@@ -8,6 +8,10 @@ from sqlalchemy.orm import Session
 from ..config import get_settings
 from ..db import get_db_session
 from ..schemas import (
+    ActualTopLineupBuildRequest,
+    ActualTopLineupBuildResponse,
+    ActualTopLineupLearningRequest,
+    ActualTopLineupLearningResponse,
     AutoDiscoverIngestRequest,
     AutoDiscoverIngestResponse,
     BacktestRangeABRequest,
@@ -220,6 +224,30 @@ def lineups_learn_walk_forward(
     service = LineupLearningService(session)
     try:
         return service.run_walk_forward_learning(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/lineups/actual-top/build", response_model=ActualTopLineupBuildResponse)
+def lineups_build_actual_top(
+    request: ActualTopLineupBuildRequest,
+    session: Session = Depends(get_db_session),
+) -> ActualTopLineupBuildResponse:
+    service = LineupLearningService(session)
+    try:
+        return service.build_actual_top_lineups(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/lineups/actual-top/learn", response_model=ActualTopLineupLearningResponse)
+def lineups_learn_from_actual_top(
+    request: ActualTopLineupLearningRequest,
+    session: Session = Depends(get_db_session),
+) -> ActualTopLineupLearningResponse:
+    service = LineupLearningService(session)
+    try:
+        return service.run_actual_top_lineup_learning(request)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 

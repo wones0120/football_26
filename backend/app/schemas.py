@@ -364,6 +364,105 @@ class LineupLearningResponse(BaseModel):
     rows: list[LineupLearningSlateResultRowResponse]
 
 
+class ActualTopLineupBuildRequest(BaseModel):
+    source_system: Literal["draftkings", "fanduel"] = "draftkings"
+    season_start: int = Field(default=2024, ge=2000)
+    season_end: int = Field(default=2025, ge=2000)
+    slate: str | None = None
+    top_k: int = Field(default=100, ge=1, le=500)
+    overwrite_existing: bool = False
+    limit_slates: int = Field(default=0, ge=0, le=2000)
+
+
+class ActualTopLineupPlayerResponse(BaseModel):
+    slot_index: int
+    roster_slot: str | None
+    position: str
+    player_name: str
+    team: str | None
+    salary: int
+    actual_points: float
+
+
+class ActualTopLineupRowResponse(BaseModel):
+    source_system: str
+    season: int
+    week: int
+    slate: str
+    lineup_rank: int
+    salary_used: int
+    actual_points: float
+    players: list[ActualTopLineupPlayerResponse]
+
+
+class ActualTopLineupBuildSliceResponse(BaseModel):
+    source_system: str
+    season: int
+    week: int
+    slate: str
+    status: str
+    rows_written: int
+    error_message: str | None = None
+
+
+class ActualTopLineupBuildResponse(BaseModel):
+    source_system: str
+    season_start: int
+    season_end: int
+    slate: str | None
+    top_k: int
+    slates_total: int
+    slates_completed: int
+    slates_failed: int
+    rows_written: int
+    rows: list[ActualTopLineupBuildSliceResponse]
+
+
+class ActualTopLineupLearningRequest(BaseModel):
+    source_system: Literal["draftkings", "fanduel"] = "draftkings"
+    season_start: int = Field(default=2024, ge=2000)
+    season_end: int = Field(default=2025, ge=2000)
+    slate: str | None = None
+    top_k_label: int = Field(default=100, ge=1, le=500)
+    candidate_lineups_per_slate: int = Field(default=3000, ge=500, le=50000)
+    training_window_slates: int = Field(default=24, ge=4, le=120)
+    min_training_slates: int = Field(default=4, ge=2, le=80)
+    min_training_rows: int = Field(default=2000, ge=500, le=2000000)
+    selection_size: int = Field(default=100, ge=10, le=1000)
+    random_seed: int | None = None
+
+
+class ActualTopLineupLearningSlateRowResponse(BaseModel):
+    season: int
+    week: int
+    slate: str
+    generated_lineups: int
+    positives_in_pool: int
+    selected_lineups: int
+    selected_mean_actual_points: float | None
+    random_mean_actual_points: float | None
+    uplift_points: float | None
+    error_message: str | None = None
+
+
+class ActualTopLineupLearningResponse(BaseModel):
+    source_system: str
+    season_start: int
+    season_end: int
+    slate: str | None
+    top_k_label: int
+    candidate_lineups_per_slate: int
+    slates_total: int
+    slates_evaluated: int
+    slates_warmup_or_failed: int
+    mean_selected_points: float | None
+    mean_random_points: float | None
+    points_uplift: float | None
+    discovered_patterns: list[str]
+    feature_insights: list[LineupLearningFeatureInsightRowResponse]
+    rows: list[ActualTopLineupLearningSlateRowResponse]
+
+
 class UltimateLineupRequest(BaseModel):
     source_system: Literal["draftkings", "fanduel"] = "draftkings"
     season: int = Field(..., ge=2000)

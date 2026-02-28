@@ -379,3 +379,77 @@ class SimulationCalibrationFactor(Base):
     low_salary_threshold: Mapped[int | None] = mapped_column(Integer)
     low_salary_hit_points: Mapped[float | None] = mapped_column(Float)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow_naive)
+
+
+class ActualTopLineup(Base):
+    __tablename__ = "actual_top_lineup"
+    __table_args__ = (
+        UniqueConstraint(
+            "source_system",
+            "season",
+            "week",
+            "slate",
+            "lineup_rank",
+            name="uq_actual_top_lineup_slice_rank",
+        ),
+        UniqueConstraint(
+            "source_system",
+            "season",
+            "week",
+            "slate",
+            "lineup_key",
+            name="uq_actual_top_lineup_slice_key",
+        ),
+        Index(
+            "idx_actual_top_lineup_slice",
+            "source_system",
+            "season",
+            "week",
+            "slate",
+            "lineup_rank",
+        ),
+    )
+
+    actual_top_lineup_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    source_system: Mapped[str] = mapped_column(String(32), nullable=False)
+    season: Mapped[int] = mapped_column(Integer, nullable=False)
+    week: Mapped[int] = mapped_column(Integer, nullable=False)
+    slate: Mapped[str] = mapped_column(String(64), nullable=False)
+    lineup_rank: Mapped[int] = mapped_column(Integer, nullable=False)
+    actual_points: Mapped[float] = mapped_column(Float, nullable=False)
+    salary_used: Mapped[int] = mapped_column(Integer, nullable=False)
+    lineup_key: Mapped[str] = mapped_column(String(512), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow_naive)
+
+
+class ActualTopLineupPlayer(Base):
+    __tablename__ = "actual_top_lineup_player"
+    __table_args__ = (
+        UniqueConstraint(
+            "actual_top_lineup_id",
+            "slot_index",
+            name="uq_actual_top_lineup_player_slot",
+        ),
+        Index(
+            "idx_actual_top_lineup_player_lineup",
+            "actual_top_lineup_id",
+            "slot_index",
+        ),
+    )
+
+    actual_top_lineup_player_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    actual_top_lineup_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("actual_top_lineup.actual_top_lineup_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    slot_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    roster_slot: Mapped[str | None] = mapped_column(String(16))
+    position: Mapped[str] = mapped_column(String(16), nullable=False)
+    player_master_id: Mapped[str | None] = mapped_column(String(36))
+    source_player_key: Mapped[str | None] = mapped_column(String(128))
+    player_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    team: Mapped[str | None] = mapped_column(String(16))
+    salary: Mapped[int] = mapped_column(Integer, nullable=False)
+    actual_points: Mapped[float] = mapped_column(Float, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow_naive)

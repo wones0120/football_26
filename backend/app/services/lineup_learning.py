@@ -1,16 +1,38 @@
 from __future__ import annotations
 
 import math
+from itertools import combinations
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Any
+from datetime import UTC, datetime
+from typing import Any, Callable
 
 import numpy as np
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
-from ..models import CuratedSalary, PlayerAlias, RawNflSchedule, RawNflWeeklyStat
+try:
+    from pulp import LpBinary, LpMaximize, LpProblem, LpStatus, LpVariable, PULP_CBC_CMD, lpSum, value
+
+    HAS_PULP = True
+except Exception:  # noqa: BLE001
+    HAS_PULP = False
+
+from ..models import (
+    ActualTopLineup,
+    ActualTopLineupPlayer,
+    CuratedSalary,
+    PlayerAlias,
+    RawNflSchedule,
+    RawNflWeeklyStat,
+)
 from ..schemas import (
+    ActualTopLineupBuildRequest,
+    ActualTopLineupBuildResponse,
+    ActualTopLineupBuildSliceResponse,
+    ActualTopLineupLearningRequest,
+    ActualTopLineupLearningResponse,
+    ActualTopLineupLearningSlateRowResponse,
     LineupLearningFeatureInsightRowResponse,
     LineupLearningRequest,
     LineupLearningResponse,
@@ -56,6 +78,9 @@ FEATURE_NAMES = [
 ]
 
 PATTERN_FEATURE_INDEX = {name: idx for idx, name in enumerate(FEATURE_NAMES)}
+TOP_TARGET_PERCENTILE = 98.0
+CEILING_TARGET_PERCENTILE = 90.0
+BUST_TARGET_PERCENTILE = 35.0
 
 TEAM_ALIASES = {
     "JAX": "JAC",
@@ -83,6 +108,23 @@ class PlayerPoolRow:
     team_spread_line: float | None = None
     team_implied_total: float | None = None
     opponent_implied_total: float | None = None
+    player_master_id: str | None = None
+    source_player_key: str | None = None
+
+
+@dataclass
+class LogisticTargetModel:
+    weights: np.ndarray
+    bias: float
+    mean: np.ndarray
+    std: np.ndarray
+    positive_rate: float
+    training_rows: int
+    has_signal: bool
+
+
+def utcnow_naive() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 def _sigmoid(values: np.ndarray) -> np.ndarray:
@@ -486,6 +528,8 @@ class LineupLearningService:
                     team_spread_line=_safe_float(context.get("team_spread_line")),
                     team_implied_total=_safe_float(context.get("team_implied_total")),
                     opponent_implied_total=_safe_float(context.get("opponent_implied_total")),
+                    player_master_id=row.player_master_id,
+                    source_player_key=row.source_player_key,
                 )
             )
 
@@ -610,14 +654,14 @@ class LineupLearningService:
         self,
         *,
         candidate_lineups: list[list[PlayerPoolRow]],
-        policy_scores: np.ndarray,
+        ranking_scores: np.ndarray,
     ) -> list[str]:
         by_matchup: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
         for idx, lineup in enumerate(candidate_lineups):
             archetype, matchup_key = self._qb_game_stack_archetype(lineup)
             if matchup_key is None:
                 continue
-            by_matchup[matchup_key][archetype].append(float(policy_scores[idx]))
+            by_matchup[matchup_key][archetype].append(float(ranking_scores[idx]))
 
         min_samples = max(40, len(candidate_lineups) // 2000)
         rules: list[tuple[str, str, float, int]] = []
@@ -645,13 +689,320 @@ class LineupLearningService:
             )
         return summary
 
+    def _player_conflicts_with_dst(self, player: PlayerPoolRow, dst: PlayerPoolRow) -> bool:
+        if player.position == "DST":
+            return False
+        if dst.team and player.opponent and player.opponent == dst.team:
+            return True
+        if dst.opponent and player.team and player.team == dst.opponent:
+            return True
+        return False
+
+    def _pareto_filter_players(self, players: list[PlayerPoolRow]) -> list[PlayerPoolRow]:
+        if not players:
+            return []
+        ordered = sorted(players, key=lambda row: (int(row.salary), -float(row.actual_points)))
+        kept: list[PlayerPoolRow] = []
+        best_points = -1e18
+        for row in ordered:
+            points = float(row.actual_points)
+            if points > (best_points + 1e-9):
+                kept.append(row)
+                best_points = max(best_points, points)
+        return kept
+
+    def _position_dp_exact(
+        self,
+        *,
+        players: list[PlayerPoolRow],
+        max_pick: int,
+        budget_units: int,
+        salary_step: int,
+    ) -> tuple[list[list[float]], list[list[tuple[PlayerPoolRow, ...] | None]]]:
+        neg_inf = -1e18
+        points: list[list[float]] = [
+            [neg_inf for _ in range(budget_units + 1)]
+            for _ in range(max_pick + 1)
+        ]
+        choices: list[list[tuple[PlayerPoolRow, ...] | None]] = [
+            [None for _ in range(budget_units + 1)]
+            for _ in range(max_pick + 1)
+        ]
+        points[0][0] = 0.0
+        choices[0][0] = ()
+
+        for player in players:
+            cost = int(player.salary // salary_step)
+            gain = float(player.actual_points)
+            if cost < 0 or cost > budget_units:
+                continue
+            for pick_count in range(max_pick - 1, -1, -1):
+                cur_points_row = points[pick_count]
+                nxt_points_row = points[pick_count + 1]
+                cur_choice_row = choices[pick_count]
+                nxt_choice_row = choices[pick_count + 1]
+                for salary_units in range(budget_units - cost, -1, -1):
+                    base = cur_points_row[salary_units]
+                    if base <= neg_inf / 2:
+                        continue
+                    base_choice = cur_choice_row[salary_units]
+                    if base_choice is None:
+                        continue
+                    next_salary = salary_units + cost
+                    next_points = base + gain
+                    if next_points > nxt_points_row[next_salary]:
+                        nxt_points_row[next_salary] = next_points
+                        nxt_choice_row[next_salary] = base_choice + (player,)
+
+        return points, choices
+
+    def optimize_actual_lineup(
+        self,
+        *,
+        players: list[PlayerPoolRow],
+    ) -> tuple[list[PlayerPoolRow], float, int] | None:
+        if not players:
+            return None
+
+        if HAS_PULP:
+            variables: dict[int, LpVariable] = {
+                idx: LpVariable(f"p_{idx}", lowBound=0, upBound=1, cat=LpBinary)
+                for idx in range(len(players))
+            }
+            model = LpProblem("optimal_actual_lineup", LpMaximize)
+            model += lpSum(
+                float(players[idx].actual_points) * variables[idx]
+                for idx in range(len(players))
+            )
+
+            qb_idx = [idx for idx, row in enumerate(players) if row.position == "QB"]
+            rb_idx = [idx for idx, row in enumerate(players) if row.position == "RB"]
+            wr_idx = [idx for idx, row in enumerate(players) if row.position == "WR"]
+            te_idx = [idx for idx, row in enumerate(players) if row.position == "TE"]
+            dst_idx = [idx for idx, row in enumerate(players) if row.position == "DST"]
+            skill_idx = rb_idx + wr_idx + te_idx
+            offense_idx = qb_idx + skill_idx
+
+            if not qb_idx or len(rb_idx) < 2 or len(wr_idx) < 3 or not te_idx or not dst_idx:
+                return None
+
+            model += lpSum(variables[idx] for idx in qb_idx) == 1
+            model += lpSum(variables[idx] for idx in dst_idx) == 1
+            model += lpSum(variables[idx] for idx in rb_idx) >= 2
+            model += lpSum(variables[idx] for idx in wr_idx) >= 3
+            model += lpSum(variables[idx] for idx in te_idx) >= 1
+            model += lpSum(variables[idx] for idx in skill_idx) == 7
+            model += lpSum(variables[idx] for idx in range(len(players))) == 9
+            model += lpSum(int(players[idx].salary) * variables[idx] for idx in range(len(players))) <= DK_SALARY_CAP
+
+            for offense_i in offense_idx:
+                offense_player = players[offense_i]
+                for dst_i in dst_idx:
+                    dst_player = players[dst_i]
+                    if self._player_conflicts_with_dst(offense_player, dst_player):
+                        model += variables[offense_i] + variables[dst_i] <= 1
+
+            status = model.solve(PULP_CBC_CMD(msg=False))
+            status_name = LpStatus.get(status, "")
+            if status_name in {"Optimal", "Integer Feasible"}:
+                lineup = [
+                    players[idx]
+                    for idx in range(len(players))
+                    if value(variables[idx]) is not None and value(variables[idx]) > 0.5
+                ]
+                if len(lineup) == 9 and _lineup_satisfies_roster_rules(lineup):
+                    points = float(sum(float(row.actual_points) for row in lineup))
+                    salary = int(sum(int(row.salary) for row in lineup))
+                    return lineup, points, salary
+
+        return self._optimize_actual_lineup_dp(players=players)
+
+    def _optimize_actual_lineup_dp(
+        self,
+        *,
+        players: list[PlayerPoolRow],
+    ) -> tuple[list[PlayerPoolRow], float, int] | None:
+        if not players:
+            return None
+
+        salaries = [int(row.salary) for row in players if int(row.salary) > 0]
+        if not salaries:
+            return None
+        salary_step = 0
+        for salary in salaries:
+            salary_step = salary if salary_step == 0 else math.gcd(salary_step, salary)
+        if salary_step <= 0:
+            salary_step = 1
+        cap_units = DK_SALARY_CAP // salary_step
+
+        dst_pool = [row for row in players if row.position == "DST"]
+        if not dst_pool:
+            return None
+
+        best_lineup: list[PlayerPoolRow] | None = None
+        best_points = -1e18
+        best_salary_used = 0
+
+        for dst in dst_pool:
+            dst_cost = int(dst.salary // salary_step)
+            if dst_cost > cap_units:
+                continue
+            remaining_after_dst = cap_units - dst_cost
+
+            qb_pool = [
+                row for row in players
+                if row.position == "QB" and not self._player_conflicts_with_dst(row, dst)
+            ]
+            rb_pool = [
+                row for row in players
+                if row.position == "RB" and not self._player_conflicts_with_dst(row, dst)
+            ]
+            wr_pool = [
+                row for row in players
+                if row.position == "WR" and not self._player_conflicts_with_dst(row, dst)
+            ]
+            te_pool = [
+                row for row in players
+                if row.position == "TE" and not self._player_conflicts_with_dst(row, dst)
+            ]
+            if len(qb_pool) < 1 or len(rb_pool) < 2 or len(wr_pool) < 3 or len(te_pool) < 1:
+                continue
+
+            rb_pool = self._pareto_filter_players(rb_pool)
+            wr_pool = self._pareto_filter_players(wr_pool)
+            te_pool = self._pareto_filter_players(te_pool)
+            if len(rb_pool) < 2 or len(wr_pool) < 3 or len(te_pool) < 1:
+                continue
+
+            rb_points, rb_choices = self._position_dp_exact(
+                players=rb_pool,
+                max_pick=3,
+                budget_units=remaining_after_dst,
+                salary_step=salary_step,
+            )
+            wr_points, wr_choices = self._position_dp_exact(
+                players=wr_pool,
+                max_pick=4,
+                budget_units=remaining_after_dst,
+                salary_step=salary_step,
+            )
+            te_points, te_choices = self._position_dp_exact(
+                players=te_pool,
+                max_pick=2,
+                budget_units=remaining_after_dst,
+                salary_step=salary_step,
+            )
+
+            skill_exact_points = [-1e18 for _ in range(remaining_after_dst + 1)]
+            skill_exact_choices: list[tuple[PlayerPoolRow, ...] | None] = [None for _ in range(remaining_after_dst + 1)]
+            structures = [(2, 3, 2), (2, 4, 1), (3, 3, 1)]
+            for rb_need, wr_need, te_need in structures:
+                rw_points = [-1e18 for _ in range(remaining_after_dst + 1)]
+                rw_choices: list[tuple[PlayerPoolRow, ...] | None] = [None for _ in range(remaining_after_dst + 1)]
+                for rb_salary in range(remaining_after_dst + 1):
+                    rb_val = rb_points[rb_need][rb_salary]
+                    if rb_val <= -1e17:
+                        continue
+                    rb_choice = rb_choices[rb_need][rb_salary]
+                    if rb_choice is None:
+                        continue
+                    max_wr_salary = remaining_after_dst - rb_salary
+                    for wr_salary in range(max_wr_salary + 1):
+                        wr_val = wr_points[wr_need][wr_salary]
+                        if wr_val <= -1e17:
+                            continue
+                        wr_choice = wr_choices[wr_need][wr_salary]
+                        if wr_choice is None:
+                            continue
+                        total_rw_salary = rb_salary + wr_salary
+                        total_rw_points = rb_val + wr_val
+                        if total_rw_points > rw_points[total_rw_salary]:
+                            rw_points[total_rw_salary] = total_rw_points
+                            rw_choices[total_rw_salary] = rb_choice + wr_choice
+
+                te_prefix_points = [-1e18 for _ in range(remaining_after_dst + 1)]
+                te_prefix_choices: list[tuple[PlayerPoolRow, ...] | None] = [None for _ in range(remaining_after_dst + 1)]
+                running_te_points = -1e18
+                running_te_choice: tuple[PlayerPoolRow, ...] | None = None
+                for budget in range(remaining_after_dst + 1):
+                    val = te_points[te_need][budget]
+                    if val > running_te_points:
+                        running_te_points = val
+                        running_te_choice = te_choices[te_need][budget]
+                    te_prefix_points[budget] = running_te_points
+                    te_prefix_choices[budget] = running_te_choice
+
+                for budget in range(remaining_after_dst + 1):
+                    best_val = skill_exact_points[budget]
+                    best_choice = skill_exact_choices[budget]
+                    for rw_salary in range(budget + 1):
+                        rw_val = rw_points[rw_salary]
+                        if rw_val <= -1e17:
+                            continue
+                        te_val = te_prefix_points[budget - rw_salary]
+                        if te_val <= -1e17:
+                            continue
+                        rw_choice = rw_choices[rw_salary]
+                        te_choice = te_prefix_choices[budget - rw_salary]
+                        if rw_choice is None or te_choice is None:
+                            continue
+                        total_val = rw_val + te_val
+                        if total_val > best_val:
+                            best_val = total_val
+                            best_choice = rw_choice + te_choice
+                    skill_exact_points[budget] = best_val
+                    skill_exact_choices[budget] = best_choice
+
+            skill_prefix_points = [-1e18 for _ in range(remaining_after_dst + 1)]
+            skill_prefix_choices: list[tuple[PlayerPoolRow, ...] | None] = [None for _ in range(remaining_after_dst + 1)]
+            running_points = -1e18
+            running_choice: tuple[PlayerPoolRow, ...] | None = None
+            for budget in range(remaining_after_dst + 1):
+                val = skill_exact_points[budget]
+                if val > running_points:
+                    running_points = val
+                    running_choice = skill_exact_choices[budget]
+                skill_prefix_points[budget] = running_points
+                skill_prefix_choices[budget] = running_choice
+
+            for qb in qb_pool:
+                qb_cost = int(qb.salary // salary_step)
+                remaining_for_skills = remaining_after_dst - qb_cost
+                if remaining_for_skills < 0:
+                    continue
+                skill_points = skill_prefix_points[remaining_for_skills]
+                skill_choice = skill_prefix_choices[remaining_for_skills]
+                if skill_points <= -1e17 or skill_choice is None:
+                    continue
+                lineup = [qb, *list(skill_choice), dst]
+                if not _lineup_satisfies_roster_rules(lineup):
+                    continue
+                lineup_points = float(qb.actual_points + dst.actual_points + skill_points)
+                lineup_salary_used = int(sum(row.salary for row in lineup))
+                if lineup_salary_used > DK_SALARY_CAP:
+                    continue
+                if (
+                    lineup_points > best_points
+                    or (
+                        abs(lineup_points - best_points) <= 1e-9
+                        and lineup_salary_used > best_salary_used
+                    )
+                ):
+                    best_points = lineup_points
+                    best_salary_used = lineup_salary_used
+                    best_lineup = lineup
+
+        if best_lineup is None:
+            return None
+        return best_lineup, float(best_points), int(best_salary_used)
+
     def _generate_lineups_for_slate(
         self,
         *,
         players: list[PlayerPoolRow],
         lineups_target: int,
         rng: np.random.Generator,
-    ) -> tuple[np.ndarray, np.ndarray, list[float]]:
+    ) -> tuple[np.ndarray, np.ndarray, list[list[PlayerPoolRow]]]:
         by_pos: dict[str, list[PlayerPoolRow]] = defaultdict(list)
         for player in players:
             by_pos[player.position].append(player)
@@ -669,6 +1020,7 @@ class LineupLearningService:
 
         feature_rows: list[np.ndarray] = []
         point_rows: list[float] = []
+        generated_lineups: list[list[PlayerPoolRow]] = []
         lineup_keys: set[tuple[str, ...]] = set()
         max_attempts = max(lineups_target * 20, 8000)
         min_salary_floor = 43000
@@ -715,11 +1067,12 @@ class LineupLearningService:
 
             feature_rows.append(self._lineup_features(lineup))
             point_rows.append(float(sum(row.actual_points for row in lineup)))
+            generated_lineups.append(lineup)
 
         if len(feature_rows) < 120:
             raise ValueError("No valid lineups generated for this slate.")
 
-        return np.vstack(feature_rows), np.asarray(point_rows, dtype=float), point_rows
+        return np.vstack(feature_rows), np.asarray(point_rows, dtype=float), generated_lineups
 
     def _compute_dst_projection_lookup(
         self,
@@ -869,6 +1222,907 @@ class LineupLearningService:
         self._player_projection_cache[cache_key] = result
         return result
 
+    def _collect_training_lineup_chunks(
+        self,
+        *,
+        source_system: str,
+        season: int,
+        week: int,
+        training_start_season: int,
+        training_window_slates: int,
+        training_lineups_per_slate: int,
+        rng: np.random.Generator,
+    ) -> tuple[list[np.ndarray], list[np.ndarray], int, int]:
+        target_ord = _slice_ordinal(season, week)
+        slices = self._fetch_available_slate_slices(
+            source_system=source_system,
+            season_start=training_start_season,
+            season_end=season,
+            slate_filter=None,
+        )
+        historical = [item for item in slices if _slice_ordinal(item[0], item[1]) < target_ord]
+
+        x_chunks_recent: list[np.ndarray] = []
+        points_chunks_recent: list[np.ndarray] = []
+        slates_used = 0
+        for hist_season, hist_week, hist_slate in reversed(historical):
+            try:
+                projection_lookup, dst_projection_lookup = self._compute_player_projection_lookup(
+                    source_system=source_system,
+                    season=hist_season,
+                    week=hist_week,
+                    slate=hist_slate,
+                )
+                pool = self._fetch_slate_player_pool(
+                    source_system=source_system,
+                    season=hist_season,
+                    week=hist_week,
+                    slate=hist_slate,
+                    projection_lookup=projection_lookup,
+                    dst_projection_lookup=dst_projection_lookup,
+                )
+                x_slate, points_slate, _ = self._generate_lineups_for_slate(
+                    players=pool,
+                    lineups_target=training_lineups_per_slate,
+                    rng=rng,
+                )
+            except Exception:  # noqa: BLE001
+                continue
+            if float(np.max(points_slate)) <= 0.0:
+                continue
+            if float(np.std(points_slate)) < 1e-9:
+                continue
+            x_chunks_recent.append(x_slate)
+            points_chunks_recent.append(points_slate)
+            slates_used += 1
+            if slates_used >= training_window_slates:
+                break
+
+        # Keep chronological order for any time-aware downstream analysis.
+        x_chunks = list(reversed(x_chunks_recent))
+        points_chunks = list(reversed(points_chunks_recent))
+        total_rows = int(sum(chunk.shape[0] for chunk in x_chunks))
+        return x_chunks, points_chunks, slates_used, total_rows
+
+    def _fit_percentile_model(
+        self,
+        *,
+        x_chunks: list[np.ndarray],
+        points_chunks: list[np.ndarray],
+        percentile: float,
+        tail: str,
+    ) -> LogisticTargetModel:
+        x_parts: list[np.ndarray] = []
+        y_parts: list[np.ndarray] = []
+        for x_slate, points_slate in zip(x_chunks, points_chunks):
+            threshold = float(np.percentile(points_slate, percentile))
+            if not math.isfinite(threshold):
+                continue
+            if tail == "upper":
+                y_slate = (points_slate >= threshold).astype(float)
+            else:
+                y_slate = (points_slate <= threshold).astype(float)
+            pos_rate = float(np.mean(y_slate))
+            if pos_rate <= 0.0 or pos_rate >= 1.0:
+                continue
+            x_parts.append(x_slate)
+            y_parts.append(y_slate)
+
+        if not x_parts:
+            dim = len(FEATURE_NAMES)
+            return LogisticTargetModel(
+                weights=np.zeros(dim, dtype=float),
+                bias=0.0,
+                mean=np.zeros(dim, dtype=float),
+                std=np.ones(dim, dtype=float),
+                positive_rate=0.0,
+                training_rows=0,
+                has_signal=False,
+            )
+
+        x_train = np.vstack(x_parts)
+        y_train = np.concatenate(y_parts)
+        weights, bias, mean, std = self._fit_logistic(x_train, y_train)
+        has_signal = float(np.max(np.abs(weights))) > 1e-8
+        return LogisticTargetModel(
+            weights=weights,
+            bias=float(bias),
+            mean=mean,
+            std=std,
+            positive_rate=float(np.mean(y_train)),
+            training_rows=int(len(y_train)),
+            has_signal=has_signal,
+        )
+
+    def _predict_target_model(self, model: LogisticTargetModel, x_rows: np.ndarray) -> np.ndarray:
+        if x_rows.size == 0:
+            return np.asarray([], dtype=float)
+        x_norm = (x_rows - model.mean) / model.std
+        return _sigmoid(x_norm @ model.weights + model.bias)
+
+    def _fit_blend_weights(
+        self,
+        *,
+        points_train: np.ndarray,
+        policy_scores: np.ndarray,
+        ceiling_scores: np.ndarray,
+        quality_scores: np.ndarray,
+    ) -> tuple[np.ndarray, float]:
+        if len(points_train) < 200:
+            return np.asarray([1.0, 0.0, 0.0], dtype=float), 0.0
+
+        y_mean = float(np.mean(points_train))
+        y_std = float(np.std(points_train))
+        if y_std < 1e-9:
+            return np.asarray([1.0, 0.0, 0.0], dtype=float), 0.0
+        y_norm = (points_train - y_mean) / y_std
+
+        x = np.column_stack([policy_scores, ceiling_scores, quality_scores])
+        x_mean = np.mean(x, axis=0)
+        x_std = np.std(x, axis=0)
+        x_std = np.where(x_std < 1e-6, 1.0, x_std)
+        x_scaled = (x - x_mean) / x_std
+
+        design = np.column_stack([x_scaled, np.ones(len(x_scaled), dtype=float)])
+        reg = 0.05
+        gram = design.T @ design
+        for idx in range(3):
+            gram[idx, idx] += reg
+        rhs = design.T @ y_norm
+        try:
+            coeff = np.linalg.solve(gram, rhs)
+        except np.linalg.LinAlgError:
+            coeff = np.linalg.pinv(gram) @ rhs
+
+        weights_scaled = coeff[:3]
+        intercept_scaled = float(coeff[3])
+        weights = weights_scaled / x_std
+        intercept = intercept_scaled - float(np.dot(weights, x_mean))
+        return weights.astype(float), float(intercept)
+
+    def _lineup_key(self, lineup: list[PlayerPoolRow]) -> str:
+        return "|".join(sorted(row.uid for row in lineup))
+
+    def _canonical_slot_order(self, lineup: list[PlayerPoolRow]) -> list[tuple[int, str, PlayerPoolRow]]:
+        qb_rows = [row for row in lineup if row.position == "QB"]
+        dst_rows = [row for row in lineup if row.position == "DST"]
+        rb_rows = sorted([row for row in lineup if row.position == "RB"], key=lambda row: row.salary, reverse=True)
+        wr_rows = sorted([row for row in lineup if row.position == "WR"], key=lambda row: row.salary, reverse=True)
+        te_rows = sorted([row for row in lineup if row.position == "TE"], key=lambda row: row.salary, reverse=True)
+
+        ordered: list[tuple[int, str, PlayerPoolRow]] = []
+        if qb_rows:
+            ordered.append((0, "QB", qb_rows[0]))
+        if len(rb_rows) >= 1:
+            ordered.append((1, "RB1", rb_rows[0]))
+        if len(rb_rows) >= 2:
+            ordered.append((2, "RB2", rb_rows[1]))
+        if len(wr_rows) >= 1:
+            ordered.append((3, "WR1", wr_rows[0]))
+        if len(wr_rows) >= 2:
+            ordered.append((4, "WR2", wr_rows[1]))
+        if len(wr_rows) >= 3:
+            ordered.append((5, "WR3", wr_rows[2]))
+        if te_rows:
+            ordered.append((6, "TE", te_rows[0]))
+
+        used_ids = {id(row) for _idx, _slot, row in ordered}
+        flex_candidates = [row for row in lineup if row.position in {"RB", "WR", "TE"} and id(row) not in used_ids]
+        if flex_candidates:
+            flex_row = sorted(flex_candidates, key=lambda row: row.salary, reverse=True)[0]
+            ordered.append((7, "FLEX", flex_row))
+        if dst_rows:
+            ordered.append((8, "DST", dst_rows[0]))
+        ordered.sort(key=lambda row: row[0])
+        return ordered
+
+    def _optimize_top_actual_lineups(
+        self,
+        *,
+        players: list[PlayerPoolRow],
+        top_k: int,
+    ) -> list[tuple[list[PlayerPoolRow], float, int]]:
+        if top_k <= 0 or not players:
+            return []
+        objective_scores = np.asarray([float(row.actual_points) for row in players], dtype=float)
+        results = self._optimize_top_lineups_by_linear_scores(
+            players=players,
+            objective_scores=objective_scores,
+            top_k=top_k,
+            solver_name="top_actual_lineups",
+        )
+        if results:
+            return results
+        if not HAS_PULP:
+            best = self.optimize_actual_lineup(players=players)
+            if best is None:
+                return []
+            return [best]
+        return []
+
+    def _optimize_top_projected_lineups(
+        self,
+        *,
+        players: list[PlayerPoolRow],
+        top_k: int,
+    ) -> list[tuple[list[PlayerPoolRow], float, int]]:
+        if top_k <= 0 or not players:
+            return []
+        objective_scores = np.asarray(
+            [
+                (0.65 * float(max(0.0, row.projected_mean_points)))
+                + (0.35 * float(max(0.0, row.projected_p90_points)))
+                for row in players
+            ],
+            dtype=float,
+        )
+        return self._optimize_top_lineups_by_linear_scores(
+            players=players,
+            objective_scores=objective_scores,
+            top_k=top_k,
+            solver_name="top_projected_lineups",
+        )
+
+    def _optimize_top_lineups_by_linear_scores(
+        self,
+        *,
+        players: list[PlayerPoolRow],
+        objective_scores: np.ndarray,
+        top_k: int,
+        solver_name: str,
+    ) -> list[tuple[list[PlayerPoolRow], float, int]]:
+        if not HAS_PULP:
+            return []
+        if len(objective_scores) != len(players):
+            return []
+
+        variables: dict[int, LpVariable] = {
+            idx: LpVariable(f"p_{idx}", lowBound=0, upBound=1, cat=LpBinary)
+            for idx in range(len(players))
+        }
+        model = LpProblem(solver_name, LpMaximize)
+        model += lpSum(float(objective_scores[idx]) * variables[idx] for idx in range(len(players)))
+
+        qb_idx = [idx for idx, row in enumerate(players) if row.position == "QB"]
+        rb_idx = [idx for idx, row in enumerate(players) if row.position == "RB"]
+        wr_idx = [idx for idx, row in enumerate(players) if row.position == "WR"]
+        te_idx = [idx for idx, row in enumerate(players) if row.position == "TE"]
+        dst_idx = [idx for idx, row in enumerate(players) if row.position == "DST"]
+        skill_idx = rb_idx + wr_idx + te_idx
+        offense_idx = qb_idx + skill_idx
+
+        if not qb_idx or len(rb_idx) < 2 or len(wr_idx) < 3 or not te_idx or not dst_idx:
+            return []
+
+        model += lpSum(variables[idx] for idx in qb_idx) == 1
+        model += lpSum(variables[idx] for idx in dst_idx) == 1
+        model += lpSum(variables[idx] for idx in rb_idx) >= 2
+        model += lpSum(variables[idx] for idx in wr_idx) >= 3
+        model += lpSum(variables[idx] for idx in te_idx) >= 1
+        model += lpSum(variables[idx] for idx in skill_idx) == 7
+        model += lpSum(variables[idx] for idx in range(len(players))) == 9
+        model += lpSum(int(players[idx].salary) * variables[idx] for idx in range(len(players))) <= DK_SALARY_CAP
+
+        for offense_i in offense_idx:
+            offense_player = players[offense_i]
+            for dst_i in dst_idx:
+                dst_player = players[dst_i]
+                if self._player_conflicts_with_dst(offense_player, dst_player):
+                    model += variables[offense_i] + variables[dst_i] <= 1
+
+        results: list[tuple[list[PlayerPoolRow], float, int]] = []
+        seen_keys: set[str] = set()
+        for _rank in range(top_k):
+            status = model.solve(PULP_CBC_CMD(msg=False))
+            status_name = LpStatus.get(status, "")
+            if status_name not in {"Optimal", "Integer Feasible"}:
+                break
+
+            lineup_idx = [
+                idx
+                for idx in range(len(players))
+                if value(variables[idx]) is not None and value(variables[idx]) > 0.5
+            ]
+            lineup = [players[idx] for idx in lineup_idx]
+            if len(lineup) != 9 or not _lineup_satisfies_roster_rules(lineup):
+                break
+
+            lineup_key = self._lineup_key(lineup)
+            if lineup_key in seen_keys:
+                break
+            seen_keys.add(lineup_key)
+
+            points = float(sum(float(row.actual_points) for row in lineup))
+            salary = int(sum(int(row.salary) for row in lineup))
+            results.append((lineup, points, salary))
+
+            # No-good cut: prevent selecting this exact lineup again.
+            model += lpSum(variables[idx] for idx in lineup_idx) <= 8
+
+        return results
+
+    def _clear_actual_top_lineups_for_slice(
+        self,
+        *,
+        source_system: str,
+        season: int,
+        week: int,
+        slate: str,
+    ) -> None:
+        lineup_ids = self.session.execute(
+            select(ActualTopLineup.actual_top_lineup_id).where(
+                and_(
+                    ActualTopLineup.source_system == source_system,
+                    ActualTopLineup.season == season,
+                    ActualTopLineup.week == week,
+                    ActualTopLineup.slate == slate,
+                )
+            )
+        ).scalars().all()
+        if lineup_ids:
+            self.session.query(ActualTopLineupPlayer).filter(
+                ActualTopLineupPlayer.actual_top_lineup_id.in_(lineup_ids)
+            ).delete(synchronize_session=False)
+            self.session.query(ActualTopLineup).filter(
+                ActualTopLineup.actual_top_lineup_id.in_(lineup_ids)
+            ).delete(synchronize_session=False)
+
+    def _load_top_lineup_keys_for_slice(
+        self,
+        *,
+        source_system: str,
+        season: int,
+        week: int,
+        slate: str,
+        top_k: int,
+    ) -> set[str]:
+        rows = self.session.execute(
+            select(ActualTopLineup.lineup_key).where(
+                and_(
+                    ActualTopLineup.source_system == source_system,
+                    ActualTopLineup.season == season,
+                    ActualTopLineup.week == week,
+                    ActualTopLineup.slate == slate,
+                    ActualTopLineup.lineup_rank <= top_k,
+                )
+            )
+        ).scalars().all()
+        return {str(row) for row in rows if row}
+
+    def _load_stored_top_lineups_for_slice(
+        self,
+        *,
+        source_system: str,
+        season: int,
+        week: int,
+        slate: str,
+        top_k: int,
+        pool: list[PlayerPoolRow],
+    ) -> list[list[PlayerPoolRow]]:
+        headers = self.session.execute(
+            select(ActualTopLineup).where(
+                and_(
+                    ActualTopLineup.source_system == source_system,
+                    ActualTopLineup.season == season,
+                    ActualTopLineup.week == week,
+                    ActualTopLineup.slate == slate,
+                    ActualTopLineup.lineup_rank <= top_k,
+                )
+            ).order_by(ActualTopLineup.lineup_rank)
+        ).scalars().all()
+        if not headers:
+            return []
+
+        lineup_ids = [row.actual_top_lineup_id for row in headers]
+        players_rows = self.session.execute(
+            select(ActualTopLineupPlayer).where(
+                ActualTopLineupPlayer.actual_top_lineup_id.in_(lineup_ids)
+            )
+        ).scalars().all()
+        by_lineup: dict[int, list[ActualTopLineupPlayer]] = defaultdict(list)
+        for row in players_rows:
+            by_lineup[row.actual_top_lineup_id].append(row)
+
+        by_master: dict[str, PlayerPoolRow] = {}
+        by_source: dict[str, PlayerPoolRow] = {}
+        by_tuple: dict[tuple[str, str | None, str, int], PlayerPoolRow] = {}
+        for row in pool:
+            if row.player_master_id and row.player_master_id not in by_master:
+                by_master[row.player_master_id] = row
+            if row.source_player_key and row.source_player_key not in by_source:
+                by_source[row.source_player_key] = row
+            key = (row.name, row.team, row.position, int(row.salary))
+            if key not in by_tuple:
+                by_tuple[key] = row
+
+        resolved: list[list[PlayerPoolRow]] = []
+        for header in headers:
+            slot_rows = sorted(
+                by_lineup.get(header.actual_top_lineup_id, []),
+                key=lambda row: row.slot_index,
+            )
+            if len(slot_rows) != 9:
+                continue
+            lineup: list[PlayerPoolRow] = []
+            used_ids: set[str] = set()
+            failed = False
+            for slot in slot_rows:
+                candidate: PlayerPoolRow | None = None
+                if slot.player_master_id:
+                    candidate = by_master.get(slot.player_master_id)
+                if candidate is None and slot.source_player_key:
+                    candidate = by_source.get(slot.source_player_key)
+                if candidate is None:
+                    candidate = by_tuple.get(
+                        (slot.player_name, _canonical_team(slot.team), slot.position, int(slot.salary))
+                    )
+                if candidate is None or candidate.uid in used_ids:
+                    failed = True
+                    break
+                lineup.append(candidate)
+                used_ids.add(candidate.uid)
+            if failed or not _lineup_satisfies_roster_rules(lineup):
+                continue
+            resolved.append(lineup)
+
+        return resolved
+
+    def build_actual_top_lineups(
+        self,
+        request: ActualTopLineupBuildRequest,
+        progress_hook: Callable[[str], None] | None = None,
+    ) -> ActualTopLineupBuildResponse:
+        season_start = min(request.season_start, request.season_end)
+        season_end = max(request.season_start, request.season_end)
+        slices = self._fetch_available_slate_slices(
+            source_system=request.source_system,
+            season_start=season_start,
+            season_end=season_end,
+            slate_filter=request.slate,
+        )
+        if request.limit_slates > 0:
+            slices = slices[: request.limit_slates]
+
+        rows: list[ActualTopLineupBuildSliceResponse] = []
+        rows_written = 0
+        slates_completed = 0
+        if progress_hook is not None:
+            progress_hook(
+                f"[build_actual_top] start source={request.source_system} "
+                f"seasons={season_start}-{season_end} slates={len(slices)} top_k={request.top_k}"
+            )
+        for index, (season, week, slate) in enumerate(slices, start=1):
+            try:
+                existing_count = self.session.execute(
+                    select(ActualTopLineup.actual_top_lineup_id).where(
+                        and_(
+                            ActualTopLineup.source_system == request.source_system,
+                            ActualTopLineup.season == season,
+                            ActualTopLineup.week == week,
+                            ActualTopLineup.slate == slate,
+                        )
+                    )
+                ).all()
+                if len(existing_count) >= request.top_k and not request.overwrite_existing:
+                    rows.append(
+                        ActualTopLineupBuildSliceResponse(
+                            source_system=request.source_system,
+                            season=season,
+                            week=week,
+                            slate=slate,
+                            status="skipped_existing",
+                            rows_written=0,
+                        )
+                    )
+                    if progress_hook is not None:
+                        progress_hook(
+                            f"[build_actual_top] {index}/{len(slices)} {season} W{week:02d} {slate} "
+                            "status=skipped_existing rows=0"
+                        )
+                    continue
+
+                if request.overwrite_existing or len(existing_count) > 0:
+                    self._clear_actual_top_lineups_for_slice(
+                        source_system=request.source_system,
+                        season=season,
+                        week=week,
+                        slate=slate,
+                    )
+
+                projection_lookup, dst_projection_lookup = self._compute_player_projection_lookup(
+                    source_system=request.source_system,
+                    season=season,
+                    week=week,
+                    slate=slate,
+                )
+                pool = self._fetch_slate_player_pool(
+                    source_system=request.source_system,
+                    season=season,
+                    week=week,
+                    slate=slate,
+                    projection_lookup=projection_lookup,
+                    dst_projection_lookup=dst_projection_lookup,
+                )
+                top_lineups = self._optimize_top_actual_lineups(players=pool, top_k=request.top_k)
+                if not top_lineups:
+                    rows.append(
+                        ActualTopLineupBuildSliceResponse(
+                            source_system=request.source_system,
+                            season=season,
+                            week=week,
+                            slate=slate,
+                            status="failed",
+                            rows_written=0,
+                            error_message="No feasible top actual lineups found.",
+                        )
+                    )
+                    self.session.rollback()
+                    continue
+
+                for rank, (lineup, points, salary_used) in enumerate(top_lineups, start=1):
+                    header = ActualTopLineup(
+                        source_system=request.source_system,
+                        season=season,
+                        week=week,
+                        slate=slate,
+                        lineup_rank=rank,
+                        actual_points=float(points),
+                        salary_used=int(salary_used),
+                        lineup_key=self._lineup_key(lineup),
+                        created_at=utcnow_naive(),
+                    )
+                    self.session.add(header)
+                    self.session.flush()
+
+                    for slot_index, roster_slot, player in self._canonical_slot_order(lineup):
+                        self.session.add(
+                            ActualTopLineupPlayer(
+                                actual_top_lineup_id=header.actual_top_lineup_id,
+                                slot_index=int(slot_index),
+                                roster_slot=roster_slot,
+                                position=player.position,
+                                player_master_id=player.player_master_id,
+                                source_player_key=player.source_player_key,
+                                player_name=player.name,
+                                team=player.team,
+                                salary=int(player.salary),
+                                actual_points=float(player.actual_points),
+                                created_at=utcnow_naive(),
+                            )
+                        )
+
+                self.session.commit()
+                wrote = len(top_lineups)
+                rows_written += wrote
+                slates_completed += 1
+                rows.append(
+                    ActualTopLineupBuildSliceResponse(
+                        source_system=request.source_system,
+                        season=season,
+                        week=week,
+                        slate=slate,
+                        status="ok",
+                        rows_written=wrote,
+                    )
+                )
+                if progress_hook is not None:
+                    progress_hook(
+                        f"[build_actual_top] {index}/{len(slices)} {season} W{week:02d} {slate} "
+                        f"status=ok rows={wrote} total_rows={rows_written}"
+                    )
+            except Exception as exc:  # noqa: BLE001
+                self.session.rollback()
+                rows.append(
+                    ActualTopLineupBuildSliceResponse(
+                        source_system=request.source_system,
+                        season=season,
+                        week=week,
+                        slate=slate,
+                        status="failed",
+                        rows_written=0,
+                        error_message=str(exc),
+                    )
+                )
+                if progress_hook is not None:
+                    progress_hook(
+                        f"[build_actual_top] {index}/{len(slices)} {season} W{week:02d} {slate} "
+                        f"status=failed error={exc}"
+                    )
+
+        if progress_hook is not None:
+            progress_hook(
+                f"[build_actual_top] done slates_completed={slates_completed}/{len(slices)} "
+                f"rows_written={rows_written}"
+            )
+
+        return ActualTopLineupBuildResponse(
+            source_system=request.source_system,
+            season_start=season_start,
+            season_end=season_end,
+            slate=request.slate,
+            top_k=request.top_k,
+            slates_total=len(slices),
+            slates_completed=slates_completed,
+            slates_failed=len(slices) - slates_completed,
+            rows_written=rows_written,
+            rows=rows,
+        )
+
+    def run_actual_top_lineup_learning(
+        self,
+        request: ActualTopLineupLearningRequest,
+        progress_hook: Callable[[str], None] | None = None,
+    ) -> ActualTopLineupLearningResponse:
+        season_start = min(request.season_start, request.season_end)
+        season_end = max(request.season_start, request.season_end)
+        slices = self._fetch_available_slate_slices(
+            source_system=request.source_system,
+            season_start=season_start,
+            season_end=season_end,
+            slate_filter=request.slate,
+        )
+        rng = np.random.default_rng(request.random_seed)
+        history_x: list[np.ndarray] = []
+        history_y: list[np.ndarray] = []
+        rows: list[ActualTopLineupLearningSlateRowResponse] = []
+        selected_points_total = 0.0
+        random_points_total = 0.0
+        slates_evaluated = 0
+        last_weights: np.ndarray | None = None
+
+        if progress_hook is not None:
+            progress_hook(
+                f"[learn_actual_top] start source={request.source_system} "
+                f"seasons={season_start}-{season_end} slates={len(slices)} "
+                f"top_k_label={request.top_k_label} candidates_per_slate={request.candidate_lineups_per_slate}"
+            )
+        for index, (season, week, slate) in enumerate(slices, start=1):
+            try:
+                top_keys = self._load_top_lineup_keys_for_slice(
+                    source_system=request.source_system,
+                    season=season,
+                    week=week,
+                    slate=slate,
+                    top_k=request.top_k_label,
+                )
+                if not top_keys:
+                    msg = "No stored top actual lineups for this slate."
+                    rows.append(
+                        ActualTopLineupLearningSlateRowResponse(
+                            season=season,
+                            week=week,
+                            slate=slate,
+                            generated_lineups=0,
+                            positives_in_pool=0,
+                            selected_lineups=0,
+                            selected_mean_actual_points=None,
+                            random_mean_actual_points=None,
+                            uplift_points=None,
+                            error_message=msg,
+                        )
+                    )
+                    if progress_hook is not None:
+                        progress_hook(
+                            f"[learn_actual_top] {index}/{len(slices)} {season} W{week:02d} {slate} "
+                            f"status=skipped reason={msg} eval={slates_evaluated}"
+                        )
+                    continue
+
+                projection_lookup, dst_projection_lookup = self._compute_player_projection_lookup(
+                    source_system=request.source_system,
+                    season=season,
+                    week=week,
+                    slate=slate,
+                )
+                pool = self._fetch_slate_player_pool(
+                    source_system=request.source_system,
+                    season=season,
+                    week=week,
+                    slate=slate,
+                    projection_lookup=projection_lookup,
+                    dst_projection_lookup=dst_projection_lookup,
+                )
+                candidate_lineups = self._generate_candidate_lineups_adaptive(
+                    players=pool,
+                    requested_lineups=request.candidate_lineups_per_slate,
+                    min_salary_floor=36000,
+                    rng=rng,
+                )
+                stored_top_lineups = self._load_stored_top_lineups_for_slice(
+                    source_system=request.source_system,
+                    season=season,
+                    week=week,
+                    slate=slate,
+                    top_k=request.top_k_label,
+                    pool=pool,
+                )
+                if stored_top_lineups:
+                    seen_candidate_keys = {self._lineup_key(lineup) for lineup in candidate_lineups}
+                    for top_lineup in stored_top_lineups:
+                        key = self._lineup_key(top_lineup)
+                        if key not in seen_candidate_keys:
+                            candidate_lineups.append(top_lineup)
+                            seen_candidate_keys.add(key)
+
+                x_slate = np.vstack([self._lineup_features(lineup) for lineup in candidate_lineups])
+                points_slate = np.asarray(
+                    [sum(player.actual_points for player in lineup) for lineup in candidate_lineups],
+                    dtype=float,
+                )
+                y_slate = np.asarray(
+                    [1.0 if self._lineup_key(lineup) in top_keys else 0.0 for lineup in candidate_lineups],
+                    dtype=float,
+                )
+                positives = int(np.sum(y_slate))
+                if positives <= 0 or positives >= len(y_slate):
+                    msg = "No usable positive labels in generated candidate pool."
+                    rows.append(
+                        ActualTopLineupLearningSlateRowResponse(
+                            season=season,
+                            week=week,
+                            slate=slate,
+                            generated_lineups=len(candidate_lineups),
+                            positives_in_pool=positives,
+                            selected_lineups=0,
+                            selected_mean_actual_points=None,
+                            random_mean_actual_points=None,
+                            uplift_points=None,
+                            error_message=msg,
+                        )
+                    )
+                    if progress_hook is not None:
+                        progress_hook(
+                            f"[learn_actual_top] {index}/{len(slices)} {season} W{week:02d} {slate} "
+                            f"status=skipped gen={len(candidate_lineups)} pos={positives} reason={msg}"
+                        )
+                    continue
+
+                train_rows = int(sum(chunk.shape[0] for chunk in history_x))
+                selected_n = min(request.selection_size, len(candidate_lineups))
+                if len(history_x) >= request.min_training_slates and train_rows >= request.min_training_rows:
+                    x_train = np.vstack(history_x)
+                    y_train = np.concatenate(history_y)
+                    weights, bias, mean, std = self._fit_logistic(x_train, y_train)
+                    last_weights = weights
+                    probs = _sigmoid(((x_slate - mean) / std) @ weights + bias)
+                    selected_idx = np.argsort(-probs)[:selected_n]
+
+                    random_runs = 5
+                    random_means: list[float] = []
+                    for _ in range(random_runs):
+                        random_idx = rng.choice(len(points_slate), size=selected_n, replace=False)
+                        random_means.append(float(np.mean(points_slate[random_idx])))
+                    selected_mean = float(np.mean(points_slate[selected_idx]))
+                    random_mean = float(np.mean(random_means))
+                    uplift = selected_mean - random_mean
+                    selected_points_total += selected_mean
+                    random_points_total += random_mean
+                    slates_evaluated += 1
+                    rows.append(
+                        ActualTopLineupLearningSlateRowResponse(
+                            season=season,
+                            week=week,
+                            slate=slate,
+                            generated_lineups=len(candidate_lineups),
+                            positives_in_pool=positives,
+                            selected_lineups=selected_n,
+                            selected_mean_actual_points=selected_mean,
+                            random_mean_actual_points=random_mean,
+                            uplift_points=uplift,
+                            error_message=None,
+                        )
+                    )
+                    if progress_hook is not None:
+                        progress_hook(
+                            f"[learn_actual_top] {index}/{len(slices)} {season} W{week:02d} {slate} "
+                            f"status=evaluated gen={len(candidate_lineups)} pos={positives} "
+                            f"uplift={uplift:.2f} eval={slates_evaluated}"
+                        )
+                else:
+                    msg = "Warm-up slate used for training only."
+                    rows.append(
+                        ActualTopLineupLearningSlateRowResponse(
+                            season=season,
+                            week=week,
+                            slate=slate,
+                            generated_lineups=len(candidate_lineups),
+                            positives_in_pool=positives,
+                            selected_lineups=0,
+                            selected_mean_actual_points=None,
+                            random_mean_actual_points=None,
+                            uplift_points=None,
+                            error_message=msg,
+                        )
+                    )
+                    if progress_hook is not None:
+                        progress_hook(
+                            f"[learn_actual_top] {index}/{len(slices)} {season} W{week:02d} {slate} "
+                            f"status=warmup gen={len(candidate_lineups)} pos={positives} "
+                            f"train_rows={train_rows}"
+                        )
+
+                history_x.append(x_slate)
+                history_y.append(y_slate)
+                while len(history_x) > request.training_window_slates:
+                    history_x.pop(0)
+                    history_y.pop(0)
+            except Exception as exc:  # noqa: BLE001
+                rows.append(
+                    ActualTopLineupLearningSlateRowResponse(
+                        season=season,
+                        week=week,
+                        slate=slate,
+                        generated_lineups=0,
+                        positives_in_pool=0,
+                        selected_lineups=0,
+                        selected_mean_actual_points=None,
+                        random_mean_actual_points=None,
+                        uplift_points=None,
+                        error_message=str(exc),
+                    )
+                )
+                if progress_hook is not None:
+                    progress_hook(
+                        f"[learn_actual_top] {index}/{len(slices)} {season} W{week:02d} {slate} "
+                        f"status=failed error={exc}"
+                    )
+
+        mean_selected = (selected_points_total / slates_evaluated) if slates_evaluated > 0 else None
+        mean_random = (random_points_total / slates_evaluated) if slates_evaluated > 0 else None
+        insights: list[LineupLearningFeatureInsightRowResponse] = []
+        if last_weights is not None:
+            ranked = sorted(
+                enumerate(last_weights),
+                key=lambda pair: abs(float(pair[1])),
+                reverse=True,
+            )
+            for index, weight in ranked[:8]:
+                insights.append(
+                    LineupLearningFeatureInsightRowResponse(
+                        feature_name=FEATURE_NAMES[index],
+                        weight=float(weight),
+                        direction="positive" if weight > 0 else "negative",
+                    )
+                )
+
+        discovered_patterns = [
+            f"Top-lineup label source: stored historical top-{request.top_k_label} actual lineups per slate.",
+            f"Walk-forward evaluated slates: {slates_evaluated}/{len(slices)}.",
+        ]
+        if mean_selected is not None and mean_random is not None:
+            discovered_patterns.append(
+                f"Average selected vs random actual points: {mean_selected:.2f} vs {mean_random:.2f} (uplift {(mean_selected - mean_random):.2f})."
+            )
+        if insights:
+            discovered_patterns.append(
+                f"Strongest learned signal: {insights[0].feature_name} ({insights[0].weight:.3f})."
+            )
+
+        if progress_hook is not None:
+            progress_hook(
+                f"[learn_actual_top] done evaluated={slates_evaluated}/{len(slices)} "
+                f"mean_selected={mean_selected if mean_selected is not None else 'NA'} "
+                f"mean_random={mean_random if mean_random is not None else 'NA'}"
+            )
+
+        return ActualTopLineupLearningResponse(
+            source_system=request.source_system,
+            season_start=season_start,
+            season_end=season_end,
+            slate=request.slate,
+            top_k_label=request.top_k_label,
+            candidate_lineups_per_slate=request.candidate_lineups_per_slate,
+            slates_total=len(slices),
+            slates_evaluated=slates_evaluated,
+            slates_warmup_or_failed=len(slices) - slates_evaluated,
+            mean_selected_points=mean_selected,
+            mean_random_points=mean_random,
+            points_uplift=(mean_selected - mean_random) if mean_selected is not None and mean_random is not None else None,
+            discovered_patterns=discovered_patterns,
+            feature_insights=insights,
+            rows=rows,
+        )
+
     def _fit_policy_for_target(
         self,
         *,
@@ -925,7 +2179,7 @@ class LineupLearningService:
                 continue
             if float(np.std(points_slate)) < 1e-9:
                 continue
-            threshold = float(np.percentile(points_slate, 98.0))
+            threshold = float(np.percentile(points_slate, TOP_TARGET_PERCENTILE))
             if not math.isfinite(threshold) or threshold <= 0.0:
                 continue
             y_slate = (points_slate >= threshold).astype(float)
@@ -955,6 +2209,8 @@ class LineupLearningService:
         candidate_lineups: int,
         min_salary_floor: int,
         rng: np.random.Generator,
+        min_required_lineups: int | None = None,
+        max_attempts_multiplier: int = 6,
     ) -> list[list[PlayerPoolRow]]:
         by_pos: dict[str, list[PlayerPoolRow]] = defaultdict(list)
         for player in players:
@@ -989,7 +2245,7 @@ class LineupLearningService:
         lineups: list[list[PlayerPoolRow]] = []
         seen_keys: set[tuple[str, ...]] = set()
         attempts = 0
-        max_attempts = max(candidate_lineups * 6, 12000)
+        max_attempts = max(candidate_lineups * max_attempts_multiplier, 12000)
         while len(lineups) < candidate_lineups and attempts < max_attempts:
             attempts += 1
             selected: set[str] = set()
@@ -1030,13 +2286,180 @@ class LineupLearningService:
             seen_keys.add(key)
             lineups.append(lineup)
 
-        min_required = min(candidate_lineups, max(200, candidate_lineups // 30))
+        min_required = min_required_lineups
+        if min_required is None:
+            min_required = min(candidate_lineups, max(200, candidate_lineups // 30))
+        min_required = max(1, int(min_required))
         if len(lineups) < min_required:
             raise ValueError(
                 f"Could not generate enough valid candidate lineups ({len(lineups)}). "
                 "Try lower min_salary_floor or a larger player pool."
             )
         return lineups
+
+    def _enumerate_candidate_lineups_small_pool(
+        self,
+        *,
+        players: list[PlayerPoolRow],
+        limit: int,
+        min_salary_floor: int,
+    ) -> list[list[PlayerPoolRow]]:
+        by_pos: dict[str, list[PlayerPoolRow]] = defaultdict(list)
+        for player in players:
+            by_pos[player.position].append(player)
+        if (
+            len(by_pos["QB"]) < 1
+            or len(by_pos["RB"]) < 2
+            or len(by_pos["WR"]) < 3
+            or len(by_pos["TE"]) < 1
+            or len(by_pos["DST"]) < 1
+        ):
+            return []
+
+        n_qb = len(by_pos["QB"])
+        n_rb = len(by_pos["RB"])
+        n_wr = len(by_pos["WR"])
+        n_te = len(by_pos["TE"])
+        n_dst = len(by_pos["DST"])
+        skill_count = n_rb + n_wr + n_te
+        if skill_count < 7:
+            return []
+
+        try:
+            approx = (
+                n_qb
+                * math.comb(n_rb, 2)
+                * math.comb(n_wr, 3)
+                * n_te
+                * (skill_count - 6)
+                * n_dst
+            )
+        except ValueError:
+            return []
+        if approx > 3_000_000:
+            # Not a tiny slate; enumeration would be too expensive.
+            return []
+
+        lineups: list[list[PlayerPoolRow]] = []
+        seen_keys: set[tuple[str, ...]] = set()
+        target = max(1, int(limit))
+        salary_floor = max(0, int(min_salary_floor))
+        rb_rows = by_pos["RB"]
+        wr_rows = by_pos["WR"]
+        te_rows = by_pos["TE"]
+        dst_rows = by_pos["DST"]
+        for qb in by_pos["QB"]:
+            for rb_pair in combinations(rb_rows, 2):
+                rb_ids = {row.uid for row in rb_pair}
+                for wr_triplet in combinations(wr_rows, 3):
+                    wr_ids = {row.uid for row in wr_triplet}
+                    for te in te_rows:
+                        if te.uid in rb_ids or te.uid in wr_ids:
+                            continue
+                        used_ids = {qb.uid, te.uid, *rb_ids, *wr_ids}
+                        flex_pool = [
+                            row
+                            for row in (rb_rows + wr_rows + te_rows)
+                            if row.uid not in used_ids
+                        ]
+                        if not flex_pool:
+                            continue
+                        for flex in flex_pool:
+                            if flex.uid in used_ids:
+                                continue
+                            for dst in dst_rows:
+                                if dst.uid in used_ids or dst.uid == flex.uid:
+                                    continue
+                                lineup = [qb, *list(rb_pair), *list(wr_triplet), te, flex, dst]
+                                if not _lineup_satisfies_roster_rules(lineup):
+                                    continue
+                                salary = int(sum(row.salary for row in lineup))
+                                if salary > DK_SALARY_CAP or salary < salary_floor:
+                                    continue
+                                key = tuple(sorted(row.uid for row in lineup))
+                                if key in seen_keys:
+                                    continue
+                                seen_keys.add(key)
+                                lineups.append(lineup)
+                                if len(lineups) >= target:
+                                    return lineups
+        return lineups
+
+    def _generate_candidate_lineups_adaptive(
+        self,
+        *,
+        players: list[PlayerPoolRow],
+        requested_lineups: int,
+        min_salary_floor: int,
+        rng: np.random.Generator,
+    ) -> list[list[PlayerPoolRow]]:
+        target = max(100, int(requested_lineups))
+        base_floor = max(0, int(min_salary_floor))
+        attempts_plan: list[tuple[int, int, int, int]] = [
+            (target, base_floor, min(target, max(200, target // 30)), 6),
+            (min(target, 2200), max(28000, base_floor - 3000), 120, 8),
+            (min(target, 1600), 24000, 100, 10),
+            (min(target, 1200), 20000, 80, 12),
+            (min(target, 900), 12000, 60, 14),
+            (min(target, 700), 0, 40, 18),
+            (min(target, 500), 0, 25, 24),
+        ]
+        seen_plan: set[tuple[int, int, int, int]] = set()
+        plan: list[tuple[int, int, int, int]] = []
+        for item in attempts_plan:
+            normalized = (
+                max(100, int(item[0])),
+                max(0, int(item[1])),
+                max(1, int(item[2])),
+                max(1, int(item[3])),
+            )
+            if normalized not in seen_plan:
+                seen_plan.add(normalized)
+                plan.append(normalized)
+
+        last_error: Exception | None = None
+        for candidate_count, floor_value, min_required, attempts_multiplier in plan:
+            try:
+                return self._generate_candidate_lineups(
+                    players=players,
+                    candidate_lineups=candidate_count,
+                    min_salary_floor=floor_value,
+                    rng=rng,
+                    min_required_lineups=min_required,
+                    max_attempts_multiplier=attempts_multiplier,
+                )
+            except ValueError as exc:
+                last_error = exc
+                continue
+
+        enum_target = max(120, min(requested_lineups, 600))
+        enumerated = self._enumerate_candidate_lineups_small_pool(
+            players=players,
+            limit=enum_target,
+            min_salary_floor=0,
+        )
+        if len(enumerated) >= 20:
+            return enumerated
+
+        solver_target = max(120, min(requested_lineups, 200))
+        projected_candidates = self._optimize_top_projected_lineups(
+            players=players,
+            top_k=solver_target,
+        )
+        if projected_candidates:
+            projected_lineups = [lineup for lineup, _obj, _salary in projected_candidates]
+            if len(projected_lineups) >= 20:
+                return projected_lineups
+            last_error = ValueError(
+                "Projected MILP fallback produced too few candidate lineups "
+                f"({len(projected_lineups)})."
+            )
+
+        if last_error is not None:
+            raise ValueError(
+                f"Adaptive candidate generation failed after {len(plan)} strategies: {last_error}"
+            ) from last_error
+        raise ValueError("Adaptive candidate generation failed with unknown error.")
 
     def _fit_logistic(self, x_train: np.ndarray, y_train: np.ndarray) -> tuple[np.ndarray, float, np.ndarray, np.ndarray]:
         mean = np.mean(x_train, axis=0)
@@ -1320,25 +2743,69 @@ class LineupLearningService:
 
     def build_ultimate_lineups(self, request: UltimateLineupRequest) -> UltimateLineupResponse:
         rng = np.random.default_rng(request.random_seed)
-        (
-            policy_weights,
-            policy_bias,
-            policy_mean,
-            policy_std,
-            training_slates_used,
-            training_rows_used,
-            training_positive_rate,
-        ) = self._fit_policy_for_target(
+        x_history_chunks, points_history_chunks, training_slates_used, training_rows_used = self._collect_training_lineup_chunks(
             source_system=request.source_system,
             season=request.season,
             week=request.week,
             training_start_season=request.training_start_season,
             training_window_slates=request.training_window_slates,
             training_lineups_per_slate=request.training_lineups_per_slate,
-            min_training_slates=request.min_training_slates,
-            min_training_rows=request.min_training_rows,
             rng=rng,
         )
+        history_ready = (
+            training_slates_used >= request.min_training_slates
+            and training_rows_used >= request.min_training_rows
+        )
+        dim = len(FEATURE_NAMES)
+        zero_model = LogisticTargetModel(
+            weights=np.zeros(dim, dtype=float),
+            bias=0.0,
+            mean=np.zeros(dim, dtype=float),
+            std=np.ones(dim, dtype=float),
+            positive_rate=0.0,
+            training_rows=0,
+            has_signal=False,
+        )
+        policy_model = zero_model
+        ceiling_model = zero_model
+        bust_model = zero_model
+        blend_weights = np.asarray([1.0, 0.0, 0.0], dtype=float)
+        blend_intercept = 0.0
+
+        if history_ready:
+            policy_model = self._fit_percentile_model(
+                x_chunks=x_history_chunks,
+                points_chunks=points_history_chunks,
+                percentile=TOP_TARGET_PERCENTILE,
+                tail="upper",
+            )
+            ceiling_model = self._fit_percentile_model(
+                x_chunks=x_history_chunks,
+                points_chunks=points_history_chunks,
+                percentile=CEILING_TARGET_PERCENTILE,
+                tail="upper",
+            )
+            bust_model = self._fit_percentile_model(
+                x_chunks=x_history_chunks,
+                points_chunks=points_history_chunks,
+                percentile=BUST_TARGET_PERCENTILE,
+                tail="lower",
+            )
+
+            x_history = np.vstack(x_history_chunks)
+            points_history = np.concatenate(points_history_chunks)
+            policy_history_scores = self._predict_target_model(policy_model, x_history)
+            ceiling_history_scores = self._predict_target_model(ceiling_model, x_history)
+            bust_history_scores = self._predict_target_model(bust_model, x_history)
+            quality_history_scores = 1.0 - bust_history_scores
+            blend_weights, blend_intercept = self._fit_blend_weights(
+                points_train=points_history,
+                policy_scores=policy_history_scores,
+                ceiling_scores=ceiling_history_scores,
+                quality_scores=quality_history_scores,
+            )
+
+        training_positive_rate = float(policy_model.positive_rate)
 
         player_projection_lookup, dst_projection_lookup = self._compute_player_projection_lookup(
             source_system=request.source_system,
@@ -1382,9 +2849,9 @@ class LineupLearningService:
                 player.projected_mean_points = global_mean
                 player.projected_p90_points = global_p90
 
-        candidate_lineups = self._generate_candidate_lineups(
+        candidate_lineups = self._generate_candidate_lineups_adaptive(
             players=target_pool,
-            candidate_lineups=request.candidate_lineups,
+            requested_lineups=request.candidate_lineups,
             min_salary_floor=request.min_salary_floor,
             rng=rng,
         )
@@ -1398,7 +2865,7 @@ class LineupLearningService:
             dtype=float,
         )
 
-        has_learned_signal = training_rows_used > 0 and float(np.max(np.abs(policy_weights))) > 1e-8
+        has_learned_signal = history_ready and (policy_model.has_signal or ceiling_model.has_signal or bust_model.has_signal)
         learned_only = bool(getattr(request, "learned_only", True))
         if not has_learned_signal and learned_only:
             raise ValueError(
@@ -1407,16 +2874,34 @@ class LineupLearningService:
             )
 
         if has_learned_signal:
-            x_norm = (x_candidates - policy_mean) / policy_std
-            policy_scores = _sigmoid(x_norm @ policy_weights + policy_bias)
+            policy_scores = self._predict_target_model(policy_model, x_candidates)
+            ceiling_scores = self._predict_target_model(ceiling_model, x_candidates)
+            bust_scores = self._predict_target_model(bust_model, x_candidates)
+            quality_scores = 1.0 - bust_scores
+            composite = (
+                blend_intercept
+                + (blend_weights[0] * policy_scores)
+                + (blend_weights[1] * ceiling_scores)
+                + (blend_weights[2] * quality_scores)
+            )
         else:
             # Optional heuristic fallback is only used when learned_only=False.
             policy_scores = np.full(len(candidate_lineups), 0.5, dtype=float)
+            ceiling_scores = np.full(len(candidate_lineups), 0.5, dtype=float)
+            bust_scores = np.full(len(candidate_lineups), 0.5, dtype=float)
+            mean_std = float(np.std(mean_points))
+            p90_std = float(np.std(p90_points))
+            mean_norm = (
+                (mean_points - float(np.mean(mean_points))) / (mean_std if mean_std > 1e-9 else 1.0)
+            )
+            p90_norm = (
+                (p90_points - float(np.mean(p90_points))) / (p90_std if p90_std > 1e-9 else 1.0)
+            )
+            composite = (0.6 * mean_norm) + (0.4 * p90_norm)
 
-        composite = np.asarray(policy_scores, dtype=float)
         matchup_stack_rules = self._summarize_matchup_stack_rules(
             candidate_lineups=candidate_lineups,
-            policy_scores=policy_scores,
+            ranking_scores=composite,
         )
 
         ranked_idx = np.argsort(-composite)
@@ -1557,17 +3042,29 @@ class LineupLearningService:
                 )
             )
 
-        insights = sorted(
-            enumerate(policy_weights),
+        top_feature_weights = sorted(
+            enumerate(policy_model.weights),
             key=lambda item: abs(float(item[1])),
             reverse=True,
         )[:5]
+        selected_policy_mean = float(np.mean(policy_scores[top_idx])) if keep > 0 else 0.0
+        selected_ceiling_mean = float(np.mean(ceiling_scores[top_idx])) if keep > 0 else 0.0
+        selected_bust_mean = float(np.mean(bust_scores[top_idx])) if keep > 0 else 0.0
         discovered_patterns = [
-            f"Policy trained on {training_slates_used} slates and {training_rows_used} historical lineups.",
-            f"Historical positive lineup rate (top 2% target) = {training_positive_rate:.2%}.",
+            f"Models trained on {training_slates_used} slates and {training_rows_used} historical lineups.",
+            (
+                "Historical label rates: "
+                f"top-{100 - TOP_TARGET_PERCENTILE:.0f}%={policy_model.positive_rate:.2%}, "
+                f"ceiling(top-{100 - CEILING_TARGET_PERCENTILE:.0f}%)={ceiling_model.positive_rate:.2%}, "
+                f"bust(bottom-{BUST_TARGET_PERCENTILE:.0f}%)={bust_model.positive_rate:.2%}."
+            ),
             (
                 "Ranking mode: "
-                + ("learned-only policy score." if has_learned_signal else "heuristic fallback (no learned signal).")
+                + (
+                    "learned blended score (policy + ceiling + quality)."
+                    if has_learned_signal
+                    else "heuristic fallback (no learned signal)."
+                )
             ),
             (
                 "Diversification targets: "
@@ -1584,7 +3081,20 @@ class LineupLearningService:
                 f"Exposure caps auto-relaxed by x{cap_multiplier_used:.2f} to fill {keep} lineups."
             )
         if has_learned_signal:
-            for idx, weight in insights:
+            discovered_patterns.append(
+                "Learned blend weights: "
+                f"policy={blend_weights[0]:.3f}, "
+                f"ceiling={blend_weights[1]:.3f}, "
+                f"quality(1-bust)={blend_weights[2]:.3f}, "
+                f"intercept={blend_intercept:.3f}."
+            )
+            discovered_patterns.append(
+                "Selected lineup average risk profile: "
+                f"policy={selected_policy_mean:.3f}, "
+                f"ceiling={selected_ceiling_mean:.3f}, "
+                f"bust={selected_bust_mean:.3f}."
+            )
+            for idx, weight in top_feature_weights:
                 direction = "positive" if weight > 0 else "negative"
                 discovered_patterns.append(
                     f"Policy signal: {FEATURE_NAMES[idx]} has {direction} weight {float(weight):.3f}."

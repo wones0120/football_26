@@ -1,0 +1,278 @@
+{
+  "summary": {
+    "source_system": "draftkings",
+    "season_start": 2025,
+    "season_end": 2025,
+    "slate_filter": "sunday_main",
+    "lineups_per_slate": 2000,
+    "training_window_slates": 24,
+    "learned_only": true,
+    "slates_total": 12,
+    "slates_completed": 6,
+    "slates_failed_or_skipped": 6,
+    "mean_gap_points": 173.9067,
+    "median_gap_points": 174.52,
+    "best_case_gap_points": 137.2,
+    "worst_case_gap_points": 215.86
+  },
+  "rows": [
+    {
+      "season": 2025,
+      "week": 1,
+      "slate": "sunday_main",
+      "status": "warmup_or_no_signal",
+      "error": "Insufficient learned history for learned-only mode."
+    },
+    {
+      "season": 2025,
+      "week": 5,
+      "slate": "sunday_main",
+      "status": "warmup_or_no_signal",
+      "error": "Insufficient learned history for learned-only mode."
+    },
+    {
+      "season": 2025,
+      "week": 6,
+      "slate": "sunday_main",
+      "status": "warmup_or_no_signal",
+      "error": "Insufficient learned history for learned-only mode."
+    },
+    {
+      "season": 2025,
+      "week": 7,
+      "slate": "sunday_main",
+      "status": "warmup_or_no_signal",
+      "error": "Insufficient learned history for learned-only mode."
+    },
+    {
+      "season": 2025,
+      "week": 8,
+      "slate": "sunday_main",
+      "status": "warmup_or_no_signal",
+      "error": "Insufficient learned history for learned-only mode."
+    },
+    {
+      "season": 2025,
+      "week": 9,
+      "slate": "sunday_main",
+      "status": "warmup_or_no_signal",
+      "error": "Insufficient learned history for learned-only mode."
+    },
+    {
+      "season": 2025,
+      "week": 10,
+      "slate": "sunday_main",
+      "status": "ok",
+      "optimal_actual_points": 273.88,
+      "predicted_actual_points": 112.82,
+      "gap_points": 161.06,
+      "optimal_salary_used": 49300,
+      "predicted_salary_used": 49300,
+      "predicted_projected_mean_points": 110.8861,
+      "predicted_projected_p90_points": 205.614,
+      "predicted_policy_score": 0.152387,
+      "optimal_lineup": [
+        "QB:Davis Mills(HOU,$4500,actual=28.68)",
+        "RB:Jahmyr Gibbs(DET,$8000,actual=41.20)",
+        "RB:De'Von Achane(MIA,$7400,actual=43.50)",
+        "RB:TreVeyon Henderson(NE,$5600,actual=31.00)",
+        "WR:Emeka Egbuka(TB,$7000,actual=26.50)",
+        "WR:Jameson Williams(DET,$4900,actual=26.90)",
+        "WR:Jalen Nailor(MIN,$3100,actual=26.40)",
+        "TE:Trey McBride(ARI,$6000,actual=30.70)",
+        "DST:Jets(NYJ,$2800,actual=19.00)"
+      ],
+      "predicted_lineup": [
+        "QB:Tua Tagovailoa(MIA,$4800,actual=12.82)",
+        "RB:Alvin Kamara(NO,$5400,actual=14.50)",
+        "RB:Jacory Croskey-Merritt(WAS,$5200,actual=3.00)",
+        "WR:Jaxon Smith-Njigba(SEA,$8600,actual=20.30)",
+        "WR:Jaylen Waddle(MIA,$6400,actual=19.40)",
+        "WR:Amon-Ra St. Brown(DET,$8400,actual=16.80)",
+        "TE:Cade Otton(TB,$3900,actual=17.20)",
+        "RB:Kyle Juszczyk(SF,$4000,actual=2.80)",
+        "DST:Jaguars(JAC,$2600,actual=6.00)"
+      ]
+    },
+    {
+      "season": 2025,
+      "week": 11,
+      "slate": "sunday_main",
+      "status": "ok",
+      "optimal_actual_points": 291.48,
+      "predicted_actual_points": 92.2,
+      "gap_points": 199.28,
+      "optimal_salary_used": 49900,
+      "predicted_salary_used": 50000,
+      "predicted_projected_mean_points": 117.4182,
+      "predicted_projected_p90_points": 219.628,
+      "predicted_policy_score": 0.193028,
+      "optimal_lineup": [
+        "QB:Josh Allen(BUF,$7000,actual=47.68)",
+        "RB:Christian McCaffrey(SF,$9000,actual=35.10)",
+        "RB:Sean Tucker(TB,$5000,actual=37.00)",
+        "RB:Kenneth Gainwell(PIT,$4100,actual=29.50)",
+        "WR:Nico Collins(HOU,$6700,actual=24.20)",
+        "WR:Tetairoa McMillan(CAR,$5600,actual=36.00)",
+        "WR:Michael Wilson(ARI,$3800,actual=36.50)",
+        "TE:Trey McBride(ARI,$6300,actual=30.50)",
+        "DST:Browns(CLE,$2400,actual=15.00)"
+      ],
+      "predicted_lineup": [
+        "QB:Russell Wilson(NYG,$4600,actual=0.00)",
+        "RB:Jarquez Hunter(LAR,$4000,actual=0.00)",
+        "RB:Kareem Hunt(KC,$5200,actual=13.20)",
+        "WR:Tee Higgins(CIN,$6000,actual=15.30)",
+        "WR:Puka Nacua(LAR,$8700,actual=15.30)",
+        "WR:Khalil Shakir(BUF,$5300,actual=0.70)",
+        "TE:Trey McBride(ARI,$6300,actual=30.50)",
+        "RB:Rachaad White(TB,$6200,actual=8.20)",
+        "DST:Texans(HOU,$3700,actual=9.00)"
+      ]
+    },
+    {
+      "season": 2025,
+      "week": 12,
+      "slate": "sunday_main",
+      "status": "ok",
+      "optimal_actual_points": 292.44,
+      "predicted_actual_points": 104.46,
+      "gap_points": 187.98,
+      "optimal_salary_used": 49700,
+      "predicted_salary_used": 49800,
+      "predicted_projected_mean_points": 111.8061,
+      "predicted_projected_p90_points": 197.238,
+      "predicted_policy_score": 0.112796,
+      "optimal_lineup": [
+        "QB:Jameis Winston(NYG,$4600,actual=36.24)",
+        "RB:Jahmyr Gibbs(DET,$8300,actual=58.40)",
+        "RB:Emanuel Wilson(GB,$5300,actual=29.50)",
+        "WR:Jaxon Smith-Njigba(SEA,$9000,actual=40.10)",
+        "WR:George Pickens(DAL,$6900,actual=32.60)",
+        "WR:Wan'Dale Robinson(NYG,$5500,actual=33.60)",
+        "WR:John Metchie III(NYJ,$3300,actual=18.50)",
+        "TE:Hunter Henry(NE,$3900,actual=27.50)",
+        "DST:Browns(CLE,$2900,actual=16.00)"
+      ],
+      "predicted_lineup": [
+        "QB:Kirk Cousins(ATL,$4400,actual=15.46)",
+        "RB:Bijan Robinson(ATL,$8500,actual=14.70)",
+        "RB:Jonathan Taylor(IND,$10000,actual=8.60)",
+        "WR:Rome Odunze(CHI,$6100,actual=8.30)",
+        "WR:DJ Moore(CHI,$4900,actual=23.40)",
+        "WR:Chris Olave(NO,$6400,actual=16.00)",
+        "TE:Charlie Woerner(ATL,$2500,actual=5.40)",
+        "WR:Olamide Zaccheaus(CHI,$3100,actual=1.60)",
+        "DST:Ravens(BAL,$3900,actual=11.00)"
+      ]
+    },
+    {
+      "season": 2025,
+      "week": 13,
+      "slate": "sunday_main",
+      "status": "ok",
+      "optimal_actual_points": 226.54,
+      "predicted_actual_points": 89.34,
+      "gap_points": 137.2,
+      "optimal_salary_used": 50000,
+      "predicted_salary_used": 50000,
+      "predicted_projected_mean_points": 116.5697,
+      "predicted_projected_p90_points": 211.49,
+      "predicted_policy_score": 0.119437,
+      "optimal_lineup": [
+        "QB:Jacoby Brissett(ARI,$5800,actual=23.64)",
+        "RB:Bijan Robinson(ATL,$8500,actual=33.30)",
+        "RB:Kimani Vidal(LAC,$5700,actual=23.70)",
+        "WR:Davante Adams(LAR,$7500,actual=21.80)",
+        "WR:Jakobi Meyers(JAC,$5700,actual=21.30)",
+        "WR:Adonai Mitchell(NYJ,$3600,actual=27.20)",
+        "WR:Devaughn Vele(NO,$3500,actual=23.30)",
+        "TE:Brock Bowers(LV,$5800,actual=22.30)",
+        "DST:Seahawks(SEA,$3900,actual=30.00)"
+      ],
+      "predicted_lineup": [
+        "QB:Jacoby Brissett(ARI,$5800,actual=23.64)",
+        "RB:Christian McCaffrey(SF,$9300,actual=17.40)",
+        "RB:Ashton Jeanty(LV,$6400,actual=12.10)",
+        "WR:Chris Godwin Jr.(TB,$5000,actual=10.80)",
+        "WR:Puka Nacua(LAR,$9000,actual=13.20)",
+        "WR:Ja'seem Reed(CAR,$3000,actual=0.00)",
+        "TE:Pharaoh Brown(ARI,$2500,actual=0.00)",
+        "WR:Emeka Egbuka(TB,$6500,actual=8.20)",
+        "DST:Raiders(LV,$2500,actual=4.00)"
+      ]
+    },
+    {
+      "season": 2025,
+      "week": 17,
+      "slate": "sunday_main",
+      "status": "ok",
+      "optimal_actual_points": 236.04,
+      "predicted_actual_points": 93.98,
+      "gap_points": 142.06,
+      "optimal_salary_used": 48700,
+      "predicted_salary_used": 49400,
+      "predicted_projected_mean_points": 109.2508,
+      "predicted_projected_p90_points": 215.408,
+      "predicted_policy_score": 0.092728,
+      "optimal_lineup": [
+        "QB:Drake Maye(NE,$6800,actual=32.44)",
+        "RB:Chase Brown(CIN,$7400,actual=32.10)",
+        "RB:Rhamondre Stevenson(NE,$5900,actual=27.20)",
+        "RB:Zach Charbonnet(SEA,$5300,actual=29.20)",
+        "WR:Chris Olave(NO,$7200,actual=28.90)",
+        "WR:Wan'Dale Robinson(NYG,$5700,actual=25.30)",
+        "WR:Chris Godwin Jr.(TB,$5000,actual=26.80)",
+        "TE:Greg Dulcich(MIA,$2500,actual=16.10)",
+        "DST:Giants(NYG,$2900,actual=18.00)"
+      ],
+      "predicted_lineup": [
+        "QB:Josh Allen(BUF,$7000,actual=24.18)",
+        "RB:TreVeyon Henderson(NE,$6400,actual=8.20)",
+        "RB:D'Ernest Johnson(NE,$4300,actual=0.50)",
+        "WR:Jaxon Smith-Njigba(SEA,$8600,actual=16.20)",
+        "WR:Alec Pierce(IND,$4700,actual=0.00)",
+        "WR:Mike Evans(TB,$6500,actual=12.10)",
+        "TE:Chig Okonkwo(TEN,$3300,actual=14.50)",
+        "RB:Ashton Jeanty(LV,$6100,actual=9.30)",
+        "DST:Browns(CLE,$2500,actual=9.00)"
+      ]
+    },
+    {
+      "season": 2025,
+      "week": 18,
+      "slate": "sunday_main",
+      "status": "ok",
+      "optimal_actual_points": 259.66,
+      "predicted_actual_points": 43.8,
+      "gap_points": 215.86,
+      "optimal_salary_used": 49900,
+      "predicted_salary_used": 49500,
+      "predicted_projected_mean_points": 127.8962,
+      "predicted_projected_p90_points": 229.286,
+      "predicted_policy_score": 0.103155,
+      "optimal_lineup": [
+        "QB:Mitchell Trubisky(BUF,$5000,actual=28.86)",
+        "RB:Rhamondre Stevenson(NE,$5600,actual=38.30)",
+        "RB:Tyrone Tracy Jr.(NYG,$5500,actual=31.90)",
+        "RB:Ray Davis(BUF,$4900,actual=28.40)",
+        "WR:Puka Nacua(LAR,$9000,actual=26.00)",
+        "WR:Amon-Ra St. Brown(DET,$7700,actual=27.90)",
+        "WR:Alec Pierce(IND,$4500,actual=32.20)",
+        "TE:Colston Loveland(CHI,$3900,actual=25.10)",
+        "DST:Broncos(DEN,$3800,actual=21.00)"
+      ],
+      "predicted_lineup": [
+        "QB:Jordan Love(GB,$5500,actual=0.00)",
+        "RB:Alvin Kamara(NO,$5500,actual=0.00)",
+        "RB:Saquon Barkley(PHI,$7200,actual=0.00)",
+        "WR:Drake London(ATL,$6900,actual=17.80)",
+        "WR:CeeDee Lamb(DAL,$7300,actual=1.40)",
+        "WR:Chris Olave(NO,$7400,actual=0.00)",
+        "TE:Colby Parkinson(LAR,$3700,actual=19.60)",
+        "TE:Brock Bowers(LV,$2500,actual=0.00)",
+        "DST:Bills(BUF,$3500,actual=5.00)"
+      ]
+    }
+  ]
+}

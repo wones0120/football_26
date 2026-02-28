@@ -1,0 +1,34 @@
+{
+  "summary": {
+    "source_system": "draftkings",
+    "season_start": 2025,
+    "season_end": 2025,
+    "slate_filter": "sunday_main",
+    "lineups_per_slate": 2000,
+    "training_window_slates": 24,
+    "learned_only": true,
+    "slates_total": 2,
+    "slates_completed": 0,
+    "slates_failed_or_skipped": 2,
+    "mean_gap_points": null,
+    "median_gap_points": null,
+    "best_case_gap_points": null,
+    "worst_case_gap_points": null
+  },
+  "rows": [
+    {
+      "season": 2025,
+      "week": 1,
+      "slate": "sunday_main",
+      "status": "warmup_or_no_signal",
+      "error": "Insufficient learned history for learned-only mode."
+    },
+    {
+      "season": 2025,
+      "week": 5,
+      "slate": "sunday_main",
+      "status": "warmup_or_no_signal",
+      "error": "Insufficient learned history for learned-only mode."
+    }
+  ]
+}
