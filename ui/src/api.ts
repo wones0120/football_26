@@ -144,6 +144,42 @@ export type BacktestWeekResult = {
   rows: BacktestPlayerRow[];
 };
 
+export type OptimalVsPredictedBacktestRow = {
+  season: number;
+  week: number;
+  slate: string;
+  slate_type: "classic" | "showdown";
+  status: string;
+  optimal_actual_points?: number | null;
+  predicted_actual_points?: number | null;
+  gap_points?: number | null;
+  optimal_salary_used?: number | null;
+  predicted_salary_used?: number | null;
+  predicted_projected_mean_points?: number | null;
+  predicted_projected_p90_points?: number | null;
+  predicted_policy_score?: number | null;
+  error_message?: string | null;
+};
+
+export type OptimalVsPredictedBacktestResult = {
+  source_system: "draftkings" | "fanduel";
+  season_start: number;
+  season_end: number;
+  slate_filter?: string | null;
+  slate_type: "classic" | "showdown";
+  lineups_per_slate: number;
+  training_window_slates: number;
+  learned_only: boolean;
+  slates_total: number;
+  slates_completed: number;
+  slates_failed_or_skipped: number;
+  mean_gap_points?: number | null;
+  median_gap_points?: number | null;
+  best_case_gap_points?: number | null;
+  worst_case_gap_points?: number | null;
+  rows: OptimalVsPredictedBacktestRow[];
+};
+
 export type AutoDiscoveredFile = {
   file_name: string;
   path: string;
@@ -291,6 +327,23 @@ export function backtestWeek(payload: {
   low_salary_hit_points?: number;
 }): Promise<BacktestWeekResult> {
   return postJson("/simulate/backtest-week", payload);
+}
+
+export function runOptimalVsPredictedBacktest(payload: {
+  source_system: "draftkings" | "fanduel";
+  season_start: number;
+  season_end: number;
+  slate?: string | null;
+  slate_type: "classic" | "showdown";
+  lineups_per_slate?: number;
+  training_window_slates?: number;
+  min_training_slates?: number;
+  min_training_rows?: number;
+  learned_only?: boolean;
+  random_seed?: number;
+  limit_slates?: number;
+}): Promise<OptimalVsPredictedBacktestResult> {
+  return postJson("/lineups/optimal-vs-predicted", payload);
 }
 
 export function fetchRuns(): Promise<{ rows: IngestResult[] }> {

@@ -364,6 +364,57 @@ class LineupLearningResponse(BaseModel):
     rows: list[LineupLearningSlateResultRowResponse]
 
 
+class OptimalVsPredictedBacktestRequest(BaseModel):
+    source_system: Literal["draftkings", "fanduel"] = "draftkings"
+    season_start: int = Field(default=2024, ge=2000)
+    season_end: int = Field(default=2025, ge=2000)
+    slate: str | None = None
+    slate_type: Literal["classic", "showdown"] = "classic"
+    lineups_per_slate: int = Field(default=600, ge=100, le=20000)
+    training_window_slates: int = Field(default=24, ge=2, le=120)
+    min_training_slates: int = Field(default=2, ge=1, le=80)
+    min_training_rows: int = Field(default=500, ge=100, le=2000000)
+    learned_only: bool = True
+    random_seed: int | None = None
+    limit_slates: int = Field(default=0, ge=0, le=2000)
+
+
+class OptimalVsPredictedBacktestRowResponse(BaseModel):
+    season: int
+    week: int
+    slate: str
+    slate_type: Literal["classic", "showdown"]
+    status: str
+    optimal_actual_points: float | None = None
+    predicted_actual_points: float | None = None
+    gap_points: float | None = None
+    optimal_salary_used: int | None = None
+    predicted_salary_used: int | None = None
+    predicted_projected_mean_points: float | None = None
+    predicted_projected_p90_points: float | None = None
+    predicted_policy_score: float | None = None
+    error_message: str | None = None
+
+
+class OptimalVsPredictedBacktestResponse(BaseModel):
+    source_system: str
+    season_start: int
+    season_end: int
+    slate_filter: str | None
+    slate_type: Literal["classic", "showdown"]
+    lineups_per_slate: int
+    training_window_slates: int
+    learned_only: bool
+    slates_total: int
+    slates_completed: int
+    slates_failed_or_skipped: int
+    mean_gap_points: float | None
+    median_gap_points: float | None
+    best_case_gap_points: float | None
+    worst_case_gap_points: float | None
+    rows: list[OptimalVsPredictedBacktestRowResponse]
+
+
 class ActualTopLineupBuildRequest(BaseModel):
     source_system: Literal["draftkings", "fanduel"] = "draftkings"
     season_start: int = Field(default=2024, ge=2000)

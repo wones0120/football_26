@@ -1,0 +1,99 @@
+{
+  "summary": {
+    "source_system": "draftkings",
+    "season_start": 2024,
+    "season_end": 2025,
+    "slate_filter": null,
+    "slate_type": "showdown",
+    "lineups_per_slate": 600,
+    "training_window_slates": 24,
+    "learned_only": true,
+    "slates_total": 4,
+    "slates_completed": 2,
+    "slates_failed_or_skipped": 2,
+    "mean_gap_points": 64.795,
+    "median_gap_points": 64.795,
+    "best_case_gap_points": 55.36,
+    "worst_case_gap_points": 74.23
+  },
+  "rows": [
+    {
+      "season": 2024,
+      "week": 7,
+      "slate": "sunday_night",
+      "slate_type": "showdown",
+      "status": "warmup_or_no_signal",
+      "error": "Insufficient learned history for learned-only mode."
+    },
+    {
+      "season": 2024,
+      "week": 8,
+      "slate": "sunday",
+      "slate_type": "showdown",
+      "status": "warmup_or_no_signal",
+      "error": "Insufficient learned history for learned-only mode."
+    },
+    {
+      "season": 2024,
+      "week": 8,
+      "slate": "thursday",
+      "slate_type": "showdown",
+      "status": "ok",
+      "optimal_actual_points": 129.21,
+      "predicted_actual_points": 73.85,
+      "gap_points": 55.36,
+      "optimal_salary_used": 48900,
+      "predicted_salary_used": 49100,
+      "predicted_projected_mean_points": 84.6343,
+      "predicted_projected_p90_points": 157.2,
+      "predicted_policy_score": 0.090193,
+      "optimal_lineup": [
+        "CPT:Demarcus Robinson(LAR,$4500,actual=26.25,base=17.50)",
+        "FLEX:Justin Jefferson(MIN,$11800,actual=22.50)",
+        "FLEX:Kyren Williams(LAR,$11200,actual=22.60)",
+        "FLEX:Puka Nacua(LAR,$10600,actual=21.10)",
+        "FLEX:Matthew Stafford(LAR,$9000,actual=25.76)",
+        "FLEX:Josh Oliver(MIN,$1800,actual=11.00)"
+      ],
+      "predicted_lineup": [
+        "CPT:Puka Nacua(LAR,$15900,actual=31.65,base=21.10)",
+        "FLEX:Justin Jefferson(MIN,$11800,actual=22.50)",
+        "FLEX:Jordan Whittington(LAR,$4000,actual=0.00)",
+        "FLEX:Cooper Kupp(LAR,$11000,actual=16.10)",
+        "FLEX:Davis Allen(LAR,$200,actual=0.00)",
+        "FLEX:Jalen Nailor(MIN,$6200,actual=3.60)"
+      ]
+    },
+    {
+      "season": 2024,
+      "week": 9,
+      "slate": "thursday",
+      "slate_type": "showdown",
+      "status": "ok",
+      "optimal_actual_points": 129.44,
+      "predicted_actual_points": 55.21,
+      "gap_points": 74.23,
+      "optimal_salary_used": 48800,
+      "predicted_salary_used": 49900,
+      "predicted_projected_mean_points": 91.8198,
+      "predicted_projected_p90_points": 166.793,
+      "predicted_policy_score": 0.110579,
+      "optimal_lineup": [
+        "CPT:Garrett Wilson(NYJ,$14400,actual=45.00,base=30.00)",
+        "FLEX:Davante Adams(NYJ,$9800,actual=22.10)",
+        "FLEX:Tank Dell(HOU,$9200,actual=21.60)",
+        "FLEX:Aaron Rodgers(NYJ,$9000,actual=20.34)",
+        "FLEX:Jets(NYJ,$3400,actual=14.00)",
+        "FLEX:Robert Woods(HOU,$3000,actual=6.40)"
+      ],
+      "predicted_lineup": [
+        "CPT:Aaron Rodgers(NYJ,$13500,actual=30.51,base=20.34)",
+        "FLEX:Dalton Schultz(HOU,$7000,actual=5.10)",
+        "FLEX:Stefon Diggs(HOU,$9400,actual=0.00)",
+        "FLEX:Nico Collins(HOU,$8800,actual=0.00)",
+        "FLEX:Brevin Jordan(HOU,$200,actual=0.00)",
+        "FLEX:Joe Mixon(HOU,$11000,actual=19.60)"
+      ]
+    }
+  ]
+}

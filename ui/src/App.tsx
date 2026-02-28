@@ -12,12 +12,14 @@ import {
   ingestNflreadpyWeeklyStats,
   ingestInjuries,
   ingestSalaries,
+  runOptimalVsPredictedBacktest,
   resolveUnresolved,
   simulateWeek,
   upsertPlayerMaster,
   type BacktestWeekResult,
   type IngestResult,
   type CuratedSalarySliceRow,
+  type OptimalVsPredictedBacktestResult,
   type SeasonCoverageRow,
   type SimulatedPlayerOutcome,
   type UnresolvedRow,
@@ -45,9 +47,19 @@ function App() {
   const [backtestTopN, setBacktestTopN] = useState(25);
   const [backtestLowSalaryThreshold, setBacktestLowSalaryThreshold] = useState(4500);
   const [backtestLowSalaryHitPoints, setBacktestLowSalaryHitPoints] = useState(15);
+  const [lineupBacktestMode, setLineupBacktestMode] = useState<"classic" | "showdown">("classic");
+  const [lineupBacktestLineupsPerSlate, setLineupBacktestLineupsPerSlate] = useState(600);
+  const [lineupBacktestTrainingWindowSlates, setLineupBacktestTrainingWindowSlates] = useState(24);
+  const [lineupBacktestMinTrainingSlates, setLineupBacktestMinTrainingSlates] = useState(2);
+  const [lineupBacktestMinTrainingRows, setLineupBacktestMinTrainingRows] = useState(500);
+  const [lineupBacktestLimitSlates, setLineupBacktestLimitSlates] = useState(0);
   const [simulationRows, setSimulationRows] = useState<SimulatedPlayerOutcome[]>([]);
   const [simulationRunId, setSimulationRunId] = useState<string | null>(null);
   const [backtestResult, setBacktestResult] = useState<BacktestWeekResult | null>(null);
+  const [lineupBacktestClassicResult, setLineupBacktestClassicResult] =
+    useState<OptimalVsPredictedBacktestResult | null>(null);
+  const [lineupBacktestShowdownResult, setLineupBacktestShowdownResult] =
+    useState<OptimalVsPredictedBacktestResult | null>(null);
   const [runs, setRuns] = useState<IngestResult[]>([]);
   const [coverage, setCoverage] = useState<SeasonCoverageRow[]>([]);
   const [salarySlices, setSalarySlices] = useState<CuratedSalarySliceRow[]>([]);
@@ -66,6 +78,10 @@ function App() {
     if (total === 0) return 0;
     return Math.max(0, Math.round(((total - unresolvedRows) / total) * 100));
   }, [runs]);
+  const lineupBacktestPanels = [
+    { mode: "classic" as const, result: lineupBacktestClassicResult },
+    { mode: "showdown" as const, result: lineupBacktestShowdownResult },
+  ];
 
   const refresh = async () => {
     const [runsResp, unresolvedResp, coverageResp] = await Promise.all([
@@ -377,6 +393,82 @@ function App() {
     } finally {
       setIsIngesting(false);
     }
+  };
+
+  const runLineupBacktest = async () => {
+    const seasonStart = Math.min(historyStartSeason, historyEndSeason);
+    const seasonEnd = Math.max(historyStartSeason, historyEndSeason);
+    setIsIngesting(true);
+    setStatus(
+      `Running ${lineupBacktestMode} lineup backtest for ${sourceSystem} seasons ${seasonStart}-${seasonEnd}...`
+    );
+    setError(null);
+    try {
+      const result = await runOptimalVsPredictedBacktest({
+        source_system: sourceSystem,
+        season_start: seasonStart,
+        season_end: seasonEnd,
+        slate_type: lineupBacktestMode,
+        lineups_per_slate: lineupBacktestLineupsPerSlate,
+        training_window_slates: lineupBacktestTrainingWindowSlates,
+        min_training_slates: lineupBacktestMinTrainingSlates,
+        min_training_rows: lineupBacktestMinTrainingRows,
+        learned_only: true,
+        limit_slates: lineupBacktestLimitSlates,
+      });
+      if (lineupBacktestMode === "classic") {
+        setLineupBacktestClassicResult(result);
+      } else {
+        setLineupBacktestShowdownResult(result);
+      }
+      const meanGap = result.mean_gap_points == null ? "n/a" : result.mean_gap_points.toFixed(2);
+      setStatus(
+        `${lineupBacktestMode} lineup backtest completed: slates=${result.slates_completed}/${result.slates_total} mean_gap=${meanGap}`
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setStatus(null);
+    } finally {
+      setIsIngesting(false);
+    }
+  };
+
+  const downloadLineupBacktestResult = (
+    mode: "classic" | "showdown",
+    result: OptimalVsPredictedBacktestResult
+  ) => {
+    const payload = {
+      exported_at: new Date().toISOString(),
+      mode,
+      source_system: result.source_system,
+      summary: {
+        season_start: result.season_start,
+        season_end: result.season_end,
+        slate_filter: result.slate_filter,
+        slate_type: result.slate_type,
+        lineups_per_slate: result.lineups_per_slate,
+        training_window_slates: result.training_window_slates,
+        learned_only: result.learned_only,
+        slates_total: result.slates_total,
+        slates_completed: result.slates_completed,
+        slates_failed_or_skipped: result.slates_failed_or_skipped,
+        mean_gap_points: result.mean_gap_points,
+        median_gap_points: result.median_gap_points,
+        best_case_gap_points: result.best_case_gap_points,
+        worst_case_gap_points: result.worst_case_gap_points,
+      },
+      rows: result.rows,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+    a.href = url;
+    a.download = `lineup_backtest_${mode}_${result.season_start}_${result.season_end}_${stamp}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
   };
 
   const createAndResolve = async (row: UnresolvedRow) => {
@@ -916,6 +1008,213 @@ function App() {
               </div>
             </div>
           )}
+        </section>
+
+        <section className="panel wide-panel">
+          <h2>Lineup Backtests (Optimal vs Predicted)</h2>
+          <p className="hint">
+            Runs walk-forward lineup backtests against actual-optimal lineups. Classic and showdown are tracked
+            separately.
+          </p>
+          <div className="backtest-grid">
+            <label>
+              Mode
+              <select
+                value={lineupBacktestMode}
+                onChange={(event) => setLineupBacktestMode(event.target.value as "classic" | "showdown")}
+              >
+                <option value="classic">classic</option>
+                <option value="showdown">showdown</option>
+              </select>
+            </label>
+            <label>
+              Candidate Lineups / Slate
+              <input
+                type="number"
+                min={100}
+                max={20000}
+                step={100}
+                value={lineupBacktestLineupsPerSlate}
+                onChange={(event) => setLineupBacktestLineupsPerSlate(Number(event.target.value))}
+              />
+            </label>
+            <label>
+              Training Window (Slates)
+              <input
+                type="number"
+                min={2}
+                max={120}
+                value={lineupBacktestTrainingWindowSlates}
+                onChange={(event) => setLineupBacktestTrainingWindowSlates(Number(event.target.value))}
+              />
+            </label>
+            <label>
+              Min Training Slates
+              <input
+                type="number"
+                min={1}
+                max={80}
+                value={lineupBacktestMinTrainingSlates}
+                onChange={(event) => setLineupBacktestMinTrainingSlates(Number(event.target.value))}
+              />
+            </label>
+            <label>
+              Min Training Rows
+              <input
+                type="number"
+                min={100}
+                max={2000000}
+                step={100}
+                value={lineupBacktestMinTrainingRows}
+                onChange={(event) => setLineupBacktestMinTrainingRows(Number(event.target.value))}
+              />
+            </label>
+            <label>
+              Limit Slates (0 = all)
+              <input
+                type="number"
+                min={0}
+                max={2000}
+                value={lineupBacktestLimitSlates}
+                onChange={(event) => setLineupBacktestLimitSlates(Number(event.target.value))}
+              />
+            </label>
+          </div>
+          <div className="button-row">
+            <button onClick={runLineupBacktest} disabled={isIngesting}>
+              Run {lineupBacktestMode} Lineup Backtest
+            </button>
+            <button
+              onClick={() => {
+                setLineupBacktestClassicResult(null);
+                setLineupBacktestShowdownResult(null);
+              }}
+              disabled={isIngesting || (!lineupBacktestClassicResult && !lineupBacktestShowdownResult)}
+            >
+              Clear Lineup Backtest Results
+            </button>
+          </div>
+
+          {lineupBacktestPanels.map(({ mode, result }) => {
+            if (!result) return null;
+            const topGaps = result.rows
+              .filter((row) => row.status === "ok" && row.gap_points != null)
+              .sort((a, b) => (b.gap_points ?? -999999) - (a.gap_points ?? -999999))
+              .slice(0, 12);
+            const issues = result.rows.filter((row) => row.status !== "ok");
+            return (
+              <div className="subsection" key={mode}>
+                <h3>{mode === "classic" ? "Classic Metrics" : "Showdown Metrics"}</h3>
+                <div className="button-row">
+                  <button onClick={() => downloadLineupBacktestResult(mode, result)} disabled={isIngesting}>
+                    Download {mode} JSON
+                  </button>
+                </div>
+                <div className="metric-grid">
+                  <div className="mini-card">
+                    <span>Slates Completed</span>
+                    <strong>
+                      {result.slates_completed}/{result.slates_total}
+                    </strong>
+                  </div>
+                  <div className="mini-card">
+                    <span>Mean Gap</span>
+                    <strong>{result.mean_gap_points == null ? "-" : result.mean_gap_points.toFixed(2)}</strong>
+                  </div>
+                  <div className="mini-card">
+                    <span>Median Gap</span>
+                    <strong>{result.median_gap_points == null ? "-" : result.median_gap_points.toFixed(2)}</strong>
+                  </div>
+                  <div className="mini-card">
+                    <span>Best Gap</span>
+                    <strong>{result.best_case_gap_points == null ? "-" : result.best_case_gap_points.toFixed(2)}</strong>
+                  </div>
+                  <div className="mini-card">
+                    <span>Worst Gap</span>
+                    <strong>{result.worst_case_gap_points == null ? "-" : result.worst_case_gap_points.toFixed(2)}</strong>
+                  </div>
+                  <div className="mini-card">
+                    <span>Failed/Skipped</span>
+                    <strong>{result.slates_failed_or_skipped}</strong>
+                  </div>
+                </div>
+
+                <div className="dual-tables">
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Season</th>
+                          <th>Week</th>
+                          <th>Slate</th>
+                          <th>Gap</th>
+                          <th>Optimal</th>
+                          <th>Predicted</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {topGaps.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="empty-row">
+                              No completed rows yet.
+                            </td>
+                          </tr>
+                        ) : (
+                          topGaps.map((row) => (
+                            <tr key={`${mode}-${row.season}-${row.week}-${row.slate}`}>
+                              <td>{row.season}</td>
+                              <td>{row.week}</td>
+                              <td>{row.slate}</td>
+                              <td>{row.gap_points == null ? "-" : row.gap_points.toFixed(2)}</td>
+                              <td>
+                                {row.optimal_actual_points == null ? "-" : row.optimal_actual_points.toFixed(2)}
+                              </td>
+                              <td>
+                                {row.predicted_actual_points == null ? "-" : row.predicted_actual_points.toFixed(2)}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Season</th>
+                          <th>Week</th>
+                          <th>Slate</th>
+                          <th>Status</th>
+                          <th>Error</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {issues.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="empty-row">
+                              No failed or warmup rows.
+                            </td>
+                          </tr>
+                        ) : (
+                          issues.map((row) => (
+                            <tr key={`${mode}-issue-${row.season}-${row.week}-${row.slate}`}>
+                              <td>{row.season}</td>
+                              <td>{row.week}</td>
+                              <td>{row.slate}</td>
+                              <td>{row.status}</td>
+                              <td>{row.error_message ?? "-"}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </section>
 
         <section className="panel wide-panel">

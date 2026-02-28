@@ -1,0 +1,1477 @@
+{
+  "summary": {
+    "source_system": "draftkings",
+    "season_start": 2024,
+    "season_end": 2025,
+    "slate_filter": null,
+    "lineups_per_slate": 600,
+    "training_window_slates": 24,
+    "learned_only": true,
+    "slates_total": 88,
+    "slates_completed": 29,
+    "slates_failed_or_skipped": 59,
+    "mean_gap_points": 164.2352,
+    "median_gap_points": 172.46,
+    "best_case_gap_points": 89.7,
+    "worst_case_gap_points": 254.4
+  },
+  "rows": [
+    {
+      "season": 2024,
+      "week": 4,
+      "slate": "main",
+      "status": "warmup_or_no_signal",
+      "error": "Insufficient learned history for learned-only mode."
+    },
+    {
+      "season": 2024,
+      "week": 5,
+      "slate": "main",
+      "status": "warmup_or_no_signal",
+      "error": "Insufficient learned history for learned-only mode."
+    },
+    {
+      "season": 2024,
+      "week": 6,
+      "slate": "main",
+      "status": "ok",
+      "optimal_actual_points": 237.9,
+      "predicted_actual_points": 75.3,
+      "gap_points": 162.6,
+      "optimal_salary_used": 49000,
+      "predicted_salary_used": 45400,
+      "predicted_projected_mean_points": 95.8633,
+      "predicted_projected_p90_points": 177.006,
+      "predicted_policy_score": 0.164659,
+      "optimal_lineup": [
+        "DST:Lions(DET,$2800,actual=18.00)",
+        "QB:Baker Mayfield(TB,$6500,actual=31.90)",
+        "TE:Mark Andrews(BAL,$3900,actual=15.60)",
+        "RB:Joe Mixon(HOU,$6900,actual=30.20)",
+        "WR:Allen Lazard(NYJ,$4700,actual=26.40)",
+        "WR:Garrett Wilson(NYJ,$7100,actual=27.70)",
+        "WR:Zay Flowers(BAL,$6500,actual=25.40)",
+        "RB:Bijan Robinson(ATL,$6600,actual=25.50)",
+        "RB:Sean Tucker(TB,$4000,actual=37.20)"
+      ],
+      "predicted_lineup": [
+        "QB:Josh Allen(BUF,$7500,actual=24.40)",
+        "RB:Rico Dowdle(DAL,$5900,actual=10.50)",
+        "RB:Jaylen Warren(PIT,$5000,actual=4.80)",
+        "WR:Davante Adams(LV,$7100,actual=0.00)",
+        "WR:Tyrell Shavers(BUF,$3000,actual=0.00)",
+        "WR:D.J. Montgomery(IND,$3000,actual=0.00)",
+        "TE:Dalton Kincaid(BUF,$5100,actual=11.10)",
+        "RB:Bucky Irving(TB,$5400,actual=18.50)",
+        "DST:Eagles(PHI,$3400,actual=6.00)"
+      ]
+    },
+    {
+      "season": 2024,
+      "week": 7,
+      "slate": "1pm_slate",
+      "status": "ok",
+      "optimal_actual_points": 215.42,
+      "predicted_actual_points": 86.6,
+      "gap_points": 128.82,
+      "optimal_salary_used": 49400,
+      "predicted_salary_used": 47400,
+      "predicted_projected_mean_points": 97.6515,
+      "predicted_projected_p90_points": 183.58,
+      "predicted_policy_score": 0.377794,
+      "optimal_lineup": [
+        "DST:Eagles(PHI,$3600,actual=15.00)",
+        "TE:Jonnu Smith(MIA,$3400,actual=22.60)",
+        "RB:Joe Mixon(HOU,$7200,actual=29.40)",
+        "TE:David Njoku(CLE,$4100,actual=23.60)",
+        "QB:Josh Allen(BUF,$7500,actual=24.02)",
+        "WR:Cedric Tillman(CLE,$3000,actual=18.10)",
+        "WR:Amon-Ra St. Brown(DET,$8300,actual=28.20)",
+        "RB:Jahmyr Gibbs(DET,$6900,actual=35.00)",
+        "WR:Keon Coleman(BUF,$5400,actual=19.50)"
+      ],
+      "predicted_lineup": [
+        "QB:Jared Goff(DET,$6500,actual=18.80)",
+        "RB:David Montgomery(DET,$6600,actual=9.00)",
+        "RB:Jerome Ford(CLE,$5600,actual=0.00)",
+        "WR:Laviska Shenault Jr.(SEA,$3000,actual=0.00)",
+        "WR:Jaylen Waddle(MIA,$5300,actual=2.10)",
+        "WR:Khalil Shakir(BUF,$6000,actual=13.50)",
+        "TE:James Mitchell(DET,$2500,actual=0.00)",
+        "WR:Amon-Ra St. Brown(DET,$8300,actual=28.20)",
+        "DST:Eagles(PHI,$3600,actual=15.00)"
+      ]
+    },
+    {
+      "season": 2024,
+      "week": 7,
+      "slate": "monday_night",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2024,
+      "week": 7,
+      "slate": "sunday_night",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2024,
+      "week": 8,
+      "slate": "normal",
+      "status": "ok",
+      "optimal_actual_points": 253.84,
+      "predicted_actual_points": 141.64,
+      "gap_points": 112.2,
+      "optimal_salary_used": 49800,
+      "predicted_salary_used": 48100,
+      "predicted_projected_mean_points": 110.1467,
+      "predicted_projected_p90_points": 204.61,
+      "predicted_policy_score": 0.104706,
+      "optimal_lineup": [
+        "QB:Jalen Hurts(PHI,$7500,actual=35.14)",
+        "RB:James Cook(BUF,$7000,actual=31.30)",
+        "RB:Josh Jacobs(GB,$6600,actual=28.50)",
+        "RB:De'Von Achane(MIA,$6200,actual=26.70)",
+        "WR:Marvin Harrison Jr.(ARI,$6800,actual=26.10)",
+        "WR:Ladd McConkey(LAC,$5100,actual=32.10)",
+        "WR:Cedric Tillman(CLE,$3300,actual=28.90)",
+        "TE:Cade Otton(TB,$3500,actual=29.10)",
+        "DST:Lions(DET,$3800,actual=16.00)"
+      ],
+      "predicted_lineup": [
+        "QB:Josh Allen(BUF,$7800,actual=20.82)",
+        "RB:Austin Ekeler(WAS,$5600,actual=7.80)",
+        "RB:Rhamondre Stevenson(NE,$6000,actual=23.50)",
+        "WR:Marvin Harrison Jr.(ARI,$6800,actual=26.10)",
+        "WR:Courtland Sutton(DEN,$5300,actual=21.12)",
+        "WR:Curtis Samuel(BUF,$4000,actual=0.00)",
+        "TE:Dawson Knox(BUF,$2900,actual=7.00)",
+        "RB:James Cook(BUF,$7000,actual=31.30)",
+        "DST:Colts(IND,$2700,actual=4.00)"
+      ]
+    },
+    {
+      "season": 2024,
+      "week": 8,
+      "slate": "sunday",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2024,
+      "week": 8,
+      "slate": "thursday",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2024,
+      "week": 9,
+      "slate": "main",
+      "status": "ok",
+      "optimal_actual_points": 268.22,
+      "predicted_actual_points": 115.56,
+      "gap_points": 152.66,
+      "optimal_salary_used": 49500,
+      "predicted_salary_used": 48800,
+      "predicted_projected_mean_points": 106.2455,
+      "predicted_projected_p90_points": 196.1,
+      "predicted_policy_score": 0.144606,
+      "optimal_lineup": [
+        "QB:Geno Smith(SEA,$5800,actual=28.12)",
+        "RB:Saquon Barkley(PHI,$8200,actual=36.90)",
+        "RB:De'Von Achane(MIA,$6700,actual=32.10)",
+        "WR:Zay Flowers(BAL,$7000,actual=32.70)",
+        "WR:Jaxon Smith-Njigba(SEA,$6200,actual=40.00)",
+        "WR:Demarcus Robinson(LAR,$4800,actual=27.40)",
+        "WR:Quentin Johnston(LAC,$4400,actual=25.00)",
+        "TE:Mike Gesicki(CIN,$3100,actual=30.00)",
+        "DST:Chargers(LAC,$3300,actual=16.00)"
+      ],
+      "predicted_lineup": [
+        "QB:Trevor Lawrence(JAC,$5600,actual=21.56)",
+        "RB:De'Von Achane(MIA,$6700,actual=32.10)",
+        "RB:Rhamondre Stevenson(NE,$6300,actual=22.40)",
+        "WR:DeVonta Smith(PHI,$6800,actual=18.70)",
+        "WR:Romeo Doubs(GB,$5700,actual=6.80)",
+        "WR:Tee Higgins(CIN,$6400,actual=0.00)",
+        "TE:Greg Dulcich(DEN,$2500,actual=0.00)",
+        "WR:Khalil Shakir(BUF,$5900,actual=11.00)",
+        "DST:Falcons(ATL,$2900,actual=3.00)"
+      ]
+    },
+    {
+      "season": 2024,
+      "week": 9,
+      "slate": "thursday",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2024,
+      "week": 10,
+      "slate": "main",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2024,
+      "week": 10,
+      "slate": "sunday",
+      "status": "ok",
+      "optimal_actual_points": 214.44,
+      "predicted_actual_points": 70.96,
+      "gap_points": 143.48,
+      "optimal_salary_used": 49600,
+      "predicted_salary_used": 49400,
+      "predicted_projected_mean_points": 99.9609,
+      "predicted_projected_p90_points": 174.31,
+      "predicted_policy_score": 0.117971,
+      "optimal_lineup": [
+        "QB:Kyler Murray(ARI,$6300,actual=28.74)",
+        "RB:Bijan Robinson(ATL,$7700,actual=32.40)",
+        "RB:James Conner(ARI,$6500,actual=22.30)",
+        "WR:Calvin Ridley(TEN,$5700,actual=25.40)",
+        "WR:Courtland Sutton(DEN,$5600,actual=19.00)",
+        "WR:Ricky Pearsall(SF,$4400,actual=17.30)",
+        "WR:Marquez Valdes-Scantling(NO,$3900,actual=28.90)",
+        "TE:Travis Kelce(KC,$6000,actual=20.40)",
+        "DST:Eagles(PHI,$3500,actual=20.00)"
+      ],
+      "predicted_lineup": [
+        "QB:Derek Carr(NO,$5300,actual=20.46)",
+        "RB:Christian McCaffrey(SF,$8000,actual=16.70)",
+        "RB:Jordan Mason(SF,$7400,actual=0.50)",
+        "WR:Allen Lazard(NYJ,$4800,actual=0.00)",
+        "WR:Tyler Scott(CHI,$3000,actual=0.00)",
+        "WR:Ladd McConkey(LAC,$5900,actual=7.20)",
+        "TE:Dalton Kincaid(BUF,$4900,actual=4.40)",
+        "RB:Rhamondre Stevenson(NE,$6400,actual=8.70)",
+        "DST:Vikings(MIN,$3700,actual=13.00)"
+      ]
+    },
+    {
+      "season": 2024,
+      "week": 10,
+      "slate": "thursday",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2024,
+      "week": 11,
+      "slate": "main",
+      "status": "ok",
+      "optimal_actual_points": 277.4,
+      "predicted_actual_points": 77.74,
+      "gap_points": 199.66,
+      "optimal_salary_used": 48500,
+      "predicted_salary_used": 48200,
+      "predicted_projected_mean_points": 112.2912,
+      "predicted_projected_p90_points": 207.322,
+      "predicted_policy_score": 0.172052,
+      "optimal_lineup": [
+        "QB:Jared Goff(DET,$6300,actual=37.58)",
+        "RB:Breece Hall(NYJ,$7500,actual=31.10)",
+        "RB:David Montgomery(DET,$6500,actual=24.50)",
+        "WR:Amon-Ra St. Brown(DET,$8000,actual=41.70)",
+        "WR:Jerry Jeudy(CLE,$5400,actual=29.20)",
+        "WR:Nick Westbrook-Ikhine(TEN,$3600,actual=22.70)",
+        "TE:Taysom Hill(NO,$4500,actual=46.52)",
+        "TE:Jonnu Smith(MIA,$3800,actual=31.10)",
+        "DST:Broncos(DEN,$2900,actual=13.00)"
+      ],
+      "predicted_lineup": [
+        "QB:Patrick Mahomes(KC,$6800,actual=17.84)",
+        "RB:Kareem Hunt(KC,$6700,actual=6.00)",
+        "RB:Craig Reynolds(DET,$4000,actual=2.10)",
+        "WR:JuJu Smith-Schuster(KC,$4500,actual=1.80)",
+        "WR:Cedric Tillman(CLE,$5300,actual=7.70)",
+        "WR:Jerry Jeudy(CLE,$5400,actual=29.20)",
+        "TE:Travis Kelce(KC,$6300,actual=2.80)",
+        "RB:Aaron Jones(MIN,$6900,actual=5.30)",
+        "DST:Seahawks(SEA,$2300,actual=5.00)"
+      ]
+    },
+    {
+      "season": 2024,
+      "week": 12,
+      "slate": "main",
+      "status": "ok",
+      "optimal_actual_points": 264.78,
+      "predicted_actual_points": 100.0,
+      "gap_points": 164.78,
+      "optimal_salary_used": 47600,
+      "predicted_salary_used": 49900,
+      "predicted_projected_mean_points": 107.5642,
+      "predicted_projected_p90_points": 196.886,
+      "predicted_policy_score": 0.098234,
+      "optimal_lineup": [
+        "QB:Tua Tagovailoa(MIA,$5800,actual=31.48)",
+        "RB:Josh Jacobs(GB,$6800,actual=31.60)",
+        "RB:Bucky Irving(TB,$5300,actual=27.20)",
+        "WR:Courtland Sutton(DEN,$5800,actual=29.70)",
+        "WR:DJ Moore(CHI,$5500,actual=29.90)",
+        "WR:Jaylen Waddle(MIA,$5300,actual=31.40)",
+        "WR:Jordan Addison(MIN,$5100,actual=33.20)",
+        "TE:Trey McBride(ARI,$5600,actual=28.30)",
+        "DST:Cowboys(DAL,$2400,actual=22.00)"
+      ],
+      "predicted_lineup": [
+        "QB:J.J. McCarthy(MIN,$4000,actual=0.00)",
+        "RB:Christian McCaffrey(SF,$8500,actual=8.80)",
+        "RB:Josh Jacobs(GB,$6800,actual=31.60)",
+        "WR:Josh Downs(IND,$6200,actual=5.70)",
+        "WR:KaVontae Turpin(DAL,$3300,actual=1.80)",
+        "WR:Jameson Williams(DET,$6000,actual=11.80)",
+        "TE:Cade Otton(TB,$5500,actual=4.00)",
+        "RB:David Montgomery(DET,$6700,actual=16.30)",
+        "DST:Seahawks(SEA,$2900,actual=20.00)"
+      ]
+    },
+    {
+      "season": 2024,
+      "week": 13,
+      "slate": "main",
+      "status": "ok",
+      "optimal_actual_points": 234.16,
+      "predicted_actual_points": 72.74,
+      "gap_points": 161.42,
+      "optimal_salary_used": 48900,
+      "predicted_salary_used": 47200,
+      "predicted_projected_mean_points": 103.0731,
+      "predicted_projected_p90_points": 197.196,
+      "predicted_policy_score": 0.105629,
+      "optimal_lineup": [
+        "QB:Russell Wilson(PIT,$5700,actual=30.86)",
+        "RB:Najee Harris(PIT,$6000,actual=24.90)",
+        "RB:Bucky Irving(TB,$5800,actual=30.50)",
+        "WR:Terry McLaurin(WAS,$7100,actual=27.30)",
+        "WR:Mike Evans(TB,$6700,actual=28.80)",
+        "WR:Adam Thielen(CAR,$4800,actual=23.90)",
+        "WR:Parker Washington(JAC,$3900,actual=27.30)",
+        "TE:Trey McBride(ARI,$5800,actual=21.60)",
+        "DST:Chargers(LAC,$3100,actual=19.00)"
+      ],
+      "predicted_lineup": [
+        "QB:Geno Smith(SEA,$5500,actual=12.44)",
+        "RB:Aaron Jones(MIN,$6500,actual=10.80)",
+        "RB:Breece Hall(NYJ,$7500,actual=7.00)",
+        "WR:Jaxon Smith-Njigba(SEA,$6300,actual=11.90)",
+        "WR:Marvin Harrison Jr.(ARI,$6000,actual=17.00)",
+        "WR:Marcus Rosemy-Jacksaint(PHI,$3000,actual=0.00)",
+        "TE:Jaheim Bell(NE,$2500,actual=0.00)",
+        "WR:DK Metcalf(SEA,$6400,actual=10.60)",
+        "DST:Texans(HOU,$3500,actual=3.00)"
+      ]
+    },
+    {
+      "season": 2024,
+      "week": 13,
+      "slate": "thursday",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2024,
+      "week": 15,
+      "slate": "main",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2024,
+      "week": 15,
+      "slate": "monday_classic",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2024,
+      "week": 15,
+      "slate": "monday_second_captain",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2024,
+      "week": 15,
+      "slate": "sunday_all",
+      "status": "ok",
+      "optimal_actual_points": 296.36,
+      "predicted_actual_points": 112.04,
+      "gap_points": 184.32,
+      "optimal_salary_used": 49800,
+      "predicted_salary_used": 48900,
+      "predicted_projected_mean_points": 109.9785,
+      "predicted_projected_p90_points": 209.338,
+      "predicted_policy_score": 0.120155,
+      "optimal_lineup": [
+        "QB:Jared Goff(DET,$6500,actual=44.06)",
+        "RB:James Conner(ARI,$6600,actual=33.80)",
+        "RB:Tyjae Spears(TEN,$4300,actual=27.20)",
+        "WR:Amon-Ra St. Brown(DET,$7600,actual=41.30)",
+        "WR:Mike Evans(TB,$7100,actual=39.90)",
+        "WR:Davante Adams(NYJ,$6900,actual=45.80)",
+        "WR:DeVonta Smith(PHI,$5500,actual=31.00)",
+        "TE:Brenton Strange(JAC,$2500,actual=18.30)",
+        "DST:Cowboys(DAL,$2800,actual=15.00)"
+      ],
+      "predicted_lineup": [
+        "QB:Joe Burrow(CIN,$7300,actual=19.84)",
+        "RB:Derrick Henry(BAL,$8300,actual=6.70)",
+        "RB:Tyrone Tracy Jr.(NYG,$5700,actual=4.50)",
+        "WR:A.J. Brown(PHI,$8000,actual=28.00)",
+        "WR:Braxton Berrios(MIA,$3000,actual=0.00)",
+        "WR:Andrei Iosivas(CIN,$3800,actual=1.50)",
+        "TE:Mike Gesicki(CIN,$3500,actual=6.70)",
+        "WR:Davante Adams(NYJ,$6900,actual=45.80)",
+        "DST:Patriots(NE,$2400,actual=-1.00)"
+      ]
+    },
+    {
+      "season": 2024,
+      "week": 15,
+      "slate": "sunday_early",
+      "status": "ok",
+      "optimal_actual_points": 262.8,
+      "predicted_actual_points": 69.74,
+      "gap_points": 193.06,
+      "optimal_salary_used": 49700,
+      "predicted_salary_used": 49800,
+      "predicted_projected_mean_points": 110.4316,
+      "predicted_projected_p90_points": 209.586,
+      "predicted_policy_score": 0.098659,
+      "optimal_lineup": [
+        "QB:Lamar Jackson(BAL,$8300,actual=37.10)",
+        "RB:Chase Brown(CIN,$7200,actual=26.30)",
+        "RB:Tyjae Spears(TEN,$4300,actual=27.20)",
+        "WR:CeeDee Lamb(DAL,$7300,actual=29.60)",
+        "WR:Davante Adams(NYJ,$6900,actual=45.80)",
+        "WR:Brian Thomas Jr.(JAC,$5800,actual=35.50)",
+        "WR:Jalen Coker(CAR,$3700,actual=24.00)",
+        "TE:Brenton Strange(JAC,$2500,actual=18.30)",
+        "DST:Chiefs(KC,$3700,actual=19.00)"
+      ],
+      "predicted_lineup": [
+        "QB:Joe Burrow(CIN,$7300,actual=19.84)",
+        "RB:Kendall Milton(CIN,$4000,actual=0.00)",
+        "RB:Dante Miller(NYG,$4000,actual=0.00)",
+        "WR:Ja'Marr Chase(CIN,$8400,actual=18.40)",
+        "WR:Jaylen Waddle(MIA,$5700,actual=0.00)",
+        "WR:Tank Dell(HOU,$5400,actual=6.10)",
+        "TE:Jonnu Smith(MIA,$5400,actual=19.80)",
+        "WR:Tyreek Hill(MIA,$7400,actual=5.60)",
+        "DST:Browns(CLE,$2200,actual=0.00)"
+      ]
+    },
+    {
+      "season": 2024,
+      "week": 15,
+      "slate": "sunday_late",
+      "status": "ok",
+      "optimal_actual_points": 265.96,
+      "predicted_actual_points": 90.98,
+      "gap_points": 174.98,
+      "optimal_salary_used": 49000,
+      "predicted_salary_used": 47800,
+      "predicted_projected_mean_points": 90.893,
+      "predicted_projected_p90_points": 163.438,
+      "predicted_policy_score": 0.080533,
+      "optimal_lineup": [
+        "QB:Jared Goff(DET,$6500,actual=44.06)",
+        "RB:James Conner(ARI,$6600,actual=33.80)",
+        "RB:Ty Johnson(BUF,$4400,actual=20.30)",
+        "WR:Amon-Ra St. Brown(DET,$7600,actual=41.30)",
+        "WR:Mike Evans(TB,$7100,actual=39.90)",
+        "WR:DeVonta Smith(PHI,$5500,actual=31.00)",
+        "WR:Jalen McMillan(TB,$3700,actual=18.50)",
+        "TE:Sam LaPorta(DET,$4400,actual=21.10)",
+        "DST:Broncos(DEN,$3200,actual=16.00)"
+      ],
+      "predicted_lineup": [
+        "QB:Josh Allen(BUF,$8500,actual=44.28)",
+        "RB:Terrell Jennings(NE,$4000,actual=0.00)",
+        "RB:Jaylen Warren(PIT,$5400,actual=2.50)",
+        "WR:Jameson Williams(DET,$5600,actual=12.70)",
+        "WR:Amari Cooper(BUF,$5300,actual=0.00)",
+        "WR:Courtland Sutton(DEN,$6600,actual=12.20)",
+        "TE:Dalton Kincaid(BUF,$4900,actual=9.30)",
+        "RB:Kenneth Gainwell(PHI,$4600,actual=9.00)",
+        "DST:Chargers(LAC,$2900,actual=1.00)"
+      ]
+    },
+    {
+      "season": 2024,
+      "week": 15,
+      "slate": "sunday_night",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2024,
+      "week": 15,
+      "slate": "thursday",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2024,
+      "week": 16,
+      "slate": "afternoon_only",
+      "status": "ok",
+      "optimal_actual_points": 221.46,
+      "predicted_actual_points": 94.2,
+      "gap_points": 127.26,
+      "optimal_salary_used": 49700,
+      "predicted_salary_used": 48400,
+      "predicted_projected_mean_points": 111.3468,
+      "predicted_projected_p90_points": 217.356,
+      "predicted_policy_score": 0.088935,
+      "optimal_lineup": [
+        "QB:Geno Smith(SEA,$5700,actual=26.36)",
+        "RB:De'Von Achane(MIA,$7400,actual=34.00)",
+        "RB:James Cook(BUF,$7000,actual=30.60)",
+        "RB:Ameer Abdullah(LV,$4600,actual=19.50)",
+        "WR:Justin Jefferson(MIN,$8200,actual=39.40)",
+        "WR:Brian Thomas Jr.(JAC,$6300,actual=31.20)",
+        "WR:Kayshon Boutte(NE,$3500,actual=20.50)",
+        "TE:Hunter Henry(NE,$4100,actual=13.90)",
+        "DST:Dolphins(MIA,$2900,actual=6.00)"
+      ],
+      "predicted_lineup": [
+        "QB:Gardner Minshew II(LV,$4000,actual=0.00)",
+        "RB:Zach Charbonnet(SEA,$6000,actual=3.30)",
+        "RB:Aaron Jones Sr.(MIN,$6400,actual=0.00)",
+        "WR:Justin Jefferson(MIN,$8200,actual=39.40)",
+        "WR:Jaylen Waddle(MIA,$5600,actual=0.00)",
+        "WR:Jordan Addison(MIN,$6200,actual=14.50)",
+        "TE:Harrison Bryant(LV,$2500,actual=0.00)",
+        "RB:De'Von Achane(MIA,$7400,actual=34.00)",
+        "DST:Patriots(NE,$2100,actual=3.00)"
+      ]
+    },
+    {
+      "season": 2024,
+      "week": 16,
+      "slate": "main",
+      "status": "ok",
+      "optimal_actual_points": 277.92,
+      "predicted_actual_points": 97.46,
+      "gap_points": 180.46,
+      "optimal_salary_used": 49800,
+      "predicted_salary_used": 49900,
+      "predicted_projected_mean_points": 123.6399,
+      "predicted_projected_p90_points": 230.696,
+      "predicted_policy_score": 0.137323,
+      "optimal_lineup": [
+        "QB:Jayden Daniels(WAS,$7300,actual=36.42)",
+        "RB:De'Von Achane(MIA,$7400,actual=34.00)",
+        "RB:Jonathan Taylor(IND,$6900,actual=42.80)",
+        "RB:Chuba Hubbard(CAR,$6800,actual=35.50)",
+        "WR:Jameson Williams(DET,$5500,actual=29.00)",
+        "WR:Keenan Allen(CHI,$5300,actual=32.10)",
+        "WR:Olamide Zaccheaus(WAS,$3500,actual=24.00)",
+        "TE:Chig Okonkwo(TEN,$3400,actual=19.10)",
+        "DST:Falcons(ATL,$3700,actual=25.00)"
+      ],
+      "predicted_lineup": [
+        "QB:Malik Willis(GB,$4000,actual=1.16)",
+        "RB:Najee Harris(PIT,$5700,actual=4.20)",
+        "RB:Jahmyr Gibbs(DET,$7500,actual=28.40)",
+        "WR:CeeDee Lamb(DAL,$7500,actual=20.50)",
+        "WR:Cornelius Johnson(GB,$3000,actual=0.00)",
+        "WR:DeAndre Hopkins(KC,$5300,actual=7.70)",
+        "TE:Brock Bowers(LV,$6500,actual=20.90)",
+        "WR:Puka Nacua(LAR,$8000,actual=13.60)",
+        "DST:Giants(NYG,$2400,actual=1.00)"
+      ]
+    },
+    {
+      "season": 2024,
+      "week": 16,
+      "slate": "monday_night",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2024,
+      "week": 16,
+      "slate": "monday_night_unknown",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2024,
+      "week": 16,
+      "slate": "saturday",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2024,
+      "week": 16,
+      "slate": "saturday_kc_vs_hou",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2024,
+      "week": 16,
+      "slate": "saturday_pit_vs_bal",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2024,
+      "week": 16,
+      "slate": "sunday_det_vs_chi",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2024,
+      "week": 16,
+      "slate": "sunday_early",
+      "status": "ok",
+      "optimal_actual_points": 273.52,
+      "predicted_actual_points": 91.9,
+      "gap_points": 181.62,
+      "optimal_salary_used": 49500,
+      "predicted_salary_used": 47900,
+      "predicted_projected_mean_points": 113.4966,
+      "predicted_projected_p90_points": 218.546,
+      "predicted_policy_score": 0.113122,
+      "optimal_lineup": [
+        "DST:Falcons(ATL,$3700,actual=25.00)",
+        "WR:Keenan Allen(CHI,$5300,actual=32.10)",
+        "RB:James Conner(ARI,$7100,actual=29.60)",
+        "WR:Olamide Zaccheaus(WAS,$3500,actual=24.00)",
+        "RB:Chuba Hubbard(CAR,$6800,actual=35.50)",
+        "RB:Jonathan Taylor(IND,$6900,actual=42.80)",
+        "TE:Chig Okonkwo(TEN,$3400,actual=19.10)",
+        "QB:Jayden Daniels(WAS,$7300,actual=36.42)",
+        "WR:Jameson Williams(DET,$5500,actual=29.00)"
+      ],
+      "predicted_lineup": [
+        "QB:Matthew Stafford(LAR,$5900,actual=7.00)",
+        "RB:Jonathan Taylor(IND,$6900,actual=42.80)",
+        "RB:Cody Schrader(LAR,$4000,actual=0.00)",
+        "WR:Puka Nacua(LAR,$8000,actual=13.60)",
+        "WR:Drake Stoops(LAR,$3000,actual=0.00)",
+        "WR:Cooper Kupp(LAR,$6500,actual=5.40)",
+        "TE:Drew Sample(CIN,$2500,actual=2.20)",
+        "RB:Chase Brown(CIN,$7700,actual=13.90)",
+        "DST:Lions(DET,$3400,actual=7.00)"
+      ]
+    },
+    {
+      "season": 2024,
+      "week": 16,
+      "slate": "sunday_late",
+      "status": "ok",
+      "optimal_actual_points": 221.46,
+      "predicted_actual_points": 124.02,
+      "gap_points": 97.44,
+      "optimal_salary_used": 49700,
+      "predicted_salary_used": 46100,
+      "predicted_projected_mean_points": 105.0817,
+      "predicted_projected_p90_points": 194.58,
+      "predicted_policy_score": 0.09821,
+      "optimal_lineup": [
+        "QB:Geno Smith(SEA,$5700,actual=26.36)",
+        "RB:De'Von Achane(MIA,$7400,actual=34.00)",
+        "RB:James Cook(BUF,$7000,actual=30.60)",
+        "RB:Ameer Abdullah(LV,$4600,actual=19.50)",
+        "WR:Justin Jefferson(MIN,$8200,actual=39.40)",
+        "WR:Brian Thomas Jr.(JAC,$6300,actual=31.20)",
+        "WR:Kayshon Boutte(NE,$3500,actual=20.50)",
+        "TE:Hunter Henry(NE,$4100,actual=13.90)",
+        "DST:Dolphins(MIA,$2900,actual=6.00)"
+      ],
+      "predicted_lineup": [
+        "QB:Brock Purdy(SF,$6300,actual=25.12)",
+        "RB:James Cook(BUF,$7000,actual=30.60)",
+        "RB:Kenneth Walker III(SEA,$6300,actual=13.90)",
+        "WR:Deebo Samuel Sr.(SF,$5200,actual=25.10)",
+        "WR:Keon Coleman(BUF,$4700,actual=2.70)",
+        "WR:Amari Cooper(BUF,$5200,actual=2.00)",
+        "TE:George Kittle(SF,$6000,actual=21.60)",
+        "TE:Quintin Morris(BUF,$2500,actual=0.00)",
+        "DST:Jaguars(JAC,$2900,actual=3.00)"
+      ]
+    },
+    {
+      "season": 2024,
+      "week": 16,
+      "slate": "sunday_main",
+      "status": "ok",
+      "optimal_actual_points": 277.92,
+      "predicted_actual_points": 93.58,
+      "gap_points": 184.34,
+      "optimal_salary_used": 49800,
+      "predicted_salary_used": 48200,
+      "predicted_projected_mean_points": 98.4723,
+      "predicted_projected_p90_points": 182.802,
+      "predicted_policy_score": 0.105852,
+      "optimal_lineup": [
+        "QB:Jayden Daniels(WAS,$7300,actual=36.42)",
+        "RB:De'Von Achane(MIA,$7400,actual=34.00)",
+        "RB:Jonathan Taylor(IND,$6900,actual=42.80)",
+        "RB:Chuba Hubbard(CAR,$6800,actual=35.50)",
+        "WR:Jameson Williams(DET,$5500,actual=29.00)",
+        "WR:Keenan Allen(CHI,$5300,actual=32.10)",
+        "WR:Olamide Zaccheaus(WAS,$3500,actual=24.00)",
+        "TE:Chig Okonkwo(TEN,$3400,actual=19.10)",
+        "DST:Falcons(ATL,$3700,actual=25.00)"
+      ],
+      "predicted_lineup": [
+        "QB:Joe Burrow(CIN,$7500,actual=22.98)",
+        "RB:Bijan Robinson(ATL,$8100,actual=24.30)",
+        "RB:Zach Charbonnet(SEA,$6000,actual=3.30)",
+        "WR:Jeff Foreman(LV,$3000,actual=0.00)",
+        "WR:Tee Higgins(CIN,$6800,actual=19.80)",
+        "WR:Darnell Mooney(ATL,$5400,actual=13.20)",
+        "TE:Cal Adomitis(CIN,$2500,actual=0.00)",
+        "TE:Trey McBride(ARI,$6200,actual=5.00)",
+        "DST:Commanders(WAS,$2700,actual=5.00)"
+      ]
+    },
+    {
+      "season": 2024,
+      "week": 16,
+      "slate": "sunday_night",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2024,
+      "week": 17,
+      "slate": "monday_night",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2024,
+      "week": 17,
+      "slate": "saturday_night",
+      "status": "ok",
+      "optimal_actual_points": 234.88,
+      "predicted_actual_points": 121.14,
+      "gap_points": 113.74,
+      "optimal_salary_used": 48900,
+      "predicted_salary_used": 47800,
+      "predicted_projected_mean_points": 105.8256,
+      "predicted_projected_p90_points": 197.98,
+      "predicted_policy_score": 0.061794,
+      "optimal_lineup": [
+        "QB:Joe Burrow(CIN,$7200,actual=39.98)",
+        "RB:Kyren Williams(LAR,$7500,actual=16.20)",
+        "RB:Michael Carter(ARI,$4100,actual=10.10)",
+        "WR:Tee Higgins(CIN,$6900,actual=44.10)",
+        "WR:Ladd McConkey(LAC,$6600,actual=29.40)",
+        "WR:Marvin Mims Jr.(DEN,$3900,actual=33.20)",
+        "TE:Trey McBride(ARI,$6200,actual=33.30)",
+        "TE:Mike Gesicki(CIN,$3100,actual=18.60)",
+        "DST:Chargers(LAC,$3400,actual=10.00)"
+      ],
+      "predicted_lineup": [
+        "QB:Kyler Murray(ARI,$6000,actual=21.04)",
+        "RB:Kyren Williams(LAR,$7500,actual=16.20)",
+        "RB:James Conner(ARI,$7400,actual=2.80)",
+        "WR:Greg Dortch(ARI,$3200,actual=4.80)",
+        "WR:Ja'Marr Chase(CIN,$8400,actual=22.20)",
+        "WR:Tee Higgins(CIN,$6900,actual=44.10)",
+        "TE:Tip Reiman(ARI,$2500,actual=0.00)",
+        "TE:Travis Vokolek(ARI,$2500,actual=0.00)",
+        "DST:Chargers(LAC,$3400,actual=10.00)"
+      ]
+    },
+    {
+      "season": 2024,
+      "week": 17,
+      "slate": "saturday_night_ari_vs_lar",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2024,
+      "week": 17,
+      "slate": "saturday_night_lac_vs_ne",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2024,
+      "week": 17,
+      "slate": "sunday_early",
+      "status": "ok",
+      "optimal_actual_points": 264.96,
+      "predicted_actual_points": 65.8,
+      "gap_points": 199.16,
+      "optimal_salary_used": 48300,
+      "predicted_salary_used": 49200,
+      "predicted_projected_mean_points": 111.9938,
+      "predicted_projected_p90_points": 210.074,
+      "predicted_policy_score": 0.087841,
+      "optimal_lineup": [
+        "DST:Eagles(PHI,$3100,actual=19.00)",
+        "WR:Adam Thielen(CAR,$5700,actual=31.00)",
+        "TE:Tyler Conklin(NYJ,$2900,actual=21.70)",
+        "QB:Drew Lock(NYG,$4900,actual=37.36)",
+        "WR:DeVonta Smith(PHI,$5800,actual=33.00)",
+        "RB:Jonathan Taylor(IND,$7900,actual=30.60)",
+        "WR:Alec Pierce(IND,$4700,actual=27.20)",
+        "WR:Malik Nabers(NYG,$6600,actual=39.10)",
+        "RB:Bucky Irving(TB,$6700,actual=26.00)"
+      ],
+      "predicted_lineup": [
+        "QB:Jalen Hurts(PHI,$7500,actual=0.00)",
+        "RB:Saquon Barkley(PHI,$8600,actual=21.90)",
+        "RB:Chuba Hubbard(CAR,$7000,actual=0.00)",
+        "WR:Calvin Ridley(TEN,$5500,actual=14.10)",
+        "WR:Khalil Shakir(BUF,$5600,actual=5.50)",
+        "WR:Christian Kirk(JAC,$3000,actual=0.00)",
+        "TE:Jordan Murray(NYG,$2500,actual=0.00)",
+        "RB:James Cook(BUF,$7200,actual=11.30)",
+        "DST:Giants(NYG,$2300,actual=13.00)"
+      ]
+    },
+    {
+      "season": 2024,
+      "week": 17,
+      "slate": "sunday_late",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2024,
+      "week": 17,
+      "slate": "sunday_main",
+      "status": "ok",
+      "optimal_actual_points": 264.96,
+      "predicted_actual_points": 92.5,
+      "gap_points": 172.46,
+      "optimal_salary_used": 48300,
+      "predicted_salary_used": 49900,
+      "predicted_projected_mean_points": 111.4072,
+      "predicted_projected_p90_points": 215.99,
+      "predicted_policy_score": 0.140554,
+      "optimal_lineup": [
+        "QB:Drew Lock(NYG,$4900,actual=37.36)",
+        "RB:Jonathan Taylor(IND,$7900,actual=30.60)",
+        "RB:Bucky Irving(TB,$6700,actual=26.00)",
+        "WR:Malik Nabers(NYG,$6600,actual=39.10)",
+        "WR:DeVonta Smith(PHI,$5800,actual=33.00)",
+        "WR:Adam Thielen(CAR,$5700,actual=31.00)",
+        "WR:Alec Pierce(IND,$4700,actual=27.20)",
+        "TE:Tyler Conklin(NYJ,$2900,actual=21.70)",
+        "DST:Eagles(PHI,$3100,actual=19.00)"
+      ],
+      "predicted_lineup": [
+        "QB:Jordan Love(GB,$6200,actual=14.00)",
+        "RB:Tony Pollard(TEN,$6400,actual=0.00)",
+        "RB:Jacob Kibodi(CLE,$4000,actual=0.00)",
+        "WR:Davante Adams(NYJ,$7100,actual=9.70)",
+        "WR:Mike Evans(TB,$7500,actual=29.70)",
+        "WR:Khalil Shakir(BUF,$5600,actual=5.50)",
+        "TE:Albert Okwuegbunam Jr.(IND,$2500,actual=0.00)",
+        "RB:Jonathan Taylor(IND,$7900,actual=30.60)",
+        "DST:Packers(GB,$2700,actual=3.00)"
+      ]
+    },
+    {
+      "season": 2024,
+      "week": 17,
+      "slate": "sunday_night_atl_vs_was",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2024,
+      "week": 17,
+      "slate": "thursday_night_sea_vs_chi",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2024,
+      "week": 17,
+      "slate": "wednesday_night",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2024,
+      "week": 17,
+      "slate": "wednesday_night_hou_vs_bal",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2024,
+      "week": 17,
+      "slate": "wednesday_night_kc_vs_pit",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2024,
+      "week": 19,
+      "slate": "saturday_night",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2024,
+      "week": 19,
+      "slate": "saturday_night_4_game",
+      "status": "ok",
+      "optimal_actual_points": 184.08,
+      "predicted_actual_points": 94.38,
+      "gap_points": 89.7,
+      "optimal_salary_used": 49600,
+      "predicted_salary_used": 49100,
+      "predicted_projected_mean_points": 105.0631,
+      "predicted_projected_p90_points": 190.06,
+      "predicted_policy_score": 0.133836,
+      "optimal_lineup": [
+        "DST:Eagles(PHI,$3300,actual=12.00)",
+        "RB:Derrick Henry(BAL,$8200,actual=33.60)",
+        "TE:Dallas Goedert(PHI,$3900,actual=14.70)",
+        "WR:Curtis Samuel(BUF,$3100,actual=15.80)",
+        "WR:Terry McLaurin(WAS,$6500,actual=21.90)",
+        "QB:Josh Allen(BUF,$8200,actual=25.48)",
+        "WR:Dyami Brown(WAS,$3400,actual=19.90)",
+        "RB:James Cook(BUF,$6700,actual=21.00)",
+        "WR:George Pickens(PIT,$6300,actual=19.70)"
+      ],
+      "predicted_lineup": [
+        "QB:Josh Allen(BUF,$8200,actual=25.48)",
+        "RB:Derrick Henry(BAL,$8200,actual=33.60)",
+        "RB:Sean Tucker(TB,$4000,actual=0.00)",
+        "WR:DeVonta Smith(PHI,$5700,actual=9.50)",
+        "WR:Zay Flowers(BAL,$6000,actual=0.00)",
+        "WR:Khalil Shakir(BUF,$5300,actual=12.10)",
+        "TE:Dalton Kincaid(BUF,$4000,actual=7.70)",
+        "RB:Keaton Mitchell(BAL,$4200,actual=0.00)",
+        "DST:Bills(BUF,$3500,actual=6.00)"
+      ]
+    },
+    {
+      "season": 2024,
+      "week": 19,
+      "slate": "saturday_night_pit_vs_bal",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2024,
+      "week": 20,
+      "slate": "sunday_main",
+      "status": "ok",
+      "optimal_actual_points": 217.46,
+      "predicted_actual_points": 122.76,
+      "gap_points": 94.7,
+      "optimal_salary_used": 49900,
+      "predicted_salary_used": 49100,
+      "predicted_projected_mean_points": 123.8287,
+      "predicted_projected_p90_points": 220.902,
+      "predicted_policy_score": 0.111748,
+      "optimal_lineup": [
+        "QB:Matthew Stafford(LAR,$5200,actual=23.46)",
+        "RB:Saquon Barkley(PHI,$8200,actual=42.20)",
+        "RB:Jahmyr Gibbs(DET,$7700,actual=38.50)",
+        "WR:Amon-Ra St. Brown(DET,$7200,actual=24.70)",
+        "WR:Terry McLaurin(WAS,$6300,actual=18.70)",
+        "WR:Dyami Brown(WAS,$3900,actual=15.80)",
+        "TE:Travis Kelce(KC,$5000,actual=27.70)",
+        "TE:Tyler Higbee(LAR,$3400,actual=18.40)",
+        "DST:Bills(BUF,$3000,actual=8.00)"
+      ],
+      "predicted_lineup": [
+        "QB:Matthew Stafford(LAR,$5200,actual=23.46)",
+        "RB:Jahmyr Gibbs(DET,$7700,actual=38.50)",
+        "RB:Derrick Henry(BAL,$8000,actual=14.40)",
+        "WR:Amon-Ra St. Brown(DET,$7200,actual=24.70)",
+        "WR:Zay Flowers(BAL,$5900,actual=0.00)",
+        "WR:Puka Nacua(LAR,$7400,actual=15.70)",
+        "TE:Irv Smith Jr.(HOU,$2500,actual=0.00)",
+        "TE:Quintin Morris(BUF,$2500,actual=0.00)",
+        "DST:Rams(LAR,$2700,actual=6.00)"
+      ]
+    },
+    {
+      "season": 2024,
+      "week": 20,
+      "slate": "sunday_night",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2025,
+      "week": 1,
+      "slate": "friday",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2025,
+      "week": 1,
+      "slate": "sunday_main",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2025,
+      "week": 1,
+      "slate": "thursday",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2025,
+      "week": 5,
+      "slate": "monday_night",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2025,
+      "week": 5,
+      "slate": "sunday_late",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2025,
+      "week": 5,
+      "slate": "sunday_main",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2025,
+      "week": 6,
+      "slate": "sunday_main",
+      "status": "ok",
+      "optimal_actual_points": 254.9,
+      "predicted_actual_points": 91.7,
+      "gap_points": 163.2,
+      "optimal_salary_used": 49900,
+      "predicted_salary_used": 48100,
+      "predicted_projected_mean_points": 122.342,
+      "predicted_projected_p90_points": 212.78,
+      "predicted_policy_score": 0.070573,
+      "optimal_lineup": [
+        "QB:Jacoby Brissett(ARI,$4200,actual=24.70)",
+        "RB:De'Von Achane(MIA,$7800,actual=34.00)",
+        "RB:Josh Jacobs(GB,$7300,actual=32.00)",
+        "RB:Rico Dowdle(CAR,$5800,actual=36.90)",
+        "WR:Jaxon Smith-Njigba(SEA,$7600,actual=33.20)",
+        "WR:George Pickens(DAL,$6800,actual=34.80)",
+        "WR:Kayshon Boutte(NE,$3800,actual=26.30)",
+        "TE:Michael Mayer(LV,$3100,actual=16.00)",
+        "DST:Rams(LAR,$3500,actual=17.00)"
+      ],
+      "predicted_lineup": [
+        "QB:Deshaun Watson(CLE,$4000,actual=0.00)",
+        "RB:Kendall Milton(CIN,$4000,actual=0.00)",
+        "RB:Hassan Haskins(LAC,$5000,actual=3.30)",
+        "WR:Tre Tucker(LV,$4800,actual=12.00)",
+        "WR:Ja'Marr Chase(CIN,$7700,actual=25.10)",
+        "WR:Emeka Egbuka(TB,$7200,actual=4.40)",
+        "TE:David Njoku(CLE,$3500,actual=5.80)",
+        "RB:Christian McCaffrey(SF,$8400,actual=24.10)",
+        "DST:Rams(LAR,$3500,actual=17.00)"
+      ]
+    },
+    {
+      "season": 2025,
+      "week": 7,
+      "slate": "sunday_main",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2025,
+      "week": 7,
+      "slate": "thursday_night",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2025,
+      "week": 8,
+      "slate": "sunday_main",
+      "status": "ok",
+      "optimal_actual_points": 249.34,
+      "predicted_actual_points": 65.7,
+      "gap_points": 183.64,
+      "optimal_salary_used": 50000,
+      "predicted_salary_used": 49500,
+      "predicted_projected_mean_points": 125.6008,
+      "predicted_projected_p90_points": 224.424,
+      "predicted_policy_score": 0.121689,
+      "optimal_lineup": [
+        "QB:Drake Maye(NE,$6200,actual=27.28)",
+        "RB:Jonathan Taylor(IND,$9500,actual=40.40)",
+        "RB:Saquon Barkley(PHI,$7600,actual=36.40)",
+        "RB:Breece Hall(NYJ,$6100,actual=35.86)",
+        "WR:Khalil Shakir(BUF,$5100,actual=20.80)",
+        "WR:Troy Franklin(DEN,$4200,actual=26.90)",
+        "WR:Xavier Hutchinson(HOU,$3700,actual=17.90)",
+        "TE:Dallas Goedert(PHI,$4200,actual=17.80)",
+        "DST:Buccaneers(TB,$3400,actual=26.00)"
+      ],
+      "predicted_lineup": [
+        "QB:Bryce Young(CAR,$5200,actual=0.00)",
+        "RB:Christian McCaffrey(SF,$9000,actual=9.80)",
+        "RB:Jonathan Taylor(IND,$9500,actual=40.40)",
+        "WR:Calvin Ridley(TEN,$4900,actual=0.00)",
+        "WR:Emeka Egbuka(TB,$7000,actual=6.50)",
+        "WR:DeAndre Hopkins(BAL,$4200,actual=2.40)",
+        "TE:Maximilian Mang(IND,$2500,actual=0.00)",
+        "WR:Darius Slayton(NYG,$4300,actual=4.60)",
+        "DST:49ers(SF,$2900,actual=2.00)"
+      ]
+    },
+    {
+      "season": 2025,
+      "week": 8,
+      "slate": "thursday_night",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2025,
+      "week": 9,
+      "slate": "monday_night",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2025,
+      "week": 9,
+      "slate": "sunday_main",
+      "status": "ok",
+      "optimal_actual_points": 307.1,
+      "predicted_actual_points": 52.7,
+      "gap_points": 254.4,
+      "optimal_salary_used": 46700,
+      "predicted_salary_used": 49800,
+      "predicted_projected_mean_points": 114.1082,
+      "predicted_projected_p90_points": 200.34,
+      "predicted_policy_score": 0.13769,
+      "optimal_lineup": [
+        "QB:Caleb Williams(CHI,$5700,actual=38.70)",
+        "RB:Christian McCaffrey(SF,$8800,actual=37.30)",
+        "RB:Rico Dowdle(CAR,$5800,actual=31.10)",
+        "WR:Drake London(ATL,$6400,actual=41.80)",
+        "WR:Tee Higgins(CIN,$5900,actual=36.10)",
+        "WR:DeMario Douglas(NE,$3500,actual=23.00)",
+        "TE:Brock Bowers(LV,$5000,actual=46.30)",
+        "TE:Colston Loveland(CHI,$3300,actual=32.80)",
+        "DST:Titans(TEN,$2300,actual=20.00)"
+      ],
+      "predicted_lineup": [
+        "QB:Patrick Mahomes(KC,$7100,actual=11.50)",
+        "RB:Jonathan Taylor(IND,$9800,actual=7.70)",
+        "RB:Tony Pollard(TEN,$5300,actual=7.80)",
+        "WR:Brandon Aiyuk(SF,$4900,actual=0.00)",
+        "WR:Efton Chism III(NE,$3000,actual=0.00)",
+        "WR:Xavier Worthy(KC,$5600,actual=6.00)",
+        "TE:Jake Tonges(SF,$3000,actual=0.00)",
+        "WR:Justin Jefferson(MIN,$7800,actual=16.70)",
+        "DST:Jaguars(JAC,$3300,actual=3.00)"
+      ]
+    },
+    {
+      "season": 2025,
+      "week": 9,
+      "slate": "sunday_night",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2025,
+      "week": 9,
+      "slate": "thursday_night",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2025,
+      "week": 10,
+      "slate": "monday_night",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2025,
+      "week": 10,
+      "slate": "sunday_main",
+      "status": "ok",
+      "optimal_actual_points": 273.88,
+      "predicted_actual_points": 81.84,
+      "gap_points": 192.04,
+      "optimal_salary_used": 49300,
+      "predicted_salary_used": 48600,
+      "predicted_projected_mean_points": 108.7265,
+      "predicted_projected_p90_points": 200.264,
+      "predicted_policy_score": 0.100019,
+      "optimal_lineup": [
+        "QB:Davis Mills(HOU,$4500,actual=28.68)",
+        "RB:Jahmyr Gibbs(DET,$8000,actual=41.20)",
+        "RB:De'Von Achane(MIA,$7400,actual=43.50)",
+        "RB:TreVeyon Henderson(NE,$5600,actual=31.00)",
+        "WR:Emeka Egbuka(TB,$7000,actual=26.50)",
+        "WR:Jameson Williams(DET,$4900,actual=26.90)",
+        "WR:Jalen Nailor(MIN,$3100,actual=26.40)",
+        "TE:Trey McBride(ARI,$6000,actual=30.70)",
+        "DST:Jets(NYJ,$2800,actual=19.00)"
+      ],
+      "predicted_lineup": [
+        "QB:Josh Allen(BUF,$7000,actual=24.34)",
+        "RB:Derrick Henry(BAL,$6800,actual=11.40)",
+        "RB:Brian Robinson Jr.(SF,$4500,actual=0.00)",
+        "WR:Jordan Addison(MIN,$5400,actual=6.50)",
+        "WR:Rashid Shaheed(SEA,$5200,actual=3.30)",
+        "WR:Tetairoa McMillan(CAR,$5700,actual=11.00)",
+        "TE:Tyler Ott(WAS,$2500,actual=0.00)",
+        "WR:Jaxon Smith-Njigba(SEA,$8600,actual=20.30)",
+        "DST:Browns(CLE,$2900,actual=5.00)"
+      ]
+    },
+    {
+      "season": 2025,
+      "week": 10,
+      "slate": "sunday_night",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2025,
+      "week": 11,
+      "slate": "monday_night",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2025,
+      "week": 11,
+      "slate": "sunday_main",
+      "status": "ok",
+      "optimal_actual_points": 291.48,
+      "predicted_actual_points": 57.2,
+      "gap_points": 234.28,
+      "optimal_salary_used": 49900,
+      "predicted_salary_used": 50000,
+      "predicted_projected_mean_points": 101.2517,
+      "predicted_projected_p90_points": 176.692,
+      "predicted_policy_score": 0.12387,
+      "optimal_lineup": [
+        "QB:Josh Allen(BUF,$7000,actual=47.68)",
+        "RB:Christian McCaffrey(SF,$9000,actual=35.10)",
+        "RB:Sean Tucker(TB,$5000,actual=37.00)",
+        "RB:Kenneth Gainwell(PIT,$4100,actual=29.50)",
+        "WR:Nico Collins(HOU,$6700,actual=24.20)",
+        "WR:Tetairoa McMillan(CAR,$5600,actual=36.00)",
+        "WR:Michael Wilson(ARI,$3800,actual=36.50)",
+        "TE:Trey McBride(ARI,$6300,actual=30.50)",
+        "DST:Browns(CLE,$2400,actual=15.00)"
+      ],
+      "predicted_lineup": [
+        "QB:Brock Purdy(SF,$5800,actual=19.30)",
+        "RB:Josh Jacobs(GB,$7800,actual=4.00)",
+        "RB:Scott Matlock(LAC,$4000,actual=0.00)",
+        "WR:Ladd McConkey(LAC,$6500,actual=4.30)",
+        "WR:Rome Odunze(CHI,$6200,actual=6.10)",
+        "WR:Rashee Rice(KC,$7900,actual=9.80)",
+        "TE:Tyler Conklin(LAC,$3100,actual=0.00)",
+        "RB:Zach Charbonnet(SEA,$5100,actual=6.70)",
+        "DST:Packers(GB,$3600,actual=7.00)"
+      ]
+    },
+    {
+      "season": 2025,
+      "week": 11,
+      "slate": "thursday_night",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2025,
+      "week": 12,
+      "slate": "sunday_main",
+      "status": "ok",
+      "optimal_actual_points": 292.44,
+      "predicted_actual_points": 108.8,
+      "gap_points": 183.64,
+      "optimal_salary_used": 49700,
+      "predicted_salary_used": 49800,
+      "predicted_projected_mean_points": 116.1635,
+      "predicted_projected_p90_points": 205.678,
+      "predicted_policy_score": 0.140154,
+      "optimal_lineup": [
+        "QB:Jameis Winston(NYG,$4600,actual=36.24)",
+        "RB:Jahmyr Gibbs(DET,$8300,actual=58.40)",
+        "RB:Emanuel Wilson(GB,$5300,actual=29.50)",
+        "WR:Jaxon Smith-Njigba(SEA,$9000,actual=40.10)",
+        "WR:George Pickens(DAL,$6900,actual=32.60)",
+        "WR:Wan'Dale Robinson(NYG,$5500,actual=33.60)",
+        "WR:John Metchie III(NYJ,$3300,actual=18.50)",
+        "TE:Hunter Henry(NE,$3900,actual=27.50)",
+        "DST:Browns(CLE,$2900,actual=16.00)"
+      ],
+      "predicted_lineup": [
+        "QB:Joe Burrow(CIN,$6500,actual=0.00)",
+        "RB:Alvin Kamara(NO,$5500,actual=3.50)",
+        "RB:Kendre Miller(NO,$4000,actual=0.00)",
+        "WR:Ja'Marr Chase(CIN,$8100,actual=0.00)",
+        "WR:Jamari Thrash(CLE,$3000,actual=0.00)",
+        "WR:Jaxon Smith-Njigba(SEA,$9000,actual=40.10)",
+        "TE:Jonnu Smith(PIT,$2900,actual=5.80)",
+        "RB:Jahmyr Gibbs(DET,$8300,actual=58.40)",
+        "DST:Vikings(MIN,$2500,actual=1.00)"
+      ]
+    },
+    {
+      "season": 2025,
+      "week": 12,
+      "slate": "sunday_night",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2025,
+      "week": 13,
+      "slate": "sunday_main",
+      "status": "ok",
+      "optimal_actual_points": 226.54,
+      "predicted_actual_points": 81.94,
+      "gap_points": 144.6,
+      "optimal_salary_used": 50000,
+      "predicted_salary_used": 49100,
+      "predicted_projected_mean_points": 113.9625,
+      "predicted_projected_p90_points": 201.332,
+      "predicted_policy_score": 0.13125,
+      "optimal_lineup": [
+        "QB:Jacoby Brissett(ARI,$5800,actual=23.64)",
+        "RB:Bijan Robinson(ATL,$8500,actual=33.30)",
+        "RB:Kimani Vidal(LAC,$5700,actual=23.70)",
+        "WR:Davante Adams(LAR,$7500,actual=21.80)",
+        "WR:Jakobi Meyers(JAC,$5700,actual=21.30)",
+        "WR:Adonai Mitchell(NYJ,$3600,actual=27.20)",
+        "WR:Devaughn Vele(NO,$3500,actual=23.30)",
+        "TE:Brock Bowers(LV,$5800,actual=22.30)",
+        "DST:Seahawks(SEA,$3900,actual=30.00)"
+      ],
+      "predicted_lineup": [
+        "QB:Justin Herbert(LAC,$6500,actual=13.84)",
+        "RB:Salvon Ahmed(IND,$4000,actual=0.00)",
+        "RB:Josh Williams(TB,$4000,actual=0.00)",
+        "WR:Davante Adams(LAR,$7500,actual=21.80)",
+        "WR:Keenan Allen(LAC,$5000,actual=7.00)",
+        "WR:Ladd McConkey(LAC,$6300,actual=13.90)",
+        "TE:Tyler Higbee(LAR,$2500,actual=0.00)",
+        "RB:Christian McCaffrey(SF,$9300,actual=17.40)",
+        "DST:Chargers(LAC,$4000,actual=8.00)"
+      ]
+    },
+    {
+      "season": 2025,
+      "week": 13,
+      "slate": "thursday_night",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2025,
+      "week": 16,
+      "slate": "monday_night",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2025,
+      "week": 17,
+      "slate": "monday_night",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2025,
+      "week": 17,
+      "slate": "saturday_night",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2025,
+      "week": 17,
+      "slate": "sunday_late",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2025,
+      "week": 17,
+      "slate": "sunday_late2",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2025,
+      "week": 17,
+      "slate": "sunday_main",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2025,
+      "week": 17,
+      "slate": "sunday_night",
+      "status": "failed",
+      "error": "No valid lineups generated for this slate."
+    },
+    {
+      "season": 2025,
+      "week": 18,
+      "slate": "sunday_main",
+      "status": "ok",
+      "optimal_actual_points": 259.66,
+      "predicted_actual_points": 71.5,
+      "gap_points": 188.16,
+      "optimal_salary_used": 49900,
+      "predicted_salary_used": 48200,
+      "predicted_projected_mean_points": 108.8208,
+      "predicted_projected_p90_points": 208.414,
+      "predicted_policy_score": 0.099757,
+      "optimal_lineup": [
+        "QB:Mitchell Trubisky(BUF,$5000,actual=28.86)",
+        "RB:Rhamondre Stevenson(NE,$5600,actual=38.30)",
+        "RB:Tyrone Tracy Jr.(NYG,$5500,actual=31.90)",
+        "RB:Ray Davis(BUF,$4900,actual=28.40)",
+        "WR:Puka Nacua(LAR,$9000,actual=26.00)",
+        "WR:Amon-Ra St. Brown(DET,$7700,actual=27.90)",
+        "WR:Alec Pierce(IND,$4500,actual=32.20)",
+        "TE:Colston Loveland(CHI,$3900,actual=25.10)",
+        "DST:Broncos(DEN,$3800,actual=21.00)"
+      ],
+      "predicted_lineup": [
+        "QB:Jimmy Garoppolo(LAR,$4900,actual=0.00)",
+        "RB:A.J. Dillon(PHI,$4000,actual=0.00)",
+        "RB:RJ Harvey(DEN,$6800,actual=4.30)",
+        "WR:Drake London(ATL,$6900,actual=17.80)",
+        "WR:Terry McLaurin(WAS,$5700,actual=9.70)",
+        "WR:DeVonta Smith(PHI,$5800,actual=8.20)",
+        "TE:Colby Parkinson(LAR,$3700,actual=19.60)",
+        "RB:Jonathan Taylor(IND,$7800,actual=5.90)",
+        "DST:Bears(CHI,$2600,actual=6.00)"
+      ]
+    }
+  ]
+}

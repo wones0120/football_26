@@ -1,4 +1,10 @@
-from backend.app.services.lineup_learning import PlayerPoolRow, _lineup_satisfies_roster_rules
+from backend.app.services.lineup_learning import (
+    PlayerPoolRow,
+    ShowdownLineup,
+    ShowdownPlayerPoolRow,
+    _lineup_satisfies_roster_rules,
+    _showdown_lineup_satisfies_rules,
+)
 
 
 def _player(uid: str, position: str, team: str, opponent: str) -> PlayerPoolRow:
@@ -58,3 +64,61 @@ def test_lineup_rules_block_bad_slot_construction() -> None:
         _player("dst1", "DST", "NYJ", "NE"),
     ]
     assert not _lineup_satisfies_roster_rules(lineup)
+
+
+def _showdown_player(uid: str, position: str, team: str, opponent: str) -> ShowdownPlayerPoolRow:
+    return ShowdownPlayerPoolRow(
+        uid=uid,
+        name=uid,
+        team=team,
+        opponent=opponent,
+        position=position,
+        flex_salary=6000,
+        captain_salary=9000,
+        actual_points=10.0,
+        projected_mean_points=12.0,
+        projected_p90_points=20.0,
+    )
+
+
+def test_showdown_rules_allow_valid_shape() -> None:
+    lineup = ShowdownLineup(
+        captain=_showdown_player("p1", "QB", "DAL", "NYG"),
+        flex_players=[
+            _showdown_player("p2", "WR", "DAL", "NYG"),
+            _showdown_player("p3", "RB", "DAL", "NYG"),
+            _showdown_player("p4", "TE", "NYG", "DAL"),
+            _showdown_player("p5", "K", "NYG", "DAL"),
+            _showdown_player("p6", "DST", "NYG", "DAL"),
+        ],
+    )
+    assert _showdown_lineup_satisfies_rules(lineup)
+
+
+def test_showdown_rules_block_duplicate_player() -> None:
+    shared = _showdown_player("p1", "QB", "DAL", "NYG")
+    lineup = ShowdownLineup(
+        captain=shared,
+        flex_players=[
+            shared,
+            _showdown_player("p2", "WR", "DAL", "NYG"),
+            _showdown_player("p3", "RB", "DAL", "NYG"),
+            _showdown_player("p4", "TE", "NYG", "DAL"),
+            _showdown_player("p5", "K", "NYG", "DAL"),
+        ],
+    )
+    assert not _showdown_lineup_satisfies_rules(lineup)
+
+
+def test_showdown_rules_block_six_from_same_team() -> None:
+    lineup = ShowdownLineup(
+        captain=_showdown_player("p1", "QB", "DAL", "NYG"),
+        flex_players=[
+            _showdown_player("p2", "WR", "DAL", "NYG"),
+            _showdown_player("p3", "RB", "DAL", "NYG"),
+            _showdown_player("p4", "TE", "DAL", "NYG"),
+            _showdown_player("p5", "K", "DAL", "NYG"),
+            _showdown_player("p6", "DST", "DAL", "NYG"),
+        ],
+    )
+    assert not _showdown_lineup_satisfies_rules(lineup)

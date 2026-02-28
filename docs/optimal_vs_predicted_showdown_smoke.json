@@ -1,0 +1,37 @@
+{
+  "summary": {
+    "source_system": "draftkings",
+    "season_start": 2024,
+    "season_end": 2025,
+    "slate_filter": null,
+    "slate_type": "showdown",
+    "lineups_per_slate": 600,
+    "training_window_slates": 24,
+    "learned_only": true,
+    "slates_total": 2,
+    "slates_completed": 0,
+    "slates_failed_or_skipped": 2,
+    "mean_gap_points": null,
+    "median_gap_points": null,
+    "best_case_gap_points": null,
+    "worst_case_gap_points": null
+  },
+  "rows": [
+    {
+      "season": 2024,
+      "week": 7,
+      "slate": "sunday_night",
+      "slate_type": "showdown",
+      "status": "warmup_or_no_signal",
+      "error": "Insufficient learned history for learned-only mode."
+    },
+    {
+      "season": 2024,
+      "week": 8,
+      "slate": "sunday",
+      "slate_type": "showdown",
+      "status": "warmup_or_no_signal",
+      "error": "Insufficient learned history for learned-only mode."
+    }
+  ]
+}

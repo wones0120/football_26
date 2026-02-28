@@ -30,6 +30,8 @@ from ..schemas import (
     UltimateLineupResponse,
     NflReadPyBootstrapRequest,
     NflReadPySeasonRequest,
+    OptimalVsPredictedBacktestRequest,
+    OptimalVsPredictedBacktestResponse,
     PlayerMasterResponse,
     PlayerMasterUpsertRequest,
     ResolveUnresolvedRequest,
@@ -260,6 +262,18 @@ def lineups_generate_ultimate(
     service = LineupLearningService(session)
     try:
         return service.build_ultimate_lineups(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/lineups/optimal-vs-predicted", response_model=OptimalVsPredictedBacktestResponse)
+def lineups_optimal_vs_predicted(
+    request: OptimalVsPredictedBacktestRequest,
+    session: Session = Depends(get_db_session),
+) -> OptimalVsPredictedBacktestResponse:
+    service = LineupLearningService(session)
+    try:
+        return service.run_optimal_vs_predicted_backtest(request)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 

@@ -72,3 +72,36 @@ Migrations live in `/migrations`. The migration runner tracks applied files in `
 
 1. Phase 1 baseline is implemented.
 2. See `/Users/wones/git/football_26/docs/phase_plan.md` for the build sequence.
+
+## Backtest Scripts
+
+1. Classic slates:
+
+```bash
+source .venv/bin/activate
+python scripts/run_optimal_vs_predicted_lineups.py \
+  --source-system draftkings \
+  --season-start 2024 \
+  --season-end 2025 \
+  --slate-type classic \
+  --lineups-per-slate 600 \
+  --training-window-slates 24 \
+  --min-training-slates 2 \
+  --min-training-rows 500 \
+  --learned-only
+```
+
+2. Showdown slates:
+
+```bash
+source .venv/bin/activate
+python scripts/run_optimal_vs_predicted_showdown.py \
+  --source-system draftkings \
+  --season-start 2024 \
+  --season-end 2025 \
+  --lineups-per-slate 600 \
+  --training-window-slates 24 \
+  --min-training-slates 2 \
+  --min-training-rows 500 \
+  --learned-only
+```

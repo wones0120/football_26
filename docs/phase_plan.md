@@ -1,5 +1,29 @@
 # Phase Plan
 
+## Execution Board
+
+### Now
+1. Keep `classic` and `showdown` lineup backtests as separate tracks with stable API/UI workflows.
+2. Track baseline quality every run:
+   - Classic: `slates_completed`, `mean_gap_points`, `worst_case_gap_points`.
+   - Showdown: `slates_completed`, `mean_gap_points`, `worst_case_gap_points`.
+3. Start showdown captain descriptive research on historical winners:
+   - Captain position mix.
+   - Captain as top scorer overall vs top scorer on team.
+   - Captain archetype performance by spread/total/implied-team-total bands.
+
+### Next
+1. Build matchup-aware captain archetype prediction model for showdown slates.
+2. Add captain archetype probabilities as lineup-construction inputs for showdown generation.
+3. Run walk-forward A/B backtests:
+   - Baseline showdown construction vs captain-informed showdown construction.
+   - Measure lift in mean gap reduction, top-percentile hit rate, and stability.
+
+### Later
+1. Extend captain-archetype learning to teammate-context features (who was active/available in-game).
+2. Add automated drift monitoring for captain archetype priors by season segment and slate type.
+3. Promote the highest-performing lineup policy into production weekly build workflows.
+
 ## Phase 1 (Now): Data Foundation
 1. Canonical identity tables (`player_master`, `player_alias`, `unresolved_player_queue`).
 2. Ingest run lineage (`ingest_run`) and immutable raw snapshots.
@@ -21,3 +45,14 @@
 2. Lineup-level EV/risk scoring model.
 3. Exposure diversification and scenario stress testing tools.
 
+## Future To-Do: Showdown Captain Intelligence
+1. Run descriptive analysis on historical showdown winners:
+   - Captain position mix (QB/RB/WR/TE/DST).
+   - Captain as top scorer overall vs top scorer on captain's team.
+   - Captain archetypes by game context (spread, total, implied team totals).
+2. Build matchup-aware captain archetype prediction for future schedules:
+   - Train on historical showdown slates and outcomes.
+   - Predict which captain type is most likely to be optimal for a given matchup.
+3. Use predicted captain archetype probabilities to guide lineup generation:
+   - Weight captain candidate selection by learned archetype likelihood.
+   - Track backtest lift versus baseline showdown lineup construction.
