@@ -11,13 +11,44 @@
    - Captain position mix.
    - Captain as top scorer overall vs top scorer on team.
    - Captain archetype performance by spread/total/implied-team-total bands.
+   - Status: completed for `draftkings` seasons 2024-2025.
+   - Artifacts:
+     - `docs/showdown_captain_descriptive_2024_2025.md`
+     - `docs/showdown_captain_descriptive_2024_2025.json`
 
 ### Next
 1. Build matchup-aware captain archetype prediction model for showdown slates.
+   - Status: completed (initial v1).
+   - Artifacts:
+     - `docs/showdown_captain_training_dataset_2024_2025.csv`
+     - `docs/showdown_captain_model_2024_2025.json`
+     - `docs/showdown_captain_model_eval_2024_2025.json`
+     - `docs/showdown_captain_model_eval_2024_2025.md`
 2. Add captain archetype probabilities as lineup-construction inputs for showdown generation.
+   - Status: completed (captain prior wired into showdown candidate generation and backtests).
+   - Code:
+     - `backend/app/services/lineup_learning.py`
+     - `backend/app/schemas.py`
+     - `scripts/run_optimal_vs_predicted_showdown.py`
 3. Run walk-forward A/B backtests:
    - Baseline showdown construction vs captain-informed showdown construction.
    - Measure lift in mean gap reduction, top-percentile hit rate, and stability.
+   - Status: completed for `draftkings` seasons `2024-2025` at `2,500` lineups/slate.
+   - Result snapshot:
+     - Baseline mean gap: `56.0362`
+     - Captain-informed mean gap: `49.2954`
+     - Mean gap lift: `+6.7408` points
+     - Win rate across shared slates: `61.54%`
+     - Gap stddev reduction (stability lift): `+3.0083`
+   - Artifact:
+     - `docs/optimal_vs_predicted_showdown_captain_ab_2024_2025.json`
+   - Hyperparameter sweep (captain prior strength):
+     - Artifact:
+       - `docs/showdown_captain_strength_sweep_2024_2025.json`
+       - `docs/showdown_captain_strength_sweep_2024_2025.md`
+       - `docs/showdown_captain_strength_sweep_2024_2025_2500.json`
+       - `docs/showdown_captain_strength_sweep_2024_2025_2500.md`
+     - Current best at production scale (`2,500` lineups/slate): `showdown_captain_prior_strength=0.35`.
 
 ### Later
 1. Extend captain-archetype learning to teammate-context features (who was active/available in-game).

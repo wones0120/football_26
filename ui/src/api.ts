@@ -170,6 +170,8 @@ export type OptimalVsPredictedBacktestResult = {
   lineups_per_slate: number;
   training_window_slates: number;
   learned_only: boolean;
+  showdown_captain_model_path?: string | null;
+  showdown_captain_prior_strength?: number;
   slates_total: number;
   slates_completed: number;
   slates_failed_or_skipped: number;
@@ -342,6 +344,8 @@ export function runOptimalVsPredictedBacktest(payload: {
   learned_only?: boolean;
   random_seed?: number;
   limit_slates?: number;
+  showdown_captain_model_path?: string | null;
+  showdown_captain_prior_strength?: number;
 }): Promise<OptimalVsPredictedBacktestResult> {
   return postJson("/lineups/optimal-vs-predicted", payload);
 }

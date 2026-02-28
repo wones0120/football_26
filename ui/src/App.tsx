@@ -25,6 +25,49 @@ import {
   type UnresolvedRow,
 } from "./api";
 
+type ShowdownCaptainABRow = {
+  season: number;
+  week: number;
+  slate: string;
+  baseline_gap_points: number;
+  captain_informed_gap_points: number;
+  gap_lift_points: number;
+  baseline_predicted_actual_points: number;
+  captain_informed_predicted_actual_points: number;
+  optimal_actual_points: number;
+};
+
+type ShowdownCaptainABSummary = {
+  source_system: "draftkings" | "fanduel";
+  season_start: number;
+  season_end: number;
+  lineups_per_slate: number;
+  training_window_slates: number;
+  learned_only: boolean;
+  showdown_captain_model_path: string;
+  showdown_captain_prior_strength: number;
+  paired_slates: number;
+  mean_gap_lift_points?: number | null;
+  median_gap_lift_points?: number | null;
+  captain_informed_win_rate?: number | null;
+  baseline_gap_stddev?: number | null;
+  captain_informed_gap_stddev?: number | null;
+  stability_lift_stddev_reduction?: number | null;
+  baseline_near_optimal_rate_90pct?: number | null;
+  captain_informed_near_optimal_rate_90pct?: number | null;
+  near_optimal_rate_lift_90pct?: number | null;
+  baseline_mean_gap_points?: number | null;
+  captain_informed_mean_gap_points?: number | null;
+};
+
+type ShowdownCaptainABResult = {
+  generated_at: string;
+  summary: ShowdownCaptainABSummary;
+  baseline: OptimalVsPredictedBacktestResult;
+  captain_informed: OptimalVsPredictedBacktestResult;
+  paired_rows: ShowdownCaptainABRow[];
+};
+
 function App() {
   const slateOptions = ["sunday_main", "sunday_night", "monday_night", "thursday_night"] as const;
   const [sourceSystem, setSourceSystem] = useState<"draftkings" | "fanduel">("draftkings");
@@ -53,6 +96,11 @@ function App() {
   const [lineupBacktestMinTrainingSlates, setLineupBacktestMinTrainingSlates] = useState(2);
   const [lineupBacktestMinTrainingRows, setLineupBacktestMinTrainingRows] = useState(500);
   const [lineupBacktestLimitSlates, setLineupBacktestLimitSlates] = useState(0);
+  const [lineupBacktestShowdownCaptainModelPath, setLineupBacktestShowdownCaptainModelPath] = useState(
+    "docs/showdown_captain_model_2024_2025.json"
+  );
+  const [lineupBacktestShowdownCaptainPriorStrength, setLineupBacktestShowdownCaptainPriorStrength] =
+    useState(0.35);
   const [simulationRows, setSimulationRows] = useState<SimulatedPlayerOutcome[]>([]);
   const [simulationRunId, setSimulationRunId] = useState<string | null>(null);
   const [backtestResult, setBacktestResult] = useState<BacktestWeekResult | null>(null);
@@ -60,6 +108,8 @@ function App() {
     useState<OptimalVsPredictedBacktestResult | null>(null);
   const [lineupBacktestShowdownResult, setLineupBacktestShowdownResult] =
     useState<OptimalVsPredictedBacktestResult | null>(null);
+  const [lineupBacktestShowdownABResult, setLineupBacktestShowdownABResult] =
+    useState<ShowdownCaptainABResult | null>(null);
   const [runs, setRuns] = useState<IngestResult[]>([]);
   const [coverage, setCoverage] = useState<SeasonCoverageRow[]>([]);
   const [salarySlices, setSalarySlices] = useState<CuratedSalarySliceRow[]>([]);
@@ -404,6 +454,10 @@ function App() {
     );
     setError(null);
     try {
+      const shouldUseCaptainPrior =
+        lineupBacktestMode === "showdown" &&
+        lineupBacktestShowdownCaptainPriorStrength > 0 &&
+        lineupBacktestShowdownCaptainModelPath.trim().length > 0;
       const result = await runOptimalVsPredictedBacktest({
         source_system: sourceSystem,
         season_start: seasonStart,
@@ -415,6 +469,12 @@ function App() {
         min_training_rows: lineupBacktestMinTrainingRows,
         learned_only: true,
         limit_slates: lineupBacktestLimitSlates,
+        showdown_captain_model_path: shouldUseCaptainPrior
+          ? lineupBacktestShowdownCaptainModelPath.trim()
+          : null,
+        showdown_captain_prior_strength: shouldUseCaptainPrior
+          ? lineupBacktestShowdownCaptainPriorStrength
+          : 0,
       });
       if (lineupBacktestMode === "classic") {
         setLineupBacktestClassicResult(result);
@@ -424,6 +484,171 @@ function App() {
       const meanGap = result.mean_gap_points == null ? "n/a" : result.mean_gap_points.toFixed(2);
       setStatus(
         `${lineupBacktestMode} lineup backtest completed: slates=${result.slates_completed}/${result.slates_total} mean_gap=${meanGap}`
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setStatus(null);
+    } finally {
+      setIsIngesting(false);
+    }
+  };
+
+  const runShowdownCaptainAB = async () => {
+    const seasonStart = Math.min(historyStartSeason, historyEndSeason);
+    const seasonEnd = Math.max(historyStartSeason, historyEndSeason);
+    const modelPath = lineupBacktestShowdownCaptainModelPath.trim();
+    const priorStrength = Math.min(1, Math.max(0, lineupBacktestShowdownCaptainPriorStrength));
+    if (modelPath.length === 0) {
+      setError("Showdown captain model path is required for A/B runs");
+      return;
+    }
+    setIsIngesting(true);
+    setError(null);
+    setStatus(
+      `Running showdown captain A/B for ${sourceSystem} seasons ${seasonStart}-${seasonEnd}...`
+    );
+    try {
+      const baseline = await runOptimalVsPredictedBacktest({
+        source_system: sourceSystem,
+        season_start: seasonStart,
+        season_end: seasonEnd,
+        slate_type: "showdown",
+        lineups_per_slate: lineupBacktestLineupsPerSlate,
+        training_window_slates: lineupBacktestTrainingWindowSlates,
+        min_training_slates: lineupBacktestMinTrainingSlates,
+        min_training_rows: lineupBacktestMinTrainingRows,
+        learned_only: true,
+        limit_slates: lineupBacktestLimitSlates,
+        showdown_captain_model_path: null,
+        showdown_captain_prior_strength: 0,
+      });
+      const captainInformed = await runOptimalVsPredictedBacktest({
+        source_system: sourceSystem,
+        season_start: seasonStart,
+        season_end: seasonEnd,
+        slate_type: "showdown",
+        lineups_per_slate: lineupBacktestLineupsPerSlate,
+        training_window_slates: lineupBacktestTrainingWindowSlates,
+        min_training_slates: lineupBacktestMinTrainingSlates,
+        min_training_rows: lineupBacktestMinTrainingRows,
+        learned_only: true,
+        limit_slates: lineupBacktestLimitSlates,
+        showdown_captain_model_path: modelPath,
+        showdown_captain_prior_strength: priorStrength,
+      });
+
+      const baselineByKey = new Map(
+        baseline.rows
+          .filter((row) => row.status === "ok" && row.gap_points != null)
+          .map((row) => [`${row.season}-${row.week}-${row.slate}`, row] as const)
+      );
+      const captainByKey = new Map(
+        captainInformed.rows
+          .filter((row) => row.status === "ok" && row.gap_points != null)
+          .map((row) => [`${row.season}-${row.week}-${row.slate}`, row] as const)
+      );
+
+      const pairedRows: ShowdownCaptainABRow[] = [];
+      for (const [key, baselineRow] of baselineByKey.entries()) {
+        const informedRow = captainByKey.get(key);
+        if (!informedRow) continue;
+        pairedRows.push({
+          season: baselineRow.season,
+          week: baselineRow.week,
+          slate: baselineRow.slate,
+          baseline_gap_points: Number(baselineRow.gap_points ?? 0),
+          captain_informed_gap_points: Number(informedRow.gap_points ?? 0),
+          gap_lift_points: Number(baselineRow.gap_points ?? 0) - Number(informedRow.gap_points ?? 0),
+          baseline_predicted_actual_points: Number(baselineRow.predicted_actual_points ?? 0),
+          captain_informed_predicted_actual_points: Number(informedRow.predicted_actual_points ?? 0),
+          optimal_actual_points: Number(baselineRow.optimal_actual_points ?? 0),
+        });
+      }
+
+      const gapLifts = pairedRows.map((row) => row.gap_lift_points);
+      const mean = (values: number[]) =>
+        values.length === 0 ? null : values.reduce((acc, value) => acc + value, 0) / values.length;
+      const median = (values: number[]) => {
+        if (values.length === 0) return null;
+        const sorted = [...values].sort((a, b) => a - b);
+        const middle = Math.floor(sorted.length / 2);
+        return sorted.length % 2 === 0
+          ? (sorted[middle - 1] + sorted[middle]) / 2
+          : sorted[middle];
+      };
+      const stddev = (values: number[]) => {
+        if (values.length === 0) return null;
+        const mu = mean(values);
+        if (mu == null) return null;
+        const variance = values.reduce((acc, value) => acc + (value - mu) ** 2, 0) / values.length;
+        return Math.sqrt(variance);
+      };
+      const nearOptimalRate = (
+        rows: OptimalVsPredictedBacktestResult["rows"],
+        thresholdRatio: number
+      ) => {
+        const okRows = rows.filter((row) => row.status === "ok");
+        if (okRows.length === 0) return null;
+        const hits = okRows.filter((row) => {
+          const optimal = Number(row.optimal_actual_points ?? 0);
+          const predicted = Number(row.predicted_actual_points ?? 0);
+          if (optimal <= 0) return false;
+          return predicted / optimal >= thresholdRatio;
+        }).length;
+        return hits / okRows.length;
+      };
+
+      const baselineGaps = baseline.rows
+        .filter((row) => row.status === "ok" && row.gap_points != null)
+        .map((row) => Number(row.gap_points));
+      const informedGaps = captainInformed.rows
+        .filter((row) => row.status === "ok" && row.gap_points != null)
+        .map((row) => Number(row.gap_points));
+      const baselineStd = stddev(baselineGaps);
+      const informedStd = stddev(informedGaps);
+      const baselineNearOptimal = nearOptimalRate(baseline.rows, 0.9);
+      const informedNearOptimal = nearOptimalRate(captainInformed.rows, 0.9);
+      const summary: ShowdownCaptainABSummary = {
+        source_system: sourceSystem,
+        season_start: seasonStart,
+        season_end: seasonEnd,
+        lineups_per_slate: lineupBacktestLineupsPerSlate,
+        training_window_slates: lineupBacktestTrainingWindowSlates,
+        learned_only: true,
+        showdown_captain_model_path: modelPath,
+        showdown_captain_prior_strength: priorStrength,
+        paired_slates: pairedRows.length,
+        mean_gap_lift_points: mean(gapLifts),
+        median_gap_lift_points: median(gapLifts),
+        captain_informed_win_rate:
+          pairedRows.length === 0
+            ? null
+            : pairedRows.filter((row) => row.gap_lift_points > 0).length / pairedRows.length,
+        baseline_gap_stddev: baselineStd,
+        captain_informed_gap_stddev: informedStd,
+        stability_lift_stddev_reduction:
+          baselineStd == null || informedStd == null ? null : baselineStd - informedStd,
+        baseline_near_optimal_rate_90pct: baselineNearOptimal,
+        captain_informed_near_optimal_rate_90pct: informedNearOptimal,
+        near_optimal_rate_lift_90pct:
+          baselineNearOptimal == null || informedNearOptimal == null
+            ? null
+            : informedNearOptimal - baselineNearOptimal,
+        baseline_mean_gap_points: baseline.mean_gap_points,
+        captain_informed_mean_gap_points: captainInformed.mean_gap_points,
+      };
+      setLineupBacktestShowdownResult(captainInformed);
+      setLineupBacktestShowdownABResult({
+        generated_at: new Date().toISOString(),
+        summary,
+        baseline,
+        captain_informed: captainInformed,
+        paired_rows: pairedRows,
+      });
+      const meanLiftText =
+        summary.mean_gap_lift_points == null ? "n/a" : summary.mean_gap_lift_points.toFixed(2);
+      setStatus(
+        `Showdown captain A/B completed: paired_slates=${summary.paired_slates} mean_gap_lift=${meanLiftText}`
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -465,6 +690,19 @@ function App() {
     const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
     a.href = url;
     a.download = `lineup_backtest_${mode}_${result.season_start}_${result.season_end}_${stamp}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadShowdownCaptainABResult = (result: ShowdownCaptainABResult) => {
+    const blob = new Blob([JSON.stringify(result, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+    a.href = url;
+    a.download = `showdown_captain_ab_${result.summary.season_start}_${result.summary.season_end}_${stamp}.json`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -1079,21 +1317,149 @@ function App() {
                 onChange={(event) => setLineupBacktestLimitSlates(Number(event.target.value))}
               />
             </label>
+            {lineupBacktestMode === "showdown" && (
+              <>
+                <label>
+                  Captain Model Path
+                  <input
+                    type="text"
+                    value={lineupBacktestShowdownCaptainModelPath}
+                    onChange={(event) => setLineupBacktestShowdownCaptainModelPath(event.target.value)}
+                  />
+                </label>
+                <label>
+                  Captain Prior Strength
+                  <input
+                    type="number"
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    value={lineupBacktestShowdownCaptainPriorStrength}
+                    onChange={(event) =>
+                      setLineupBacktestShowdownCaptainPriorStrength(Number(event.target.value))
+                    }
+                  />
+                </label>
+              </>
+            )}
           </div>
           <div className="button-row">
             <button onClick={runLineupBacktest} disabled={isIngesting}>
               Run {lineupBacktestMode} Lineup Backtest
             </button>
+            <button onClick={runShowdownCaptainAB} disabled={isIngesting || lineupBacktestMode !== "showdown"}>
+              Run Showdown Captain A/B
+            </button>
             <button
               onClick={() => {
                 setLineupBacktestClassicResult(null);
                 setLineupBacktestShowdownResult(null);
+                setLineupBacktestShowdownABResult(null);
               }}
-              disabled={isIngesting || (!lineupBacktestClassicResult && !lineupBacktestShowdownResult)}
+              disabled={
+                isIngesting ||
+                (!lineupBacktestClassicResult &&
+                  !lineupBacktestShowdownResult &&
+                  !lineupBacktestShowdownABResult)
+              }
             >
               Clear Lineup Backtest Results
             </button>
           </div>
+
+          {lineupBacktestShowdownABResult && (
+            <div className="subsection">
+              <h3>Showdown Captain A/B Metrics</h3>
+              <div className="button-row">
+                <button onClick={() => downloadShowdownCaptainABResult(lineupBacktestShowdownABResult)} disabled={isIngesting}>
+                  Download showdown A/B JSON
+                </button>
+              </div>
+              <div className="metric-grid">
+                <div className="mini-card">
+                  <span>Paired Slates</span>
+                  <strong>{lineupBacktestShowdownABResult.summary.paired_slates}</strong>
+                </div>
+                <div className="mini-card">
+                  <span>Mean Gap Lift</span>
+                  <strong>
+                    {lineupBacktestShowdownABResult.summary.mean_gap_lift_points == null
+                      ? "-"
+                      : lineupBacktestShowdownABResult.summary.mean_gap_lift_points.toFixed(2)}
+                  </strong>
+                </div>
+                <div className="mini-card">
+                  <span>Median Gap Lift</span>
+                  <strong>
+                    {lineupBacktestShowdownABResult.summary.median_gap_lift_points == null
+                      ? "-"
+                      : lineupBacktestShowdownABResult.summary.median_gap_lift_points.toFixed(2)}
+                  </strong>
+                </div>
+                <div className="mini-card">
+                  <span>Captain Win Rate</span>
+                  <strong>
+                    {lineupBacktestShowdownABResult.summary.captain_informed_win_rate == null
+                      ? "-"
+                      : `${(lineupBacktestShowdownABResult.summary.captain_informed_win_rate * 100).toFixed(1)}%`}
+                  </strong>
+                </div>
+                <div className="mini-card">
+                  <span>Baseline Mean Gap</span>
+                  <strong>
+                    {lineupBacktestShowdownABResult.summary.baseline_mean_gap_points == null
+                      ? "-"
+                      : lineupBacktestShowdownABResult.summary.baseline_mean_gap_points.toFixed(2)}
+                  </strong>
+                </div>
+                <div className="mini-card">
+                  <span>Captain Mean Gap</span>
+                  <strong>
+                    {lineupBacktestShowdownABResult.summary.captain_informed_mean_gap_points == null
+                      ? "-"
+                      : lineupBacktestShowdownABResult.summary.captain_informed_mean_gap_points.toFixed(2)}
+                  </strong>
+                </div>
+              </div>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Season</th>
+                      <th>Week</th>
+                      <th>Slate</th>
+                      <th>Gap Lift</th>
+                      <th>Baseline Gap</th>
+                      <th>Captain Gap</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lineupBacktestShowdownABResult.paired_rows.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="empty-row">
+                          No paired showdown rows yet.
+                        </td>
+                      </tr>
+                    ) : (
+                      [...lineupBacktestShowdownABResult.paired_rows]
+                        .sort((a, b) => b.gap_lift_points - a.gap_lift_points)
+                        .slice(0, 12)
+                        .map((row) => (
+                          <tr key={`ab-${row.season}-${row.week}-${row.slate}`}>
+                            <td>{row.season}</td>
+                            <td>{row.week}</td>
+                            <td>{row.slate}</td>
+                            <td>{row.gap_lift_points.toFixed(2)}</td>
+                            <td>{row.baseline_gap_points.toFixed(2)}</td>
+                            <td>{row.captain_informed_gap_points.toFixed(2)}</td>
+                          </tr>
+                        ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {lineupBacktestPanels.map(({ mode, result }) => {
             if (!result) return null;

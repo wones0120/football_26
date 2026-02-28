@@ -377,6 +377,8 @@ class OptimalVsPredictedBacktestRequest(BaseModel):
     learned_only: bool = True
     random_seed: int | None = None
     limit_slates: int = Field(default=0, ge=0, le=2000)
+    showdown_captain_model_path: str | None = None
+    showdown_captain_prior_strength: float = Field(default=0.0, ge=0.0, le=1.0)
 
 
 class OptimalVsPredictedBacktestRowResponse(BaseModel):
@@ -405,6 +407,8 @@ class OptimalVsPredictedBacktestResponse(BaseModel):
     lineups_per_slate: int
     training_window_slates: int
     learned_only: bool
+    showdown_captain_model_path: str | None = None
+    showdown_captain_prior_strength: float = 0.0
     slates_total: int
     slates_completed: int
     slates_failed_or_skipped: int

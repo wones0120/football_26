@@ -41,6 +41,8 @@ def parse_args() -> argparse.Namespace:
     parser.set_defaults(learned_only=True)
     parser.add_argument("--random-seed", type=int, default=42)
     parser.add_argument("--limit-slates", type=int, default=0)
+    parser.add_argument("--showdown-captain-model-path", type=str, default="")
+    parser.add_argument("--showdown-captain-prior-strength", type=float, default=0.0)
     parser.add_argument("--output-json", type=str, default="")
     parser.add_argument("--quiet-progress", action="store_true")
     return parser.parse_args()
@@ -72,9 +74,14 @@ def main() -> None:
     history_x: list[np.ndarray] = []
     history_y: list[np.ndarray] = []
     history_points: list[np.ndarray] = []
+    captain_prior_strength = float(min(max(args.showdown_captain_prior_strength, 0.0), 1.0))
+    captain_model_path = args.showdown_captain_model_path.strip()
+    captain_model = None
 
     with SessionLocal() as session:
         service = LineupLearningService(session)
+        if captain_prior_strength > 0.0 and captain_model_path:
+            captain_model = service._load_showdown_captain_archetype_model(captain_model_path)
         slices = service._fetch_available_slate_slices(
             source_system=args.source_system,
             season_start=season_start,
@@ -121,10 +128,15 @@ def main() -> None:
                     continue
                 optimal_lineup, optimal_points, optimal_salary = optimal
 
+                captain_position_probs = None
+                if captain_model is not None:
+                    captain_position_probs = service._predict_showdown_captain_position_probs(pool, captain_model)
                 x_slate, points_slate, generated_lineups = service._generate_showdown_lineups_for_slate(
                     players=pool,
                     lineups_target=args.lineups_per_slate,
                     rng=rng,
+                    captain_position_probs=captain_position_probs,
+                    captain_prior_strength=captain_prior_strength,
                 )
                 if len(generated_lineups) == 0:
                     rows.append(
@@ -282,6 +294,8 @@ def main() -> None:
         "lineups_per_slate": args.lineups_per_slate,
         "training_window_slates": args.training_window_slates,
         "learned_only": args.learned_only,
+        "showdown_captain_model_path": captain_model_path or None,
+        "showdown_captain_prior_strength": captain_prior_strength,
         "slates_total": len(rows),
         "slates_completed": len(completed),
         "slates_failed_or_skipped": len(rows) - len(completed),

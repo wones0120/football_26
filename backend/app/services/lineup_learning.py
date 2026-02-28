@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 import math
 import statistics
 from itertools import combinations
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, Callable
 
 import numpy as np
@@ -121,6 +123,37 @@ SHOWDOWN_FEATURE_NAMES = [
     "captain_has_vegas_line",
 ]
 SHOWDOWN_FEATURE_INDEX = {name: idx for idx, name in enumerate(SHOWDOWN_FEATURE_NAMES)}
+SHOWDOWN_CAPTAIN_CONTEXT_FEATURE_NAMES = [
+    "game_total_line",
+    "game_spread_abs",
+    "max_team_implied_total",
+    "min_team_implied_total",
+    "implied_total_diff",
+    "has_vegas_line",
+    "pool_size",
+    "team_count",
+    "team1_player_count",
+    "team2_player_count",
+    "qb_count",
+    "rb_count",
+    "wr_count",
+    "te_count",
+    "k_count",
+    "dst_count",
+    "top_qb_proj_mean",
+    "top_rb_proj_mean",
+    "top_wr_proj_mean",
+    "top_te_proj_mean",
+    "top_k_proj_mean",
+    "top_dst_proj_mean",
+    "top_qb_salary",
+    "top_rb_salary",
+    "top_wr_salary",
+    "top_te_salary",
+    "top_k_salary",
+    "top_dst_salary",
+]
+SHOWDOWN_CAPTAIN_POSITIONS = {"QB", "RB", "WR", "TE", "K", "DST"}
 
 TEAM_ALIASES = {
     "JAX": "JAC",
@@ -179,6 +212,16 @@ class ShowdownLineup:
 
 
 @dataclass
+class ShowdownCaptainArchetypeModel:
+    classes: list[str]
+    feature_names: list[str]
+    x_mean: np.ndarray
+    x_std: np.ndarray
+    weights: np.ndarray
+    bias: np.ndarray
+
+
+@dataclass
 class LogisticTargetModel:
     weights: np.ndarray
     bias: float
@@ -206,6 +249,31 @@ def _zscore(values: np.ndarray) -> np.ndarray:
     if std < 1e-9:
         return np.zeros(len(values), dtype=float)
     return (values - mean) / std
+
+
+def _softmax_vector(values: np.ndarray) -> np.ndarray:
+    if values.size == 0:
+        return np.asarray([], dtype=float)
+    shifted = values - float(np.max(values))
+    exp = np.exp(shifted)
+    denom = float(np.sum(exp))
+    if denom <= 0:
+        return np.ones(values.shape[0], dtype=float) / max(values.shape[0], 1)
+    return exp / denom
+
+
+def _safe_median(values: list[float], default: float = 0.0) -> float:
+    clean = [value for value in values if math.isfinite(value)]
+    if not clean:
+        return float(default)
+    return float(statistics.median(clean))
+
+
+def _max_or_zero(values: list[float]) -> float:
+    clean = [value for value in values if math.isfinite(value)]
+    if not clean:
+        return 0.0
+    return float(max(clean))
 
 
 def _normalize_pool_position(raw_position: str | None) -> str | None:
@@ -771,6 +839,114 @@ class LineupLearningService:
             + sum(player.projected_p90_points for player in lineup.flex_players)
         )
 
+    def _showdown_captain_context_features(
+        self,
+        players: list[ShowdownPlayerPoolRow],
+    ) -> dict[str, float]:
+        by_team: dict[str, list[ShowdownPlayerPoolRow]] = {}
+        for row in players:
+            if row.team:
+                by_team.setdefault(row.team, []).append(row)
+
+        team_counts = sorted([len(rows) for rows in by_team.values()], reverse=True)
+        team1_count = float(team_counts[0]) if len(team_counts) >= 1 else 0.0
+        team2_count = float(team_counts[1]) if len(team_counts) >= 2 else 0.0
+
+        team_implied_values: list[float] = []
+        for rows in by_team.values():
+            values = [float(row.team_implied_total) for row in rows if row.team_implied_total is not None]
+            if values:
+                team_implied_values.append(_safe_median(values))
+
+        game_totals = [float(row.game_total_line) for row in players if row.game_total_line is not None]
+        spread_abs_values = [
+            abs(float(row.team_spread_line))
+            for row in players
+            if row.team_spread_line is not None and math.isfinite(float(row.team_spread_line))
+        ]
+        has_vegas_line = 1.0 if game_totals and spread_abs_values else 0.0
+
+        features = {
+            "game_total_line": _safe_median(game_totals),
+            "game_spread_abs": _safe_median(spread_abs_values),
+            "max_team_implied_total": _max_or_zero(team_implied_values),
+            "min_team_implied_total": min(team_implied_values) if team_implied_values else 0.0,
+            "implied_total_diff": (
+                (_max_or_zero(team_implied_values) - min(team_implied_values))
+                if team_implied_values
+                else 0.0
+            ),
+            "has_vegas_line": has_vegas_line,
+            "pool_size": float(len(players)),
+            "team_count": float(len(by_team)),
+            "team1_player_count": team1_count,
+            "team2_player_count": team2_count,
+        }
+
+        for position in ("QB", "RB", "WR", "TE", "K", "DST"):
+            rows = [row for row in players if row.position == position]
+            features[f"{position.lower()}_count"] = float(len(rows))
+            features[f"top_{position.lower()}_proj_mean"] = _max_or_zero(
+                [float(row.projected_mean_points) for row in rows]
+            )
+            features[f"top_{position.lower()}_salary"] = _max_or_zero(
+                [float(row.flex_salary) for row in rows]
+            )
+        return features
+
+    def _load_showdown_captain_archetype_model(self, model_path: str) -> ShowdownCaptainArchetypeModel:
+        resolved_path = Path(model_path).expanduser().resolve()
+        if not resolved_path.exists():
+            raise ValueError(f"Showdown captain model not found: {resolved_path}")
+        payload = json.loads(resolved_path.read_text(encoding="utf-8"))
+        model = payload.get("model", {})
+        classes = [str(value) for value in model.get("classes", []) if str(value)]
+        feature_names = [str(value) for value in model.get("feature_names", []) if str(value)]
+        if not classes or not feature_names:
+            raise ValueError("Invalid showdown captain model: missing classes or feature_names.")
+        weights = np.asarray(model.get("weights"), dtype=float)
+        bias = np.asarray(model.get("bias"), dtype=float)
+        x_mean = np.asarray(model.get("x_mean"), dtype=float)
+        x_std = np.asarray(model.get("x_std"), dtype=float)
+        if weights.ndim != 2:
+            raise ValueError("Invalid showdown captain model: weights must be 2D.")
+        if weights.shape[0] != len(feature_names) or weights.shape[1] != len(classes):
+            raise ValueError("Invalid showdown captain model: weights shape mismatch.")
+        if bias.shape[0] != len(classes):
+            raise ValueError("Invalid showdown captain model: bias shape mismatch.")
+        if x_mean.shape[0] != len(feature_names) or x_std.shape[0] != len(feature_names):
+            raise ValueError("Invalid showdown captain model: normalization vector mismatch.")
+        x_std = np.where(x_std < 1e-6, 1.0, x_std)
+        return ShowdownCaptainArchetypeModel(
+            classes=classes,
+            feature_names=feature_names,
+            x_mean=x_mean,
+            x_std=x_std,
+            weights=weights,
+            bias=bias,
+        )
+
+    def _predict_showdown_captain_position_probs(
+        self,
+        players: list[ShowdownPlayerPoolRow],
+        model: ShowdownCaptainArchetypeModel,
+    ) -> dict[str, float]:
+        features = self._showdown_captain_context_features(players)
+        row = np.asarray([float(features.get(name, 0.0)) for name in model.feature_names], dtype=float)
+        logits = ((row - model.x_mean) / model.x_std) @ model.weights + model.bias
+        probs = _softmax_vector(np.asarray(logits, dtype=float))
+        out = {
+            model.classes[index].upper(): float(probs[index])
+            for index in range(len(model.classes))
+            if model.classes[index].upper() in SHOWDOWN_CAPTAIN_POSITIONS
+        }
+        if not out:
+            return {}
+        total = float(sum(out.values()))
+        if total <= 0:
+            return {}
+        return {key: value / total for key, value in out.items()}
+
     def _showdown_lineup_features(self, lineup: ShowdownLineup) -> np.ndarray:
         captain = lineup.captain
         flex = lineup.flex_players
@@ -1045,6 +1221,8 @@ class LineupLearningService:
         players: list[ShowdownPlayerPoolRow],
         lineups_target: int,
         rng: np.random.Generator,
+        captain_position_probs: dict[str, float] | None = None,
+        captain_prior_strength: float = 0.0,
     ) -> tuple[np.ndarray, np.ndarray, list[ShowdownLineup]]:
         if len(players) < 6:
             raise ValueError("Insufficient showdown player pool for lineup construction.")
@@ -1056,6 +1234,20 @@ class LineupLearningService:
             ],
             dtype=float,
         )
+        if captain_position_probs and captain_prior_strength > 0:
+            strength = float(min(max(captain_prior_strength, 0.0), 1.0))
+            class_scale = float(max(len(captain_position_probs), 1))
+            captain_bias_factors = np.asarray(
+                [
+                    max(
+                        0.05,
+                        float(captain_position_probs.get(str(row.position).upper(), 0.0)) * class_scale,
+                    )
+                    for row in players
+                ],
+                dtype=float,
+            )
+            weights = weights * ((1.0 - strength) + (strength * captain_bias_factors))
         if float(np.sum(weights)) <= 0:
             weights = np.ones(len(players), dtype=float)
         weights = weights / np.sum(weights)
@@ -3543,6 +3735,15 @@ class LineupLearningService:
         history_x: list[np.ndarray] = []
         history_y: list[np.ndarray] = []
         history_points: list[np.ndarray] = []
+        captain_model: ShowdownCaptainArchetypeModel | None = None
+        captain_prior_strength = float(getattr(request, "showdown_captain_prior_strength", 0.0) or 0.0)
+        captain_model_path = getattr(request, "showdown_captain_model_path", None)
+        if (
+            request.slate_type == "showdown"
+            and captain_prior_strength > 0.0
+            and captain_model_path
+        ):
+            captain_model = self._load_showdown_captain_archetype_model(captain_model_path)
 
         if progress_hook is not None:
             progress_hook(
@@ -3589,10 +3790,18 @@ class LineupLearningService:
                         continue
 
                     optimal_lineup, optimal_points, optimal_salary = optimal_showdown
+                    captain_position_probs: dict[str, float] | None = None
+                    if captain_model is not None:
+                        captain_position_probs = self._predict_showdown_captain_position_probs(
+                            showdown_pool,
+                            captain_model,
+                        )
                     x_slate, points_slate, generated_showdown = self._generate_showdown_lineups_for_slate(
                         players=showdown_pool,
                         lineups_target=request.lineups_per_slate,
                         rng=rng,
+                        captain_position_probs=captain_position_probs,
+                        captain_prior_strength=captain_prior_strength,
                     )
                     if len(generated_showdown) == 0:
                         rows.append(
@@ -3820,6 +4029,8 @@ class LineupLearningService:
             lineups_per_slate=request.lineups_per_slate,
             training_window_slates=request.training_window_slates,
             learned_only=request.learned_only,
+            showdown_captain_model_path=captain_model_path,
+            showdown_captain_prior_strength=captain_prior_strength,
             slates_total=len(rows),
             slates_completed=len(completed_rows),
             slates_failed_or_skipped=len(rows) - len(completed_rows),
