@@ -300,6 +300,58 @@ class RawNflWeeklyStat(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow_naive)
 
 
+class PlayerGameFeatureMatrix(Base):
+    __tablename__ = "player_game_feature_matrix"
+    __table_args__ = (
+        UniqueConstraint(
+            "source_system",
+            "season",
+            "week",
+            "game_id",
+            "player_id",
+            "position",
+            name="uq_player_game_feature_row",
+        ),
+        Index("idx_pgfm_slice", "source_system", "season", "week"),
+        Index("idx_pgfm_player", "source_system", "player_master_id", "season", "week"),
+        Index("idx_pgfm_team_pos", "source_system", "team", "opponent", "position", "season", "week"),
+    )
+
+    player_game_feature_matrix_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    source_system: Mapped[str] = mapped_column(String(32), nullable=False)
+    season: Mapped[int] = mapped_column(Integer, nullable=False)
+    week: Mapped[int] = mapped_column(Integer, nullable=False)
+    game_id: Mapped[str | None] = mapped_column(String(64))
+    player_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    player_master_id: Mapped[str | None] = mapped_column(String(36))
+    source_player_key: Mapped[str | None] = mapped_column(String(128))
+    player_name: Mapped[str | None] = mapped_column(String(128))
+    team: Mapped[str | None] = mapped_column(String(16))
+    opponent: Mapped[str | None] = mapped_column(String(16))
+    position: Mapped[str] = mapped_column(String(16), nullable=False)
+    dk_points: Mapped[float] = mapped_column(Float, nullable=False)
+    salary: Mapped[int | None] = mapped_column(Integer)
+    slate: Mapped[str | None] = mapped_column(String(64))
+    is_home: Mapped[bool | None] = mapped_column(Boolean)
+    kickoff_bucket: Mapped[str | None] = mapped_column(String(16))
+    game_total_line: Mapped[float | None] = mapped_column(Float)
+    team_spread_line: Mapped[float | None] = mapped_column(Float)
+    team_implied_total: Mapped[float | None] = mapped_column(Float)
+    opponent_implied_total: Mapped[float | None] = mapped_column(Float)
+    player_games_history: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    player_roll3_mean: Mapped[float | None] = mapped_column(Float)
+    player_roll8_mean: Mapped[float | None] = mapped_column(Float)
+    player_roll8_std: Mapped[float | None] = mapped_column(Float)
+    player_vs_opp_roll4: Mapped[float | None] = mapped_column(Float)
+    defense_pos_allowed_roll3: Mapped[float | None] = mapped_column(Float)
+    defense_pos_allowed_roll8: Mapped[float | None] = mapped_column(Float)
+    defense_pos_allowed_p90_roll8: Mapped[float | None] = mapped_column(Float)
+    player_injury_status: Mapped[str | None] = mapped_column(String(24))
+    team_skill_out_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    team_position_out_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow_naive)
+
+
 class SimulationRun(Base):
     __tablename__ = "simulation_run"
 

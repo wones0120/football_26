@@ -1,0 +1,161 @@
+# Football_26 Slate Intelligence Report (2024-2025)
+
+_Generated: 2026-03-01T13:51:45.049112+00:00_
+
+## Executive Summary
+
+- Showdown captain-informed construction reduced mean gap by `6.74` points (`56.04` -> `49.30`) with win rate `61.5%`.
+- Best showdown captain prior strength at production scale (`lineups_per_slate=2500`): `0.35`.
+- On regular main slates, high-point players are concentrated in high-total games (share lift `1.41x`).
+- RB performance in this sample was stronger in underdog buckets than favorite buckets (avg points `4.42` vs `3.34`).
+
+## Data Scope
+
+| Domain | Scope |
+|---|---|
+| Showdown descriptive sample | 41 slates |
+| Showdown model eval sample | 41 slates |
+| Showdown A/B paired sample | 39 slates |
+| Main-slate value analysis sample | 27 slates |
+| Classic backtest sample | 45/47 completed slates |
+
+## Showdown Analysis
+
+### 1) Historical Winning Captain Archetypes
+
+| Captain Pos | Slates | Share | Top Overall Rate | Avg Captain Pts |
+|---|---|---|---|---|
+| WR | 17 | 41.5% | 64.7% | 28.45 |
+| QB | 10 | 24.4% | 100.0% | 27.31 |
+| RB | 9 | 22.0% | 88.9% | 26.54 |
+| TE | 4 | 9.8% | 25.0% | 25.38 |
+| DST | 1 | 2.4% | 100.0% | 16.00 |
+
+By Total Band
+
+| Band | Slates | Top Captain Pos | Position Mix |
+|---|---|---|---|
+| 45-49.9 | 23 | WR | WR:10, QB:7, TE:3, RB:3 |
+| 40-44.9 | 13 | RB | RB:6, WR:4, QB:1, TE:1, DST:1 |
+| 50+ | 5 | WR | WR:3, QB:2 |
+
+By Spread Band
+
+| Band | Slates | Top Captain Pos | Position Mix |
+|---|---|---|---|
+| 3.1-7 | 22 | WR | WR:10, QB:5, TE:4, RB:2, DST:1 |
+| <=3 | 12 | WR | WR:6, QB:4, RB:2 |
+| >7 | 7 | RB | RB:5, WR:1, QB:1 |
+
+By Team Implied Total Band
+
+| Band | Slates | Top Captain Pos | Position Mix |
+|---|---|---|---|
+| 18-21.9 | 16 | QB | QB:6, WR:5, TE:3, RB:1, DST:1 |
+| 22-25.9 | 12 | WR | WR:6, RB:3, QB:3 |
+| 26+ | 10 | WR | WR:6, RB:2, TE:1, QB:1 |
+| <18 | 3 | RB | RB:3 |
+
+### 2) Captain Archetype Model Quality
+
+| Metric | Value |
+|---|---|
+| Top-1 Accuracy | 0.364 |
+| Top-2 Accuracy | 0.606 |
+| Baseline Top-1 Accuracy | 0.242 |
+| Top-1 Lift | 0.121 |
+
+### 3) Showdown A/B Backtest (Captain-Informed vs Baseline)
+
+| Metric | Value |
+|---|---|
+| Baseline Mean Gap | 56.036 |
+| Captain-Informed Mean Gap | 49.295 |
+| Mean Gap Lift | 6.741 |
+| Median Gap Lift | 5.750 |
+| Captain-Informed Win Rate | 61.5% |
+| Gap StdDev Reduction | 3.008 |
+
+### 4) Captain Prior Strength Sweep
+
+| Strength | Mean Gap Lift | Median Gap Lift | Win Rate | Paired Slates |
+|---|---|---|---|---|
+| 0.35 | 6.741 | 5.750 | 61.5% | 39 |
+| 0.50 | 3.217 | 2.560 | 59.0% | 39 |
+| 0.15 | 3.095 | 0.000 | 41.0% | 39 |
+
+Selected production setting: `showdown_captain_prior_strength=0.35`.
+
+## Regular Slate (Main/Classic) Analysis
+
+### 1) Baseline Classic Backtest Context
+
+| Metric | Value |
+|---|---|
+| Completed Slates | 45/47 |
+| Mean Gap | 138.67 |
+| Median Gap | 149.54 |
+| Best Gap | 33.02 |
+| Worst Gap | 225.38 |
+
+### 2) Position Value Drivers
+
+| Position | Rows | Avg Points | Avg Value (x) | 3x Rate | 4x Rate |
+|---|---|---|---|---|---|
+| DST | 580 | 5.76 | 1.94 | 23.4% | 13.1% |
+| QB | 1965 | 5.24 | 0.91 | 14.0% | 7.0% |
+| WR | 5651 | 3.23 | 0.68 | 6.8% | 3.4% |
+| TE | 3241 | 2.33 | 0.67 | 7.6% | 3.5% |
+| RB | 3304 | 3.80 | 0.66 | 6.4% | 2.8% |
+
+### 3) Over/Under Concentration
+
+| Metric | Value |
+|---|---|
+| High-Point Players in High Totals | 24.4% |
+| Baseline High-Total Player Share | 17.4% |
+| High-Total Share Lift | 1.41x |
+
+### 4) RB Performance vs Spread
+
+| Spread Bucket | Rows | Avg Points | Avg Value (x) | 3x Rate | 4x Rate |
+|---|---|---|---|---|---|
+| close | 830 | 3.52 | 0.61 | 5.4% | 2.0% |
+| underdog | 753 | 4.34 | 0.76 | 9.6% | 4.0% |
+| favorite | 712 | 3.63 | 0.65 | 5.3% | 2.7% |
+| big_underdog | 518 | 4.54 | 0.74 | 7.9% | 3.7% |
+| big_favorite | 491 | 2.92 | 0.55 | 3.3% | 1.4% |
+
+| RB Spread Summary | Value |
+|---|---|
+| Avg Points (Favorite Buckets) | 3.34 |
+| Avg Points (Underdog Buckets) | 4.42 |
+| Avg Value (Favorite Buckets) | 0.61x |
+| Avg Value (Underdog Buckets) | 0.75x |
+| RB Spread->Points Correlation | 0.069 |
+| RB High-Point Underdog Share | 62.3% |
+| RB Baseline Underdog Share | 38.5% |
+
+### 5) Optimal Main-Lineup FLEX Tendencies
+
+| Flex Position | Count | Share |
+|---|---|---|
+| RB | 12 | 44.4% |
+| WR | 10 | 37.0% |
+| TE | 5 | 18.5% |
+
+## Lineup Construction Implications
+
+- Continue using captain-informed showdown generation at prior strength `0.35` as default.
+- In regular main slates, increase exposure to high-total game environments as a learned prior.
+- Do not hard-code RB-favorite assumptions; current sample shows underdog RB buckets outperforming.
+- Keep FLEX policy adaptive with RB/WR priority and TE as conditional leverage.
+
+## Artifact Index
+
+- `docs/showdown_captain_descriptive_2024_2025.json`
+- `docs/showdown_captain_model_eval_2024_2025.json`
+- `docs/optimal_vs_predicted_showdown_captain_ab_2024_2025.json`
+- `docs/showdown_captain_strength_sweep_2024_2025_2500.json`
+- `docs/main_slate_value_driver_analysis_2024_2025.json`
+- `docs/optimal_vs_predicted_2024_2025_classic_tightened_v2.json`

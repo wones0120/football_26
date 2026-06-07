@@ -172,6 +172,11 @@ export type OptimalVsPredictedBacktestResult = {
   learned_only: boolean;
   showdown_captain_model_path?: string | null;
   showdown_captain_prior_strength?: number;
+  classic_value_driver_model_path?: string | null;
+  classic_value_driver_prior_strength?: number;
+  matchup_outcome_model_path?: string | null;
+  matchup_outcome_prior_strength?: number;
+  matchup_prior_gate_model_path?: string | null;
   slates_total: number;
   slates_completed: number;
   slates_failed_or_skipped: number;
@@ -346,6 +351,11 @@ export function runOptimalVsPredictedBacktest(payload: {
   limit_slates?: number;
   showdown_captain_model_path?: string | null;
   showdown_captain_prior_strength?: number;
+  classic_value_driver_model_path?: string | null;
+  classic_value_driver_prior_strength?: number;
+  matchup_outcome_model_path?: string | null;
+  matchup_outcome_prior_strength?: number;
+  matchup_prior_gate_model_path?: string | null;
 }): Promise<OptimalVsPredictedBacktestResult> {
   return postJson("/lineups/optimal-vs-predicted", payload);
 }

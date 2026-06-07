@@ -1,0 +1,628 @@
+{
+  "source_system": "draftkings",
+  "season_start": 2024,
+  "season_end": 2025,
+  "slate": null,
+  "slates_total": 88,
+  "slates_completed": 88,
+  "slates_failed": 0,
+  "rows_written": 17342,
+  "rows": [
+    {
+      "season": 2024,
+      "week": 4,
+      "slate": "main",
+      "status": "ok",
+      "rows_written": 747
+    },
+    {
+      "season": 2024,
+      "week": 5,
+      "slate": "main",
+      "status": "ok",
+      "rows_written": 595
+    },
+    {
+      "season": 2024,
+      "week": 6,
+      "slate": "main",
+      "status": "ok",
+      "rows_written": 586
+    },
+    {
+      "season": 2024,
+      "week": 7,
+      "slate": "1pm_slate",
+      "status": "ok",
+      "rows_written": 345
+    },
+    {
+      "season": 2024,
+      "week": 7,
+      "slate": "monday_night",
+      "status": "ok",
+      "rows_written": 99
+    },
+    {
+      "season": 2024,
+      "week": 7,
+      "slate": "sunday_night",
+      "status": "ok",
+      "rows_written": 55
+    },
+    {
+      "season": 2024,
+      "week": 8,
+      "slate": "normal",
+      "status": "ok",
+      "rows_written": 647
+    },
+    {
+      "season": 2024,
+      "week": 8,
+      "slate": "sunday",
+      "status": "ok",
+      "rows_written": 56
+    },
+    {
+      "season": 2024,
+      "week": 8,
+      "slate": "thursday",
+      "status": "ok",
+      "rows_written": 58
+    },
+    {
+      "season": 2024,
+      "week": 9,
+      "slate": "main",
+      "status": "ok",
+      "rows_written": 585
+    },
+    {
+      "season": 2024,
+      "week": 9,
+      "slate": "thursday",
+      "status": "ok",
+      "rows_written": 61
+    },
+    {
+      "season": 2024,
+      "week": 10,
+      "slate": "main",
+      "status": "ok",
+      "rows_written": 53
+    },
+    {
+      "season": 2024,
+      "week": 10,
+      "slate": "sunday",
+      "status": "ok",
+      "rows_written": 508
+    },
+    {
+      "season": 2024,
+      "week": 10,
+      "slate": "thursday",
+      "status": "ok",
+      "rows_written": 56
+    },
+    {
+      "season": 2024,
+      "week": 11,
+      "slate": "main",
+      "status": "ok",
+      "rows_written": 548
+    },
+    {
+      "season": 2024,
+      "week": 12,
+      "slate": "main",
+      "status": "ok",
+      "rows_written": 501
+    },
+    {
+      "season": 2024,
+      "week": 13,
+      "slate": "main",
+      "status": "ok",
+      "rows_written": 492
+    },
+    {
+      "season": 2024,
+      "week": 13,
+      "slate": "thursday",
+      "status": "ok",
+      "rows_written": 150
+    },
+    {
+      "season": 2024,
+      "week": 15,
+      "slate": "main",
+      "status": "ok",
+      "rows_written": 60
+    },
+    {
+      "season": 2024,
+      "week": 15,
+      "slate": "monday_classic",
+      "status": "ok",
+      "rows_written": 17
+    },
+    {
+      "season": 2024,
+      "week": 15,
+      "slate": "monday_second_captain",
+      "status": "ok",
+      "rows_written": 62
+    },
+    {
+      "season": 2024,
+      "week": 15,
+      "slate": "sunday_all",
+      "status": "ok",
+      "rows_written": 603
+    },
+    {
+      "season": 2024,
+      "week": 15,
+      "slate": "sunday_early",
+      "status": "ok",
+      "rows_written": 44
+    },
+    {
+      "season": 2024,
+      "week": 15,
+      "slate": "sunday_late",
+      "status": "ok",
+      "rows_written": 24
+    },
+    {
+      "season": 2024,
+      "week": 15,
+      "slate": "sunday_night",
+      "status": "ok",
+      "rows_written": 0
+    },
+    {
+      "season": 2024,
+      "week": 15,
+      "slate": "thursday",
+      "status": "ok",
+      "rows_written": 56
+    },
+    {
+      "season": 2024,
+      "week": 16,
+      "slate": "afternoon_only",
+      "status": "ok",
+      "rows_written": 204
+    },
+    {
+      "season": 2024,
+      "week": 16,
+      "slate": "main",
+      "status": "ok",
+      "rows_written": 397
+    },
+    {
+      "season": 2024,
+      "week": 16,
+      "slate": "monday_night",
+      "status": "ok",
+      "rows_written": 61
+    },
+    {
+      "season": 2024,
+      "week": 16,
+      "slate": "monday_night_unknown",
+      "status": "ok",
+      "rows_written": 13
+    },
+    {
+      "season": 2024,
+      "week": 16,
+      "slate": "saturday",
+      "status": "ok",
+      "rows_written": 110
+    },
+    {
+      "season": 2024,
+      "week": 16,
+      "slate": "saturday_kc_vs_hou",
+      "status": "ok",
+      "rows_written": 12
+    },
+    {
+      "season": 2024,
+      "week": 16,
+      "slate": "saturday_pit_vs_bal",
+      "status": "ok",
+      "rows_written": 8
+    },
+    {
+      "season": 2024,
+      "week": 16,
+      "slate": "sunday_det_vs_chi",
+      "status": "ok",
+      "rows_written": 53
+    },
+    {
+      "season": 2024,
+      "week": 16,
+      "slate": "sunday_early",
+      "status": "ok",
+      "rows_written": 43
+    },
+    {
+      "season": 2024,
+      "week": 16,
+      "slate": "sunday_late",
+      "status": "ok",
+      "rows_written": 0
+    },
+    {
+      "season": 2024,
+      "week": 16,
+      "slate": "sunday_main",
+      "status": "ok",
+      "rows_written": 66
+    },
+    {
+      "season": 2024,
+      "week": 16,
+      "slate": "sunday_night",
+      "status": "ok",
+      "rows_written": 57
+    },
+    {
+      "season": 2024,
+      "week": 17,
+      "slate": "monday_night",
+      "status": "ok",
+      "rows_written": 53
+    },
+    {
+      "season": 2024,
+      "week": 17,
+      "slate": "saturday_night",
+      "status": "ok",
+      "rows_written": 146
+    },
+    {
+      "season": 2024,
+      "week": 17,
+      "slate": "saturday_night_ari_vs_lar",
+      "status": "ok",
+      "rows_written": 12
+    },
+    {
+      "season": 2024,
+      "week": 17,
+      "slate": "saturday_night_lac_vs_ne",
+      "status": "ok",
+      "rows_written": 12
+    },
+    {
+      "season": 2024,
+      "week": 17,
+      "slate": "sunday_early",
+      "status": "ok",
+      "rows_written": 309
+    },
+    {
+      "season": 2024,
+      "week": 17,
+      "slate": "sunday_late",
+      "status": "ok",
+      "rows_written": 105
+    },
+    {
+      "season": 2024,
+      "week": 17,
+      "slate": "sunday_main",
+      "status": "ok",
+      "rows_written": 53
+    },
+    {
+      "season": 2024,
+      "week": 17,
+      "slate": "sunday_night_atl_vs_was",
+      "status": "ok",
+      "rows_written": 58
+    },
+    {
+      "season": 2024,
+      "week": 17,
+      "slate": "thursday_night_sea_vs_chi",
+      "status": "ok",
+      "rows_written": 56
+    },
+    {
+      "season": 2024,
+      "week": 17,
+      "slate": "wednesday_night",
+      "status": "ok",
+      "rows_written": 106
+    },
+    {
+      "season": 2024,
+      "week": 17,
+      "slate": "wednesday_night_hou_vs_bal",
+      "status": "ok",
+      "rows_written": 13
+    },
+    {
+      "season": 2024,
+      "week": 17,
+      "slate": "wednesday_night_kc_vs_pit",
+      "status": "ok",
+      "rows_written": 8
+    },
+    {
+      "season": 2024,
+      "week": 19,
+      "slate": "saturday_night",
+      "status": "ok",
+      "rows_written": 108
+    },
+    {
+      "season": 2024,
+      "week": 19,
+      "slate": "saturday_night_4_game",
+      "status": "ok",
+      "rows_written": 151
+    },
+    {
+      "season": 2024,
+      "week": 19,
+      "slate": "saturday_night_pit_vs_bal",
+      "status": "ok",
+      "rows_written": 8
+    },
+    {
+      "season": 2024,
+      "week": 20,
+      "slate": "sunday_main",
+      "status": "ok",
+      "rows_written": 205
+    },
+    {
+      "season": 2024,
+      "week": 20,
+      "slate": "sunday_night",
+      "status": "ok",
+      "rows_written": 6
+    },
+    {
+      "season": 2025,
+      "week": 1,
+      "slate": "friday",
+      "status": "ok",
+      "rows_written": 61
+    },
+    {
+      "season": 2025,
+      "week": 1,
+      "slate": "sunday_main",
+      "status": "ok",
+      "rows_written": 744
+    },
+    {
+      "season": 2025,
+      "week": 1,
+      "slate": "thursday",
+      "status": "ok",
+      "rows_written": 76
+    },
+    {
+      "season": 2025,
+      "week": 5,
+      "slate": "monday_night",
+      "status": "ok",
+      "rows_written": 61
+    },
+    {
+      "season": 2025,
+      "week": 5,
+      "slate": "sunday_late",
+      "status": "ok",
+      "rows_written": 55
+    },
+    {
+      "season": 2025,
+      "week": 5,
+      "slate": "sunday_main",
+      "status": "ok",
+      "rows_written": 504
+    },
+    {
+      "season": 2025,
+      "week": 6,
+      "slate": "sunday_main",
+      "status": "ok",
+      "rows_written": 497
+    },
+    {
+      "season": 2025,
+      "week": 7,
+      "slate": "sunday_main",
+      "status": "ok",
+      "rows_written": 510
+    },
+    {
+      "season": 2025,
+      "week": 7,
+      "slate": "thursday_night",
+      "status": "ok",
+      "rows_written": 59
+    },
+    {
+      "season": 2025,
+      "week": 8,
+      "slate": "sunday_main",
+      "status": "ok",
+      "rows_written": 507
+    },
+    {
+      "season": 2025,
+      "week": 8,
+      "slate": "thursday_night",
+      "status": "ok",
+      "rows_written": 62
+    },
+    {
+      "season": 2025,
+      "week": 9,
+      "slate": "monday_night",
+      "status": "ok",
+      "rows_written": 54
+    },
+    {
+      "season": 2025,
+      "week": 9,
+      "slate": "sunday_main",
+      "status": "ok",
+      "rows_written": 559
+    },
+    {
+      "season": 2025,
+      "week": 9,
+      "slate": "sunday_night",
+      "status": "ok",
+      "rows_written": 58
+    },
+    {
+      "season": 2025,
+      "week": 9,
+      "slate": "thursday_night",
+      "status": "ok",
+      "rows_written": 55
+    },
+    {
+      "season": 2025,
+      "week": 10,
+      "slate": "monday_night",
+      "status": "ok",
+      "rows_written": 58
+    },
+    {
+      "season": 2025,
+      "week": 10,
+      "slate": "sunday_main",
+      "status": "ok",
+      "rows_written": 514
+    },
+    {
+      "season": 2025,
+      "week": 10,
+      "slate": "sunday_night",
+      "status": "ok",
+      "rows_written": 58
+    },
+    {
+      "season": 2025,
+      "week": 11,
+      "slate": "monday_night",
+      "status": "ok",
+      "rows_written": 55
+    },
+    {
+      "season": 2025,
+      "week": 11,
+      "slate": "sunday_main",
+      "status": "ok",
+      "rows_written": 556
+    },
+    {
+      "season": 2025,
+      "week": 11,
+      "slate": "thursday_night",
+      "status": "ok",
+      "rows_written": 64
+    },
+    {
+      "season": 2025,
+      "week": 12,
+      "slate": "sunday_main",
+      "status": "ok",
+      "rows_written": 557
+    },
+    {
+      "season": 2025,
+      "week": 12,
+      "slate": "sunday_night",
+      "status": "ok",
+      "rows_written": 59
+    },
+    {
+      "season": 2025,
+      "week": 13,
+      "slate": "sunday_main",
+      "status": "ok",
+      "rows_written": 516
+    },
+    {
+      "season": 2025,
+      "week": 13,
+      "slate": "thursday_night",
+      "status": "ok",
+      "rows_written": 150
+    },
+    {
+      "season": 2025,
+      "week": 16,
+      "slate": "monday_night",
+      "status": "ok",
+      "rows_written": 61
+    },
+    {
+      "season": 2025,
+      "week": 17,
+      "slate": "monday_night",
+      "status": "ok",
+      "rows_written": 60
+    },
+    {
+      "season": 2025,
+      "week": 17,
+      "slate": "saturday_night",
+      "status": "ok",
+      "rows_written": 100
+    },
+    {
+      "season": 2025,
+      "week": 17,
+      "slate": "sunday_late",
+      "status": "ok",
+      "rows_written": 52
+    },
+    {
+      "season": 2025,
+      "week": 17,
+      "slate": "sunday_late2",
+      "status": "ok",
+      "rows_written": 61
+    },
+    {
+      "season": 2025,
+      "week": 17,
+      "slate": "sunday_main",
+      "status": "ok",
+      "rows_written": 384
+    },
+    {
+      "season": 2025,
+      "week": 17,
+      "slate": "sunday_night",
+      "status": "ok",
+      "rows_written": 57
+    },
+    {
+      "season": 2025,
+      "week": 18,
+      "slate": "sunday_main",
+      "status": "ok",
+      "rows_written": 677
+    }
+  ]
+}

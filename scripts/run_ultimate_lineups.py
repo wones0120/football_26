@@ -34,6 +34,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-player-exposure", type=float, default=0.35)
     parser.add_argument("--max-qb-exposure", type=float, default=0.25)
     parser.add_argument("--max-dst-exposure", type=float, default=0.30)
+    parser.add_argument("--classic-value-driver-model-path", type=str, default=None)
+    parser.add_argument("--classic-value-driver-prior-strength", type=float, default=0.0)
+    parser.add_argument("--matchup-outcome-model-path", type=str, default=None)
+    parser.add_argument("--matchup-outcome-prior-strength", type=float, default=0.0)
+    parser.add_argument("--matchup-prior-gate-model-path", type=str, default=None)
     parser.add_argument("--random-seed", type=int, default=42)
     parser.add_argument("--show-lineups", type=int, default=20)
     parser.add_argument("--show-exposures", type=int, default=35)
@@ -59,6 +64,11 @@ def main() -> None:
         max_player_exposure=args.max_player_exposure,
         max_qb_exposure=args.max_qb_exposure,
         max_dst_exposure=args.max_dst_exposure,
+        classic_value_driver_model_path=args.classic_value_driver_model_path,
+        classic_value_driver_prior_strength=args.classic_value_driver_prior_strength,
+        matchup_outcome_model_path=args.matchup_outcome_model_path,
+        matchup_outcome_prior_strength=args.matchup_outcome_prior_strength,
+        matchup_prior_gate_model_path=args.matchup_prior_gate_model_path,
         random_seed=args.random_seed,
     )
     with SessionLocal() as session:
@@ -76,6 +86,11 @@ def main() -> None:
         "training_slates_used": result.training_slates_used,
         "training_rows_used": result.training_rows_used,
         "training_positive_rate": result.training_positive_rate,
+        "classic_value_driver_model_path": result.classic_value_driver_model_path,
+        "classic_value_driver_prior_strength": result.classic_value_driver_prior_strength,
+        "matchup_outcome_model_path": result.matchup_outcome_model_path,
+        "matchup_outcome_prior_strength": result.matchup_outcome_prior_strength,
+        "matchup_prior_gate_model_path": result.matchup_prior_gate_model_path,
         "discovered_patterns": result.discovered_patterns,
     }
     print(json.dumps(summary, indent=2))

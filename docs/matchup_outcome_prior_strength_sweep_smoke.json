@@ -1,0 +1,273 @@
+{
+  "config": {
+    "source_system": "draftkings",
+    "season_start": 2024,
+    "season_end": 2025,
+    "slate_filter": null,
+    "lineups_per_slate": 1000,
+    "training_window_slates": 24,
+    "min_training_slates": 2,
+    "min_training_rows": 500,
+    "limit_slates": 8,
+    "random_seed": 20260224,
+    "matchup_outcome_model_path": "docs/matchup_outcome_intelligence_2024_2025.json",
+    "strengths": [
+      0.25,
+      0.5
+    ]
+  },
+  "ranked_results": [
+    {
+      "strength": 0.5,
+      "baseline_completed_slates": null,
+      "matchup_informed_completed_slates": null,
+      "paired_slates": 6,
+      "mean_gap_lift_points": 9.309999999999993,
+      "median_gap_lift_points": 3.9000000000000057,
+      "matchup_informed_win_rate": 0.5,
+      "baseline_mean_gap_points": 142.73000000000002,
+      "matchup_informed_mean_gap_points": 133.42000000000002,
+      "baseline_median_gap_points": 156.18,
+      "matchup_informed_median_gap_points": 145.98000000000002,
+      "baseline_gap_stddev": 36.069781904894676,
+      "matchup_informed_gap_stddev": 35.327188773898605,
+      "stability_lift_stddev_reduction": 0.7425931309960703,
+      "paired_rows": [
+        {
+          "season": 2024,
+          "week": 6,
+          "slate": "main",
+          "baseline_gap_points": 172.78,
+          "matchup_informed_gap_points": 173.10000000000002,
+          "gap_lift_points": -0.3200000000000216,
+          "baseline_predicted_actual_points": 65.12,
+          "matchup_predicted_actual_points": 64.8,
+          "optimal_actual_points": 237.9
+        },
+        {
+          "season": 2024,
+          "week": 7,
+          "slate": "1pm_slate",
+          "baseline_gap_points": 133.26000000000002,
+          "matchup_informed_gap_points": 145.42000000000002,
+          "gap_lift_points": -12.159999999999997,
+          "baseline_predicted_actual_points": 82.16,
+          "matchup_predicted_actual_points": 70.00000000000001,
+          "optimal_actual_points": 215.42000000000002
+        },
+        {
+          "season": 2024,
+          "week": 7,
+          "slate": "monday_night",
+          "baseline_gap_points": 68.69999999999999,
+          "matchup_informed_gap_points": 68.69999999999999,
+          "gap_lift_points": 0.0,
+          "baseline_predicted_actual_points": 113.24000000000001,
+          "matchup_predicted_actual_points": 113.24000000000001,
+          "optimal_actual_points": 181.94
+        },
+        {
+          "season": 2024,
+          "week": 8,
+          "slate": "normal",
+          "baseline_gap_points": 169.28,
+          "matchup_informed_gap_points": 146.54000000000002,
+          "gap_lift_points": 22.73999999999998,
+          "baseline_predicted_actual_points": 84.56,
+          "matchup_predicted_actual_points": 107.3,
+          "optimal_actual_points": 253.84
+        },
+        {
+          "season": 2024,
+          "week": 9,
+          "slate": "main",
+          "baseline_gap_points": 167.72000000000003,
+          "matchup_informed_gap_points": 159.92000000000002,
+          "gap_lift_points": 7.800000000000011,
+          "baseline_predicted_actual_points": 100.5,
+          "matchup_predicted_actual_points": 108.3,
+          "optimal_actual_points": 268.22
+        },
+        {
+          "season": 2024,
+          "week": 10,
+          "slate": "sunday",
+          "baseline_gap_points": 144.64,
+          "matchup_informed_gap_points": 106.84,
+          "gap_lift_points": 37.79999999999998,
+          "baseline_predicted_actual_points": 69.8,
+          "matchup_predicted_actual_points": 107.6,
+          "optimal_actual_points": 214.44
+        }
+      ]
+    },
+    {
+      "strength": 0.25,
+      "baseline_completed_slates": null,
+      "matchup_informed_completed_slates": null,
+      "paired_slates": 6,
+      "mean_gap_lift_points": -13.036666666666667,
+      "median_gap_lift_points": -11.159999999999997,
+      "matchup_informed_win_rate": 0.16666666666666666,
+      "baseline_mean_gap_points": 142.73000000000002,
+      "matchup_informed_mean_gap_points": 155.76666666666668,
+      "baseline_median_gap_points": 156.18,
+      "matchup_informed_median_gap_points": 174.11,
+      "baseline_gap_stddev": 36.069781904894676,
+      "matchup_informed_gap_stddev": 36.26378113520738,
+      "stability_lift_stddev_reduction": -0.1939992303127056,
+      "paired_rows": [
+        {
+          "season": 2024,
+          "week": 6,
+          "slate": "main",
+          "baseline_gap_points": 172.78,
+          "matchup_informed_gap_points": 172.78,
+          "gap_lift_points": 0.0,
+          "baseline_predicted_actual_points": 65.12,
+          "matchup_predicted_actual_points": 65.12,
+          "optimal_actual_points": 237.9
+        },
+        {
+          "season": 2024,
+          "week": 7,
+          "slate": "1pm_slate",
+          "baseline_gap_points": 133.26000000000002,
+          "matchup_informed_gap_points": 177.38000000000002,
+          "gap_lift_points": -44.120000000000005,
+          "baseline_predicted_actual_points": 82.16,
+          "matchup_predicted_actual_points": 38.04,
+          "optimal_actual_points": 215.42000000000002
+        },
+        {
+          "season": 2024,
+          "week": 7,
+          "slate": "monday_night",
+          "baseline_gap_points": 68.69999999999999,
+          "matchup_informed_gap_points": 83.29999999999998,
+          "gap_lift_points": -14.599999999999994,
+          "baseline_predicted_actual_points": 113.24000000000001,
+          "matchup_predicted_actual_points": 98.64000000000001,
+          "optimal_actual_points": 181.94
+        },
+        {
+          "season": 2024,
+          "week": 8,
+          "slate": "normal",
+          "baseline_gap_points": 169.28,
+          "matchup_informed_gap_points": 189.26,
+          "gap_lift_points": -19.97999999999999,
+          "baseline_predicted_actual_points": 84.56,
+          "matchup_predicted_actual_points": 64.58,
+          "optimal_actual_points": 253.84
+        },
+        {
+          "season": 2024,
+          "week": 9,
+          "slate": "main",
+          "baseline_gap_points": 167.72000000000003,
+          "matchup_informed_gap_points": 175.44000000000003,
+          "gap_lift_points": -7.719999999999999,
+          "baseline_predicted_actual_points": 100.5,
+          "matchup_predicted_actual_points": 92.78,
+          "optimal_actual_points": 268.22
+        },
+        {
+          "season": 2024,
+          "week": 10,
+          "slate": "sunday",
+          "baseline_gap_points": 144.64,
+          "matchup_informed_gap_points": 136.44,
+          "gap_lift_points": 8.199999999999989,
+          "baseline_predicted_actual_points": 69.8,
+          "matchup_predicted_actual_points": 78.0,
+          "optimal_actual_points": 214.44
+        }
+      ]
+    }
+  ],
+  "best_strength_result": {
+    "strength": 0.5,
+    "baseline_completed_slates": null,
+    "matchup_informed_completed_slates": null,
+    "paired_slates": 6,
+    "mean_gap_lift_points": 9.309999999999993,
+    "median_gap_lift_points": 3.9000000000000057,
+    "matchup_informed_win_rate": 0.5,
+    "baseline_mean_gap_points": 142.73000000000002,
+    "matchup_informed_mean_gap_points": 133.42000000000002,
+    "baseline_median_gap_points": 156.18,
+    "matchup_informed_median_gap_points": 145.98000000000002,
+    "baseline_gap_stddev": 36.069781904894676,
+    "matchup_informed_gap_stddev": 35.327188773898605,
+    "stability_lift_stddev_reduction": 0.7425931309960703,
+    "paired_rows": [
+      {
+        "season": 2024,
+        "week": 6,
+        "slate": "main",
+        "baseline_gap_points": 172.78,
+        "matchup_informed_gap_points": 173.10000000000002,
+        "gap_lift_points": -0.3200000000000216,
+        "baseline_predicted_actual_points": 65.12,
+        "matchup_predicted_actual_points": 64.8,
+        "optimal_actual_points": 237.9
+      },
+      {
+        "season": 2024,
+        "week": 7,
+        "slate": "1pm_slate",
+        "baseline_gap_points": 133.26000000000002,
+        "matchup_informed_gap_points": 145.42000000000002,
+        "gap_lift_points": -12.159999999999997,
+        "baseline_predicted_actual_points": 82.16,
+        "matchup_predicted_actual_points": 70.00000000000001,
+        "optimal_actual_points": 215.42000000000002
+      },
+      {
+        "season": 2024,
+        "week": 7,
+        "slate": "monday_night",
+        "baseline_gap_points": 68.69999999999999,
+        "matchup_informed_gap_points": 68.69999999999999,
+        "gap_lift_points": 0.0,
+        "baseline_predicted_actual_points": 113.24000000000001,
+        "matchup_predicted_actual_points": 113.24000000000001,
+        "optimal_actual_points": 181.94
+      },
+      {
+        "season": 2024,
+        "week": 8,
+        "slate": "normal",
+        "baseline_gap_points": 169.28,
+        "matchup_informed_gap_points": 146.54000000000002,
+        "gap_lift_points": 22.73999999999998,
+        "baseline_predicted_actual_points": 84.56,
+        "matchup_predicted_actual_points": 107.3,
+        "optimal_actual_points": 253.84
+      },
+      {
+        "season": 2024,
+        "week": 9,
+        "slate": "main",
+        "baseline_gap_points": 167.72000000000003,
+        "matchup_informed_gap_points": 159.92000000000002,
+        "gap_lift_points": 7.800000000000011,
+        "baseline_predicted_actual_points": 100.5,
+        "matchup_predicted_actual_points": 108.3,
+        "optimal_actual_points": 268.22
+      },
+      {
+        "season": 2024,
+        "week": 10,
+        "slate": "sunday",
+        "baseline_gap_points": 144.64,
+        "matchup_informed_gap_points": 106.84,
+        "gap_lift_points": 37.79999999999998,
+        "baseline_predicted_actual_points": 69.8,
+        "matchup_predicted_actual_points": 107.6,
+        "optimal_actual_points": 214.44
+      }
+    ]
+  }
+}

@@ -4,14 +4,14 @@ import json
 import math
 import statistics
 from itertools import combinations
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Callable
 
 import numpy as np
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, delete, or_, select
 from sqlalchemy.orm import Session
 
 try:
@@ -24,8 +24,10 @@ except Exception:  # noqa: BLE001
 from ..models import (
     ActualTopLineup,
     ActualTopLineupPlayer,
+    CuratedInjury,
     CuratedSalary,
     PlayerAlias,
+    PlayerGameFeatureMatrix,
     RawNflSchedule,
     RawNflWeeklyStat,
 )
@@ -154,6 +156,30 @@ SHOWDOWN_CAPTAIN_CONTEXT_FEATURE_NAMES = [
     "top_dst_salary",
 ]
 SHOWDOWN_CAPTAIN_POSITIONS = {"QB", "RB", "WR", "TE", "K", "DST"}
+CLASSIC_VALUE_DRIVER_POSITIONS = ("QB", "RB", "WR", "TE", "DST")
+PLAYER_MATCHUP_MODEL_FEATURE_NAMES = [
+    "salary_k",
+    "is_home",
+    "game_total_line",
+    "team_spread_line",
+    "team_implied_total",
+    "opponent_implied_total",
+    "player_games_history",
+    "player_roll3_mean",
+    "player_roll8_mean",
+    "player_roll8_std",
+    "player_vs_opp_roll4",
+    "defense_pos_allowed_roll3",
+    "defense_pos_allowed_roll8",
+    "defense_pos_allowed_p90_roll8",
+    "injury_status_score",
+    "team_skill_out_count",
+    "team_position_out_count",
+    "kickoff_early",
+    "kickoff_late",
+    "kickoff_prime",
+    "kickoff_unknown",
+]
 
 TEAM_ALIASES = {
     "JAX": "JAC",
@@ -222,6 +248,38 @@ class ShowdownCaptainArchetypeModel:
 
 
 @dataclass
+class ClassicValueDriverModel:
+    position_multipliers: dict[str, float]
+    rb_spread_role_multipliers: dict[str, float]
+    flex_position_multipliers: dict[str, float]
+    high_total_threshold: float
+    high_total_player_boost: float
+    high_total_baseline_share: float
+
+
+@dataclass
+class MatchupOutcomeIntelligenceModel:
+    position_hit4x_rate: dict[str, float]
+    total_spread_lifts: dict[tuple[str, str, str], float]
+    salary_teammate_lifts: dict[tuple[str, str, str], float]
+    matchup_cell_lifts: dict[tuple[str, str, str], float]
+
+
+@dataclass
+class MatchupPriorGateRule:
+    bucket_name: str
+    bucket_value: str
+    weight: float
+
+
+@dataclass
+class MatchupPriorGateModel:
+    threshold: float
+    base_prior_strength: float
+    rules: list[MatchupPriorGateRule]
+
+
+@dataclass
 class LogisticTargetModel:
     weights: np.ndarray
     bias: float
@@ -230,6 +288,23 @@ class LogisticTargetModel:
     positive_rate: float
     training_rows: int
     has_signal: bool
+
+
+@dataclass
+class PlayerMatchupProjectionModel:
+    feature_names: list[str]
+    weights: np.ndarray
+    bias: float
+    x_mean: np.ndarray
+    x_std: np.ndarray
+    y_mean: float
+    y_std: float
+    residual_std: float
+    training_rows: int
+    mae_model: float
+    mae_baseline: float
+    blend_weight: float
+    enabled: bool
 
 
 def utcnow_naive() -> datetime:
@@ -276,6 +351,75 @@ def _max_or_zero(values: list[float]) -> float:
     return float(max(clean))
 
 
+def _clamp(value: float, lower: float, upper: float) -> float:
+    return float(max(lower, min(upper, value)))
+
+
+def _spread_role_bucket(spread: float | None) -> str:
+    if spread is None or not math.isfinite(float(spread)):
+        return "unknown"
+    spread_value = float(spread)
+    if spread_value <= -7:
+        return "big_favorite"
+    if spread_value <= -3:
+        return "favorite"
+    if spread_value < 3:
+        return "close"
+    if spread_value < 7:
+        return "underdog"
+    return "big_underdog"
+
+
+def _total_band_bucket(total: float | None) -> str:
+    if total is None or not math.isfinite(float(total)):
+        return "unknown"
+    total_value = float(total)
+    if total_value < 42.0:
+        return "<42"
+    if total_value < 47.0:
+        return "42-46.9"
+    if total_value < 51.0:
+        return "47-50.9"
+    return "51+"
+
+
+def _salary_tier_bucket(position: str | None, salary: int | None) -> str:
+    pos = (position or "").strip().upper()
+    salary_value = int(salary or 0)
+    if salary_value <= 0:
+        return "unknown"
+    if pos == "QB":
+        if salary_value < 5800:
+            return "cheap"
+        if salary_value < 7200:
+            return "mid"
+        return "premium"
+    if pos in {"RB", "WR", "TE"}:
+        if salary_value < 5000:
+            return "cheap"
+        if salary_value < 7000:
+            return "mid"
+        return "premium"
+    if pos == "DST":
+        if salary_value < 2800:
+            return "cheap"
+        if salary_value < 3400:
+            return "mid"
+        return "premium"
+    return "unknown"
+
+
+def _teammate_out_bucket(value: int | None) -> str:
+    count = int(value or 0)
+    if count <= 0:
+        return "0"
+    if count == 1:
+        return "1"
+    if count == 2:
+        return "2"
+    return "3+"
+
+
 def _normalize_pool_position(raw_position: str | None) -> str | None:
     if raw_position is None:
         return None
@@ -316,6 +460,91 @@ def _safe_float(value: Any) -> float | None:
     if not math.isfinite(number):
         return None
     return float(number)
+
+
+def _safe_str(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _kickoff_bucket(kickoff: str | None) -> str:
+    if kickoff is None:
+        return "unknown"
+    text = kickoff.strip()
+    if not text:
+        return "unknown"
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        hour = int(parsed.hour)
+        if hour >= 19:
+            return "prime"
+        if hour >= 16:
+            return "late"
+        return "early"
+    except ValueError:
+        lowered = text.lower()
+        if "night" in lowered or "primetime" in lowered:
+            return "prime"
+        if "late" in lowered:
+            return "late"
+        if "early" in lowered:
+            return "early"
+    return "unknown"
+
+
+def _injury_status_bucket(status: str | None) -> str:
+    if status is None:
+        return "unknown"
+    normalized = status.strip().lower()
+    if not normalized:
+        return "unknown"
+    if any(token in normalized for token in ("out", "injured reserve", "ir", "suspended")):
+        return "out"
+    if "doubt" in normalized:
+        return "doubtful"
+    if any(token in normalized for token in ("question", "q")):
+        return "questionable"
+    if "probable" in normalized:
+        return "probable"
+    return "active"
+
+
+def _injury_multiplier(status: str | None) -> float:
+    bucket = _injury_status_bucket(status)
+    if bucket == "out":
+        return 0.35
+    if bucket == "doubtful":
+        return 0.60
+    if bucket == "questionable":
+        return 0.86
+    if bucket == "probable":
+        return 0.97
+    return 1.0
+
+
+def _injury_status_score(status: str | None) -> float:
+    bucket = _injury_status_bucket(status)
+    if bucket == "out":
+        return 1.0
+    if bucket == "doubtful":
+        return 0.8
+    if bucket == "questionable":
+        return 0.5
+    if bucket == "probable":
+        return 0.2
+    return 0.0
+
+
+def _kickoff_bucket_flags(bucket: str | None) -> tuple[float, float, float, float]:
+    normalized = (bucket or "unknown").strip().lower()
+    return (
+        1.0 if normalized == "early" else 0.0,
+        1.0 if normalized == "late" else 0.0,
+        1.0 if normalized == "prime" else 0.0,
+        1.0 if normalized not in {"early", "late", "prime"} else 0.0,
+    )
 
 
 def _lineup_satisfies_roster_rules(lineup: list[PlayerPoolRow]) -> bool:
@@ -429,6 +658,16 @@ class LineupLearningService:
             tuple[dict[str, tuple[float, float]], dict[str, tuple[float, float]]],
         ] = {}
         self._slate_type_cache: dict[tuple[str, int, int, str], str] = {}
+        self._classic_value_model_cache: dict[str, ClassicValueDriverModel] = {}
+        self._matchup_outcome_model_cache: dict[str, MatchupOutcomeIntelligenceModel] = {}
+        self._matchup_prior_gate_cache: dict[str, MatchupPriorGateModel] = {}
+        self._projection_feature_cache: dict[tuple[str, int, int, str], dict[str, dict[str, Any]]] = {}
+        self._matchup_model_cache: dict[tuple[str, int, int, str], dict[str, PlayerMatchupProjectionModel]] = {}
+        self._use_matrix_matchup_model = True
+
+    def set_matchup_matrix_projection_enabled(self, enabled: bool) -> None:
+        self._use_matrix_matchup_model = bool(enabled)
+        self._player_projection_cache.clear()
 
     def _game_context_by_team(self, *, season: int, week: int) -> dict[str, dict[str, float]]:
         cache_key = (season, week)
@@ -947,6 +1186,579 @@ class LineupLearningService:
             return {}
         return {key: value / total for key, value in out.items()}
 
+    def _load_classic_value_driver_model(self, model_path: str) -> ClassicValueDriverModel:
+        resolved_path = Path(model_path).expanduser().resolve()
+        cache_key = str(resolved_path)
+        cached = self._classic_value_model_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        if not resolved_path.exists():
+            raise ValueError(f"Classic value-driver model not found: {resolved_path}")
+
+        payload = json.loads(resolved_path.read_text(encoding="utf-8"))
+        position_rows = payload.get("position_value_summary", [])
+        position_avg_value: dict[str, float] = {}
+        for row in position_rows:
+            position = str(row.get("name", "")).upper().strip()
+            avg_value = _safe_float(row.get("avg_value"))
+            if not position or avg_value is None or avg_value <= 0:
+                continue
+            if position in CLASSIC_VALUE_DRIVER_POSITIONS:
+                position_avg_value[position] = float(avg_value)
+
+        skill_positions = [pos for pos in ("QB", "RB", "WR", "TE") if pos in position_avg_value]
+        skill_mean_value = float(
+            statistics.mean([position_avg_value[pos] for pos in skill_positions])
+        ) if skill_positions else 1.0
+        position_multipliers: dict[str, float] = {}
+        for position in CLASSIC_VALUE_DRIVER_POSITIONS:
+            if position not in position_avg_value:
+                position_multipliers[position] = 1.0
+                continue
+            if position == "DST":
+                # DST slot is fixed to 1 spot, so avoid aggressive weighting.
+                position_multipliers[position] = 1.0
+            else:
+                position_multipliers[position] = _clamp(
+                    float(position_avg_value[position] / max(skill_mean_value, 1e-6)),
+                    0.85,
+                    1.20,
+                )
+
+        high_total_payload = payload.get("high_point_total_analysis", {})
+        high_total_threshold = _safe_float(high_total_payload.get("high_total_threshold")) or 48.0
+        high_total_share_lift = _safe_float(high_total_payload.get("high_total_share_lift")) or 1.0
+        high_total_baseline_share = _safe_float(high_total_payload.get("baseline_high_total_share")) or 0.0
+        high_total_player_boost = _clamp(
+            1.0 + (0.55 * max(0.0, high_total_share_lift - 1.0)),
+            1.0,
+            1.35,
+        )
+
+        rb_payload = payload.get("rb_spread_analysis", {})
+        rb_rows = rb_payload.get("rb_by_spread_role", []) or []
+        rb_avg_value_overall = position_avg_value.get("RB")
+        if rb_avg_value_overall is None or rb_avg_value_overall <= 0:
+            rb_values = [
+                _safe_float(row.get("avg_value"))
+                for row in rb_rows
+                if _safe_float(row.get("avg_value")) is not None
+            ]
+            rb_avg_value_overall = float(statistics.mean(rb_values)) if rb_values else 1.0
+
+        rb_spread_role_multipliers: dict[str, float] = {}
+        for row in rb_rows:
+            name = str(row.get("name", "")).strip()
+            avg_value = _safe_float(row.get("avg_value"))
+            if not name or avg_value is None:
+                continue
+            rb_spread_role_multipliers[name] = _clamp(
+                float(avg_value / max(rb_avg_value_overall, 1e-6)),
+                0.80,
+                1.25,
+            )
+
+        flex_payload = payload.get("optimal_main_lineup_mix", {})
+        flex_rows = flex_payload.get("flex_position_mix", []) or []
+        flex_shares: dict[str, float] = {}
+        for row in flex_rows:
+            position = str(row.get("position", "")).upper().strip()
+            share = _safe_float(row.get("share"))
+            if position in {"RB", "WR", "TE"} and share is not None and share >= 0:
+                flex_shares[position] = float(share)
+        baseline_share = 1.0 / 3.0
+        flex_position_multipliers = {
+            position: _clamp(flex_shares.get(position, baseline_share) / baseline_share, 0.75, 1.40)
+            for position in ("RB", "WR", "TE")
+        }
+
+        model = ClassicValueDriverModel(
+            position_multipliers=position_multipliers,
+            rb_spread_role_multipliers=rb_spread_role_multipliers,
+            flex_position_multipliers=flex_position_multipliers,
+            high_total_threshold=float(high_total_threshold),
+            high_total_player_boost=float(high_total_player_boost),
+            high_total_baseline_share=float(max(0.0, min(1.0, high_total_baseline_share))),
+        )
+        self._classic_value_model_cache[cache_key] = model
+        return model
+
+    def _load_matchup_outcome_model(self, model_path: str) -> MatchupOutcomeIntelligenceModel:
+        resolved_path = Path(model_path).expanduser().resolve()
+        cache_key = str(resolved_path)
+        cached = self._matchup_outcome_model_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        if not resolved_path.exists():
+            raise ValueError(f"Matchup outcome model not found: {resolved_path}")
+
+        payload = json.loads(resolved_path.read_text(encoding="utf-8"))
+
+        position_hit4x_rate: dict[str, float] = {}
+        for row in payload.get("position_baselines", []) or []:
+            position = str(row.get("position", "")).upper().strip()
+            hit4x_rate = _safe_float(row.get("hit4x_rate"))
+            if position and hit4x_rate is not None:
+                position_hit4x_rate[position] = float(hit4x_rate)
+
+        total_spread_lifts: dict[tuple[str, str, str], float] = {}
+        total_spread_payload = (
+            payload.get("top_context_signals", {})
+            .get("position_x_total_band_x_spread_role", {})
+        )
+        for section in ("positive", "negative"):
+            for row in total_spread_payload.get(section, []) or []:
+                key_values = row.get("key_values", {}) or {}
+                position = str(key_values.get("position", "")).upper().strip()
+                total_band = str(key_values.get("total_band", "")).strip()
+                spread_role = str(key_values.get("spread_role", "")).strip()
+                lift = _safe_float(row.get("adjusted_hit4x_lift"))
+                if position and total_band and spread_role and lift is not None:
+                    total_spread_lifts[(position, total_band, spread_role)] = float(lift)
+
+        salary_teammate_lifts: dict[tuple[str, str, str], float] = {}
+        salary_teammate_payload = (
+            payload.get("top_context_signals", {})
+            .get("position_x_salary_tier_x_teammate_out_band", {})
+        )
+        for section in ("positive", "negative"):
+            for row in salary_teammate_payload.get(section, []) or []:
+                key_values = row.get("key_values", {}) or {}
+                position = str(key_values.get("position", "")).upper().strip()
+                salary_tier = str(key_values.get("salary_tier", "")).strip()
+                teammate_band = str(key_values.get("teammate_out_band", "")).strip()
+                lift = _safe_float(row.get("adjusted_hit4x_lift"))
+                if position and salary_tier and teammate_band and lift is not None:
+                    salary_teammate_lifts[(position, salary_tier, teammate_band)] = float(lift)
+
+        matchup_cell_lifts: dict[tuple[str, str, str], float] = {}
+        matchup_payload = payload.get("matchup_cells", {}) or {}
+        for section in ("positive", "negative"):
+            for row in matchup_payload.get(section, []) or []:
+                position = str(row.get("position", "")).upper().strip()
+                team = _canonical_team(_safe_str(row.get("team")))
+                opponent = _canonical_team(_safe_str(row.get("opponent")))
+                lift = _safe_float(row.get("adjusted_hit4x_lift"))
+                if position and team and opponent and lift is not None:
+                    matchup_cell_lifts[(position, team, opponent)] = float(lift)
+
+        model = MatchupOutcomeIntelligenceModel(
+            position_hit4x_rate=position_hit4x_rate,
+            total_spread_lifts=total_spread_lifts,
+            salary_teammate_lifts=salary_teammate_lifts,
+            matchup_cell_lifts=matchup_cell_lifts,
+        )
+        self._matchup_outcome_model_cache[cache_key] = model
+        return model
+
+    def _load_matchup_prior_gate_model(self, model_path: str) -> MatchupPriorGateModel:
+        resolved_path = Path(model_path).expanduser().resolve()
+        cache_key = str(resolved_path)
+        cached = self._matchup_prior_gate_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        if not resolved_path.exists():
+            raise ValueError(f"Matchup prior gate model not found: {resolved_path}")
+
+        payload = json.loads(resolved_path.read_text(encoding="utf-8"))
+        rules: list[MatchupPriorGateRule] = []
+        for row in payload.get("rules", []) or []:
+            bucket_name = str(row.get("bucket_name", "")).strip()
+            bucket_value = str(row.get("bucket_value", "")).strip()
+            weight = _safe_float(row.get("weight"))
+            if bucket_name and bucket_value and weight is not None:
+                rules.append(
+                    MatchupPriorGateRule(
+                        bucket_name=bucket_name,
+                        bucket_value=bucket_value,
+                        weight=float(weight),
+                    )
+                )
+        model = MatchupPriorGateModel(
+            threshold=float(_safe_float(payload.get("selected_threshold")) or 0.0),
+            base_prior_strength=float(_safe_float(payload.get("base_prior_strength")) or 0.0),
+            rules=rules,
+        )
+        self._matchup_prior_gate_cache[cache_key] = model
+        return model
+
+    @staticmethod
+    def _gate_total_bucket(value: float | None) -> str:
+        if value is None or not math.isfinite(float(value)):
+            return "unknown_total"
+        total = float(value)
+        if total < 42.0:
+            return "low_total"
+        if total < 47.0:
+            return "mid_total"
+        if total < 51.0:
+            return "high_total"
+        return "shootout_total"
+
+    @staticmethod
+    def _gate_implied_bucket(value: float | None) -> str:
+        if value is None or not math.isfinite(float(value)):
+            return "unknown_implied"
+        implied = float(value)
+        if implied < 21.0:
+            return "low_implied"
+        if implied < 24.0:
+            return "mid_implied"
+        if implied < 27.0:
+            return "high_implied"
+        return "elite_implied"
+
+    @staticmethod
+    def _gate_share_bucket(value: float | None, prefix: str) -> str:
+        if value is None or not math.isfinite(float(value)):
+            return f"{prefix}_unknown"
+        share = float(value)
+        if share < 0.25:
+            return f"{prefix}_low"
+        if share < 0.50:
+            return f"{prefix}_medium"
+        if share < 0.75:
+            return f"{prefix}_high"
+        return f"{prefix}_very_high"
+
+    def _matchup_prior_gate_buckets(
+        self,
+        *,
+        slate: str,
+        players: list[PlayerPoolRow],
+    ) -> dict[str, str]:
+        skill_positions = {"QB", "RB", "WR", "TE"}
+        skill_players = [player for player in players if player.position in skill_positions]
+        totals = [
+            float(player.game_total_line)
+            for player in players
+            if player.game_total_line is not None and math.isfinite(float(player.game_total_line))
+        ]
+        implied = [
+            float(player.team_implied_total)
+            for player in players
+            if player.team_implied_total is not None and math.isfinite(float(player.team_implied_total))
+        ]
+        close_spread_players = [
+            player
+            for player in players
+            if player.team_spread_line is not None
+            and math.isfinite(float(player.team_spread_line))
+            and abs(float(player.team_spread_line)) < 3.0
+        ]
+        high_total_skill = [
+            player
+            for player in skill_players
+            if player.game_total_line is not None
+            and math.isfinite(float(player.game_total_line))
+            and float(player.game_total_line) >= 48.0
+        ]
+        favorite_skill = [
+            player
+            for player in skill_players
+            if player.team_spread_line is not None
+            and math.isfinite(float(player.team_spread_line))
+            and float(player.team_spread_line) <= -3.0
+        ]
+        low_salary_skill = [
+            player
+            for player in skill_players
+            if player.salary <= 4500
+        ]
+
+        player_count = max(len(players), 1)
+        skill_count = max(len(skill_players), 1)
+        close_spread_share = len(close_spread_players) / player_count
+        high_total_skill_share = len(high_total_skill) / skill_count
+        favorite_skill_share = len(favorite_skill) / skill_count
+        low_salary_skill_share = len(low_salary_skill) / skill_count
+
+        return {
+            "slate": str(slate),
+            "max_total_bucket": self._gate_total_bucket(max(totals) if totals else None),
+            "max_implied_bucket": self._gate_implied_bucket(max(implied) if implied else None),
+            "high_total_skill_share_bucket": self._gate_share_bucket(
+                high_total_skill_share,
+                "high_total_skill",
+            ),
+            "close_spread_share_bucket": self._gate_share_bucket(
+                close_spread_share,
+                "close_spread",
+            ),
+            "favorite_skill_share_bucket": self._gate_share_bucket(
+                favorite_skill_share,
+                "favorite_skill",
+            ),
+            "low_salary_skill_share_bucket": self._gate_share_bucket(
+                low_salary_skill_share,
+                "low_salary_skill",
+            ),
+        }
+
+    def _effective_matchup_prior_strength(
+        self,
+        *,
+        requested_strength: float,
+        gate_model: MatchupPriorGateModel | None,
+        slate: str,
+        players: list[PlayerPoolRow],
+    ) -> tuple[float, float | None, bool | None]:
+        strength = _clamp(float(requested_strength), 0.0, 1.0)
+        if strength <= 0.0 or gate_model is None:
+            return strength, None, None
+        buckets = self._matchup_prior_gate_buckets(slate=slate, players=players)
+        score = 0.0
+        for rule in gate_model.rules:
+            if buckets.get(rule.bucket_name) == rule.bucket_value:
+                score += float(rule.weight)
+        active = score >= float(gate_model.threshold)
+        return (strength if active else 0.0), float(score), bool(active)
+
+    def _classic_player_prior_raw(
+        self,
+        player: PlayerPoolRow,
+        model: ClassicValueDriverModel,
+    ) -> float:
+        raw = float(model.position_multipliers.get(player.position, 1.0))
+        if player.position == "RB":
+            spread_bucket = _spread_role_bucket(player.team_spread_line)
+            raw *= float(model.rb_spread_role_multipliers.get(spread_bucket, 1.0))
+        if (
+            player.game_total_line is not None
+            and math.isfinite(float(player.game_total_line))
+            and float(player.game_total_line) >= model.high_total_threshold
+        ):
+            raw *= float(model.high_total_player_boost)
+        return _clamp(raw, 0.55, 1.85)
+
+    def _classic_player_sampling_multipliers(
+        self,
+        *,
+        players: list[PlayerPoolRow],
+        model: ClassicValueDriverModel | None,
+        prior_strength: float,
+    ) -> dict[str, float] | None:
+        if model is None:
+            return None
+        strength = _clamp(float(prior_strength), 0.0, 1.0)
+        if strength <= 0.0:
+            return None
+        multipliers: dict[str, float] = {}
+        for player in players:
+            raw = self._classic_player_prior_raw(player, model)
+            multipliers[player.uid] = _clamp((1.0 - strength) + (strength * raw), 0.40, 2.40)
+        return multipliers
+
+    def _projection_feature_payload_for_player(
+        self,
+        *,
+        source_system: str,
+        season: int,
+        week: int,
+        slate: str,
+        player: PlayerPoolRow,
+    ) -> dict[str, Any]:
+        feature_key = (source_system, season, week, slate)
+        feature_cache = self._projection_feature_cache.get(feature_key, {})
+        feature = (
+            feature_cache.get(player.player_master_id or "")
+            or feature_cache.get(player.source_player_key or "")
+        )
+        if feature is not None:
+            return feature
+        return {
+            "position": player.position,
+            "team": _canonical_team(player.team),
+            "opponent": _canonical_team(player.opponent),
+            "salary": int(player.salary),
+            "game_total_line": player.game_total_line,
+            "team_spread_line": player.team_spread_line,
+            "team_skill_out_count": 0,
+        }
+
+    def _matchup_outcome_player_prior_raw(
+        self,
+        *,
+        player: PlayerPoolRow,
+        model: MatchupOutcomeIntelligenceModel,
+        feature: dict[str, Any],
+    ) -> float:
+        position = (player.position or "").strip().upper()
+        team = _canonical_team(player.team)
+        opponent = _canonical_team(player.opponent)
+        total_band = _total_band_bucket(_safe_float(feature.get("game_total_line")))
+        spread_role = _spread_role_bucket(_safe_float(feature.get("team_spread_line")))
+        salary_tier = _salary_tier_bucket(position, int(player.salary))
+        teammate_band = _teammate_out_bucket(int(feature.get("team_skill_out_count") or 0))
+
+        total_spread_lift = float(model.total_spread_lifts.get((position, total_band, spread_role), 0.0))
+        salary_teammate_lift = float(model.salary_teammate_lifts.get((position, salary_tier, teammate_band), 0.0))
+        matchup_cell_lift = 0.0
+        if team and opponent:
+            matchup_cell_lift = float(model.matchup_cell_lifts.get((position, team, opponent), 0.0))
+
+        combined_lift = (
+            (0.30 * total_spread_lift)
+            + (0.25 * salary_teammate_lift)
+            + (0.55 * matchup_cell_lift)
+        )
+        return _clamp(1.0 + (4.0 * combined_lift), 0.70, 1.40)
+
+    def _matchup_outcome_player_raw_map(
+        self,
+        *,
+        source_system: str,
+        season: int,
+        week: int,
+        slate: str,
+        players: list[PlayerPoolRow],
+        model: MatchupOutcomeIntelligenceModel | None,
+    ) -> dict[str, float] | None:
+        if model is None or not players:
+            return None
+        raw_map: dict[str, float] = {}
+        for player in players:
+            feature = self._projection_feature_payload_for_player(
+                source_system=source_system,
+                season=season,
+                week=week,
+                slate=slate,
+                player=player,
+            )
+            raw_map[player.uid] = self._matchup_outcome_player_prior_raw(
+                player=player,
+                model=model,
+                feature=feature,
+            )
+        return raw_map
+
+    def _sampling_multipliers_from_raw_map(
+        self,
+        *,
+        raw_map: dict[str, float] | None,
+        strength: float,
+    ) -> dict[str, float] | None:
+        if raw_map is None:
+            return None
+        bounded_strength = _clamp(float(strength), 0.0, 1.0)
+        if bounded_strength <= 0.0:
+            return None
+        return {
+            uid: _clamp((1.0 - bounded_strength) + (bounded_strength * raw), 0.40, 2.40)
+            for uid, raw in raw_map.items()
+        }
+
+    def _merge_sampling_multipliers(
+        self,
+        *maps: dict[str, float] | None,
+    ) -> dict[str, float] | None:
+        merged: dict[str, float] = {}
+        for values in maps:
+            if values is None:
+                continue
+            for uid, multiplier in values.items():
+                existing = merged.get(uid, 1.0)
+                merged[uid] = _clamp(existing * float(multiplier), 0.30, 3.00)
+        return merged or None
+
+    def _classic_lineup_prior_score(
+        self,
+        *,
+        lineup: list[PlayerPoolRow],
+        model: ClassicValueDriverModel,
+    ) -> float:
+        if not lineup:
+            return 1.0
+        player_raw = [self._classic_player_prior_raw(player, model) for player in lineup]
+        player_factor = float(np.mean(player_raw)) if player_raw else 1.0
+
+        offense = [player for player in lineup if player.position != "DST"]
+        high_total_count = sum(
+            1
+            for player in offense
+            if (
+                player.game_total_line is not None
+                and math.isfinite(float(player.game_total_line))
+                and float(player.game_total_line) >= model.high_total_threshold
+            )
+        )
+        high_total_ratio = float(high_total_count / len(offense)) if offense else 0.0
+        high_total_factor = 1.0 + (0.80 * (high_total_ratio - model.high_total_baseline_share))
+        high_total_factor = _clamp(high_total_factor, 0.70, 1.40)
+
+        counts = Counter(player.position for player in lineup)
+        flex_position = "TE"
+        if counts.get("RB", 0) > 2:
+            flex_position = "RB"
+        elif counts.get("WR", 0) > 3:
+            flex_position = "WR"
+        elif counts.get("TE", 0) > 1:
+            flex_position = "TE"
+        flex_factor = float(model.flex_position_multipliers.get(flex_position, 1.0))
+
+        return _clamp(player_factor * high_total_factor * flex_factor, 0.25, 3.0)
+
+    def _classic_lineup_prior_scores(
+        self,
+        *,
+        lineups: list[list[PlayerPoolRow]],
+        model: ClassicValueDriverModel | None,
+    ) -> np.ndarray | None:
+        if model is None or not lineups:
+            return None
+        return np.asarray(
+            [self._classic_lineup_prior_score(lineup=lineup, model=model) for lineup in lineups],
+            dtype=float,
+        )
+
+    def _apply_classic_prior_to_composite(
+        self,
+        *,
+        composite_scores: np.ndarray,
+        prior_scores: np.ndarray | None,
+        prior_strength: float,
+    ) -> np.ndarray:
+        if prior_scores is None:
+            return composite_scores
+        strength = _clamp(float(prior_strength), 0.0, 1.0)
+        if strength <= 0.0:
+            return composite_scores
+        if prior_scores.shape[0] != composite_scores.shape[0]:
+            return composite_scores
+        weight = 0.22 * strength
+        return composite_scores + (weight * _zscore(prior_scores))
+
+    def _matchup_outcome_lineup_prior_scores(
+        self,
+        *,
+        lineups: list[list[PlayerPoolRow]],
+        raw_map: dict[str, float] | None,
+    ) -> np.ndarray | None:
+        if raw_map is None or not lineups:
+            return None
+        values: list[float] = []
+        for lineup in lineups:
+            player_raw = [float(raw_map.get(player.uid, 1.0)) for player in lineup]
+            values.append(float(np.mean(player_raw)) if player_raw else 1.0)
+        return np.asarray(values, dtype=float)
+
+    def _apply_matchup_outcome_prior_to_composite(
+        self,
+        *,
+        composite_scores: np.ndarray,
+        prior_scores: np.ndarray | None,
+        prior_strength: float,
+    ) -> np.ndarray:
+        if prior_scores is None:
+            return composite_scores
+        strength = _clamp(float(prior_strength), 0.0, 1.0)
+        if strength <= 0.0:
+            return composite_scores
+        if prior_scores.shape[0] != composite_scores.shape[0]:
+            return composite_scores
+        weight = 0.18 * strength
+        return composite_scores + (weight * _zscore(prior_scores))
+
     def _showdown_lineup_features(self, lineup: ShowdownLineup) -> np.ndarray:
         captain = lineup.captain
         flex = lineup.flex_players
@@ -1330,11 +2142,17 @@ class LineupLearningService:
         count: int,
         selected: set[str],
         rng: np.random.Generator,
+        weight_multipliers: dict[str, float] | None = None,
     ) -> list[PlayerPoolRow] | None:
         eligible = [row for row in rows if row.uid not in selected]
         if len(eligible) < count:
             return None
         weights = np.asarray([max(1000, row.salary) ** 0.6 for row in eligible], dtype=float)
+        if weight_multipliers:
+            weights = weights * np.asarray(
+                [max(0.05, float(weight_multipliers.get(row.uid, 1.0))) for row in eligible],
+                dtype=float,
+            )
         weights = weights / np.sum(weights)
         idxs = rng.choice(len(eligible), size=count, replace=False, p=weights)
         return [eligible[int(idx)] for idx in idxs]
@@ -1785,6 +2603,7 @@ class LineupLearningService:
         players: list[PlayerPoolRow],
         lineups_target: int,
         rng: np.random.Generator,
+        player_sampling_multipliers: dict[str, float] | None = None,
     ) -> tuple[np.ndarray, np.ndarray, list[list[PlayerPoolRow]]]:
         by_pos: dict[str, list[PlayerPoolRow]] = defaultdict(list)
         for player in players:
@@ -1811,28 +2630,64 @@ class LineupLearningService:
         while len(feature_rows) < lineups_target and attempts < max_attempts:
             attempts += 1
             selected: set[str] = set()
-            qb_pick = self._sample_weighted_unique(by_pos["QB"], 1, selected, rng)
+            qb_pick = self._sample_weighted_unique(
+                by_pos["QB"],
+                1,
+                selected,
+                rng,
+                weight_multipliers=player_sampling_multipliers,
+            )
             if qb_pick is None:
                 continue
             selected.update(row.uid for row in qb_pick)
-            rb_picks = self._sample_weighted_unique(by_pos["RB"], 2, selected, rng)
+            rb_picks = self._sample_weighted_unique(
+                by_pos["RB"],
+                2,
+                selected,
+                rng,
+                weight_multipliers=player_sampling_multipliers,
+            )
             if rb_picks is None:
                 continue
             selected.update(row.uid for row in rb_picks)
-            wr_picks = self._sample_weighted_unique(by_pos["WR"], 3, selected, rng)
+            wr_picks = self._sample_weighted_unique(
+                by_pos["WR"],
+                3,
+                selected,
+                rng,
+                weight_multipliers=player_sampling_multipliers,
+            )
             if wr_picks is None:
                 continue
             selected.update(row.uid for row in wr_picks)
-            te_pick = self._sample_weighted_unique(by_pos["TE"], 1, selected, rng)
+            te_pick = self._sample_weighted_unique(
+                by_pos["TE"],
+                1,
+                selected,
+                rng,
+                weight_multipliers=player_sampling_multipliers,
+            )
             if te_pick is None:
                 continue
             selected.update(row.uid for row in te_pick)
             flex_pool = by_pos["RB"] + by_pos["WR"] + by_pos["TE"]
-            flex_pick = self._sample_weighted_unique(flex_pool, 1, selected, rng)
+            flex_pick = self._sample_weighted_unique(
+                flex_pool,
+                1,
+                selected,
+                rng,
+                weight_multipliers=player_sampling_multipliers,
+            )
             if flex_pick is None:
                 continue
             selected.update(row.uid for row in flex_pick)
-            dst_pick = self._sample_weighted_unique(by_pos["DST"], 1, selected, rng)
+            dst_pick = self._sample_weighted_unique(
+                by_pos["DST"],
+                1,
+                selected,
+                rng,
+                weight_multipliers=player_sampling_multipliers,
+            )
             if dst_pick is None:
                 continue
 
@@ -1875,6 +2730,7 @@ class LineupLearningService:
                     requested_lineups=max(240, lineups_target),
                     min_salary_floor=min_salary_floor,
                     rng=rng,
+                    player_sampling_multipliers=player_sampling_multipliers,
                 )
             except Exception:  # noqa: BLE001
                 adaptive = []
@@ -1941,6 +2797,244 @@ class LineupLearningService:
         self._dst_projection_cache[cache_key] = lookup
         return lookup
 
+    def _player_matchup_feature_vector_from_values(
+        self,
+        *,
+        salary: int | None,
+        is_home: bool | None,
+        game_total_line: float | None,
+        team_spread_line: float | None,
+        team_implied_total: float | None,
+        opponent_implied_total: float | None,
+        player_games_history: int,
+        player_roll3_mean: float | None,
+        player_roll8_mean: float | None,
+        player_roll8_std: float | None,
+        player_vs_opp_roll4: float | None,
+        defense_pos_allowed_roll3: float | None,
+        defense_pos_allowed_roll8: float | None,
+        defense_pos_allowed_p90_roll8: float | None,
+        player_injury_status: str | None,
+        team_skill_out_count: int,
+        team_position_out_count: int,
+        kickoff_bucket: str | None,
+    ) -> np.ndarray:
+        kickoff_early, kickoff_late, kickoff_prime, kickoff_unknown = _kickoff_bucket_flags(kickoff_bucket)
+        vector = np.asarray(
+            [
+                float((salary or 0) / 1000.0),
+                1.0 if bool(is_home) else 0.0,
+                float(game_total_line if game_total_line is not None else 45.0),
+                float(team_spread_line if team_spread_line is not None else 0.0),
+                float(team_implied_total if team_implied_total is not None else 22.0),
+                float(opponent_implied_total if opponent_implied_total is not None else 22.0),
+                float(max(0, player_games_history)),
+                float(player_roll3_mean if player_roll3_mean is not None else 0.0),
+                float(player_roll8_mean if player_roll8_mean is not None else 0.0),
+                float(player_roll8_std if player_roll8_std is not None else 0.0),
+                float(player_vs_opp_roll4 if player_vs_opp_roll4 is not None else 0.0),
+                float(defense_pos_allowed_roll3 if defense_pos_allowed_roll3 is not None else 0.0),
+                float(defense_pos_allowed_roll8 if defense_pos_allowed_roll8 is not None else 0.0),
+                float(defense_pos_allowed_p90_roll8 if defense_pos_allowed_p90_roll8 is not None else 0.0),
+                float(_injury_status_score(player_injury_status)),
+                float(max(0, team_skill_out_count)),
+                float(max(0, team_position_out_count)),
+                float(kickoff_early),
+                float(kickoff_late),
+                float(kickoff_prime),
+                float(kickoff_unknown),
+            ],
+            dtype=float,
+        )
+        vector = np.where(np.isfinite(vector), vector, 0.0)
+        return vector
+
+    def _player_matchup_feature_vector_from_matrix_row(self, row: PlayerGameFeatureMatrix) -> np.ndarray:
+        return self._player_matchup_feature_vector_from_values(
+            salary=row.salary,
+            is_home=row.is_home,
+            game_total_line=row.game_total_line,
+            team_spread_line=row.team_spread_line,
+            team_implied_total=row.team_implied_total,
+            opponent_implied_total=row.opponent_implied_total,
+            player_games_history=row.player_games_history,
+            player_roll3_mean=row.player_roll3_mean,
+            player_roll8_mean=row.player_roll8_mean,
+            player_roll8_std=row.player_roll8_std,
+            player_vs_opp_roll4=row.player_vs_opp_roll4,
+            defense_pos_allowed_roll3=row.defense_pos_allowed_roll3,
+            defense_pos_allowed_roll8=row.defense_pos_allowed_roll8,
+            defense_pos_allowed_p90_roll8=row.defense_pos_allowed_p90_roll8,
+            player_injury_status=row.player_injury_status,
+            team_skill_out_count=row.team_skill_out_count,
+            team_position_out_count=row.team_position_out_count,
+            kickoff_bucket=row.kickoff_bucket,
+        )
+
+    def _fit_player_matchup_models_from_matrix(
+        self,
+        *,
+        source_system: str,
+        season: int,
+        week: int,
+        slate: str,
+    ) -> dict[str, PlayerMatchupProjectionModel]:
+        cache_key = (source_system, season, week, slate)
+        cached = self._matchup_model_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        time_filters = or_(
+            PlayerGameFeatureMatrix.season < season,
+            and_(
+                PlayerGameFeatureMatrix.season == season,
+                PlayerGameFeatureMatrix.week < week,
+            ),
+        )
+        base_filters = [
+            PlayerGameFeatureMatrix.source_system == source_system,
+            PlayerGameFeatureMatrix.position.in_(["QB", "RB", "WR", "TE", "DST"]),
+            time_filters,
+        ]
+
+        rows = self.session.execute(
+            select(PlayerGameFeatureMatrix).where(and_(*base_filters, PlayerGameFeatureMatrix.slate == slate))
+        ).scalars().all()
+        if len(rows) < 1200:
+            rows = self.session.execute(
+                select(PlayerGameFeatureMatrix).where(and_(*base_filters))
+            ).scalars().all()
+
+        grouped_samples: dict[str, list[tuple[np.ndarray, float, int]]] = defaultdict(list)
+        for row in rows:
+            dk_points = _safe_float(row.dk_points)
+            if dk_points is None:
+                continue
+            position = (row.position or "").strip().upper()
+            if position not in {"QB", "RB", "WR", "TE", "DST"}:
+                continue
+            sample_ord = _slice_ordinal(int(row.season), int(row.week))
+            grouped_samples[position].append(
+                (
+                    self._player_matchup_feature_vector_from_matrix_row(row),
+                    float(dk_points),
+                    sample_ord,
+                )
+            )
+
+        models: dict[str, PlayerMatchupProjectionModel] = {}
+        roll8_idx = PLAYER_MATCHUP_MODEL_FEATURE_NAMES.index("player_roll8_mean")
+        for position, samples in grouped_samples.items():
+            if len(samples) < 160:
+                continue
+
+            samples_sorted = sorted(samples, key=lambda item: item[2])
+            split_idx = int(len(samples_sorted) * 0.8)
+            split_idx = max(120, split_idx)
+            split_idx = min(split_idx, len(samples_sorted) - 30)
+            if split_idx < 120 or (len(samples_sorted) - split_idx) < 20:
+                continue
+
+            train_samples = samples_sorted[:split_idx]
+            valid_samples = samples_sorted[split_idx:]
+
+            x_train = np.vstack([item[0] for item in train_samples]).astype(float)
+            y_train = np.asarray([item[1] for item in train_samples], dtype=float)
+            x_valid = np.vstack([item[0] for item in valid_samples]).astype(float)
+            y_valid = np.asarray([item[1] for item in valid_samples], dtype=float)
+
+            x_mean = np.mean(x_train, axis=0)
+            x_std = np.std(x_train, axis=0)
+            x_std = np.where(x_std < 1e-6, 1.0, x_std)
+            xs_train = (x_train - x_mean) / x_std
+            xs_valid = (x_valid - x_mean) / x_std
+
+            y_mean = float(np.mean(y_train))
+            y_std = float(np.std(y_train))
+            if y_std < 1e-6:
+                continue
+            ys_train = (y_train - y_mean) / y_std
+
+            design = np.column_stack([xs_train, np.ones(xs_train.shape[0], dtype=float)])
+            reg = 0.20
+            gram = design.T @ design
+            for idx in range(xs_train.shape[1]):
+                gram[idx, idx] += reg
+            rhs = design.T @ ys_train
+            try:
+                coeff = np.linalg.solve(gram, rhs)
+            except np.linalg.LinAlgError:
+                coeff = np.linalg.pinv(gram) @ rhs
+
+            weights = coeff[: xs_train.shape[1]].astype(float)
+            bias = float(coeff[xs_train.shape[1]])
+            pred_norm_train = xs_train @ weights + bias
+            pred_train = y_mean + (y_std * pred_norm_train)
+            pred_norm_valid = xs_valid @ weights + bias
+            pred_valid = y_mean + (y_std * pred_norm_valid)
+
+            residual_std = float(np.std(y_valid - pred_valid))
+            if not math.isfinite(residual_std) or residual_std < 1e-6:
+                residual_std = float(np.std(y_train - pred_train))
+            residual_std = max(2.5, residual_std)
+            if not math.isfinite(residual_std):
+                residual_std = 4.0
+
+            baseline_valid = np.where(
+                x_valid[:, roll8_idx] > 0,
+                x_valid[:, roll8_idx],
+                y_mean,
+            )
+            mae_model = float(np.mean(np.abs(y_valid - pred_valid)))
+            mae_baseline = float(np.mean(np.abs(y_valid - baseline_valid)))
+            improvement = 0.0
+            if mae_baseline > 1e-6:
+                improvement = (mae_baseline - mae_model) / mae_baseline
+            enabled = bool(improvement > 0.005)
+            blend_weight = 0.0
+            if enabled:
+                if improvement >= 0.12:
+                    blend_weight = 0.75
+                elif improvement >= 0.08:
+                    blend_weight = 0.65
+                elif improvement >= 0.04:
+                    blend_weight = 0.5
+                elif improvement >= 0.02:
+                    blend_weight = 0.35
+                else:
+                    blend_weight = 0.2
+
+            models[position] = PlayerMatchupProjectionModel(
+                feature_names=list(PLAYER_MATCHUP_MODEL_FEATURE_NAMES),
+                weights=weights,
+                bias=bias,
+                x_mean=x_mean,
+                x_std=x_std,
+                y_mean=y_mean,
+                y_std=y_std,
+                residual_std=residual_std,
+                training_rows=int(len(y_train)),
+                mae_model=mae_model,
+                mae_baseline=mae_baseline,
+                blend_weight=blend_weight,
+                enabled=enabled,
+            )
+
+        self._matchup_model_cache[cache_key] = models
+        return models
+
+    def _predict_player_matchup_points(
+        self,
+        *,
+        model: PlayerMatchupProjectionModel,
+        feature_vector: np.ndarray,
+    ) -> tuple[float, float]:
+        xs = (feature_vector - model.x_mean) / model.x_std
+        pred_norm = float(xs @ model.weights + model.bias)
+        mean_points = float(model.y_mean + (model.y_std * pred_norm))
+        p90_points = float(mean_points + (1.2815515655446004 * model.residual_std))
+        return mean_points, p90_points
+
     def _compute_player_projection_lookup(
         self,
         *,
@@ -1969,6 +3063,42 @@ class LineupLearningService:
             self._player_projection_cache[cache_key] = empty
             return empty
 
+        target_ord = _slice_ordinal(season, week)
+        target_context_by_team = self._game_context_by_team(season=season, week=week)
+        target_schedule_rows = self.session.execute(
+            select(RawNflSchedule).where(
+                and_(
+                    RawNflSchedule.season == season,
+                    RawNflSchedule.week == week,
+                )
+            )
+        ).scalars().all()
+        target_home_away_by_team: dict[str, str] = {}
+        target_kickoff_bucket_by_team: dict[str, str] = {}
+        target_game_id_by_team: dict[str, str] = {}
+        for sched_row in target_schedule_rows:
+            payload = sched_row.raw_row_json or {}
+            home_team = _canonical_team(sched_row.home_team or payload.get("home_team"))
+            away_team = _canonical_team(sched_row.away_team or payload.get("away_team"))
+            game_id = _safe_str(sched_row.game_id or payload.get("game_id"))
+            kickoff_value = sched_row.kickoff or payload.get("kickoff") or payload.get("gameday")
+            kickoff_bucket = _kickoff_bucket(str(kickoff_value) if kickoff_value is not None else None)
+            if home_team:
+                target_home_away_by_team[home_team] = "home"
+                target_kickoff_bucket_by_team[home_team] = kickoff_bucket
+                if game_id:
+                    target_game_id_by_team[home_team] = game_id
+            if away_team:
+                target_home_away_by_team[away_team] = "away"
+                target_kickoff_bucket_by_team[away_team] = kickoff_bucket
+                if game_id:
+                    target_game_id_by_team[away_team] = game_id
+
+        target_teams = sorted({_canonical_team(row.team) for row in salary_rows if _canonical_team(row.team)})
+        target_opponents = sorted(
+            {_canonical_team(row.opponent) for row in salary_rows if _canonical_team(row.opponent)}
+        )
+
         master_ids = sorted({row.player_master_id for row in salary_rows if row.player_master_id})
         alias_rows = []
         if master_ids:
@@ -1981,17 +3111,20 @@ class LineupLearningService:
                 )
             ).all()
 
+        master_to_player_ids: dict[str, set[str]] = defaultdict(set)
         player_id_to_masters: dict[str, set[str]] = defaultdict(set)
         for player_master_id, source_key in alias_rows:
-            if source_key:
+            if source_key and player_master_id:
+                master_to_player_ids[player_master_id].add(source_key)
                 player_id_to_masters[source_key].add(player_master_id)
 
         tracked_player_ids = sorted(player_id_to_masters.keys())
-        stats_rows = []
+        player_history_rows = []
         if tracked_player_ids:
-            stats_rows = self.session.execute(
+            player_history_rows = self.session.execute(
                 select(RawNflWeeklyStat).where(
                     and_(
+                        RawNflWeeklyStat.source_system == "nflreadpy",
                         RawNflWeeklyStat.player_id.in_(tracked_player_ids),
                         or_(
                             RawNflWeeklyStat.season < season,
@@ -2001,18 +3134,94 @@ class LineupLearningService:
                 )
             ).scalars().all()
 
-        points_by_master: dict[str, list[float]] = defaultdict(list)
+        defense_history_rows = []
+        if target_opponents:
+            defense_history_rows = self.session.execute(
+                select(RawNflWeeklyStat).where(
+                    and_(
+                        RawNflWeeklyStat.source_system == "nflreadpy",
+                        RawNflWeeklyStat.opponent.in_(target_opponents),
+                        or_(
+                            RawNflWeeklyStat.season < season,
+                            and_(RawNflWeeklyStat.season == season, RawNflWeeklyStat.week < week),
+                        ),
+                    )
+                )
+            ).scalars().all()
+
+        game_ids = sorted(
+            {
+                stat_row.game_id
+                for stat_row in [*player_history_rows, *defense_history_rows]
+                if stat_row.game_id
+            }
+        )
+        game_meta_by_id: dict[str, tuple[str | None, str | None, str]] = {}
+        if game_ids:
+            schedule_rows = self.session.execute(
+                select(RawNflSchedule).where(RawNflSchedule.game_id.in_(game_ids))
+            ).scalars().all()
+            for sched_row in schedule_rows:
+                payload = sched_row.raw_row_json or {}
+                game_id = sched_row.game_id or _safe_str(payload.get("game_id"))
+                if not game_id:
+                    continue
+                home_team = _canonical_team(sched_row.home_team or payload.get("home_team"))
+                away_team = _canonical_team(sched_row.away_team or payload.get("away_team"))
+                kickoff_value = sched_row.kickoff or payload.get("kickoff") or payload.get("gameday")
+                game_meta_by_id[game_id] = (
+                    home_team,
+                    away_team,
+                    _kickoff_bucket(str(kickoff_value) if kickoff_value is not None else None),
+                )
+
+        points_by_master: dict[str, list[tuple[float, int, str | None, str, str]]] = defaultdict(list)
         points_by_position: dict[str, list[float]] = defaultdict(list)
-        for stat in stats_rows:
+        for stat in player_history_rows:
             points = _calculate_dk_player_points(stat.raw_row_json or {}, stat.position)
             if not math.isfinite(points):
                 continue
             position = _normalize_pool_position(stat.position)
-            if position:
-                points_by_position[position].append(float(points))
+            if not position or position == "DST":
+                continue
+            points_by_position[position].append(float(points))
             if stat.player_id:
+                team_key = _canonical_team(stat.team)
+                opponent_key = _canonical_team(stat.opponent)
+                home_away = "unknown"
+                kickoff_bucket = "unknown"
+                if stat.game_id and stat.game_id in game_meta_by_id and team_key:
+                    home_team, away_team, kickoff_bucket = game_meta_by_id[stat.game_id]
+                    if home_team and team_key == home_team:
+                        home_away = "home"
+                    elif away_team and team_key == away_team:
+                        home_away = "away"
                 for master_id in player_id_to_masters.get(stat.player_id, set()):
-                    points_by_master[master_id].append(float(points))
+                    points_by_master[master_id].append(
+                        (
+                            float(points),
+                            _slice_ordinal(stat.season, stat.week),
+                            opponent_key,
+                            home_away,
+                            kickoff_bucket,
+                        )
+                    )
+
+        defense_points_by_team_pos: dict[tuple[str, str], list[tuple[float, int]]] = defaultdict(list)
+        league_points_allowed_by_pos: dict[str, list[float]] = defaultdict(list)
+        for stat in defense_history_rows:
+            points = _calculate_dk_player_points(stat.raw_row_json or {}, stat.position)
+            if not math.isfinite(points):
+                continue
+            position = _normalize_pool_position(stat.position)
+            if not position or position == "DST":
+                continue
+            defense_team = _canonical_team(stat.opponent)
+            if not defense_team:
+                continue
+            row_ord = _slice_ordinal(stat.season, stat.week)
+            defense_points_by_team_pos[(defense_team, position)].append((float(points), row_ord))
+            league_points_allowed_by_pos[position].append(float(points))
 
         global_points: list[float] = []
         for values in points_by_position.values():
@@ -2020,27 +3229,571 @@ class LineupLearningService:
         if not global_points:
             global_points = [8.0]
 
+        source_keys = sorted({row.source_player_key for row in salary_rows if row.source_player_key})
+        injury_by_master: dict[str, str | None] = {}
+        injury_by_source_key: dict[str, str | None] = {}
+        injury_severity_rank = {
+            "unknown": 0,
+            "active": 1,
+            "probable": 2,
+            "questionable": 3,
+            "doubtful": 4,
+            "out": 5,
+        }
+        team_skill_out_counts: dict[str, int] = defaultdict(int)
+        team_position_out_counts: dict[tuple[str, str], int] = defaultdict(int)
+        injury_filters = []
+        if master_ids:
+            injury_filters.append(CuratedInjury.player_master_id.in_(master_ids))
+        if source_keys:
+            injury_filters.append(CuratedInjury.source_player_key.in_(source_keys))
+        if target_teams:
+            injury_filters.append(CuratedInjury.team.in_(target_teams))
+        if injury_filters:
+            injury_rows = self.session.execute(
+                select(CuratedInjury).where(
+                    and_(
+                        CuratedInjury.source_system == source_system,
+                        CuratedInjury.season == season,
+                        CuratedInjury.week == week,
+                        CuratedInjury.slate == slate,
+                        or_(*injury_filters),
+                    )
+                )
+            ).scalars().all()
+            for injury_row in injury_rows:
+                status = injury_row.injury_status
+                bucket = _injury_status_bucket(status)
+                position = _normalize_pool_position(injury_row.position)
+                team_key = _canonical_team(injury_row.team)
+
+                if injury_row.player_master_id:
+                    existing = injury_by_master.get(injury_row.player_master_id)
+                    if (
+                        existing is None
+                        or injury_severity_rank[_injury_status_bucket(status)]
+                        > injury_severity_rank[_injury_status_bucket(existing)]
+                    ):
+                        injury_by_master[injury_row.player_master_id] = status
+                if injury_row.source_player_key:
+                    existing = injury_by_source_key.get(injury_row.source_player_key)
+                    if (
+                        existing is None
+                        or injury_severity_rank[_injury_status_bucket(status)]
+                        > injury_severity_rank[_injury_status_bucket(existing)]
+                    ):
+                        injury_by_source_key[injury_row.source_player_key] = status
+
+                if (
+                    team_key
+                    and position in {"QB", "RB", "WR", "TE"}
+                    and bucket in {"out", "doubtful"}
+                ):
+                    team_skill_out_counts[team_key] += 1
+                    team_position_out_counts[(team_key, position)] += 1
+
+        matchup_models: dict[str, PlayerMatchupProjectionModel] = {}
+        if self._use_matrix_matchup_model:
+            matchup_models = self._fit_player_matchup_models_from_matrix(
+                source_system=source_system,
+                season=season,
+                week=week,
+                slate=slate,
+            )
+
         lookup: dict[str, tuple[float, float]] = {}
+        projection_feature_rows: dict[str, dict[str, Any]] = {}
         for row in salary_rows:
             position = _normalize_pool_position(row.position)
             if position == "DST":
                 continue
-            series = points_by_master.get(row.player_master_id or "", [])
-            if not series:
-                series = points_by_position.get(position or "", [])
-            if not series:
-                series = global_points
-            arr = np.asarray(series, dtype=float)
-            mean_val = float(np.mean(arr))
-            p90_val = float(np.percentile(arr, 90))
+
+            team_key = _canonical_team(row.team)
+            opponent_key = _canonical_team(row.opponent)
+            target_home_away = target_home_away_by_team.get(team_key or "", "unknown")
+            target_kickoff_bucket = target_kickoff_bucket_by_team.get(team_key or "", "unknown")
+            context = target_context_by_team.get(team_key or "", {})
+
+            player_records = points_by_master.get(row.player_master_id or "", [])
+            player_points = [entry[0] for entry in player_records]
+            player_records_desc = sorted(player_records, key=lambda item: item[1], reverse=True)
+            player_roll3_mean: float | None = None
+            player_roll8_mean: float | None = None
+            player_roll8_std: float | None = None
+            if player_points:
+                recency_weights = [
+                    1.0 / (1.0 + (0.12 * max(1, target_ord - entry[1])))
+                    for entry in player_records
+                ]
+                recency_sum = float(sum(recency_weights))
+                weighted_player_mean = (
+                    float(sum(point * weight for point, weight in zip(player_points, recency_weights)) / recency_sum)
+                    if recency_sum > 0
+                    else float(np.mean(player_points))
+                )
+                recent_points = [entry[0] for entry in player_records_desc[:6]]
+                recent3_points = [entry[0] for entry in player_records_desc[:3]]
+                recent8_points = [entry[0] for entry in player_records_desc[:8]]
+                overall_mean = float(np.mean(player_points))
+                base_mean = (0.65 * weighted_player_mean) + (0.35 * overall_mean)
+                base_p90 = float(np.percentile(player_points, 90))
+                if recent_points:
+                    base_p90 = max(base_p90, float(np.percentile(recent_points, 80)))
+                if recent3_points:
+                    player_roll3_mean = float(np.mean(recent3_points))
+                if recent8_points:
+                    player_roll8_mean = float(np.mean(recent8_points))
+                    player_roll8_std = float(np.std(recent8_points))
+            else:
+                pos_points = points_by_position.get(position or "", [])
+                series = pos_points if pos_points else global_points
+                arr = np.asarray(series, dtype=float)
+                base_mean = float(np.mean(arr))
+                base_p90 = float(np.percentile(arr, 90))
+
+            vs_opp_points = [entry[0] for entry in player_records if opponent_key and entry[2] == opponent_key]
+            vs_opp_recent_points = [entry[0] for entry in player_records_desc if opponent_key and entry[2] == opponent_key]
+            player_vs_opp_roll4: float | None = None
+            if vs_opp_recent_points:
+                player_vs_opp_roll4 = float(np.mean(vs_opp_recent_points[:4]))
+            vs_opp_factor = 1.0
+            if vs_opp_points and base_mean > 0:
+                ratio = float(np.mean(vs_opp_points)) / max(base_mean, 1e-6)
+                shrink = min(1.0, len(vs_opp_points) / 4.0)
+                vs_opp_factor = _clamp(1.0 + ((ratio - 1.0) * 0.65 * shrink), 0.75, 1.30)
+
+            split_points = [entry[0] for entry in player_records if entry[3] == target_home_away]
+            home_away_factor = 1.0
+            if split_points and base_mean > 0:
+                ratio = float(np.mean(split_points)) / max(base_mean, 1e-6)
+                shrink = min(1.0, len(split_points) / 6.0)
+                home_away_factor = _clamp(1.0 + ((ratio - 1.0) * 0.35 * shrink), 0.88, 1.14)
+
+            bucket_points = [entry[0] for entry in player_records if entry[4] == target_kickoff_bucket]
+            kickoff_factor = 1.0
+            if bucket_points and base_mean > 0:
+                ratio = float(np.mean(bucket_points)) / max(base_mean, 1e-6)
+                shrink = min(1.0, len(bucket_points) / 6.0)
+                kickoff_factor = _clamp(1.0 + ((ratio - 1.0) * 0.25 * shrink), 0.90, 1.12)
+
+            defense_factor = 1.0
+            defense_pos_allowed_roll3: float | None = None
+            defense_pos_allowed_roll8: float | None = None
+            defense_pos_allowed_p90_roll8: float | None = None
+            if opponent_key and position:
+                opp_series = defense_points_by_team_pos.get((opponent_key, position), [])
+                opp_points = [value for value, _ord in opp_series]
+                opp_series_desc = sorted(opp_series, key=lambda item: item[1], reverse=True)
+                recent3_allowed = [value for value, _ord in opp_series_desc[:3]]
+                recent8_allowed = [value for value, _ord in opp_series_desc[:8]]
+                if recent3_allowed:
+                    defense_pos_allowed_roll3 = float(np.mean(recent3_allowed))
+                if recent8_allowed:
+                    defense_pos_allowed_roll8 = float(np.mean(recent8_allowed))
+                    defense_pos_allowed_p90_roll8 = float(np.percentile(recent8_allowed, 90))
+                league_points = league_points_allowed_by_pos.get(position, [])
+                if opp_points and league_points:
+                    opp_weights = [
+                        1.0 / (1.0 + (0.10 * max(1, target_ord - row_ord)))
+                        for _value, row_ord in opp_series
+                    ]
+                    denom = float(sum(opp_weights))
+                    opp_mean = (
+                        float(sum(v * w for v, w in zip(opp_points, opp_weights)) / denom)
+                        if denom > 0
+                        else float(np.mean(opp_points))
+                    )
+                    league_mean = float(np.mean(league_points))
+                    ratio = opp_mean / max(league_mean, 1e-6)
+                    shrink = min(1.0, len(opp_points) / 30.0)
+                    defense_factor = _clamp(1.0 + ((ratio - 1.0) * shrink), 0.72, 1.32)
+
+            vegas_factor = 1.0
+            implied_total = _safe_float(context.get("team_implied_total"))
+            opponent_implied_total = _safe_float(context.get("opponent_implied_total"))
+            game_total_line = _safe_float(context.get("game_total_line"))
+            spread_line = _safe_float(context.get("team_spread_line"))
+            if implied_total is not None:
+                vegas_factor *= _clamp(1.0 + (((implied_total - 22.0) / 22.0) * 0.30), 0.85, 1.20)
+            if game_total_line is not None:
+                vegas_factor *= _clamp(1.0 + (((game_total_line - 45.0) / 45.0) * 0.12), 0.90, 1.15)
+            if spread_line is not None:
+                if position == "RB":
+                    vegas_factor *= _clamp(1.0 + (((-spread_line) / 14.0) * 0.12), 0.90, 1.12)
+                elif position in {"WR", "TE"}:
+                    vegas_factor *= _clamp(1.0 + ((spread_line / 14.0) * 0.08), 0.90, 1.12)
+                elif position == "QB":
+                    vegas_factor *= _clamp(1.0 + (((game_total_line or 45.0) - 45.0) / 45.0 * 0.08), 0.92, 1.10)
+
+            injury_status = injury_by_master.get(row.player_master_id or "")
+            if injury_status is None and row.source_player_key:
+                injury_status = injury_by_source_key.get(row.source_player_key)
+            injury_factor = _injury_multiplier(injury_status)
+
+            teammate_factor = 1.0
+            if team_key and position:
+                skill_out = float(team_skill_out_counts.get(team_key, 0))
+                same_pos_out = float(team_position_out_counts.get((team_key, position), 0))
+                if position == "RB":
+                    teammate_factor = _clamp(1.0 + (0.05 * same_pos_out) + (0.02 * skill_out), 0.90, 1.18)
+                elif position in {"WR", "TE"}:
+                    teammate_factor = _clamp(1.0 + (0.04 * same_pos_out) + (0.015 * skill_out), 0.90, 1.18)
+                elif position == "QB":
+                    pass_out = float(team_position_out_counts.get((team_key, "WR"), 0)) + float(
+                        team_position_out_counts.get((team_key, "TE"), 0)
+                    )
+                    teammate_factor = _clamp(1.0 - (0.03 * pass_out), 0.82, 1.05)
+
+            combined_factor = (
+                defense_factor
+                * vs_opp_factor
+                * home_away_factor
+                * kickoff_factor
+                * vegas_factor
+                * injury_factor
+                * teammate_factor
+            )
+            projected_mean = max(1.0, float(base_mean * combined_factor))
+            volatility = float(np.std(player_points)) if len(player_points) >= 2 else max(3.5, projected_mean * 0.28)
+            projected_p90 = max(
+                projected_mean * 1.10,
+                float(base_p90 * combined_factor * 0.95),
+                projected_mean + (1.15 * volatility),
+            )
+
+            feature_vector = self._player_matchup_feature_vector_from_values(
+                salary=int(row.salary or 0),
+                is_home=(target_home_away == "home"),
+                game_total_line=game_total_line,
+                team_spread_line=spread_line,
+                team_implied_total=implied_total,
+                opponent_implied_total=opponent_implied_total,
+                player_games_history=len(player_points),
+                player_roll3_mean=player_roll3_mean,
+                player_roll8_mean=player_roll8_mean,
+                player_roll8_std=player_roll8_std,
+                player_vs_opp_roll4=player_vs_opp_roll4,
+                defense_pos_allowed_roll3=defense_pos_allowed_roll3,
+                defense_pos_allowed_roll8=defense_pos_allowed_roll8,
+                defense_pos_allowed_p90_roll8=defense_pos_allowed_p90_roll8,
+                player_injury_status=injury_status,
+                team_skill_out_count=int(team_skill_out_counts.get(team_key or "", 0)),
+                team_position_out_count=int(team_position_out_counts.get((team_key or "", position), 0)),
+                kickoff_bucket=target_kickoff_bucket,
+            )
+            matchup_model = matchup_models.get(position or "")
+            if matchup_model is not None and matchup_model.enabled and matchup_model.blend_weight > 0.0:
+                model_mean, model_p90 = self._predict_player_matchup_points(
+                    model=matchup_model,
+                    feature_vector=feature_vector,
+                )
+                blend_weight = float(matchup_model.blend_weight)
+                if len(player_points) <= 1:
+                    blend_weight = max(blend_weight, 0.5)
+                projected_mean = ((1.0 - blend_weight) * projected_mean) + (blend_weight * model_mean)
+                projected_p90 = ((1.0 - blend_weight) * projected_p90) + (blend_weight * model_p90)
+
+            mean_val = _clamp(projected_mean, 1.0, 55.0)
+            p90_val = _clamp(projected_p90, mean_val + 0.5, 70.0)
+
+            team_position_out = int(team_position_out_counts.get((team_key or "", position), 0))
+            candidate_player_ids = sorted(master_to_player_ids.get(row.player_master_id or "", set()))
+            model_player_id = candidate_player_ids[0] if candidate_player_ids else (
+                row.source_player_key or row.player_master_id or row.normalized_name
+            )
+            feature_payload: dict[str, Any] = {
+                "source_system": source_system,
+                "season": season,
+                "week": week,
+                "slate": slate,
+                "game_id": target_game_id_by_team.get(team_key or ""),
+                "player_id": model_player_id,
+                "player_master_id": row.player_master_id,
+                "source_player_key": row.source_player_key,
+                "player_name": row.player_name,
+                "team": team_key,
+                "opponent": opponent_key,
+                "position": position,
+                "salary": int(row.salary or 0),
+                "is_home": (target_home_away == "home"),
+                "kickoff_bucket": target_kickoff_bucket,
+                "game_total_line": game_total_line,
+                "team_spread_line": spread_line,
+                "team_implied_total": implied_total,
+                "opponent_implied_total": opponent_implied_total,
+                "player_games_history": int(len(player_points)),
+                "player_roll3_mean": player_roll3_mean,
+                "player_roll8_mean": player_roll8_mean,
+                "player_roll8_std": player_roll8_std,
+                "player_vs_opp_roll4": player_vs_opp_roll4,
+                "defense_pos_allowed_roll3": defense_pos_allowed_roll3,
+                "defense_pos_allowed_roll8": defense_pos_allowed_roll8,
+                "defense_pos_allowed_p90_roll8": defense_pos_allowed_p90_roll8,
+                "player_injury_status": _injury_status_bucket(injury_status),
+                "team_skill_out_count": int(team_skill_out_counts.get(team_key or "", 0)),
+                "team_position_out_count": team_position_out,
+                "projected_mean_points": mean_val,
+                "projected_p90_points": p90_val,
+            }
+
             for key in [row.player_master_id, row.source_player_key]:
                 if key:
                     lookup[key] = (mean_val, p90_val)
+                    projection_feature_rows[key] = feature_payload
 
         dst_lookup = self._compute_dst_projection_lookup(season=season, week=week)
         result = (lookup, dst_lookup)
         self._player_projection_cache[cache_key] = result
+        self._projection_feature_cache[cache_key] = projection_feature_rows
         return result
+
+    def rebuild_player_game_feature_matrix(
+        self,
+        *,
+        source_system: str,
+        season_start: int,
+        season_end: int,
+        slate: str | None = None,
+        progress_hook: Callable[[str], None] | None = None,
+    ) -> dict[str, Any]:
+        start = min(season_start, season_end)
+        end = max(season_start, season_end)
+        slices = self._fetch_available_slate_slices(
+            source_system=source_system,
+            season_start=start,
+            season_end=end,
+            slate_filter=slate,
+        )
+        if not slices:
+            return {
+                "source_system": source_system,
+                "season_start": start,
+                "season_end": end,
+                "slate": slate,
+                "slates_total": 0,
+                "slates_completed": 0,
+                "slates_failed": 0,
+                "rows_written": 0,
+                "rows": [],
+            }
+
+        rows: list[dict[str, Any]] = []
+        rows_written = 0
+        slates_completed = 0
+
+        for index, (season, week, current_slate) in enumerate(slices, start=1):
+            try:
+                projection_lookup, dst_projection_lookup = self._compute_player_projection_lookup(
+                    source_system=source_system,
+                    season=season,
+                    week=week,
+                    slate=current_slate,
+                )
+                pool = self._fetch_slate_player_pool(
+                    source_system=source_system,
+                    season=season,
+                    week=week,
+                    slate=current_slate,
+                    projection_lookup=projection_lookup,
+                    dst_projection_lookup=dst_projection_lookup,
+                )
+                feature_key = (source_system, season, week, current_slate)
+                feature_cache = self._projection_feature_cache.get(feature_key, {})
+                if not feature_cache:
+                    raise ValueError("No projection feature cache found for target slice.")
+
+                slice_rows: list[dict[str, Any]] = []
+                for player in pool:
+                    if player.position not in {"QB", "RB", "WR", "TE", "DST"}:
+                        continue
+                    if player.position == "DST":
+                        player_key = player.team or player.uid
+                        feature = {
+                            "source_system": source_system,
+                            "season": season,
+                            "week": week,
+                            "game_id": None,
+                            "player_id": player_key,
+                            "player_master_id": player.player_master_id,
+                            "source_player_key": player.source_player_key,
+                            "player_name": player.name,
+                            "team": player.team,
+                            "opponent": player.opponent,
+                            "position": "DST",
+                            "salary": int(player.salary),
+                            "slate": current_slate,
+                            "is_home": None,
+                            "kickoff_bucket": None,
+                            "game_total_line": player.game_total_line,
+                            "team_spread_line": player.team_spread_line,
+                            "team_implied_total": player.team_implied_total,
+                            "opponent_implied_total": player.opponent_implied_total,
+                            "player_games_history": 0,
+                            "player_roll3_mean": None,
+                            "player_roll8_mean": None,
+                            "player_roll8_std": None,
+                            "player_vs_opp_roll4": None,
+                            "defense_pos_allowed_roll3": None,
+                            "defense_pos_allowed_roll8": None,
+                            "defense_pos_allowed_p90_roll8": None,
+                            "player_injury_status": "unknown",
+                            "team_skill_out_count": 0,
+                            "team_position_out_count": 0,
+                        }
+                    else:
+                        feature = (
+                            feature_cache.get(player.player_master_id or "")
+                            or feature_cache.get(player.source_player_key or "")
+                        )
+                        if feature is None:
+                            continue
+
+                    player_id = _safe_str(feature.get("player_id"))
+                    if not player_id:
+                        continue
+                    position = _safe_str(feature.get("position"))
+                    if not position:
+                        continue
+
+                    slice_rows.append(
+                        {
+                            "source_system": source_system,
+                            "season": int(season),
+                            "week": int(week),
+                            "game_id": _safe_str(feature.get("game_id")),
+                            "player_id": player_id,
+                            "player_master_id": _safe_str(feature.get("player_master_id")),
+                            "source_player_key": _safe_str(feature.get("source_player_key")),
+                            "player_name": _safe_str(feature.get("player_name")),
+                            "team": _safe_str(feature.get("team")),
+                            "opponent": _safe_str(feature.get("opponent")),
+                            "position": position,
+                            "dk_points": float(player.actual_points),
+                            "salary": int(player.salary),
+                            "slate": current_slate,
+                            "is_home": feature.get("is_home"),
+                            "kickoff_bucket": _safe_str(feature.get("kickoff_bucket")),
+                            "game_total_line": _safe_float(feature.get("game_total_line")),
+                            "team_spread_line": _safe_float(feature.get("team_spread_line")),
+                            "team_implied_total": _safe_float(feature.get("team_implied_total")),
+                            "opponent_implied_total": _safe_float(feature.get("opponent_implied_total")),
+                            "player_games_history": int(feature.get("player_games_history") or 0),
+                            "player_roll3_mean": _safe_float(feature.get("player_roll3_mean")),
+                            "player_roll8_mean": _safe_float(feature.get("player_roll8_mean")),
+                            "player_roll8_std": _safe_float(feature.get("player_roll8_std")),
+                            "player_vs_opp_roll4": _safe_float(feature.get("player_vs_opp_roll4")),
+                            "defense_pos_allowed_roll3": _safe_float(feature.get("defense_pos_allowed_roll3")),
+                            "defense_pos_allowed_roll8": _safe_float(feature.get("defense_pos_allowed_roll8")),
+                            "defense_pos_allowed_p90_roll8": _safe_float(feature.get("defense_pos_allowed_p90_roll8")),
+                            "player_injury_status": _safe_str(feature.get("player_injury_status")) or "unknown",
+                            "team_skill_out_count": int(feature.get("team_skill_out_count") or 0),
+                            "team_position_out_count": int(feature.get("team_position_out_count") or 0),
+                            "created_at": utcnow_naive(),
+                        }
+                    )
+
+                unique_rows: dict[tuple[str, int, int, str | None, str, str], dict[str, Any]] = {}
+                for payload in slice_rows:
+                    key = (
+                        str(payload["source_system"]),
+                        int(payload["season"]),
+                        int(payload["week"]),
+                        _safe_str(payload.get("game_id")),
+                        str(payload["player_id"]),
+                        str(payload["position"]),
+                    )
+                    unique_rows[key] = payload
+                payload_rows = list(unique_rows.values())
+
+                self.session.execute(
+                    delete(PlayerGameFeatureMatrix).where(
+                        and_(
+                            PlayerGameFeatureMatrix.source_system == source_system,
+                            PlayerGameFeatureMatrix.season == season,
+                            PlayerGameFeatureMatrix.week == week,
+                            PlayerGameFeatureMatrix.slate == current_slate,
+                        )
+                    )
+                )
+
+                existing_rows = self.session.execute(
+                    select(
+                        PlayerGameFeatureMatrix.game_id,
+                        PlayerGameFeatureMatrix.player_id,
+                        PlayerGameFeatureMatrix.position,
+                    ).where(
+                        and_(
+                            PlayerGameFeatureMatrix.source_system == source_system,
+                            PlayerGameFeatureMatrix.season == season,
+                            PlayerGameFeatureMatrix.week == week,
+                        )
+                    )
+                ).all()
+                existing_keys = {
+                    (_safe_str(game_id), str(player_id), str(position))
+                    for game_id, player_id, position in existing_rows
+                    if player_id and position
+                }
+                insert_rows = [
+                    payload
+                    for payload in payload_rows
+                    if (
+                        _safe_str(payload.get("game_id")),
+                        str(payload.get("player_id")),
+                        str(payload.get("position")),
+                    )
+                    not in existing_keys
+                ]
+                if insert_rows:
+                    self.session.bulk_insert_mappings(PlayerGameFeatureMatrix, insert_rows)
+                self.session.commit()
+
+                slates_completed += 1
+                rows_written += len(insert_rows)
+                row_summary = {
+                    "season": season,
+                    "week": week,
+                    "slate": current_slate,
+                    "status": "ok",
+                    "rows_written": len(insert_rows),
+                }
+                rows.append(row_summary)
+                if progress_hook is not None:
+                    progress_hook(
+                        f"[feature_matrix] {index}/{len(slices)} {season} W{week:02d} {current_slate} "
+                        f"status=ok rows={len(payload_rows)}"
+                    )
+            except Exception as exc:  # noqa: BLE001
+                self.session.rollback()
+                row_summary = {
+                    "season": season,
+                    "week": week,
+                    "slate": current_slate,
+                    "status": "failed",
+                    "rows_written": 0,
+                    "error_message": str(exc),
+                }
+                rows.append(row_summary)
+                if progress_hook is not None:
+                    progress_hook(
+                        f"[feature_matrix] {index}/{len(slices)} {season} W{week:02d} {current_slate} "
+                        f"status=failed error={exc}"
+                    )
+
+        self._matchup_model_cache.clear()
+        self._player_projection_cache.clear()
+
+        return {
+            "source_system": source_system,
+            "season_start": start,
+            "season_end": end,
+            "slate": slate,
+            "slates_total": len(slices),
+            "slates_completed": slates_completed,
+            "slates_failed": len(slices) - slates_completed,
+            "rows_written": rows_written,
+            "rows": rows,
+        }
 
     def _collect_training_lineup_chunks(
         self,
@@ -2052,6 +3805,11 @@ class LineupLearningService:
         training_window_slates: int,
         training_lineups_per_slate: int,
         rng: np.random.Generator,
+        classic_value_model: ClassicValueDriverModel | None = None,
+        classic_value_prior_strength: float = 0.0,
+        matchup_outcome_model: MatchupOutcomeIntelligenceModel | None = None,
+        matchup_outcome_prior_strength: float = 0.0,
+        matchup_prior_gate_model: MatchupPriorGateModel | None = None,
     ) -> tuple[list[np.ndarray], list[np.ndarray], int, int]:
         target_ord = _slice_ordinal(season, week)
         slices = self._fetch_available_slate_slices(
@@ -2081,10 +3839,37 @@ class LineupLearningService:
                     projection_lookup=projection_lookup,
                     dst_projection_lookup=dst_projection_lookup,
                 )
+                classic_sampling_multipliers = self._classic_player_sampling_multipliers(
+                    players=pool,
+                    model=classic_value_model,
+                    prior_strength=classic_value_prior_strength,
+                )
+                effective_matchup_prior_strength, _gate_score, _gate_active = self._effective_matchup_prior_strength(
+                    requested_strength=matchup_outcome_prior_strength,
+                    gate_model=matchup_prior_gate_model,
+                    slate=hist_slate,
+                    players=pool,
+                )
+                matchup_raw_map = self._matchup_outcome_player_raw_map(
+                    source_system=source_system,
+                    season=hist_season,
+                    week=hist_week,
+                    slate=hist_slate,
+                    players=pool,
+                    model=matchup_outcome_model,
+                )
+                matchup_sampling_multipliers = self._sampling_multipliers_from_raw_map(
+                    raw_map=matchup_raw_map,
+                    strength=effective_matchup_prior_strength,
+                )
                 x_slate, points_slate, _ = self._generate_lineups_for_slate(
                     players=pool,
                     lineups_target=training_lineups_per_slate,
                     rng=rng,
+                    player_sampling_multipliers=self._merge_sampling_multipliers(
+                        classic_sampling_multipliers,
+                        matchup_sampling_multipliers,
+                    ),
                 )
             except Exception:  # noqa: BLE001
                 continue
@@ -2168,37 +3953,106 @@ class LineupLearningService:
         ceiling_scores: np.ndarray,
         quality_scores: np.ndarray,
     ) -> tuple[np.ndarray, float]:
-        if len(points_train) < 200:
+        if len(points_train) < 400:
             return np.asarray([1.0, 0.0, 0.0], dtype=float), 0.0
 
-        y_mean = float(np.mean(points_train))
-        y_std = float(np.std(points_train))
+        points_arr = np.asarray(points_train, dtype=float)
+        x_all = np.column_stack(
+            [
+                np.asarray(policy_scores, dtype=float),
+                np.asarray(ceiling_scores, dtype=float),
+                np.asarray(quality_scores, dtype=float),
+            ]
+        )
+        if points_arr.ndim != 1 or x_all.shape[0] != points_arr.shape[0]:
+            return np.asarray([1.0, 0.0, 0.0], dtype=float), 0.0
+        if not np.isfinite(points_arr).all() or not np.isfinite(x_all).all():
+            return np.asarray([1.0, 0.0, 0.0], dtype=float), 0.0
+
+        split_idx = int(points_arr.shape[0] * 0.8)
+        split_idx = max(240, split_idx)
+        split_idx = min(split_idx, points_arr.shape[0] - 80)
+        if split_idx < 240 or (points_arr.shape[0] - split_idx) < 60:
+            return np.asarray([1.0, 0.0, 0.0], dtype=float), 0.0
+
+        x_train = x_all[:split_idx]
+        y_train = points_arr[:split_idx]
+        x_valid = x_all[split_idx:]
+        y_valid = points_arr[split_idx:]
+
+        y_mean = float(np.mean(y_train))
+        y_std = float(np.std(y_train))
         if y_std < 1e-9:
             return np.asarray([1.0, 0.0, 0.0], dtype=float), 0.0
-        y_norm = (points_train - y_mean) / y_std
+        y_train_norm = (y_train - y_mean) / y_std
 
-        x = np.column_stack([policy_scores, ceiling_scores, quality_scores])
-        x_mean = np.mean(x, axis=0)
-        x_std = np.std(x, axis=0)
+        x_mean = np.mean(x_train, axis=0)
+        x_std = np.std(x_train, axis=0)
         x_std = np.where(x_std < 1e-6, 1.0, x_std)
-        x_scaled = (x - x_mean) / x_std
+        xs_train = (x_train - x_mean) / x_std
+        xs_valid = (x_valid - x_mean) / x_std
 
-        design = np.column_stack([x_scaled, np.ones(len(x_scaled), dtype=float)])
-        reg = 0.05
-        gram = design.T @ design
-        for idx in range(3):
-            gram[idx, idx] += reg
-        rhs = design.T @ y_norm
-        try:
-            coeff = np.linalg.solve(gram, rhs)
-        except np.linalg.LinAlgError:
-            coeff = np.linalg.pinv(gram) @ rhs
+        def _fit_ridge(design_x: np.ndarray, y: np.ndarray, ridge: float) -> tuple[np.ndarray, float]:
+            design = np.column_stack([design_x, np.ones(design_x.shape[0], dtype=float)])
+            gram = design.T @ design
+            for idx in range(design_x.shape[1]):
+                gram[idx, idx] += ridge
+            rhs = design.T @ y
+            try:
+                coeff = np.linalg.solve(gram, rhs)
+            except np.linalg.LinAlgError:
+                coeff = np.linalg.pinv(gram) @ rhs
+            return coeff[: design_x.shape[1]].astype(float), float(coeff[design_x.shape[1]])
 
-        weights_scaled = coeff[:3]
-        intercept_scaled = float(coeff[3])
-        weights = weights_scaled / x_std
-        intercept = intercept_scaled - float(np.dot(weights, x_mean))
-        return weights.astype(float), float(intercept)
+        def _rank(values: np.ndarray) -> np.ndarray:
+            order = np.argsort(values, kind="mergesort")
+            ranks = np.empty(values.shape[0], dtype=float)
+            ranks[order] = np.arange(values.shape[0], dtype=float)
+            return ranks
+
+        def _spearman(a: np.ndarray, b: np.ndarray) -> float:
+            if a.shape[0] < 8:
+                return 0.0
+            ra = _rank(a)
+            rb = _rank(b)
+            sa = float(np.std(ra))
+            sb = float(np.std(rb))
+            if sa < 1e-9 or sb < 1e-9:
+                return 0.0
+            corr = float(np.corrcoef(ra, rb)[0, 1])
+            if not math.isfinite(corr):
+                return 0.0
+            return corr
+
+        full_w_scaled, full_b_scaled = _fit_ridge(xs_train, y_train_norm, ridge=0.08)
+        policy_w_scaled, policy_b_scaled = _fit_ridge(xs_train[:, [0]], y_train_norm, ridge=0.08)
+
+        full_w = full_w_scaled / x_std
+        full_b = full_b_scaled - float(np.dot(full_w, x_mean))
+        policy_w = float(policy_w_scaled[0] / x_std[0])
+        policy_b = float(policy_b_scaled - (policy_w * x_mean[0]))
+
+        full_valid_score = (x_valid @ full_w) + full_b
+        policy_valid_score = (x_valid[:, 0] * policy_w) + policy_b
+
+        corr_full = _spearman(full_valid_score, y_valid)
+        corr_policy = _spearman(policy_valid_score, y_valid)
+        corr_lift = corr_full - corr_policy
+        if not math.isfinite(corr_lift) or corr_lift <= 0.005:
+            return np.asarray([1.0, 0.0, 0.0], dtype=float), 0.0
+
+        positive_weights = np.maximum(full_w, 0.0)
+        weight_sum = float(np.sum(positive_weights))
+        if weight_sum <= 1e-9:
+            return np.asarray([1.0, 0.0, 0.0], dtype=float), 0.0
+        normalized_weights = positive_weights / weight_sum
+
+        lift_alpha = _clamp(corr_lift / 0.08, 0.0, 1.0)
+        blended_weights = ((1.0 - lift_alpha) * np.asarray([1.0, 0.0, 0.0], dtype=float)) + (
+            lift_alpha * normalized_weights
+        )
+        blended_weights = blended_weights / max(1e-9, float(np.sum(blended_weights)))
+        return blended_weights.astype(float), 0.0
 
     def _lineup_key(self, lineup: list[PlayerPoolRow]) -> str:
         return "|".join(sorted(row.uid for row in lineup))
@@ -3092,6 +4946,7 @@ class LineupLearningService:
         rng: np.random.Generator,
         min_required_lineups: int | None = None,
         max_attempts_multiplier: int = 6,
+        player_sampling_multipliers: dict[str, float] | None = None,
     ) -> list[list[PlayerPoolRow]]:
         by_pos: dict[str, list[PlayerPoolRow]] = defaultdict(list)
         for player in players:
@@ -3117,6 +4972,11 @@ class LineupLearningService:
                 ],
                 dtype=float,
             )
+            if player_sampling_multipliers:
+                weights = weights * np.asarray(
+                    [max(0.05, float(player_sampling_multipliers.get(row.uid, 1.0))) for row in eligible],
+                    dtype=float,
+                )
             if float(np.sum(weights)) <= 0:
                 weights = np.ones(len(eligible), dtype=float)
             weights = weights / np.sum(weights)
@@ -3273,6 +5133,7 @@ class LineupLearningService:
         requested_lineups: int,
         min_salary_floor: int,
         rng: np.random.Generator,
+        player_sampling_multipliers: dict[str, float] | None = None,
     ) -> list[list[PlayerPoolRow]]:
         target = max(100, int(requested_lineups))
         base_floor = max(0, int(min_salary_floor))
@@ -3308,6 +5169,7 @@ class LineupLearningService:
                     rng=rng,
                     min_required_lineups=min_required,
                     max_attempts_multiplier=attempts_multiplier,
+                    player_sampling_multipliers=player_sampling_multipliers,
                 )
             except ValueError as exc:
                 last_error = exc
@@ -3443,13 +5305,155 @@ class LineupLearningService:
         expected_points: np.ndarray,
         projected_mean: np.ndarray,
         projected_p90: np.ndarray,
+        blend_weights: np.ndarray | None = None,
     ) -> np.ndarray:
+        if blend_weights is None:
+            blend_weights = np.asarray([0.58, 0.27, 0.10, 0.05], dtype=float)
+        blend = np.asarray(blend_weights, dtype=float)
+        if blend.shape[0] != 4 or not np.isfinite(blend).all():
+            blend = np.asarray([0.58, 0.27, 0.10, 0.05], dtype=float)
+        blend_sum = float(np.sum(blend))
+        if blend_sum <= 1e-9:
+            blend = np.asarray([0.58, 0.27, 0.10, 0.05], dtype=float)
+            blend_sum = float(np.sum(blend))
+        blend = blend / blend_sum
         return (
-            (0.58 * _zscore(expected_points))
-            + (0.27 * _zscore(policy_scores))
-            + (0.10 * _zscore(projected_p90))
-            + (0.05 * _zscore(projected_mean))
+            (float(blend[0]) * _zscore(expected_points))
+            + (float(blend[1]) * _zscore(policy_scores))
+            + (float(blend[2]) * _zscore(projected_p90))
+            + (float(blend[3]) * _zscore(projected_mean))
         )
+
+    def _score_rank_correlation(self, score_values: np.ndarray, points_values: np.ndarray) -> float:
+        score_arr = np.asarray(score_values, dtype=float)
+        points_arr = np.asarray(points_values, dtype=float)
+        if score_arr.shape[0] < 8 or points_arr.shape[0] != score_arr.shape[0]:
+            return 0.0
+        if not np.isfinite(score_arr).all() or not np.isfinite(points_arr).all():
+            return 0.0
+
+        order_score = np.argsort(score_arr, kind="mergesort")
+        order_points = np.argsort(points_arr, kind="mergesort")
+        rank_score = np.empty(score_arr.shape[0], dtype=float)
+        rank_points = np.empty(points_arr.shape[0], dtype=float)
+        rank_score[order_score] = np.arange(score_arr.shape[0], dtype=float)
+        rank_points[order_points] = np.arange(points_arr.shape[0], dtype=float)
+
+        score_std = float(np.std(rank_score))
+        points_std = float(np.std(rank_points))
+        if score_std < 1e-9 or points_std < 1e-9:
+            return 0.0
+        corr = float(np.corrcoef(rank_score, rank_points)[0, 1])
+        if not math.isfinite(corr):
+            return 0.0
+        return corr
+
+    def _fit_backtest_composite_blend(
+        self,
+        *,
+        history_x: list[np.ndarray],
+        history_points: list[np.ndarray],
+        policy_weights: np.ndarray,
+        policy_bias: float,
+        policy_mean: np.ndarray,
+        policy_std: np.ndarray,
+        point_weights: np.ndarray,
+        point_bias: float,
+        point_x_mean: np.ndarray,
+        point_x_std: np.ndarray,
+        point_y_mean: float,
+        point_y_std: float,
+        projected_mean_idx: int,
+        projected_p90_idx: int,
+    ) -> np.ndarray:
+        default_blend = np.asarray([0.58, 0.27, 0.10, 0.05], dtype=float)
+        if len(history_x) < 8:
+            return default_blend
+
+        split_idx = int(len(history_x) * 0.8)
+        split_idx = max(4, split_idx)
+        split_idx = min(split_idx, len(history_x) - 2)
+        if split_idx < 4 or (len(history_x) - split_idx) < 2:
+            return default_blend
+
+        train_rows: list[np.ndarray] = []
+        train_points: list[np.ndarray] = []
+        valid_rows: list[np.ndarray] = []
+        valid_points: list[np.ndarray] = []
+
+        for idx, (x_chunk, points_chunk) in enumerate(zip(history_x, history_points)):
+            if x_chunk.size == 0 or points_chunk.size == 0:
+                continue
+            policy_chunk = _sigmoid(((x_chunk - policy_mean) / policy_std) @ policy_weights + policy_bias)
+            expected_chunk = self._predict_point_regression(
+                x_rows=x_chunk,
+                weights=point_weights,
+                bias=point_bias,
+                x_mean=point_x_mean,
+                x_std=point_x_std,
+                y_mean=point_y_mean,
+                y_std=point_y_std,
+            )
+            features_chunk = np.column_stack(
+                [
+                    _zscore(expected_chunk),
+                    _zscore(policy_chunk),
+                    _zscore(x_chunk[:, projected_p90_idx]),
+                    _zscore(x_chunk[:, projected_mean_idx]),
+                ]
+            )
+            if idx < split_idx:
+                train_rows.append(features_chunk)
+                train_points.append(np.asarray(points_chunk, dtype=float))
+            else:
+                valid_rows.append(features_chunk)
+                valid_points.append(np.asarray(points_chunk, dtype=float))
+
+        if not train_rows or not valid_rows:
+            return default_blend
+
+        x_train = np.vstack(train_rows)
+        y_train = np.concatenate(train_points)
+        x_valid = np.vstack(valid_rows)
+        y_valid = np.concatenate(valid_points)
+        if x_train.shape[0] < 400 or x_valid.shape[0] < 120:
+            return default_blend
+
+        y_mean = float(np.mean(y_train))
+        y_std = float(np.std(y_train))
+        if y_std < 1e-9:
+            return default_blend
+        y_norm = (y_train - y_mean) / y_std
+
+        design = np.column_stack([x_train, np.ones(x_train.shape[0], dtype=float)])
+        gram = design.T @ design
+        ridge = 0.10
+        for j in range(x_train.shape[1]):
+            gram[j, j] += ridge
+        rhs = design.T @ y_norm
+        try:
+            coeff = np.linalg.solve(gram, rhs)
+        except np.linalg.LinAlgError:
+            coeff = np.linalg.pinv(gram) @ rhs
+
+        learned_weights = np.maximum(coeff[:4].astype(float), 0.0)
+        learned_sum = float(np.sum(learned_weights))
+        if learned_sum <= 1e-9:
+            return default_blend
+        learned_weights = learned_weights / learned_sum
+
+        learned_valid_scores = x_valid @ learned_weights
+        baseline_valid_scores = x_valid @ default_blend
+        corr_lift = self._score_rank_correlation(learned_valid_scores, y_valid) - self._score_rank_correlation(
+            baseline_valid_scores, y_valid
+        )
+        if not math.isfinite(corr_lift) or corr_lift <= 0.003:
+            return default_blend
+
+        alpha = _clamp(corr_lift / 0.05, 0.0, 1.0)
+        blended = ((1.0 - alpha) * default_blend) + (alpha * learned_weights)
+        blended = blended / max(1e-9, float(np.sum(blended)))
+        return blended
 
     def run_walk_forward_learning(self, request: LineupLearningRequest) -> LineupLearningResponse:
         season_start = min(request.season_start, request.season_end)
@@ -3735,15 +5739,38 @@ class LineupLearningService:
         history_x: list[np.ndarray] = []
         history_y: list[np.ndarray] = []
         history_points: list[np.ndarray] = []
+        last_logged_composite_blend: np.ndarray | None = None
         captain_model: ShowdownCaptainArchetypeModel | None = None
         captain_prior_strength = float(getattr(request, "showdown_captain_prior_strength", 0.0) or 0.0)
         captain_model_path = getattr(request, "showdown_captain_model_path", None)
+        classic_value_model: ClassicValueDriverModel | None = None
+        classic_value_prior_strength = float(getattr(request, "classic_value_driver_prior_strength", 0.0) or 0.0)
+        classic_value_model_path = getattr(request, "classic_value_driver_model_path", None)
+        matchup_outcome_model: MatchupOutcomeIntelligenceModel | None = None
+        matchup_outcome_prior_strength = float(getattr(request, "matchup_outcome_prior_strength", 0.0) or 0.0)
+        matchup_outcome_model_path = getattr(request, "matchup_outcome_model_path", None)
+        matchup_prior_gate_model: MatchupPriorGateModel | None = None
+        matchup_prior_gate_model_path = getattr(request, "matchup_prior_gate_model_path", None)
         if (
             request.slate_type == "showdown"
             and captain_prior_strength > 0.0
             and captain_model_path
         ):
             captain_model = self._load_showdown_captain_archetype_model(captain_model_path)
+        if (
+            request.slate_type == "classic"
+            and classic_value_prior_strength > 0.0
+            and classic_value_model_path
+        ):
+            classic_value_model = self._load_classic_value_driver_model(classic_value_model_path)
+        if (
+            request.slate_type == "classic"
+            and matchup_outcome_prior_strength > 0.0
+            and matchup_outcome_model_path
+        ):
+            matchup_outcome_model = self._load_matchup_outcome_model(matchup_outcome_model_path)
+            if matchup_prior_gate_model_path:
+                matchup_prior_gate_model = self._load_matchup_prior_gate_model(matchup_prior_gate_model_path)
 
         if progress_hook is not None:
             progress_hook(
@@ -3822,7 +5849,10 @@ class LineupLearningService:
                         continue
                     projected_mean = x_slate[:, SHOWDOWN_FEATURE_INDEX["lineup_projected_mean"]]
                     projected_p90 = x_slate[:, SHOWDOWN_FEATURE_INDEX["lineup_projected_p90"]]
+                    projected_mean_idx = SHOWDOWN_FEATURE_INDEX["lineup_projected_mean"]
+                    projected_p90_idx = SHOWDOWN_FEATURE_INDEX["lineup_projected_p90"]
                     threshold_percentile = SHOWDOWN_TOP_TARGET_PERCENTILE
+                    classic_prior_scores: np.ndarray | None = None
                 else:
                     classic_pool = self._fetch_slate_player_pool(
                         source_system=request.source_system,
@@ -3852,10 +5882,45 @@ class LineupLearningService:
                         continue
 
                     optimal_lineup, optimal_points, optimal_salary = optimal_classic
+                    effective_matchup_prior_strength, gate_score, gate_active = self._effective_matchup_prior_strength(
+                        requested_strength=matchup_outcome_prior_strength,
+                        gate_model=matchup_prior_gate_model,
+                        slate=slate,
+                        players=classic_pool,
+                    )
+                    if (
+                        progress_hook is not None
+                        and matchup_prior_gate_model is not None
+                    ):
+                        progress_hook(
+                            f"[optimal_vs_predicted] gate {season} W{week:02d} {slate} "
+                            f"score={gate_score:.3f} active={gate_active}"
+                        )
+                    classic_sampling_multipliers = self._classic_player_sampling_multipliers(
+                        players=classic_pool,
+                        model=classic_value_model,
+                        prior_strength=classic_value_prior_strength,
+                    )
+                    matchup_raw_map = self._matchup_outcome_player_raw_map(
+                        source_system=request.source_system,
+                        season=season,
+                        week=week,
+                        slate=slate,
+                        players=classic_pool,
+                        model=matchup_outcome_model,
+                    )
+                    matchup_sampling_multipliers = self._sampling_multipliers_from_raw_map(
+                        raw_map=matchup_raw_map,
+                        strength=effective_matchup_prior_strength,
+                    )
                     x_slate, points_slate, generated_classic = self._generate_lineups_for_slate(
                         players=classic_pool,
                         lineups_target=request.lineups_per_slate,
                         rng=rng,
+                        player_sampling_multipliers=self._merge_sampling_multipliers(
+                            classic_sampling_multipliers,
+                            matchup_sampling_multipliers,
+                        ),
                     )
                     if len(generated_classic) == 0:
                         rows.append(
@@ -3876,7 +5941,17 @@ class LineupLearningService:
                         continue
                     projected_mean = x_slate[:, PATTERN_FEATURE_INDEX["lineup_projected_mean"]]
                     projected_p90 = x_slate[:, PATTERN_FEATURE_INDEX["lineup_projected_p90"]]
+                    projected_mean_idx = PATTERN_FEATURE_INDEX["lineup_projected_mean"]
+                    projected_p90_idx = PATTERN_FEATURE_INDEX["lineup_projected_p90"]
                     threshold_percentile = TOP_TARGET_PERCENTILE
+                    classic_prior_scores = self._classic_lineup_prior_scores(
+                        lineups=generated_classic,
+                        model=classic_value_model,
+                    )
+                    matchup_prior_scores = self._matchup_outcome_lineup_prior_scores(
+                        lineups=generated_classic,
+                        raw_map=matchup_raw_map,
+                    )
 
                 train_rows = int(sum(chunk.shape[0] for chunk in history_x))
                 predicted_idx: int | None = None
@@ -3900,6 +5975,32 @@ class LineupLearningService:
                     has_policy_signal = float(np.max(np.abs(weights))) > 1e-8
                     has_learned_signal = has_policy_signal or has_point_signal
                     if has_learned_signal:
+                        composite_blend = self._fit_backtest_composite_blend(
+                            history_x=history_x,
+                            history_points=history_points,
+                            policy_weights=weights,
+                            policy_bias=bias,
+                            policy_mean=mean,
+                            policy_std=std,
+                            point_weights=points_weights,
+                            point_bias=points_bias,
+                            point_x_mean=points_x_mean,
+                            point_x_std=points_x_std,
+                            point_y_mean=points_y_mean,
+                            point_y_std=points_y_std,
+                            projected_mean_idx=projected_mean_idx,
+                            projected_p90_idx=projected_p90_idx,
+                        )
+                        if progress_hook is not None:
+                            if last_logged_composite_blend is None or (
+                                float(np.max(np.abs(composite_blend - last_logged_composite_blend))) >= 0.03
+                            ):
+                                progress_hook(
+                                    "[optimal_vs_predicted] blend "
+                                    f"exp={composite_blend[0]:.3f} policy={composite_blend[1]:.3f} "
+                                    f"p90={composite_blend[2]:.3f} mean={composite_blend[3]:.3f}"
+                                )
+                                last_logged_composite_blend = np.asarray(composite_blend, dtype=float)
                         expected_points = self._predict_point_regression(
                             x_rows=x_slate,
                             weights=points_weights,
@@ -3914,13 +6015,49 @@ class LineupLearningService:
                             expected_points=expected_points,
                             projected_mean=projected_mean,
                             projected_p90=projected_p90,
+                            blend_weights=composite_blend,
                         )
+                        if request.slate_type == "classic":
+                            composite = self._apply_classic_prior_to_composite(
+                                composite_scores=composite,
+                                prior_scores=classic_prior_scores,
+                                prior_strength=classic_value_prior_strength,
+                            )
+                            composite = self._apply_matchup_outcome_prior_to_composite(
+                                composite_scores=composite,
+                                prior_scores=matchup_prior_scores,
+                                prior_strength=effective_matchup_prior_strength,
+                            )
                         predicted_idx = int(np.argmax(composite))
                         policy_score = float(probs[predicted_idx])
                     elif not request.learned_only:
-                        predicted_idx = int(np.argmax(projected_mean))
+                        heuristic_scores = projected_mean
+                        if request.slate_type == "classic":
+                            heuristic_scores = self._apply_classic_prior_to_composite(
+                                composite_scores=heuristic_scores,
+                                prior_scores=classic_prior_scores,
+                                prior_strength=classic_value_prior_strength,
+                            )
+                            heuristic_scores = self._apply_matchup_outcome_prior_to_composite(
+                                composite_scores=heuristic_scores,
+                                prior_scores=matchup_prior_scores,
+                                prior_strength=effective_matchup_prior_strength,
+                            )
+                        predicted_idx = int(np.argmax(heuristic_scores))
                 elif not request.learned_only:
-                    predicted_idx = int(np.argmax(projected_mean))
+                    heuristic_scores = projected_mean
+                    if request.slate_type == "classic":
+                        heuristic_scores = self._apply_classic_prior_to_composite(
+                            composite_scores=heuristic_scores,
+                            prior_scores=classic_prior_scores,
+                            prior_strength=classic_value_prior_strength,
+                        )
+                        heuristic_scores = self._apply_matchup_outcome_prior_to_composite(
+                            composite_scores=heuristic_scores,
+                            prior_scores=matchup_prior_scores,
+                            prior_strength=effective_matchup_prior_strength,
+                        )
+                    predicted_idx = int(np.argmax(heuristic_scores))
 
                 if predicted_idx is None:
                     rows.append(
@@ -4031,6 +6168,11 @@ class LineupLearningService:
             learned_only=request.learned_only,
             showdown_captain_model_path=captain_model_path,
             showdown_captain_prior_strength=captain_prior_strength,
+            classic_value_driver_model_path=classic_value_model_path,
+            classic_value_driver_prior_strength=classic_value_prior_strength,
+            matchup_outcome_model_path=matchup_outcome_model_path,
+            matchup_outcome_prior_strength=matchup_outcome_prior_strength,
+            matchup_prior_gate_model_path=matchup_prior_gate_model_path,
             slates_total=len(rows),
             slates_completed=len(completed_rows),
             slates_failed_or_skipped=len(rows) - len(completed_rows),
@@ -4043,6 +6185,24 @@ class LineupLearningService:
 
     def build_ultimate_lineups(self, request: UltimateLineupRequest) -> UltimateLineupResponse:
         rng = np.random.default_rng(request.random_seed)
+        classic_value_prior_strength = float(
+            getattr(request, "classic_value_driver_prior_strength", 0.0) or 0.0
+        )
+        classic_value_model_path = getattr(request, "classic_value_driver_model_path", None)
+        classic_value_model: ClassicValueDriverModel | None = None
+        if classic_value_prior_strength > 0.0 and classic_value_model_path:
+            classic_value_model = self._load_classic_value_driver_model(classic_value_model_path)
+        matchup_outcome_prior_strength = float(
+            getattr(request, "matchup_outcome_prior_strength", 0.0) or 0.0
+        )
+        matchup_outcome_model_path = getattr(request, "matchup_outcome_model_path", None)
+        matchup_outcome_model: MatchupOutcomeIntelligenceModel | None = None
+        matchup_prior_gate_model_path = getattr(request, "matchup_prior_gate_model_path", None)
+        matchup_prior_gate_model: MatchupPriorGateModel | None = None
+        if matchup_outcome_prior_strength > 0.0 and matchup_outcome_model_path:
+            matchup_outcome_model = self._load_matchup_outcome_model(matchup_outcome_model_path)
+            if matchup_prior_gate_model_path:
+                matchup_prior_gate_model = self._load_matchup_prior_gate_model(matchup_prior_gate_model_path)
         x_history_chunks, points_history_chunks, training_slates_used, training_rows_used = self._collect_training_lineup_chunks(
             source_system=request.source_system,
             season=request.season,
@@ -4051,6 +6211,11 @@ class LineupLearningService:
             training_window_slates=request.training_window_slates,
             training_lineups_per_slate=request.training_lineups_per_slate,
             rng=rng,
+            classic_value_model=classic_value_model,
+            classic_value_prior_strength=classic_value_prior_strength,
+            matchup_outcome_model=matchup_outcome_model,
+            matchup_outcome_prior_strength=matchup_outcome_prior_strength,
+            matchup_prior_gate_model=matchup_prior_gate_model,
         )
         history_ready = (
             training_slates_used >= request.min_training_slates
@@ -4149,11 +6314,38 @@ class LineupLearningService:
                 player.projected_mean_points = global_mean
                 player.projected_p90_points = global_p90
 
+        classic_sampling_multipliers = self._classic_player_sampling_multipliers(
+            players=target_pool,
+            model=classic_value_model,
+            prior_strength=classic_value_prior_strength,
+        )
+        effective_matchup_prior_strength, gate_score, gate_active = self._effective_matchup_prior_strength(
+            requested_strength=matchup_outcome_prior_strength,
+            gate_model=matchup_prior_gate_model,
+            slate=request.slate,
+            players=target_pool,
+        )
+        matchup_raw_map = self._matchup_outcome_player_raw_map(
+            source_system=request.source_system,
+            season=request.season,
+            week=request.week,
+            slate=request.slate,
+            players=target_pool,
+            model=matchup_outcome_model,
+        )
+        matchup_sampling_multipliers = self._sampling_multipliers_from_raw_map(
+            raw_map=matchup_raw_map,
+            strength=effective_matchup_prior_strength,
+        )
         candidate_lineups = self._generate_candidate_lineups_adaptive(
             players=target_pool,
             requested_lineups=request.candidate_lineups,
             min_salary_floor=request.min_salary_floor,
             rng=rng,
+            player_sampling_multipliers=self._merge_sampling_multipliers(
+                classic_sampling_multipliers,
+                matchup_sampling_multipliers,
+            ),
         )
         x_candidates = np.vstack([self._lineup_features(lineup) for lineup in candidate_lineups])
         mean_points = np.asarray(
@@ -4184,6 +6376,24 @@ class LineupLearningService:
                 + (blend_weights[1] * ceiling_scores)
                 + (blend_weights[2] * quality_scores)
             )
+            classic_prior_scores = self._classic_lineup_prior_scores(
+                lineups=candidate_lineups,
+                model=classic_value_model,
+            )
+            composite = self._apply_classic_prior_to_composite(
+                composite_scores=composite,
+                prior_scores=classic_prior_scores,
+                prior_strength=classic_value_prior_strength,
+            )
+            matchup_prior_scores = self._matchup_outcome_lineup_prior_scores(
+                lineups=candidate_lineups,
+                raw_map=matchup_raw_map,
+            )
+            composite = self._apply_matchup_outcome_prior_to_composite(
+                composite_scores=composite,
+                prior_scores=matchup_prior_scores,
+                prior_strength=effective_matchup_prior_strength,
+            )
         else:
             # Optional heuristic fallback is only used when learned_only=False.
             policy_scores = np.full(len(candidate_lineups), 0.5, dtype=float)
@@ -4198,6 +6408,24 @@ class LineupLearningService:
                 (p90_points - float(np.mean(p90_points))) / (p90_std if p90_std > 1e-9 else 1.0)
             )
             composite = (0.6 * mean_norm) + (0.4 * p90_norm)
+            classic_prior_scores = self._classic_lineup_prior_scores(
+                lineups=candidate_lineups,
+                model=classic_value_model,
+            )
+            composite = self._apply_classic_prior_to_composite(
+                composite_scores=composite,
+                prior_scores=classic_prior_scores,
+                prior_strength=classic_value_prior_strength,
+            )
+            matchup_prior_scores = self._matchup_outcome_lineup_prior_scores(
+                lineups=candidate_lineups,
+                raw_map=matchup_raw_map,
+            )
+            composite = self._apply_matchup_outcome_prior_to_composite(
+                composite_scores=composite,
+                prior_scores=matchup_prior_scores,
+                prior_strength=effective_matchup_prior_strength,
+            )
 
         matchup_stack_rules = self._summarize_matchup_stack_rules(
             candidate_lineups=candidate_lineups,
@@ -4399,6 +6627,22 @@ class LineupLearningService:
                 discovered_patterns.append(
                     f"Policy signal: {FEATURE_NAMES[idx]} has {direction} weight {float(weight):.3f}."
                 )
+        if classic_value_model is not None and classic_value_prior_strength > 0.0:
+            discovered_patterns.append(
+                "Classic value-driver prior applied: "
+                f"path={classic_value_model_path}, strength={classic_value_prior_strength:.2f}."
+            )
+        if matchup_outcome_model is not None and matchup_outcome_prior_strength > 0.0:
+            discovered_patterns.append(
+                "Matchup outcome prior applied: "
+                f"path={matchup_outcome_model_path}, strength={matchup_outcome_prior_strength:.2f}."
+            )
+        if matchup_prior_gate_model is not None and gate_score is not None and gate_active is not None:
+            discovered_patterns.append(
+                "Matchup prior gate applied: "
+                f"path={matchup_prior_gate_model_path}, score={gate_score:.3f}, "
+                f"active={gate_active}, effective_strength={effective_matchup_prior_strength:.2f}."
+            )
         discovered_patterns.extend(matchup_stack_rules)
         if rows:
             discovered_patterns.append(
@@ -4416,6 +6660,11 @@ class LineupLearningService:
             training_slates_used=training_slates_used,
             training_rows_used=training_rows_used,
             training_positive_rate=training_positive_rate,
+            classic_value_driver_model_path=classic_value_model_path,
+            classic_value_driver_prior_strength=classic_value_prior_strength,
+            matchup_outcome_model_path=matchup_outcome_model_path,
+            matchup_outcome_prior_strength=matchup_outcome_prior_strength,
+            matchup_prior_gate_model_path=matchup_prior_gate_model_path,
             discovered_patterns=discovered_patterns,
             rows=rows,
             exposures=exposures,

@@ -105,3 +105,49 @@ python scripts/run_optimal_vs_predicted_showdown.py \
   --min-training-rows 500 \
   --learned-only
 ```
+
+3. Matchup outcome prior strength sweep:
+
+```bash
+source .venv/bin/activate
+python scripts/run_matchup_outcome_prior_strength_sweep.py \
+  --source-system draftkings \
+  --season-start 2024 \
+  --season-end 2025 \
+  --lineups-per-slate 1000 \
+  --training-window-slates 24 \
+  --min-training-slates 2 \
+  --min-training-rows 500 \
+  --limit-slates 20 \
+  --strengths 0.15,0.25,0.35,0.5,0.65
+```
+
+The latest 20-slate sweep selected `matchup_outcome_prior_strength=0.15`, improving mean actual-optimal gap by `5.47` points across 18 paired classic slates. Treat this as a backtested setting, not a hardcoded rule; rerun the sweep after changing feature logic, matchup intelligence, or lineup generation.
+
+A higher-sample 5,000-lineup validation using the same `0.15` prior improved mean gap by `4.65` points across 18 paired classic slates. The UI classic lineup backtest controls expose the matchup outcome model path and prior strength so this setting can be tested without editing code.
+
+4. Matchup prior help/hurt diagnostics:
+
+```bash
+source .venv/bin/activate
+python scripts/analyze_matchup_prior_help.py \
+  --input-json docs/matchup_outcome_prior_strength_sweep_20slates_5000.json \
+  --source-system draftkings \
+  --output-json docs/matchup_prior_help_diagnostics_20slates_5000.json \
+  --report-md docs/matchup_prior_help_diagnostics_20slates_5000.md
+```
+
+The diagnostic report separates future-safe slate context, such as totals/spreads and salary-pool structure, from outcome-only explanations, such as actual low-salary breakouts. Only future-safe diagnostics should be considered for production gating.
+
+5. Matchup prior gate training:
+
+```bash
+source .venv/bin/activate
+python scripts/train_matchup_prior_gate.py \
+  --diagnostics-json docs/matchup_prior_help_diagnostics_20slates_5000.json \
+  --thresholds=-12,-8,-4,0,2,4,6,8,10,12 \
+  --output-json docs/matchup_prior_gate_20slates_5000.json \
+  --report-md docs/matchup_prior_gate_20slates_5000.md
+```
+
+The current-code 20-slate comparison has mean gaps of `133.46` with no matchup prior, `128.76` with always-on `0.15`, and `127.24` with the gated prior. The gate is experimental and should be validated on broader slates before treating it as production logic.

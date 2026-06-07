@@ -1,0 +1,298 @@
+
+=== STEP: classic_backtest ===
+COMMAND: /Users/wones/git/football_26/.venv/bin/python /Users/wones/git/football_26/scripts/run_optimal_vs_predicted_lineups.py --source-system draftkings --season-start 2024 --season-end 2025 --slate-type classic --lineups-per-slate 1000 --training-window-slates 24 --min-training-slates 4 --min-training-rows 2000 --learned-only --random-seed 42 --output-json /Users/wones/git/football_26/docs/benchmarks/20260303_062725/classic_backtest.json
+
+[optimal_vs_predicted] 1/47 2024 W04 main type=classic status=warmup_or_no_signal
+[optimal_vs_predicted] 2/47 2024 W05 main type=classic status=warmup_or_no_signal
+[optimal_vs_predicted] 3/47 2024 W06 main type=classic status=warmup_or_no_signal
+[optimal_vs_predicted] 4/47 2024 W07 1pm_slate type=classic status=warmup_or_no_signal
+[optimal_vs_predicted] 5/47 2024 W07 monday_night type=classic status=ok
+[optimal_vs_predicted] 6/47 2024 W08 normal type=classic status=ok
+[optimal_vs_predicted] 7/47 2024 W09 main type=classic status=ok
+[optimal_vs_predicted] 8/47 2024 W10 sunday type=classic status=ok
+[optimal_vs_predicted] 9/47 2024 W11 main type=classic status=ok
+[optimal_vs_predicted] 10/47 2024 W12 main type=classic status=ok
+[optimal_vs_predicted] 11/47 2024 W13 main type=classic status=ok
+[optimal_vs_predicted] 12/47 2024 W13 thursday type=classic status=ok
+[optimal_vs_predicted] 13/47 2024 W15 monday_classic type=classic status=ok
+[optimal_vs_predicted] 14/47 2024 W15 sunday_all type=classic status=ok
+[optimal_vs_predicted] 15/47 2024 W15 sunday_early type=classic status=ok
+[optimal_vs_predicted] 16/47 2024 W15 sunday_late type=classic status=ok
+[optimal_vs_predicted] 17/47 2024 W16 afternoon_only type=classic status=ok
+[optimal_vs_predicted] 18/47 2024 W16 main type=classic status=ok
+[optimal_vs_predicted] 19/47 2024 W16 monday_night_unknown type=classic status=ok
+[optimal_vs_predicted] 20/47 2024 W16 saturday type=classic status=ok
+[optimal_vs_predicted] 21/47 2024 W16 sunday_early type=classic status=ok
+[optimal_vs_predicted] 22/47 2024 W16 sunday_late type=classic status=ok
+[optimal_vs_predicted] 23/47 2024 W16 sunday_main type=classic status=ok
+[optimal_vs_predicted] 24/47 2024 W17 saturday_night type=classic status=ok
+[optimal_vs_predicted] 25/47 2024 W17 sunday_early type=classic status=ok
+[optimal_vs_predicted] 26/47 2024 W17 sunday_late type=classic status=ok
+[optimal_vs_predicted] 27/47 2024 W17 sunday_main type=classic status=ok
+[optimal_vs_predicted] 28/47 2024 W17 wednesday_night type=classic status=ok
+[optimal_vs_predicted] 29/47 2024 W19 saturday_night type=classic status=ok
+[optimal_vs_predicted] 30/47 2024 W19 saturday_night_4_game type=classic status=ok
+[optimal_vs_predicted] 31/47 2024 W20 sunday_main type=classic status=ok
+[optimal_vs_predicted] 32/47 2024 W20 sunday_night type=classic status=ok
+[optimal_vs_predicted] 33/47 2025 W01 sunday_main type=classic status=ok
+[optimal_vs_predicted] 34/47 2025 W05 sunday_main type=classic status=ok
+[optimal_vs_predicted] 35/47 2025 W06 sunday_main type=classic status=ok
+[optimal_vs_predicted] 36/47 2025 W07 sunday_main type=classic status=ok
+[optimal_vs_predicted] 37/47 2025 W08 sunday_main type=classic status=ok
+[optimal_vs_predicted] 38/47 2025 W09 sunday_main type=classic status=ok
+[optimal_vs_predicted] 39/47 2025 W10 sunday_main type=classic status=ok
+[optimal_vs_predicted] 40/47 2025 W11 sunday_main type=classic status=ok
+[optimal_vs_predicted] 41/47 2025 W12 sunday_main type=classic status=ok
+[optimal_vs_predicted] 42/47 2025 W13 sunday_main type=classic status=ok
+[optimal_vs_predicted] 43/47 2025 W13 thursday_night type=classic status=ok
+[optimal_vs_predicted] 44/47 2025 W17 saturday_night type=classic status=ok
+[optimal_vs_predicted] 45/47 2025 W17 sunday_late2 type=classic status=ok
+[optimal_vs_predicted] 46/47 2025 W17 sunday_main type=classic status=ok
+[optimal_vs_predicted] 47/47 2025 W18 sunday_main type=classic status=ok
+{
+  "source_system": "draftkings",
+  "season_start": 2024,
+  "season_end": 2025,
+  "slate_filter": null,
+  "slate_type": "classic",
+  "lineups_per_slate": 1000,
+  "training_window_slates": 24,
+  "learned_only": true,
+  "slates_total": 47,
+  "slates_completed": 43,
+  "slates_failed_or_skipped": 4,
+  "mean_gap_points": 130.4526,
+  "median_gap_points": 129.48,
+  "best_case_gap_points": 27.78,
+  "worst_case_gap_points": 219.16
+}
+
+Wrote detailed results: /Users/wones/git/football_26/docs/benchmarks/20260303_062725/classic_backtest.json
+
+Top 10 slate gaps (largest missed opportunity):
+  2024 W16 main: optimal=277.92 predicted=58.76 gap=219.16
+  2024 W12 main: optimal=264.78 predicted=52.56 gap=212.22
+  2025 W18 sunday_main: optimal=259.66 predicted=50.10 gap=209.56
+  2025 W09 sunday_main: optimal=307.10 predicted=98.10 gap=209.00
+  2025 W12 sunday_main: optimal=292.44 predicted=86.26 gap=206.18
+  2025 W06 sunday_main: optimal=254.90 predicted=60.20 gap=194.70
+  2025 W11 sunday_main: optimal=291.48 predicted=98.78 gap=192.70
+  2024 W08 normal: optimal=253.84 predicted=72.10 gap=181.74
+  2024 W15 sunday_all: optimal=296.36 predicted=115.60 gap=180.76
+  2025 W08 sunday_main: optimal=249.34 predicted=69.08 gap=180.26
+
+=== STEP: showdown_backtest_baseline ===
+COMMAND: /Users/wones/git/football_26/.venv/bin/python /Users/wones/git/football_26/scripts/run_optimal_vs_predicted_showdown.py --source-system draftkings --season-start 2024 --season-end 2025 --lineups-per-slate 1000 --training-window-slates 24 --min-training-slates 4 --min-training-rows 2000 --learned-only --random-seed 42 --output-json /Users/wones/git/football_26/docs/benchmarks/20260303_062725/showdown_backtest_baseline.json
+
+[showdown_backtest] 1/41 2024 W07 sunday_night type=showdown status=warmup_or_no_signal
+[showdown_backtest] 2/41 2024 W08 sunday type=showdown status=warmup_or_no_signal
+[showdown_backtest] 3/41 2024 W08 thursday type=showdown status=warmup_or_no_signal
+[showdown_backtest] 4/41 2024 W09 thursday type=showdown status=warmup_or_no_signal
+[showdown_backtest] 5/41 2024 W10 main type=showdown status=ok
+[showdown_backtest] 6/41 2024 W10 thursday type=showdown status=ok
+[showdown_backtest] 7/41 2024 W15 main type=showdown status=ok
+[showdown_backtest] 8/41 2024 W15 monday_second_captain type=showdown status=ok
+[showdown_backtest] 9/41 2024 W15 sunday_night type=showdown status=ok
+[showdown_backtest] 10/41 2024 W15 thursday type=showdown status=ok
+[showdown_backtest] 11/41 2024 W16 monday_night type=showdown status=ok
+[showdown_backtest] 12/41 2024 W16 saturday_kc_vs_hou type=showdown status=ok
+[showdown_backtest] 13/41 2024 W16 saturday_pit_vs_bal type=showdown status=ok
+[showdown_backtest] 14/41 2024 W16 sunday_det_vs_chi type=showdown status=ok
+[showdown_backtest] 15/41 2024 W16 sunday_night type=showdown status=ok
+[showdown_backtest] 16/41 2024 W17 monday_night type=showdown status=ok
+[showdown_backtest] 17/41 2024 W17 saturday_night_ari_vs_lar type=showdown status=ok
+[showdown_backtest] 18/41 2024 W17 saturday_night_lac_vs_ne type=showdown status=ok
+[showdown_backtest] 19/41 2024 W17 sunday_night_atl_vs_was type=showdown status=ok
+[showdown_backtest] 20/41 2024 W17 thursday_night_sea_vs_chi type=showdown status=ok
+[showdown_backtest] 21/41 2024 W17 wednesday_night_hou_vs_bal type=showdown status=ok
+[showdown_backtest] 22/41 2024 W17 wednesday_night_kc_vs_pit type=showdown status=ok
+[showdown_backtest] 23/41 2024 W19 saturday_night_pit_vs_bal type=showdown status=ok
+[showdown_backtest] 24/41 2025 W01 friday type=showdown status=ok
+[showdown_backtest] 25/41 2025 W01 thursday type=showdown status=ok
+[showdown_backtest] 26/41 2025 W05 monday_night type=showdown status=ok
+[showdown_backtest] 27/41 2025 W05 sunday_late type=showdown status=ok
+[showdown_backtest] 28/41 2025 W07 thursday_night type=showdown status=ok
+[showdown_backtest] 29/41 2025 W08 thursday_night type=showdown status=ok
+[showdown_backtest] 30/41 2025 W09 monday_night type=showdown status=ok
+[showdown_backtest] 31/41 2025 W09 sunday_night type=showdown status=ok
+[showdown_backtest] 32/41 2025 W09 thursday_night type=showdown status=ok
+[showdown_backtest] 33/41 2025 W10 monday_night type=showdown status=ok
+[showdown_backtest] 34/41 2025 W10 sunday_night type=showdown status=ok
+[showdown_backtest] 35/41 2025 W11 monday_night type=showdown status=ok
+[showdown_backtest] 36/41 2025 W11 thursday_night type=showdown status=ok
+[showdown_backtest] 37/41 2025 W12 sunday_night type=showdown status=ok
+[showdown_backtest] 38/41 2025 W16 monday_night type=showdown status=ok
+[showdown_backtest] 39/41 2025 W17 monday_night type=showdown status=ok
+[showdown_backtest] 40/41 2025 W17 sunday_late type=showdown status=ok
+[showdown_backtest] 41/41 2025 W17 sunday_night type=showdown status=ok
+{
+  "source_system": "draftkings",
+  "season_start": 2024,
+  "season_end": 2025,
+  "slate_filter": null,
+  "slate_type": "showdown",
+  "lineups_per_slate": 1000,
+  "training_window_slates": 24,
+  "learned_only": true,
+  "showdown_captain_model_path": null,
+  "showdown_captain_prior_strength": 0.0,
+  "slates_total": 41,
+  "slates_completed": 37,
+  "slates_failed_or_skipped": 4,
+  "mean_gap_points": 48.6749,
+  "median_gap_points": 44.21,
+  "best_case_gap_points": 16.5,
+  "worst_case_gap_points": 95.05
+}
+
+Wrote detailed results: /Users/wones/git/football_26/docs/benchmarks/20260303_062725/showdown_backtest_baseline.json
+
+Top 10 showdown slate gaps (largest missed opportunity):
+  2024 W17 monday_night: optimal=183.85 predicted=88.80 gap=95.05
+  2024 W10 thursday: optimal=220.42 predicted=126.48 gap=93.94
+  2025 W11 thursday_night: optimal=126.53 predicted=43.06 gap=83.47
+  2025 W17 sunday_night: optimal=180.52 predicted=97.48 gap=83.04
+  2024 W16 sunday_det_vs_chi: optimal=163.95 predicted=84.20 gap=79.75
+  2024 W17 saturday_night_ari_vs_lar: optimal=129.29 predicted=60.55 gap=68.74
+  2024 W16 monday_night: optimal=93.33 predicted=27.10 gap=66.23
+  2024 W16 saturday_kc_vs_hou: optimal=127.31 predicted=61.40 gap=65.91
+  2025 W09 monday_night: optimal=115.76 predicted=50.80 gap=64.96
+  2024 W17 sunday_night_atl_vs_was: optimal=156.68 predicted=91.97 gap=64.71
+
+=== STEP: showdown_captain_ab ===
+COMMAND: /Users/wones/git/football_26/.venv/bin/python /Users/wones/git/football_26/scripts/run_showdown_captain_ab.py --source-system draftkings --season-start 2024 --season-end 2025 --lineups-per-slate 2500 --training-window-slates 24 --min-training-slates 2 --min-training-rows 500 --learned-only --random-seed 42 --showdown-captain-model-path docs/showdown_captain_model_2024_2025.json --showdown-captain-prior-strength 0.35 --output-json /Users/wones/git/football_26/docs/benchmarks/20260303_062725/showdown_captain_ab.json
+
+[optimal_vs_predicted] start source=draftkings seasons=2024-2025 type=showdown slates=41 lineups_per_slate=2500
+[optimal_vs_predicted] 1/41 2024 W07 sunday_night type=showdown status=warmup_or_no_signal
+[optimal_vs_predicted] 2/41 2024 W08 sunday type=showdown status=warmup_or_no_signal
+[optimal_vs_predicted] 3/41 2024 W08 thursday type=showdown status=ok
+[optimal_vs_predicted] 4/41 2024 W09 thursday type=showdown status=ok
+[optimal_vs_predicted] 5/41 2024 W10 main type=showdown status=ok
+[optimal_vs_predicted] 6/41 2024 W10 thursday type=showdown status=ok
+[optimal_vs_predicted] 7/41 2024 W15 main type=showdown status=ok
+[optimal_vs_predicted] 8/41 2024 W15 monday_second_captain type=showdown status=ok
+[optimal_vs_predicted] 9/41 2024 W15 sunday_night type=showdown status=ok
+[optimal_vs_predicted] 10/41 2024 W15 thursday type=showdown status=ok
+[optimal_vs_predicted] 11/41 2024 W16 monday_night type=showdown status=ok
+[optimal_vs_predicted] 12/41 2024 W16 saturday_kc_vs_hou type=showdown status=ok
+[optimal_vs_predicted] 13/41 2024 W16 saturday_pit_vs_bal type=showdown status=ok
+[optimal_vs_predicted] 14/41 2024 W16 sunday_det_vs_chi type=showdown status=ok
+[optimal_vs_predicted] 15/41 2024 W16 sunday_night type=showdown status=ok
+[optimal_vs_predicted] 16/41 2024 W17 monday_night type=showdown status=ok
+[optimal_vs_predicted] 17/41 2024 W17 saturday_night_ari_vs_lar type=showdown status=ok
+[optimal_vs_predicted] 18/41 2024 W17 saturday_night_lac_vs_ne type=showdown status=ok
+[optimal_vs_predicted] 19/41 2024 W17 sunday_night_atl_vs_was type=showdown status=ok
+[optimal_vs_predicted] 20/41 2024 W17 thursday_night_sea_vs_chi type=showdown status=ok
+[optimal_vs_predicted] 21/41 2024 W17 wednesday_night_hou_vs_bal type=showdown status=ok
+[optimal_vs_predicted] 22/41 2024 W17 wednesday_night_kc_vs_pit type=showdown status=ok
+[optimal_vs_predicted] 23/41 2024 W19 saturday_night_pit_vs_bal type=showdown status=ok
+[optimal_vs_predicted] 24/41 2025 W01 friday type=showdown status=ok
+[optimal_vs_predicted] 25/41 2025 W01 thursday type=showdown status=ok
+[optimal_vs_predicted] 26/41 2025 W05 monday_night type=showdown status=ok
+[optimal_vs_predicted] 27/41 2025 W05 sunday_late type=showdown status=ok
+[optimal_vs_predicted] 28/41 2025 W07 thursday_night type=showdown status=ok
+[optimal_vs_predicted] 29/41 2025 W08 thursday_night type=showdown status=ok
+[optimal_vs_predicted] 30/41 2025 W09 monday_night type=showdown status=ok
+[optimal_vs_predicted] 31/41 2025 W09 sunday_night type=showdown status=ok
+[optimal_vs_predicted] 32/41 2025 W09 thursday_night type=showdown status=ok
+[optimal_vs_predicted] 33/41 2025 W10 monday_night type=showdown status=ok
+[optimal_vs_predicted] 34/41 2025 W10 sunday_night type=showdown status=ok
+[optimal_vs_predicted] 35/41 2025 W11 monday_night type=showdown status=ok
+[optimal_vs_predicted] 36/41 2025 W11 thursday_night type=showdown status=ok
+[optimal_vs_predicted] 37/41 2025 W12 sunday_night type=showdown status=ok
+[optimal_vs_predicted] 38/41 2025 W16 monday_night type=showdown status=ok
+[optimal_vs_predicted] 39/41 2025 W17 monday_night type=showdown status=ok
+[optimal_vs_predicted] 40/41 2025 W17 sunday_late type=showdown status=ok
+[optimal_vs_predicted] 41/41 2025 W17 sunday_night type=showdown status=ok
+[optimal_vs_predicted] done type=showdown completed=39/41 mean_gap=49.90358974358974
+[optimal_vs_predicted] start source=draftkings seasons=2024-2025 type=showdown slates=41 lineups_per_slate=2500
+[optimal_vs_predicted] 1/41 2024 W07 sunday_night type=showdown status=warmup_or_no_signal
+[optimal_vs_predicted] 2/41 2024 W08 sunday type=showdown status=warmup_or_no_signal
+[optimal_vs_predicted] 3/41 2024 W08 thursday type=showdown status=ok
+[optimal_vs_predicted] 4/41 2024 W09 thursday type=showdown status=ok
+[optimal_vs_predicted] 5/41 2024 W10 main type=showdown status=ok
+[optimal_vs_predicted] 6/41 2024 W10 thursday type=showdown status=ok
+[optimal_vs_predicted] 7/41 2024 W15 main type=showdown status=ok
+[optimal_vs_predicted] 8/41 2024 W15 monday_second_captain type=showdown status=ok
+[optimal_vs_predicted] 9/41 2024 W15 sunday_night type=showdown status=ok
+[optimal_vs_predicted] 10/41 2024 W15 thursday type=showdown status=ok
+[optimal_vs_predicted] 11/41 2024 W16 monday_night type=showdown status=ok
+[optimal_vs_predicted] 12/41 2024 W16 saturday_kc_vs_hou type=showdown status=ok
+[optimal_vs_predicted] 13/41 2024 W16 saturday_pit_vs_bal type=showdown status=ok
+[optimal_vs_predicted] 14/41 2024 W16 sunday_det_vs_chi type=showdown status=ok
+[optimal_vs_predicted] 15/41 2024 W16 sunday_night type=showdown status=ok
+[optimal_vs_predicted] 16/41 2024 W17 monday_night type=showdown status=ok
+[optimal_vs_predicted] 17/41 2024 W17 saturday_night_ari_vs_lar type=showdown status=ok
+[optimal_vs_predicted] 18/41 2024 W17 saturday_night_lac_vs_ne type=showdown status=ok
+[optimal_vs_predicted] 19/41 2024 W17 sunday_night_atl_vs_was type=showdown status=ok
+[optimal_vs_predicted] 20/41 2024 W17 thursday_night_sea_vs_chi type=showdown status=ok
+[optimal_vs_predicted] 21/41 2024 W17 wednesday_night_hou_vs_bal type=showdown status=ok
+[optimal_vs_predicted] 22/41 2024 W17 wednesday_night_kc_vs_pit type=showdown status=ok
+[optimal_vs_predicted] 23/41 2024 W19 saturday_night_pit_vs_bal type=showdown status=ok
+[optimal_vs_predicted] 24/41 2025 W01 friday type=showdown status=ok
+[optimal_vs_predicted] 25/41 2025 W01 thursday type=showdown status=ok
+[optimal_vs_predicted] 26/41 2025 W05 monday_night type=showdown status=ok
+[optimal_vs_predicted] 27/41 2025 W05 sunday_late type=showdown status=ok
+[optimal_vs_predicted] 28/41 2025 W07 thursday_night type=showdown status=ok
+[optimal_vs_predicted] 29/41 2025 W08 thursday_night type=showdown status=ok
+[optimal_vs_predicted] 30/41 2025 W09 monday_night type=showdown status=ok
+[optimal_vs_predicted] 31/41 2025 W09 sunday_night type=showdown status=ok
+[optimal_vs_predicted] 32/41 2025 W09 thursday_night type=showdown status=ok
+[optimal_vs_predicted] 33/41 2025 W10 monday_night type=showdown status=ok
+[optimal_vs_predicted] 34/41 2025 W10 sunday_night type=showdown status=ok
+[optimal_vs_predicted] 35/41 2025 W11 monday_night type=showdown status=ok
+[optimal_vs_predicted] 36/41 2025 W11 thursday_night type=showdown status=ok
+[optimal_vs_predicted] 37/41 2025 W12 sunday_night type=showdown status=ok
+[optimal_vs_predicted] 38/41 2025 W16 monday_night type=showdown status=ok
+[optimal_vs_predicted] 39/41 2025 W17 monday_night type=showdown status=ok
+[optimal_vs_predicted] 40/41 2025 W17 sunday_late type=showdown status=ok
+[optimal_vs_predicted] 41/41 2025 W17 sunday_night type=showdown status=ok
+[optimal_vs_predicted] done type=showdown completed=39/41 mean_gap=49.373333333333335
+{
+  "source_system": "draftkings",
+  "season_start": 2024,
+  "season_end": 2025,
+  "lineups_per_slate": 2500,
+  "training_window_slates": 24,
+  "learned_only": true,
+  "showdown_captain_model_path": "docs/showdown_captain_model_2024_2025.json",
+  "showdown_captain_prior_strength": 0.35,
+  "paired_slates": 39,
+  "mean_gap_lift_points": 0.5302564102564079,
+  "median_gap_lift_points": 0.0,
+  "captain_informed_win_rate": 0.46153846153846156,
+  "baseline_gap_stddev": 22.377184750771296,
+  "captain_informed_gap_stddev": 20.038779113909822,
+  "stability_lift_stddev_reduction": 2.3384056368614736,
+  "baseline_near_optimal_rate_90pct": 0.02564102564102564,
+  "captain_informed_near_optimal_rate_90pct": 0.0,
+  "near_optimal_rate_lift_90pct": -0.02564102564102564,
+  "baseline_mean_gap_points": 49.90358974358974,
+  "captain_informed_mean_gap_points": 49.373333333333335
+}
+
+Wrote A/B results: /Users/wones/git/football_26/docs/benchmarks/20260303_062725/showdown_captain_ab.json
+
+Top 10 captain-informed slate lifts:
+  2024 W17 saturday_night_ari_vs_lar: gap_lift=40.40 (baseline=79.14, captain=38.74)
+  2024 W17 wednesday_night_hou_vs_bal: gap_lift=31.60 (baseline=58.10, captain=26.50)
+  2025 W01 friday: gap_lift=30.33 (baseline=86.20, captain=55.87)
+  2024 W17 sunday_night_atl_vs_was: gap_lift=27.90 (baseline=97.33, captain=69.43)
+  2024 W15 thursday: gap_lift=23.55 (baseline=54.05, captain=30.50)
+  2025 W12 sunday_night: gap_lift=20.99 (baseline=61.54, captain=40.55)
+  2025 W11 monday_night: gap_lift=18.44 (baseline=47.44, captain=29.00)
+  2024 W16 sunday_det_vs_chi: gap_lift=16.54 (baseline=62.59, captain=46.05)
+  2025 W09 sunday_night: gap_lift=14.51 (baseline=70.00, captain=55.49)
+  2024 W16 monday_night: gap_lift=12.90 (baseline=66.23, captain=53.33)
+
+=== STEP: main_slate_value_analysis ===
+COMMAND: /Users/wones/git/football_26/.venv/bin/python /Users/wones/git/football_26/scripts/analyze_main_slate_value_drivers.py --source-system draftkings --season-start 2024 --season-end 2025 --main-slate-names main,sunday_main,normal,sunday --top-players-per-slate 15 --high-total-threshold 48.0 --output-json /Users/wones/git/football_26/docs/benchmarks/20260303_062725/main_slate_value_driver_analysis.json --output-md /Users/wones/git/football_26/docs/benchmarks/20260303_062725/main_slate_value_driver_analysis.md
+
+{
+  "source_system": "draftkings",
+  "season_start": 2024,
+  "season_end": 2025,
+  "main_slates_analyzed": 25,
+  "output_json": "/Users/wones/git/football_26/docs/benchmarks/20260303_062725/main_slate_value_driver_analysis.json",
+  "output_md": "/Users/wones/git/football_26/docs/benchmarks/20260303_062725/main_slate_value_driver_analysis.md"
+}

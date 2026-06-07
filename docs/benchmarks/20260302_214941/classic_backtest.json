@@ -1,0 +1,85 @@
+{
+  "summary": {
+    "source_system": "draftkings",
+    "season_start": 2024,
+    "season_end": 2025,
+    "slate_filter": null,
+    "slate_type": "classic",
+    "lineups_per_slate": 250,
+    "training_window_slates": 24,
+    "learned_only": true,
+    "slates_total": 8,
+    "slates_completed": 0,
+    "slates_failed_or_skipped": 8,
+    "mean_gap_points": null,
+    "median_gap_points": null,
+    "best_case_gap_points": null,
+    "worst_case_gap_points": null
+  },
+  "rows": [
+    {
+      "season": 2024,
+      "week": 4,
+      "slate": "main",
+      "slate_type": "classic",
+      "status": "warmup_or_no_signal",
+      "error": "Insufficient learned history for learned-only mode."
+    },
+    {
+      "season": 2024,
+      "week": 5,
+      "slate": "main",
+      "slate_type": "classic",
+      "status": "warmup_or_no_signal",
+      "error": "Insufficient learned history for learned-only mode."
+    },
+    {
+      "season": 2024,
+      "week": 6,
+      "slate": "main",
+      "slate_type": "classic",
+      "status": "warmup_or_no_signal",
+      "error": "Insufficient learned history for learned-only mode."
+    },
+    {
+      "season": 2024,
+      "week": 7,
+      "slate": "1pm_slate",
+      "slate_type": "classic",
+      "status": "warmup_or_no_signal",
+      "error": "Insufficient learned history for learned-only mode."
+    },
+    {
+      "season": 2024,
+      "week": 7,
+      "slate": "monday_night",
+      "slate_type": "classic",
+      "status": "warmup_or_no_signal",
+      "error": "Insufficient learned history for learned-only mode."
+    },
+    {
+      "season": 2024,
+      "week": 8,
+      "slate": "normal",
+      "slate_type": "classic",
+      "status": "warmup_or_no_signal",
+      "error": "Insufficient learned history for learned-only mode."
+    },
+    {
+      "season": 2024,
+      "week": 9,
+      "slate": "main",
+      "slate_type": "classic",
+      "status": "warmup_or_no_signal",
+      "error": "Insufficient learned history for learned-only mode."
+    },
+    {
+      "season": 2024,
+      "week": 10,
+      "slate": "sunday",
+      "slate_type": "classic",
+      "status": "warmup_or_no_signal",
+      "error": "Insufficient learned history for learned-only mode."
+    }
+  ]
+}

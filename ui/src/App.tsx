@@ -101,6 +101,19 @@ function App() {
   );
   const [lineupBacktestShowdownCaptainPriorStrength, setLineupBacktestShowdownCaptainPriorStrength] =
     useState(0.35);
+  const [lineupBacktestClassicValueModelPath, setLineupBacktestClassicValueModelPath] = useState(
+    "docs/main_slate_value_driver_analysis_2024_2025.json"
+  );
+  const [lineupBacktestClassicValuePriorStrength, setLineupBacktestClassicValuePriorStrength] = useState(
+    0.45
+  );
+  const [lineupBacktestMatchupOutcomeModelPath, setLineupBacktestMatchupOutcomeModelPath] = useState(
+    "docs/matchup_outcome_intelligence_2024_2025.json"
+  );
+  const [lineupBacktestMatchupOutcomePriorStrength, setLineupBacktestMatchupOutcomePriorStrength] =
+    useState(0.15);
+  const [lineupBacktestMatchupPriorGateModelPath, setLineupBacktestMatchupPriorGateModelPath] =
+    useState("docs/matchup_prior_gate_20slates_5000.json");
   const [simulationRows, setSimulationRows] = useState<SimulatedPlayerOutcome[]>([]);
   const [simulationRunId, setSimulationRunId] = useState<string | null>(null);
   const [backtestResult, setBacktestResult] = useState<BacktestWeekResult | null>(null);
@@ -458,6 +471,16 @@ function App() {
         lineupBacktestMode === "showdown" &&
         lineupBacktestShowdownCaptainPriorStrength > 0 &&
         lineupBacktestShowdownCaptainModelPath.trim().length > 0;
+      const shouldUseClassicPrior =
+        lineupBacktestMode === "classic" &&
+        lineupBacktestClassicValuePriorStrength > 0 &&
+        lineupBacktestClassicValueModelPath.trim().length > 0;
+      const shouldUseMatchupPrior =
+        lineupBacktestMode === "classic" &&
+        lineupBacktestMatchupOutcomePriorStrength > 0 &&
+        lineupBacktestMatchupOutcomeModelPath.trim().length > 0;
+      const shouldUseMatchupGate =
+        shouldUseMatchupPrior && lineupBacktestMatchupPriorGateModelPath.trim().length > 0;
       const result = await runOptimalVsPredictedBacktest({
         source_system: sourceSystem,
         season_start: seasonStart,
@@ -475,6 +498,21 @@ function App() {
         showdown_captain_prior_strength: shouldUseCaptainPrior
           ? lineupBacktestShowdownCaptainPriorStrength
           : 0,
+        classic_value_driver_model_path: shouldUseClassicPrior
+          ? lineupBacktestClassicValueModelPath.trim()
+          : null,
+        classic_value_driver_prior_strength: shouldUseClassicPrior
+          ? lineupBacktestClassicValuePriorStrength
+          : 0,
+        matchup_outcome_model_path: shouldUseMatchupPrior
+          ? lineupBacktestMatchupOutcomeModelPath.trim()
+          : null,
+        matchup_outcome_prior_strength: shouldUseMatchupPrior
+          ? lineupBacktestMatchupOutcomePriorStrength
+          : 0,
+        matchup_prior_gate_model_path: shouldUseMatchupGate
+          ? lineupBacktestMatchupPriorGateModelPath.trim()
+          : null,
       });
       if (lineupBacktestMode === "classic") {
         setLineupBacktestClassicResult(result);
@@ -674,6 +712,13 @@ function App() {
         lineups_per_slate: result.lineups_per_slate,
         training_window_slates: result.training_window_slates,
         learned_only: result.learned_only,
+        showdown_captain_model_path: result.showdown_captain_model_path ?? null,
+        showdown_captain_prior_strength: result.showdown_captain_prior_strength ?? 0,
+        classic_value_driver_model_path: result.classic_value_driver_model_path ?? null,
+        classic_value_driver_prior_strength: result.classic_value_driver_prior_strength ?? 0,
+        matchup_outcome_model_path: result.matchup_outcome_model_path ?? null,
+        matchup_outcome_prior_strength: result.matchup_outcome_prior_strength ?? 0,
+        matchup_prior_gate_model_path: result.matchup_prior_gate_model_path ?? null,
         slates_total: result.slates_total,
         slates_completed: result.slates_completed,
         slates_failed_or_skipped: result.slates_failed_or_skipped,
@@ -1338,6 +1383,60 @@ function App() {
                     onChange={(event) =>
                       setLineupBacktestShowdownCaptainPriorStrength(Number(event.target.value))
                     }
+                  />
+                </label>
+              </>
+            )}
+            {lineupBacktestMode === "classic" && (
+              <>
+                <label>
+                  Classic Value Model Path
+                  <input
+                    type="text"
+                    value={lineupBacktestClassicValueModelPath}
+                    onChange={(event) => setLineupBacktestClassicValueModelPath(event.target.value)}
+                  />
+                </label>
+                <label>
+                  Classic Prior Strength
+                  <input
+                    type="number"
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    value={lineupBacktestClassicValuePriorStrength}
+                    onChange={(event) =>
+                      setLineupBacktestClassicValuePriorStrength(Number(event.target.value))
+                    }
+                  />
+                </label>
+                <label>
+                  Matchup Outcome Model Path
+                  <input
+                    type="text"
+                    value={lineupBacktestMatchupOutcomeModelPath}
+                    onChange={(event) => setLineupBacktestMatchupOutcomeModelPath(event.target.value)}
+                  />
+                </label>
+                <label>
+                  Matchup Prior Strength
+                  <input
+                    type="number"
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    value={lineupBacktestMatchupOutcomePriorStrength}
+                    onChange={(event) =>
+                      setLineupBacktestMatchupOutcomePriorStrength(Number(event.target.value))
+                    }
+                  />
+                </label>
+                <label>
+                  Matchup Gate Model Path
+                  <input
+                    type="text"
+                    value={lineupBacktestMatchupPriorGateModelPath}
+                    onChange={(event) => setLineupBacktestMatchupPriorGateModelPath(event.target.value)}
                   />
                 </label>
               </>

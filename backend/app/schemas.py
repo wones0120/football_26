@@ -379,6 +379,11 @@ class OptimalVsPredictedBacktestRequest(BaseModel):
     limit_slates: int = Field(default=0, ge=0, le=2000)
     showdown_captain_model_path: str | None = None
     showdown_captain_prior_strength: float = Field(default=0.0, ge=0.0, le=1.0)
+    classic_value_driver_model_path: str | None = None
+    classic_value_driver_prior_strength: float = Field(default=0.0, ge=0.0, le=1.0)
+    matchup_outcome_model_path: str | None = None
+    matchup_outcome_prior_strength: float = Field(default=0.0, ge=0.0, le=1.0)
+    matchup_prior_gate_model_path: str | None = None
 
 
 class OptimalVsPredictedBacktestRowResponse(BaseModel):
@@ -409,6 +414,11 @@ class OptimalVsPredictedBacktestResponse(BaseModel):
     learned_only: bool
     showdown_captain_model_path: str | None = None
     showdown_captain_prior_strength: float = 0.0
+    classic_value_driver_model_path: str | None = None
+    classic_value_driver_prior_strength: float = 0.0
+    matchup_outcome_model_path: str | None = None
+    matchup_outcome_prior_strength: float = 0.0
+    matchup_prior_gate_model_path: str | None = None
     slates_total: int
     slates_completed: int
     slates_failed_or_skipped: int
@@ -535,6 +545,11 @@ class UltimateLineupRequest(BaseModel):
     max_player_exposure: float = Field(default=0.35, ge=0.05, le=1.0)
     max_qb_exposure: float = Field(default=0.25, ge=0.05, le=1.0)
     max_dst_exposure: float = Field(default=0.30, ge=0.05, le=1.0)
+    classic_value_driver_model_path: str | None = None
+    classic_value_driver_prior_strength: float = Field(default=0.0, ge=0.0, le=1.0)
+    matchup_outcome_model_path: str | None = None
+    matchup_outcome_prior_strength: float = Field(default=0.0, ge=0.0, le=1.0)
+    matchup_prior_gate_model_path: str | None = None
     random_seed: int | None = None
 
 
@@ -578,6 +593,11 @@ class UltimateLineupResponse(BaseModel):
     training_slates_used: int
     training_rows_used: int
     training_positive_rate: float
+    classic_value_driver_model_path: str | None = None
+    classic_value_driver_prior_strength: float = 0.0
+    matchup_outcome_model_path: str | None = None
+    matchup_outcome_prior_strength: float = 0.0
+    matchup_prior_gate_model_path: str | None = None
     discovered_patterns: list[str]
     rows: list[UltimateLineupRowResponse]
     exposures: list[UltimateLineupExposureRowResponse]

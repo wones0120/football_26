@@ -1,0 +1,2941 @@
+{
+  "summary": {
+    "source_system": "draftkings",
+    "season_start": 2024,
+    "season_end": 2025,
+    "rows_analyzed": 17342,
+    "positions": [
+      "DST",
+      "QB",
+      "RB",
+      "TE",
+      "WR"
+    ],
+    "min_group_count": 80,
+    "min_matchup_count": 8
+  },
+  "position_baselines": [
+    {
+      "name": "DST",
+      "count": 656,
+      "avg_points": 5.714939024390244,
+      "avg_value": 1.8300507640490176,
+      "hit3x_rate": 0.21189024390243902,
+      "hit4x_rate": 0.1173780487804878,
+      "avg_over_roll8": null,
+      "position": "DST"
+    },
+    {
+      "name": "QB",
+      "count": 2313,
+      "avg_points": 5.119853004755736,
+      "avg_value": 0.8287342907217153,
+      "hit3x_rate": 0.12235192390834414,
+      "hit4x_rate": 0.0609597924773022,
+      "avg_over_roll8": -4.641135042200693,
+      "position": "QB"
+    },
+    {
+      "name": "RB",
+      "count": 3881,
+      "avg_points": 3.6065962380829686,
+      "avg_value": 0.6258178216416851,
+      "hit3x_rate": 0.05694408657562484,
+      "hit4x_rate": 0.0244782272610152,
+      "avg_over_roll8": -1.8161093747495671,
+      "position": "RB"
+    },
+    {
+      "name": "TE",
+      "count": 3810,
+      "avg_points": 2.2728083989501306,
+      "avg_value": 0.6595437963157287,
+      "hit3x_rate": 0.07322834645669292,
+      "hit4x_rate": 0.03569553805774278,
+      "avg_over_roll8": -1.30477504045096,
+      "position": "TE"
+    },
+    {
+      "name": "WR",
+      "count": 6682,
+      "avg_points": 3.115519305597133,
+      "avg_value": 0.6435742396675045,
+      "hit3x_rate": 0.06330439988027536,
+      "hit4x_rate": 0.03172702783597725,
+      "avg_over_roll8": -1.8198275540955315,
+      "position": "WR"
+    }
+  ],
+  "factor_effect_sizes": [
+    {
+      "position": "RB",
+      "factor": "salary_tier",
+      "effect_ratio": 0.369505496401382
+    },
+    {
+      "position": "WR",
+      "factor": "salary_tier",
+      "effect_ratio": 0.32261244265438105
+    },
+    {
+      "position": "QB",
+      "factor": "salary_tier",
+      "effect_ratio": 0.21293631661851825
+    },
+    {
+      "position": "TE",
+      "factor": "salary_tier",
+      "effect_ratio": 0.1720025300299025
+    },
+    {
+      "position": "DST",
+      "factor": "spread_role",
+      "effect_ratio": 0.09895129152396694
+    },
+    {
+      "position": "DST",
+      "factor": "salary_tier",
+      "effect_ratio": 0.055616966577482434
+    },
+    {
+      "position": "DST",
+      "factor": "total_band",
+      "effect_ratio": 0.01904157718313984
+    },
+    {
+      "position": "DST",
+      "factor": "spread_abs_band",
+      "effect_ratio": 0.005028496041856452
+    },
+    {
+      "position": "RB",
+      "factor": "spread_role",
+      "effect_ratio": 0.004438950952096563
+    },
+    {
+      "position": "QB",
+      "factor": "spread_role",
+      "effect_ratio": 0.004174378141079004
+    },
+    {
+      "position": "QB",
+      "factor": "total_band",
+      "effect_ratio": 0.003902430361568914
+    },
+    {
+      "position": "TE",
+      "factor": "spread_role",
+      "effect_ratio": 0.0027250249099769097
+    },
+    {
+      "position": "WR",
+      "factor": "total_band",
+      "effect_ratio": 0.0022754168706078486
+    },
+    {
+      "position": "TE",
+      "factor": "total_band",
+      "effect_ratio": 0.001834592066594745
+    },
+    {
+      "position": "QB",
+      "factor": "defense_bucket",
+      "effect_ratio": 0.000805823062636864
+    },
+    {
+      "position": "WR",
+      "factor": "spread_role",
+      "effect_ratio": 0.0007479510748982685
+    },
+    {
+      "position": "RB",
+      "factor": "total_band",
+      "effect_ratio": 0.0006835002501066111
+    },
+    {
+      "position": "RB",
+      "factor": "is_home",
+      "effect_ratio": 0.00048632404914465135
+    },
+    {
+      "position": "RB",
+      "factor": "defense_bucket",
+      "effect_ratio": 0.00041751257789593866
+    },
+    {
+      "position": "TE",
+      "factor": "defense_bucket",
+      "effect_ratio": 0.00037331677457533687
+    },
+    {
+      "position": "TE",
+      "factor": "spread_abs_band",
+      "effect_ratio": 0.0003315439925526549
+    },
+    {
+      "position": "WR",
+      "factor": "defense_bucket",
+      "effect_ratio": 0.0003032986892764984
+    },
+    {
+      "position": "RB",
+      "factor": "spread_abs_band",
+      "effect_ratio": 0.0002800983062074768
+    },
+    {
+      "position": "WR",
+      "factor": "spread_abs_band",
+      "effect_ratio": 0.000257891638122248
+    },
+    {
+      "position": "WR",
+      "factor": "is_home",
+      "effect_ratio": 0.00018131566444260405
+    },
+    {
+      "position": "QB",
+      "factor": "spread_abs_band",
+      "effect_ratio": 0.00016636288471009206
+    },
+    {
+      "position": "TE",
+      "factor": "is_home",
+      "effect_ratio": 3.09960302250035e-05
+    },
+    {
+      "position": "QB",
+      "factor": "is_home",
+      "effect_ratio": 2.395855532028774e-07
+    }
+  ],
+  "top_context_signals": {
+    "position_x_defense_bucket": {
+      "positive": [
+        {
+          "name": "RB|favorable",
+          "count": 1234,
+          "avg_points": 3.8000648298217206,
+          "avg_value": 0.6835547586837994,
+          "hit3x_rate": 0.06645056726094004,
+          "hit4x_rate": 0.03403565640194489,
+          "avg_over_roll8": -1.5730948577514066,
+          "position": "RB",
+          "key_values": {
+            "position": "RB",
+            "defense_bucket": "favorable"
+          },
+          "baseline_hit4x_rate": 0.0244782272610152,
+          "adjusted_hit4x_rate": 0.03318861689167047,
+          "adjusted_hit4x_lift": 0.00871038963065527,
+          "signal_score": 0.3059814948603891
+        },
+        {
+          "name": "QB|neutral",
+          "count": 710,
+          "avg_points": 5.386394366197179,
+          "avg_value": 0.8905830059701615,
+          "hit3x_rate": 0.13943661971830987,
+          "hit4x_rate": 0.06901408450704226,
+          "avg_over_roll8": -4.500747463590242,
+          "position": "QB",
+          "key_values": {
+            "position": "QB",
+            "defense_bucket": "neutral"
+          },
+          "baseline_hit4x_rate": 0.0609597924773022,
+          "adjusted_hit4x_rate": 0.06784960855093526,
+          "adjusted_hit4x_lift": 0.006889816073633058,
+          "signal_score": 0.18358483468203368
+        },
+        {
+          "name": "TE|unknown",
+          "count": 235,
+          "avg_points": 2.6353191489361705,
+          "avg_value": 0.700405569863421,
+          "hit3x_rate": 0.08936170212765958,
+          "hit4x_rate": 0.0425531914893617,
+          "avg_over_roll8": -0.8423642439431914,
+          "position": "TE",
+          "key_values": {
+            "position": "TE",
+            "defense_bucket": "unknown"
+          },
+          "baseline_hit4x_rate": 0.03569553805774278,
+          "adjusted_hit4x_rate": 0.04023511145613841,
+          "adjusted_hit4x_lift": 0.004539573398395627,
+          "signal_score": 0.06959034243531201
+        },
+        {
+          "name": "WR|favorable",
+          "count": 2129,
+          "avg_points": 3.1521747299201484,
+          "avg_value": 0.6531065501355134,
+          "hit3x_rate": 0.06622827618600281,
+          "hit4x_rate": 0.033818694222639736,
+          "avg_over_roll8": -1.6460681931821537,
+          "position": "WR",
+          "key_values": {
+            "position": "WR",
+            "defense_bucket": "favorable"
+          },
+          "baseline_hit4x_rate": 0.03172702783597725,
+          "adjusted_hit4x_rate": 0.033707089079732,
+          "adjusted_hit4x_lift": 0.0019800612437547507,
+          "signal_score": 0.09136218005434607
+        },
+        {
+          "name": "QB|favorable",
+          "count": 736,
+          "avg_points": 5.203777173913049,
+          "avg_value": 0.828796010485943,
+          "hit3x_rate": 0.11684782608695653,
+          "hit4x_rate": 0.0625,
+          "avg_over_roll8": -4.393066450970629,
+          "position": "QB",
+          "key_values": {
+            "position": "QB",
+            "defense_bucket": "favorable"
+          },
+          "baseline_hit4x_rate": 0.0609597924773022,
+          "adjusted_hit4x_rate": 0.06228408305756573,
+          "adjusted_hit4x_lift": 0.0013242905802635235,
+          "signal_score": 0.03592710283556662
+        },
+        {
+          "name": "WR|neutral",
+          "count": 2052,
+          "avg_points": 3.1730799220272914,
+          "avg_value": 0.669125895474643,
+          "hit3x_rate": 0.06432748538011696,
+          "hit4x_rate": 0.032651072124756333,
+          "avg_over_roll8": -2.003185231060955,
+          "position": "WR",
+          "key_values": {
+            "position": "WR",
+            "defense_bucket": "neutral"
+          },
+          "baseline_hit4x_rate": 0.03172702783597725,
+          "adjusted_hit4x_rate": 0.03260001995410555,
+          "adjusted_hit4x_lift": 0.0008729921181283018,
+          "signal_score": 0.03954567573099002
+        },
+        {
+          "name": "TE|neutral",
+          "count": 1170,
+          "avg_points": 2.2705299145299143,
+          "avg_value": 0.6783708403631038,
+          "hit3x_rate": 0.0735042735042735,
+          "hit4x_rate": 0.035897435897435895,
+          "avg_over_roll8": -1.160453082953084,
+          "position": "TE",
+          "key_values": {
+            "position": "TE",
+            "defense_bucket": "neutral"
+          },
+          "baseline_hit4x_rate": 0.03569553805774278,
+          "adjusted_hit4x_rate": 0.03587865470304583,
+          "adjusted_hit4x_lift": 0.0001831166453030511,
+          "signal_score": 0.006263552967034031
+        },
+        {
+          "name": "DST|unknown",
+          "count": 656,
+          "avg_points": 5.714939024390244,
+          "avg_value": 1.8300507640490176,
+          "hit3x_rate": 0.21189024390243902,
+          "hit4x_rate": 0.1173780487804878,
+          "avg_over_roll8": null,
+          "position": "DST",
+          "key_values": {
+            "position": "DST",
+            "defense_bucket": "unknown"
+          },
+          "baseline_hit4x_rate": 0.1173780487804878,
+          "adjusted_hit4x_rate": 0.1173780487804878,
+          "adjusted_hit4x_lift": 0.0,
+          "signal_score": 0.0
+        },
+        {
+          "name": "TE|tough",
+          "count": 1184,
+          "avg_points": 2.2404391891891895,
+          "avg_value": 0.6581123262466745,
+          "hit3x_rate": 0.07010135135135136,
+          "hit4x_rate": 0.03547297297297297,
+          "avg_over_roll8": -1.4865143900697528,
+          "position": "TE",
+          "key_values": {
+            "position": "TE",
+            "defense_bucket": "tough"
+          },
+          "baseline_hit4x_rate": 0.03569553805774278,
+          "adjusted_hit4x_rate": 0.03549345442249166,
+          "adjusted_hit4x_lift": -0.00020208363525112127,
+          "signal_score": 0.006953556646306186
+        },
+        {
+          "name": "RB|unknown",
+          "count": 251,
+          "avg_points": 3.511553784860558,
+          "avg_value": 0.5754126106920997,
+          "hit3x_rate": 0.05179282868525897,
+          "hit4x_rate": 0.02390438247011952,
+          "avg_over_roll8": -1.8621632996633006,
+          "position": "RB",
+          "key_values": {
+            "position": "RB",
+            "defense_bucket": "unknown"
+          },
+          "baseline_hit4x_rate": 0.0244782272610152,
+          "adjusted_hit4x_rate": 0.024089992645072302,
+          "adjusted_hit4x_lift": -0.00038823461594289857,
+          "signal_score": 0.006150793068466766
+        },
+        {
+          "name": "TE|favorable",
+          "count": 1221,
+          "avg_points": 2.236609336609336,
+          "avg_value": 0.6350267629354072,
+          "hit3x_rate": 0.0728910728910729,
+          "hit4x_rate": 0.0343980343980344,
+          "avg_over_roll8": -1.348822841000807,
+          "position": "TE",
+          "key_values": {
+            "position": "TE",
+            "defense_bucket": "favorable"
+          },
+          "baseline_hit4x_rate": 0.03569553805774278,
+          "adjusted_hit4x_rate": 0.03451414210807542,
+          "adjusted_hit4x_lift": -0.0011813959496673604,
+          "signal_score": 0.04128129469936998
+        },
+        {
+          "name": "QB|unknown",
+          "count": 155,
+          "avg_points": 4.449935483870967,
+          "avg_value": 0.743377736843812,
+          "hit3x_rate": 0.0967741935483871,
+          "hit4x_rate": 0.05806451612903226,
+          "avg_over_roll8": -4.508075702075702,
+          "position": "QB",
+          "key_values": {
+            "position": "QB",
+            "defense_bucket": "unknown"
+          },
+          "baseline_hit4x_rate": 0.0609597924773022,
+          "adjusted_hit4x_rate": 0.05932790944464096,
+          "adjusted_hit4x_lift": -0.0016318830326612424,
+          "signal_score": 0.020316779912293834
+        },
+        {
+          "name": "WR|tough",
+          "count": 2073,
+          "avg_points": 3.1054992764109977,
+          "avg_value": 0.6378773318319191,
+          "hit3x_rate": 0.06367583212735166,
+          "hit4x_rate": 0.029908345393150026,
+          "avg_over_roll8": -1.701594683339336,
+          "position": "WR",
+          "key_values": {
+            "position": "WR",
+            "defense_bucket": "tough"
+          },
+          "baseline_hit4x_rate": 0.03172702783597725,
+          "adjusted_hit4x_rate": 0.030007862900281478,
+          "adjusted_hit4x_lift": -0.001719164935695773,
+          "signal_score": 0.0782739401193583
+        },
+        {
+          "name": "RB|neutral",
+          "count": 1194,
+          "avg_points": 3.5870351758793984,
+          "avg_value": 0.6035663217340594,
+          "hit3x_rate": 0.059463986599664995,
+          "hit4x_rate": 0.020938023450586266,
+          "avg_over_roll8": -1.948812762319292,
+          "position": "RB",
+          "key_values": {
+            "position": "RB",
+            "defense_bucket": "neutral"
+          },
+          "baseline_hit4x_rate": 0.0244782272610152,
+          "adjusted_hit4x_rate": 0.021261329734643702,
+          "adjusted_hit4x_lift": -0.0032168975263714983,
+          "signal_score": 0.11115765855773962
+        },
+        {
+          "name": "WR|unknown",
+          "count": 428,
+          "avg_points": 2.705747663551403,
+          "avg_value": 0.5012457425659438,
+          "hit3x_rate": 0.04205607476635514,
+          "hit4x_rate": 0.02570093457943925,
+          "avg_over_roll8": -2.3864395943562613,
+          "position": "WR",
+          "key_values": {
+            "position": "WR",
+            "defense_bucket": "unknown"
+          },
+          "baseline_hit4x_rate": 0.03172702783597725,
+          "adjusted_hit4x_rate": 0.027020517044374578,
+          "adjusted_hit4x_lift": -0.004706510791602673,
+          "signal_score": 0.0973690523722512
+        },
+        {
+          "name": "RB|tough",
+          "count": 1202,
+          "avg_points": 3.447254575707155,
+          "avg_value": 0.5991727455419191,
+          "hit3x_rate": 0.045757071547420966,
+          "hit4x_rate": 0.018302828618968387,
+          "avg_over_roll8": -1.9222487639864665,
+          "position": "RB",
+          "key_values": {
+            "position": "RB",
+            "defense_bucket": "tough"
+          },
+          "baseline_hit4x_rate": 0.0244782272610152,
+          "adjusted_hit4x_rate": 0.018863379176491547,
+          "adjusted_hit4x_lift": -0.005614848084523654,
+          "signal_score": 0.19466606240626352
+        },
+        {
+          "name": "QB|tough",
+          "count": 712,
+          "avg_points": 4.913146067415729,
+          "avg_value": 0.785577341674254,
+          "hit3x_rate": 0.11657303370786516,
+          "hit4x_rate": 0.05196629213483146,
+          "avg_over_roll8": -5.072963663663655,
+          "position": "QB",
+          "key_values": {
+            "position": "QB",
+            "defense_bucket": "tough"
+          },
+          "baseline_hit4x_rate": 0.0609597924773022,
+          "adjusted_hit4x_rate": 0.05326343160730321,
+          "adjusted_hit4x_lift": -0.007696360869998996,
+          "signal_score": 0.20536452248762738
+        }
+      ],
+      "negative": [
+        {
+          "name": "QB|tough",
+          "count": 712,
+          "avg_points": 4.913146067415729,
+          "avg_value": 0.785577341674254,
+          "hit3x_rate": 0.11657303370786516,
+          "hit4x_rate": 0.05196629213483146,
+          "avg_over_roll8": -5.072963663663655,
+          "position": "QB",
+          "key_values": {
+            "position": "QB",
+            "defense_bucket": "tough"
+          },
+          "baseline_hit4x_rate": 0.0609597924773022,
+          "adjusted_hit4x_rate": 0.05326343160730321,
+          "adjusted_hit4x_lift": -0.007696360869998996,
+          "signal_score": 0.20536452248762738
+        },
+        {
+          "name": "RB|tough",
+          "count": 1202,
+          "avg_points": 3.447254575707155,
+          "avg_value": 0.5991727455419191,
+          "hit3x_rate": 0.045757071547420966,
+          "hit4x_rate": 0.018302828618968387,
+          "avg_over_roll8": -1.9222487639864665,
+          "position": "RB",
+          "key_values": {
+            "position": "RB",
+            "defense_bucket": "tough"
+          },
+          "baseline_hit4x_rate": 0.0244782272610152,
+          "adjusted_hit4x_rate": 0.018863379176491547,
+          "adjusted_hit4x_lift": -0.005614848084523654,
+          "signal_score": 0.19466606240626352
+        },
+        {
+          "name": "WR|unknown",
+          "count": 428,
+          "avg_points": 2.705747663551403,
+          "avg_value": 0.5012457425659438,
+          "hit3x_rate": 0.04205607476635514,
+          "hit4x_rate": 0.02570093457943925,
+          "avg_over_roll8": -2.3864395943562613,
+          "position": "WR",
+          "key_values": {
+            "position": "WR",
+            "defense_bucket": "unknown"
+          },
+          "baseline_hit4x_rate": 0.03172702783597725,
+          "adjusted_hit4x_rate": 0.027020517044374578,
+          "adjusted_hit4x_lift": -0.004706510791602673,
+          "signal_score": 0.0973690523722512
+        },
+        {
+          "name": "RB|neutral",
+          "count": 1194,
+          "avg_points": 3.5870351758793984,
+          "avg_value": 0.6035663217340594,
+          "hit3x_rate": 0.059463986599664995,
+          "hit4x_rate": 0.020938023450586266,
+          "avg_over_roll8": -1.948812762319292,
+          "position": "RB",
+          "key_values": {
+            "position": "RB",
+            "defense_bucket": "neutral"
+          },
+          "baseline_hit4x_rate": 0.0244782272610152,
+          "adjusted_hit4x_rate": 0.021261329734643702,
+          "adjusted_hit4x_lift": -0.0032168975263714983,
+          "signal_score": 0.11115765855773962
+        },
+        {
+          "name": "WR|tough",
+          "count": 2073,
+          "avg_points": 3.1054992764109977,
+          "avg_value": 0.6378773318319191,
+          "hit3x_rate": 0.06367583212735166,
+          "hit4x_rate": 0.029908345393150026,
+          "avg_over_roll8": -1.701594683339336,
+          "position": "WR",
+          "key_values": {
+            "position": "WR",
+            "defense_bucket": "tough"
+          },
+          "baseline_hit4x_rate": 0.03172702783597725,
+          "adjusted_hit4x_rate": 0.030007862900281478,
+          "adjusted_hit4x_lift": -0.001719164935695773,
+          "signal_score": 0.0782739401193583
+        },
+        {
+          "name": "QB|unknown",
+          "count": 155,
+          "avg_points": 4.449935483870967,
+          "avg_value": 0.743377736843812,
+          "hit3x_rate": 0.0967741935483871,
+          "hit4x_rate": 0.05806451612903226,
+          "avg_over_roll8": -4.508075702075702,
+          "position": "QB",
+          "key_values": {
+            "position": "QB",
+            "defense_bucket": "unknown"
+          },
+          "baseline_hit4x_rate": 0.0609597924773022,
+          "adjusted_hit4x_rate": 0.05932790944464096,
+          "adjusted_hit4x_lift": -0.0016318830326612424,
+          "signal_score": 0.020316779912293834
+        },
+        {
+          "name": "TE|favorable",
+          "count": 1221,
+          "avg_points": 2.236609336609336,
+          "avg_value": 0.6350267629354072,
+          "hit3x_rate": 0.0728910728910729,
+          "hit4x_rate": 0.0343980343980344,
+          "avg_over_roll8": -1.348822841000807,
+          "position": "TE",
+          "key_values": {
+            "position": "TE",
+            "defense_bucket": "favorable"
+          },
+          "baseline_hit4x_rate": 0.03569553805774278,
+          "adjusted_hit4x_rate": 0.03451414210807542,
+          "adjusted_hit4x_lift": -0.0011813959496673604,
+          "signal_score": 0.04128129469936998
+        },
+        {
+          "name": "RB|unknown",
+          "count": 251,
+          "avg_points": 3.511553784860558,
+          "avg_value": 0.5754126106920997,
+          "hit3x_rate": 0.05179282868525897,
+          "hit4x_rate": 0.02390438247011952,
+          "avg_over_roll8": -1.8621632996633006,
+          "position": "RB",
+          "key_values": {
+            "position": "RB",
+            "defense_bucket": "unknown"
+          },
+          "baseline_hit4x_rate": 0.0244782272610152,
+          "adjusted_hit4x_rate": 0.024089992645072302,
+          "adjusted_hit4x_lift": -0.00038823461594289857,
+          "signal_score": 0.006150793068466766
+        },
+        {
+          "name": "TE|tough",
+          "count": 1184,
+          "avg_points": 2.2404391891891895,
+          "avg_value": 0.6581123262466745,
+          "hit3x_rate": 0.07010135135135136,
+          "hit4x_rate": 0.03547297297297297,
+          "avg_over_roll8": -1.4865143900697528,
+          "position": "TE",
+          "key_values": {
+            "position": "TE",
+            "defense_bucket": "tough"
+          },
+          "baseline_hit4x_rate": 0.03569553805774278,
+          "adjusted_hit4x_rate": 0.03549345442249166,
+          "adjusted_hit4x_lift": -0.00020208363525112127,
+          "signal_score": 0.006953556646306186
+        },
+        {
+          "name": "DST|unknown",
+          "count": 656,
+          "avg_points": 5.714939024390244,
+          "avg_value": 1.8300507640490176,
+          "hit3x_rate": 0.21189024390243902,
+          "hit4x_rate": 0.1173780487804878,
+          "avg_over_roll8": null,
+          "position": "DST",
+          "key_values": {
+            "position": "DST",
+            "defense_bucket": "unknown"
+          },
+          "baseline_hit4x_rate": 0.1173780487804878,
+          "adjusted_hit4x_rate": 0.1173780487804878,
+          "adjusted_hit4x_lift": 0.0,
+          "signal_score": 0.0
+        },
+        {
+          "name": "TE|neutral",
+          "count": 1170,
+          "avg_points": 2.2705299145299143,
+          "avg_value": 0.6783708403631038,
+          "hit3x_rate": 0.0735042735042735,
+          "hit4x_rate": 0.035897435897435895,
+          "avg_over_roll8": -1.160453082953084,
+          "position": "TE",
+          "key_values": {
+            "position": "TE",
+            "defense_bucket": "neutral"
+          },
+          "baseline_hit4x_rate": 0.03569553805774278,
+          "adjusted_hit4x_rate": 0.03587865470304583,
+          "adjusted_hit4x_lift": 0.0001831166453030511,
+          "signal_score": 0.006263552967034031
+        },
+        {
+          "name": "WR|neutral",
+          "count": 2052,
+          "avg_points": 3.1730799220272914,
+          "avg_value": 0.669125895474643,
+          "hit3x_rate": 0.06432748538011696,
+          "hit4x_rate": 0.032651072124756333,
+          "avg_over_roll8": -2.003185231060955,
+          "position": "WR",
+          "key_values": {
+            "position": "WR",
+            "defense_bucket": "neutral"
+          },
+          "baseline_hit4x_rate": 0.03172702783597725,
+          "adjusted_hit4x_rate": 0.03260001995410555,
+          "adjusted_hit4x_lift": 0.0008729921181283018,
+          "signal_score": 0.03954567573099002
+        },
+        {
+          "name": "QB|favorable",
+          "count": 736,
+          "avg_points": 5.203777173913049,
+          "avg_value": 0.828796010485943,
+          "hit3x_rate": 0.11684782608695653,
+          "hit4x_rate": 0.0625,
+          "avg_over_roll8": -4.393066450970629,
+          "position": "QB",
+          "key_values": {
+            "position": "QB",
+            "defense_bucket": "favorable"
+          },
+          "baseline_hit4x_rate": 0.0609597924773022,
+          "adjusted_hit4x_rate": 0.06228408305756573,
+          "adjusted_hit4x_lift": 0.0013242905802635235,
+          "signal_score": 0.03592710283556662
+        },
+        {
+          "name": "WR|favorable",
+          "count": 2129,
+          "avg_points": 3.1521747299201484,
+          "avg_value": 0.6531065501355134,
+          "hit3x_rate": 0.06622827618600281,
+          "hit4x_rate": 0.033818694222639736,
+          "avg_over_roll8": -1.6460681931821537,
+          "position": "WR",
+          "key_values": {
+            "position": "WR",
+            "defense_bucket": "favorable"
+          },
+          "baseline_hit4x_rate": 0.03172702783597725,
+          "adjusted_hit4x_rate": 0.033707089079732,
+          "adjusted_hit4x_lift": 0.0019800612437547507,
+          "signal_score": 0.09136218005434607
+        },
+        {
+          "name": "TE|unknown",
+          "count": 235,
+          "avg_points": 2.6353191489361705,
+          "avg_value": 0.700405569863421,
+          "hit3x_rate": 0.08936170212765958,
+          "hit4x_rate": 0.0425531914893617,
+          "avg_over_roll8": -0.8423642439431914,
+          "position": "TE",
+          "key_values": {
+            "position": "TE",
+            "defense_bucket": "unknown"
+          },
+          "baseline_hit4x_rate": 0.03569553805774278,
+          "adjusted_hit4x_rate": 0.04023511145613841,
+          "adjusted_hit4x_lift": 0.004539573398395627,
+          "signal_score": 0.06959034243531201
+        },
+        {
+          "name": "QB|neutral",
+          "count": 710,
+          "avg_points": 5.386394366197179,
+          "avg_value": 0.8905830059701615,
+          "hit3x_rate": 0.13943661971830987,
+          "hit4x_rate": 0.06901408450704226,
+          "avg_over_roll8": -4.500747463590242,
+          "position": "QB",
+          "key_values": {
+            "position": "QB",
+            "defense_bucket": "neutral"
+          },
+          "baseline_hit4x_rate": 0.0609597924773022,
+          "adjusted_hit4x_rate": 0.06784960855093526,
+          "adjusted_hit4x_lift": 0.006889816073633058,
+          "signal_score": 0.18358483468203368
+        },
+        {
+          "name": "RB|favorable",
+          "count": 1234,
+          "avg_points": 3.8000648298217206,
+          "avg_value": 0.6835547586837994,
+          "hit3x_rate": 0.06645056726094004,
+          "hit4x_rate": 0.03403565640194489,
+          "avg_over_roll8": -1.5730948577514066,
+          "position": "RB",
+          "key_values": {
+            "position": "RB",
+            "defense_bucket": "favorable"
+          },
+          "baseline_hit4x_rate": 0.0244782272610152,
+          "adjusted_hit4x_rate": 0.03318861689167047,
+          "adjusted_hit4x_lift": 0.00871038963065527,
+          "signal_score": 0.3059814948603891
+        }
+      ]
+    },
+    "position_x_total_band_x_spread_role": {
+      "positive": [
+        {
+          "name": "QB|47-50.9|close",
+          "count": 155,
+          "avg_points": 6.121935483870968,
+          "avg_value": 0.968767703242424,
+          "hit3x_rate": 0.15483870967741936,
+          "hit4x_rate": 0.1032258064516129,
+          "avg_over_roll8": -3.384681571815717,
+          "position": "QB",
+          "key_values": {
+            "position": "QB",
+            "total_band": "47-50.9",
+            "spread_role": "close"
+          },
+          "baseline_hit4x_rate": 0.0609597924773022,
+          "adjusted_hit4x_rate": 0.08316735914177054,
+          "adjusted_hit4x_lift": 0.022207566664468333,
+          "signal_score": 0.2764819752882723
+        },
+        {
+          "name": "WR|51+|underdog",
+          "count": 138,
+          "avg_points": 3.9440579710144927,
+          "avg_value": 0.8217999101202225,
+          "hit3x_rate": 0.10144927536231885,
+          "hit4x_rate": 0.057971014492753624,
+          "avg_over_roll8": -0.7416777926123723,
+          "position": "WR",
+          "key_values": {
+            "position": "WR",
+            "total_band": "51+",
+            "spread_role": "underdog"
+          },
+          "baseline_hit4x_rate": 0.03172702783597725,
+          "adjusted_hit4x_rate": 0.044754618334664806,
+          "adjusted_hit4x_lift": 0.013027590498687555,
+          "signal_score": 0.15303953659040598
+        },
+        {
+          "name": "RB|42-46.9|underdog",
+          "count": 428,
+          "avg_points": 3.9871495327102773,
+          "avg_value": 0.6915485605796552,
+          "hit3x_rate": 0.0794392523364486,
+          "hit4x_rate": 0.0397196261682243,
+          "avg_over_roll8": -1.0034410789632313,
+          "position": "RB",
+          "key_values": {
+            "position": "RB",
+            "total_band": "42-46.9",
+            "spread_role": "underdog"
+          },
+          "baseline_hit4x_rate": 0.0244782272610152,
+          "adjusted_hit4x_rate": 0.03596294333898262,
+          "adjusted_hit4x_lift": 0.011484716077967416,
+          "signal_score": 0.2375976537164708
+        },
+        {
+          "name": "WR|42-46.9|close",
+          "count": 578,
+          "avg_points": 3.2112456747404843,
+          "avg_value": 0.6494595027304718,
+          "hit3x_rate": 0.07439446366782007,
+          "hit4x_rate": 0.04498269896193772,
+          "avg_over_roll8": -1.4359146461336818,
+          "position": "WR",
+          "key_values": {
+            "position": "WR",
+            "total_band": "42-46.9",
+            "spread_role": "close"
+          },
+          "baseline_hit4x_rate": 0.03172702783597725,
+          "adjusted_hit4x_rate": 0.04239802771175044,
+          "adjusted_hit4x_lift": 0.01067099987577319,
+          "signal_score": 0.25654823672280097
+        },
+        {
+          "name": "WR|47-50.9|big_underdog",
+          "count": 212,
+          "avg_points": 3.785849056603775,
+          "avg_value": 0.6862234428814753,
+          "hit3x_rate": 0.07547169811320754,
+          "hit4x_rate": 0.04716981132075472,
+          "avg_over_roll8": -1.6964615154237799,
+          "position": "WR",
+          "key_values": {
+            "position": "WR",
+            "total_band": "47-50.9",
+            "spread_role": "big_underdog"
+          },
+          "baseline_hit4x_rate": 0.03172702783597725,
+          "adjusted_hit4x_rate": 0.04102779516203641,
+          "adjusted_hit4x_lift": 0.00930076732605916,
+          "signal_score": 0.13542121637668084
+        },
+        {
+          "name": "QB|<42|underdog",
+          "count": 126,
+          "avg_points": 4.664603174603177,
+          "avg_value": 0.8439835609840921,
+          "hit3x_rate": 0.14285714285714285,
+          "hit4x_rate": 0.07936507936507936,
+          "avg_over_roll8": -5.182665959453088,
+          "position": "QB",
+          "key_values": {
+            "position": "QB",
+            "total_band": "<42",
+            "spread_role": "underdog"
+          },
+          "baseline_hit4x_rate": 0.0609597924773022,
+          "adjusted_hit4x_rate": 0.06967808626624927,
+          "adjusted_hit4x_lift": 0.00871829378894707,
+          "signal_score": 0.09786260506643753
+        },
+        {
+          "name": "TE|47-50.9|big_underdog",
+          "count": 116,
+          "avg_points": 3.3482758620689657,
+          "avg_value": 0.8896070186299677,
+          "hit3x_rate": 0.11206896551724138,
+          "hit4x_rate": 0.05172413793103448,
+          "avg_over_roll8": -0.8220289855072467,
+          "position": "TE",
+          "key_values": {
+            "position": "TE",
+            "total_band": "47-50.9",
+            "spread_role": "big_underdog"
+          },
+          "baseline_hit4x_rate": 0.03569553805774278,
+          "adjusted_hit4x_rate": 0.042958497375328086,
+          "adjusted_hit4x_lift": 0.007262959317585305,
+          "signal_score": 0.07822446582542003
+        },
+        {
+          "name": "RB|47-50.9|big_underdog",
+          "count": 126,
+          "avg_points": 4.78904761904762,
+          "avg_value": 0.7327975858718949,
+          "hit3x_rate": 0.0873015873015873,
+          "hit4x_rate": 0.03968253968253968,
+          "avg_over_roll8": -1.148937532002048,
+          "position": "RB",
+          "key_values": {
+            "position": "RB",
+            "total_band": "47-50.9",
+            "spread_role": "big_underdog"
+          },
+          "baseline_hit4x_rate": 0.0244782272610152,
+          "adjusted_hit4x_rate": 0.03168026998700048,
+          "adjusted_hit4x_lift": 0.007202042725985278,
+          "signal_score": 0.08084272909663304
+        },
+        {
+          "name": "TE|47-50.9|favorite",
+          "count": 210,
+          "avg_points": 2.448571428571429,
+          "avg_value": 0.6998786597947552,
+          "hit3x_rate": 0.08571428571428572,
+          "hit4x_rate": 0.047619047619047616,
+          "avg_over_roll8": -0.7893125960061443,
+          "position": "TE",
+          "key_values": {
+            "position": "TE",
+            "total_band": "47-50.9",
+            "spread_role": "favorite"
+          },
+          "baseline_hit4x_rate": 0.03569553805774278,
+          "adjusted_hit4x_rate": 0.04284964379452568,
+          "adjusted_hit4x_lift": 0.0071541057367828995,
+          "signal_score": 0.10367284151379616
+        },
+        {
+          "name": "TE|<42|big_favorite",
+          "count": 120,
+          "avg_points": 2.224333333333334,
+          "avg_value": 0.682485784497071,
+          "hit3x_rate": 0.075,
+          "hit4x_rate": 0.05,
+          "avg_over_roll8": -1.41217746400886,
+          "position": "TE",
+          "key_values": {
+            "position": "TE",
+            "total_band": "<42",
+            "spread_role": "big_favorite"
+          },
+          "baseline_hit4x_rate": 0.03569553805774278,
+          "adjusted_hit4x_rate": 0.042297597415707655,
+          "adjusted_hit4x_lift": 0.006602059357964873,
+          "signal_score": 0.0723219367269087
+        },
+        {
+          "name": "QB|<42|favorite",
+          "count": 122,
+          "avg_points": 4.053934426229508,
+          "avg_value": 0.8069473372399278,
+          "hit3x_rate": 0.13114754098360656,
+          "hit4x_rate": 0.07377049180327869,
+          "avg_over_roll8": -5.158848272642388,
+          "position": "QB",
+          "key_values": {
+            "position": "QB",
+            "total_band": "<42",
+            "spread_role": "favorite"
+          },
+          "baseline_hit4x_rate": 0.0609597924773022,
+          "adjusted_hit4x_rate": 0.06692507994970347,
+          "adjusted_hit4x_lift": 0.005965287472401264,
+          "signal_score": 0.06588875370397644
+        },
+        {
+          "name": "RB|<42|big_underdog",
+          "count": 139,
+          "avg_points": 3.788489208633093,
+          "avg_value": 0.708189975602929,
+          "hit3x_rate": 0.05755395683453238,
+          "hit4x_rate": 0.03597122302158273,
+          "avg_over_roll8": -1.7228954081632655,
+          "position": "RB",
+          "key_values": {
+            "position": "RB",
+            "total_band": "<42",
+            "spread_role": "big_underdog"
+          },
+          "baseline_hit4x_rate": 0.0244782272610152,
+          "adjusted_hit4x_rate": 0.030204128374702967,
+          "adjusted_hit4x_lift": 0.005725901113687766,
+          "signal_score": 0.0675073785253033
+        },
+        {
+          "name": "WR|<42|big_underdog",
+          "count": 222,
+          "avg_points": 3.305495495495494,
+          "avg_value": 0.6815005228717974,
+          "hit3x_rate": 0.06306306306306306,
+          "hit4x_rate": 0.04054054054054054,
+          "avg_over_roll8": -1.7536519209956714,
+          "position": "WR",
+          "key_values": {
+            "position": "WR",
+            "total_band": "<42",
+            "spread_role": "big_underdog"
+          },
+          "baseline_hit4x_rate": 0.03172702783597725,
+          "adjusted_hit4x_rate": 0.037131999715571316,
+          "adjusted_hit4x_lift": 0.005404971879594066,
+          "signal_score": 0.08053226723657406
+        },
+        {
+          "name": "RB|<42|underdog",
+          "count": 209,
+          "avg_points": 4.031100478468898,
+          "avg_value": 0.7314379975250058,
+          "hit3x_rate": 0.10047846889952153,
+          "hit4x_rate": 0.03349282296650718,
+          "avg_over_roll8": -1.3325625000000003,
+          "position": "RB",
+          "key_values": {
+            "position": "RB",
+            "total_band": "<42",
+            "spread_role": "underdog"
+          },
+          "baseline_hit4x_rate": 0.0244782272610152,
+          "adjusted_hit4x_rate": 0.029876652769461685,
+          "adjusted_hit4x_lift": 0.005398425508446485,
+          "signal_score": 0.07804413223158643
+        },
+        {
+          "name": "WR|47-50.9|close",
+          "count": 466,
+          "avg_points": 3.766738197424893,
+          "avg_value": 0.8539876079796241,
+          "hit3x_rate": 0.09227467811158799,
+          "hit4x_rate": 0.03862660944206009,
+          "avg_over_roll8": -1.529540353905914,
+          "position": "WR",
+          "key_values": {
+            "position": "WR",
+            "total_band": "47-50.9",
+            "spread_role": "close"
+          },
+          "baseline_hit4x_rate": 0.03172702783597725,
+          "adjusted_hit4x_rate": 0.03703264669478022,
+          "adjusted_hit4x_lift": 0.005305618858802971,
+          "signal_score": 0.11453257015930776
+        },
+        {
+          "name": "RB|47-50.9|favorite",
+          "count": 215,
+          "avg_points": 3.613488372093024,
+          "avg_value": 0.6098103723984657,
+          "hit3x_rate": 0.06046511627906977,
+          "hit4x_rate": 0.03255813953488372,
+          "avg_over_roll8": -1.7459205856255546,
+          "position": "RB",
+          "key_values": {
+            "position": "RB",
+            "total_band": "47-50.9",
+            "spread_role": "favorite"
+          },
+          "baseline_hit4x_rate": 0.0244782272610152,
+          "adjusted_hit4x_rate": 0.02937169525786515,
+          "adjusted_hit4x_lift": 0.004893467996849948,
+          "signal_score": 0.071752325695979
+        },
+        {
+          "name": "RB|47-50.9|underdog",
+          "count": 216,
+          "avg_points": 3.9402777777777778,
+          "avg_value": 0.7078845685235419,
+          "hit3x_rate": 0.07407407407407407,
+          "hit4x_rate": 0.032407407407407406,
+          "avg_over_roll8": -2.119194805194806,
+          "position": "RB",
+          "key_values": {
+            "position": "RB",
+            "total_band": "47-50.9",
+            "spread_role": "underdog"
+          },
+          "baseline_hit4x_rate": 0.0244782272610152,
+          "adjusted_hit4x_rate": 0.02928919049590485,
+          "adjusted_hit4x_lift": 0.004810963234889651,
+          "signal_score": 0.07070643058061507
+        },
+        {
+          "name": "TE|42-46.9|favorite",
+          "count": 431,
+          "avg_points": 2.1183294663573085,
+          "avg_value": 0.6513607075863102,
+          "hit3x_rate": 0.08120649651972157,
+          "hit4x_rate": 0.04176334106728538,
+          "avg_over_roll8": -1.2871490818549642,
+          "position": "TE",
+          "key_values": {
+            "position": "TE",
+            "total_band": "42-46.9",
+            "spread_role": "favorite"
+          },
+          "baseline_hit4x_rate": 0.03569553805774278,
+          "adjusted_hit4x_rate": 0.040275613534297705,
+          "adjusted_hit4x_lift": 0.004580075476554923,
+          "signal_score": 0.09508483780748148
+        },
+        {
+          "name": "WR|47-50.9|big_favorite",
+          "count": 233,
+          "avg_points": 2.9279828326180257,
+          "avg_value": 0.5464485279884289,
+          "hit3x_rate": 0.05150214592274678,
+          "hit4x_rate": 0.03862660944206009,
+          "avg_over_roll8": -1.8569054460864816,
+          "position": "WR",
+          "key_values": {
+            "position": "WR",
+            "total_band": "47-50.9",
+            "spread_role": "big_favorite"
+          },
+          "baseline_hit4x_rate": 0.03172702783597725,
+          "adjusted_hit4x_rate": 0.036036954147551786,
+          "adjusted_hit4x_lift": 0.004309926311574536,
+          "signal_score": 0.06578816991686406
+        },
+        {
+          "name": "TE|47-50.9|underdog",
+          "count": 210,
+          "avg_points": 2.2942857142857136,
+          "avg_value": 0.7208393084483592,
+          "hit3x_rate": 0.0761904761904762,
+          "hit4x_rate": 0.04285714285714286,
+          "avg_over_roll8": -1.3862277291869127,
+          "position": "TE",
+          "key_values": {
+            "position": "TE",
+            "total_band": "47-50.9",
+            "spread_role": "underdog"
+          },
+          "baseline_hit4x_rate": 0.03569553805774278,
+          "adjusted_hit4x_rate": 0.039992500937382824,
+          "adjusted_hit4x_lift": 0.004296962879640043,
+          "signal_score": 0.06226890795325492
+        }
+      ],
+      "negative": [
+        {
+          "name": "TE|47-50.9|big_favorite",
+          "count": 145,
+          "avg_points": 1.4379310344827587,
+          "avg_value": 0.3943273825528831,
+          "hit3x_rate": 0.027586206896551724,
+          "hit4x_rate": 0.0,
+          "avg_over_roll8": -1.9043105158730158,
+          "position": "TE",
+          "key_values": {
+            "position": "TE",
+            "total_band": "47-50.9",
+            "spread_role": "big_favorite"
+          },
+          "baseline_hit4x_rate": 0.03569553805774278,
+          "adjusted_hit4x_rate": 0.017534650273978908,
+          "adjusted_hit4x_lift": -0.018160887783763874,
+          "signal_score": 0.21868604788302629
+        },
+        {
+          "name": "WR|42-46.9|big_underdog",
+          "count": 488,
+          "avg_points": 2.9448770491803273,
+          "avg_value": 0.5685129824681577,
+          "hit3x_rate": 0.0471311475409836,
+          "hit4x_rate": 0.014344262295081968,
+          "avg_over_roll8": -2.108162972085387,
+          "position": "WR",
+          "key_values": {
+            "position": "WR",
+            "total_band": "42-46.9",
+            "spread_role": "big_underdog"
+          },
+          "baseline_hit4x_rate": 0.03172702783597725,
+          "adjusted_hit4x_rate": 0.018219401109931234,
+          "adjusted_hit4x_lift": -0.013507626726046017,
+          "signal_score": 0.29839322734917095
+        },
+        {
+          "name": "TE|<42|underdog",
+          "count": 209,
+          "avg_points": 1.8177033492822967,
+          "avg_value": 0.5526674550643857,
+          "hit3x_rate": 0.04784688995215311,
+          "hit4x_rate": 0.014354066985645933,
+          "avg_over_roll8": -1.8296170112781946,
+          "position": "TE",
+          "key_values": {
+            "position": "TE",
+            "total_band": "<42",
+            "spread_role": "underdog"
+          },
+          "baseline_hit4x_rate": 0.03569553805774278,
+          "adjusted_hit4x_rate": 0.022915115553249252,
+          "adjusted_hit4x_lift": -0.01278042250449353,
+          "signal_score": 0.18476442480416305
+        },
+        {
+          "name": "QB|47-50.9|underdog",
+          "count": 132,
+          "avg_points": 5.30878787878788,
+          "avg_value": 0.7255131981142237,
+          "hit3x_rate": 0.09090909090909091,
+          "hit4x_rate": 0.03787878787878788,
+          "avg_over_roll8": -5.014688532555878,
+          "position": "QB",
+          "key_values": {
+            "position": "QB",
+            "total_band": "47-50.9",
+            "spread_role": "underdog"
+          },
+          "baseline_hit4x_rate": 0.0609597924773022,
+          "adjusted_hit4x_rate": 0.04975871671625848,
+          "adjusted_hit4x_lift": -0.011201075761043726,
+          "signal_score": 0.1286905628358686
+        },
+        {
+          "name": "RB|<42|favorite",
+          "count": 190,
+          "avg_points": 3.331578947368421,
+          "avg_value": 0.6244877993455721,
+          "hit3x_rate": 0.042105263157894736,
+          "hit4x_rate": 0.005263157894736842,
+          "avg_over_roll8": -1.6487500000000004,
+          "position": "RB",
+          "key_values": {
+            "position": "RB",
+            "total_band": "<42",
+            "spread_role": "favorite"
+          },
+          "baseline_hit4x_rate": 0.0244782272610152,
+          "adjusted_hit4x_rate": 0.013415005504673115,
+          "adjusted_hit4x_lift": -0.011063221756342086,
+          "signal_score": 0.1524959880446045
+        },
+        {
+          "name": "TE|42-46.9|underdog",
+          "count": 416,
+          "avg_points": 2.142788461538461,
+          "avg_value": 0.583633005818048,
+          "hit3x_rate": 0.057692307692307696,
+          "hit4x_rate": 0.02403846153846154,
+          "avg_over_roll8": -1.2695829284094597,
+          "position": "TE",
+          "key_values": {
+            "position": "TE",
+            "total_band": "42-46.9",
+            "spread_role": "underdog"
+          },
+          "baseline_hit4x_rate": 0.03569553805774278,
+          "adjusted_hit4x_rate": 0.026973696633244587,
+          "adjusted_hit4x_lift": -0.008721841424498195,
+          "signal_score": 0.17789135847191273
+        },
+        {
+          "name": "RB|47-50.9|big_favorite",
+          "count": 137,
+          "avg_points": 2.672262773722627,
+          "avg_value": 0.43051129013397293,
+          "hit3x_rate": 0.014598540145985401,
+          "hit4x_rate": 0.0072992700729927005,
+          "avg_over_roll8": -2.597831211692599,
+          "position": "RB",
+          "key_values": {
+            "position": "RB",
+            "total_band": "47-50.9",
+            "spread_role": "big_favorite"
+          },
+          "baseline_hit4x_rate": 0.0244782272610152,
+          "adjusted_hit4x_rate": 0.015981775510982413,
+          "adjusted_hit4x_lift": -0.008496451750032788,
+          "signal_score": 0.09944841804004238
+        },
+        {
+          "name": "TE|<42|close",
+          "count": 260,
+          "avg_points": 1.9102307692307692,
+          "avg_value": 0.5631737560875348,
+          "hit3x_rate": 0.08461538461538462,
+          "hit4x_rate": 0.023076923076923078,
+          "avg_over_roll8": -2.0535439560439572,
+          "position": "TE",
+          "key_values": {
+            "position": "TE",
+            "total_band": "<42",
+            "spread_role": "close"
+          },
+          "baseline_hit4x_rate": 0.03569553805774278,
+          "adjusted_hit4x_rate": 0.02749343832020997,
+          "adjusted_hit4x_lift": -0.00820209973753281,
+          "signal_score": 0.13225488432248278
+        },
+        {
+          "name": "RB|<42|big_favorite",
+          "count": 125,
+          "avg_points": 3.2144,
+          "avg_value": 0.5993537222642267,
+          "hit3x_rate": 0.032,
+          "hit4x_rate": 0.008,
+          "avg_over_roll8": -2.1159753167321984,
+          "position": "RB",
+          "key_values": {
+            "position": "RB",
+            "total_band": "<42",
+            "spread_role": "big_favorite"
+          },
+          "baseline_hit4x_rate": 0.0244782272610152,
+          "adjusted_hit4x_rate": 0.016705478552989164,
+          "adjusted_hit4x_lift": -0.007772748708026037,
+          "signal_score": 0.08690197241584942
+        },
+        {
+          "name": "WR|47-50.9|underdog",
+          "count": 362,
+          "avg_points": 3.1613259668508302,
+          "avg_value": 0.5609163077887493,
+          "hit3x_rate": 0.058011049723756904,
+          "hit4x_rate": 0.022099447513812154,
+          "avg_over_roll8": -2.5545765243366705,
+          "position": "WR",
+          "key_values": {
+            "position": "WR",
+            "total_band": "47-50.9",
+            "spread_role": "underdog"
+          },
+          "baseline_hit4x_rate": 0.03172702783597725,
+          "adjusted_hit4x_rate": 0.024784430073778514,
+          "adjusted_hit4x_lift": -0.006942597762198736,
+          "signal_score": 0.13209193107431905
+        },
+        {
+          "name": "WR|<42|underdog",
+          "count": 356,
+          "avg_points": 2.8719101123595503,
+          "avg_value": 0.5856374317931714,
+          "hit3x_rate": 0.047752808988764044,
+          "hit4x_rate": 0.02247191011235955,
+          "avg_over_roll8": -1.9563664596273285,
+          "position": "WR",
+          "key_values": {
+            "position": "WR",
+            "total_band": "<42",
+            "spread_role": "underdog"
+          },
+          "baseline_hit4x_rate": 0.03172702783597725,
+          "adjusted_hit4x_rate": 0.025084241727896806,
+          "adjusted_hit4x_lift": -0.006642786108080445,
+          "signal_score": 0.12533583761583728
+        },
+        {
+          "name": "QB|42-46.9|underdog",
+          "count": 253,
+          "avg_points": 5.5437944664031615,
+          "avg_value": 0.7937013698750857,
+          "hit3x_rate": 0.09486166007905138,
+          "hit4x_rate": 0.05138339920948617,
+          "avg_over_roll8": -4.281973057644108,
+          "position": "QB",
+          "key_values": {
+            "position": "QB",
+            "total_band": "42-46.9",
+            "spread_role": "underdog"
+          },
+          "baseline_hit4x_rate": 0.0609597924773022,
+          "adjusted_hit4x_rate": 0.05479483701481504,
+          "adjusted_hit4x_lift": -0.006164955462487166,
+          "signal_score": 0.09805961957490932
+        },
+        {
+          "name": "RB|<42|close",
+          "count": 254,
+          "avg_points": 3.237795275590552,
+          "avg_value": 0.5822035215112484,
+          "hit3x_rate": 0.051181102362204724,
+          "hit4x_rate": 0.015748031496062992,
+          "avg_over_roll8": -2.2585385878489315,
+          "position": "RB",
+          "key_values": {
+            "position": "RB",
+            "total_band": "<42",
+            "spread_role": "close"
+          },
+          "baseline_hit4x_rate": 0.0244782272610152,
+          "adjusted_hit4x_rate": 0.018850131514066316,
+          "adjusted_hit4x_lift": -0.005628095746948884,
+          "signal_score": 0.08969708624673003
+        },
+        {
+          "name": "QB|47-50.9|big_favorite",
+          "count": 84,
+          "avg_points": 4.1292857142857144,
+          "avg_value": 0.6959398648130278,
+          "hit3x_rate": 0.10714285714285714,
+          "hit4x_rate": 0.047619047619047616,
+          "avg_over_roll8": -6.161477591036415,
+          "position": "QB",
+          "key_values": {
+            "position": "QB",
+            "total_band": "47-50.9",
+            "spread_role": "big_favorite"
+          },
+          "baseline_hit4x_rate": 0.0609597924773022,
+          "adjusted_hit4x_rate": 0.05595701315545673,
+          "adjusted_hit4x_lift": -0.005002779321845473,
+          "signal_score": 0.04585122985503345
+        },
+        {
+          "name": "RB|42-46.9|close",
+          "count": 334,
+          "avg_points": 3.283532934131736,
+          "avg_value": 0.5765020157539206,
+          "hit3x_rate": 0.05089820359281437,
+          "hit4x_rate": 0.017964071856287425,
+          "avg_over_roll8": -2.120442799070848,
+          "position": "RB",
+          "key_values": {
+            "position": "RB",
+            "total_band": "42-46.9",
+            "spread_role": "close"
+          },
+          "baseline_hit4x_rate": 0.0244782272610152,
+          "adjusted_hit4x_rate": 0.019888084001143728,
+          "adjusted_hit4x_lift": -0.004590143259871473,
+          "signal_score": 0.0838879291603502
+        },
+        {
+          "name": "RB|51+|favorite",
+          "count": 80,
+          "avg_points": 3.975,
+          "avg_value": 0.6344209041633231,
+          "hit3x_rate": 0.0625,
+          "hit4x_rate": 0.0125,
+          "avg_over_roll8": -1.4798418621179812,
+          "position": "RB",
+          "key_values": {
+            "position": "RB",
+            "total_band": "51+",
+            "spread_role": "favorite"
+          },
+          "baseline_hit4x_rate": 0.0244782272610152,
+          "adjusted_hit4x_rate": 0.020122508257009675,
+          "adjusted_hit4x_lift": -0.004355719004005526,
+          "signal_score": 0.03895873513537614
+        },
+        {
+          "name": "RB|47-50.9|close",
+          "count": 276,
+          "avg_points": 3.561231884057972,
+          "avg_value": 0.5814939904618865,
+          "hit3x_rate": 0.043478260869565216,
+          "hit4x_rate": 0.018115942028985508,
+          "avg_over_roll8": -2.1212093352192367,
+          "position": "RB",
+          "key_values": {
+            "position": "RB",
+            "total_band": "47-50.9",
+            "spread_role": "close"
+          },
+          "baseline_hit4x_rate": 0.0244782272610152,
+          "adjusted_hit4x_rate": 0.020257095712841656,
+          "adjusted_hit4x_lift": -0.004221131548173544,
+          "signal_score": 0.07012670409314936
+        },
+        {
+          "name": "RB|42-46.9|big_favorite",
+          "count": 270,
+          "avg_points": 2.677407407407407,
+          "avg_value": 0.5424037872240609,
+          "hit3x_rate": 0.03333333333333333,
+          "hit4x_rate": 0.018518518518518517,
+          "avg_over_roll8": -2.4051386094343847,
+          "position": "RB",
+          "key_values": {
+            "position": "RB",
+            "total_band": "42-46.9",
+            "spread_role": "big_favorite"
+          },
+          "baseline_hit4x_rate": 0.0244782272610152,
+          "adjusted_hit4x_rate": 0.02055354101595641,
+          "adjusted_hit4x_lift": -0.003924686245058789,
+          "signal_score": 0.06448917562646841
+        },
+        {
+          "name": "QB|42-46.9|close",
+          "count": 201,
+          "avg_points": 4.993631840796021,
+          "avg_value": 0.8149826860646344,
+          "hit3x_rate": 0.15422885572139303,
+          "hit4x_rate": 0.05472636815920398,
+          "avg_over_roll8": -4.957196927803375,
+          "position": "QB",
+          "key_values": {
+            "position": "QB",
+            "total_band": "42-46.9",
+            "spread_role": "close"
+          },
+          "baseline_hit4x_rate": 0.0609597924773022,
+          "adjusted_hit4x_rate": 0.05728554529859914,
+          "adjusted_hit4x_lift": -0.0036742471787030648,
+          "signal_score": 0.052091444195488515
+        },
+        {
+          "name": "TE|<42|big_underdog",
+          "count": 136,
+          "avg_points": 2.2919117647058824,
+          "avg_value": 0.6822350595933335,
+          "hit3x_rate": 0.04411764705882353,
+          "hit4x_rate": 0.029411764705882353,
+          "avg_over_roll8": -1.0574561403508775,
+          "position": "TE",
+          "key_values": {
+            "position": "TE",
+            "total_band": "<42",
+            "spread_role": "big_underdog"
+          },
+          "baseline_hit4x_rate": 0.03569553805774278,
+          "adjusted_hit4x_rate": 0.032599185971318806,
+          "adjusted_hit4x_lift": -0.0030963520864239757,
+          "signal_score": 0.036109360130884165
+        }
+      ]
+    },
+    "position_x_salary_tier_x_teammate_out_band": {
+      "positive": [
+        {
+          "name": "QB|mid|0",
+          "count": 307,
+          "avg_points": 14.715570032573284,
+          "avg_value": 2.3213177984598055,
+          "hit3x_rate": 0.3517915309446254,
+          "hit4x_rate": 0.16286644951140064,
+          "avg_over_roll8": -2.217979784366575,
+          "position": "QB",
+          "key_values": {
+            "position": "QB",
+            "salary_tier": "mid",
+            "teammate_out_band": "0"
+          },
+          "baseline_hit4x_rate": 0.0609597924773022,
+          "adjusted_hit4x_rate": 0.1309493757199604,
+          "adjusted_hit4x_lift": 0.0699895832426582,
+          "signal_score": 1.2263165664222517
+        },
+        {
+          "name": "WR|mid|0",
+          "count": 722,
+          "avg_points": 10.465235457063715,
+          "avg_value": 1.7978893479235052,
+          "hit3x_rate": 0.20221606648199447,
+          "hit4x_rate": 0.09556786703601108,
+          "avg_over_roll8": -1.6870562456866807,
+          "position": "WR",
+          "key_values": {
+            "position": "WR",
+            "salary_tier": "mid",
+            "teammate_out_band": "0"
+          },
+          "baseline_hit4x_rate": 0.03172702783597725,
+          "adjusted_hit4x_rate": 0.08519928526338377,
+          "adjusted_hit4x_lift": 0.05347225742740652,
+          "signal_score": 1.4368026416263315
+        },
+        {
+          "name": "RB|premium|0",
+          "count": 288,
+          "avg_points": 14.526388888888894,
+          "avg_value": 1.6788016945315318,
+          "hit3x_rate": 0.1840277777777778,
+          "hit4x_rate": 0.0763888888888889,
+          "avg_over_roll8": -2.492671906600476,
+          "position": "RB",
+          "key_values": {
+            "position": "RB",
+            "salary_tier": "premium",
+            "teammate_out_band": "0"
+          },
+          "baseline_hit4x_rate": 0.0244782272610152,
+          "adjusted_hit4x_rate": 0.059408765926500295,
+          "adjusted_hit4x_lift": 0.034930538665485095,
+          "signal_score": 0.5927908982607217
+        },
+        {
+          "name": "RB|mid|0",
+          "count": 727,
+          "avg_points": 8.767125171939481,
+          "avg_value": 1.4905234647839913,
+          "hit3x_rate": 0.15130674002751032,
+          "hit4x_rate": 0.06464924346629987,
+          "avg_over_roll8": -1.483534055276016,
+          "position": "RB",
+          "key_values": {
+            "position": "RB",
+            "salary_tier": "mid",
+            "teammate_out_band": "0"
+          },
+          "baseline_hit4x_rate": 0.0244782272610152,
+          "adjusted_hit4x_rate": 0.05816257418286289,
+          "adjusted_hit4x_lift": 0.03368434692184769,
+          "signal_score": 0.908228941638539
+        },
+        {
+          "name": "TE|mid|0",
+          "count": 127,
+          "avg_points": 11.769291338582677,
+          "avg_value": 2.090989420271985,
+          "hit3x_rate": 0.2283464566929134,
+          "hit4x_rate": 0.10236220472440945,
+          "avg_over_roll8": -1.2102484882842022,
+          "position": "TE",
+          "key_values": {
+            "position": "TE",
+            "salary_tier": "mid",
+            "teammate_out_band": "0"
+          },
+          "baseline_hit4x_rate": 0.03569553805774278,
+          "adjusted_hit4x_rate": 0.06740590010518348,
+          "adjusted_hit4x_lift": 0.031710362047440696,
+          "signal_score": 0.35735763146997496
+        },
+        {
+          "name": "DST|mid|0",
+          "count": 219,
+          "avg_points": 6.100456621004566,
+          "avg_value": 2.002762463738891,
+          "hit3x_rate": 0.2374429223744292,
+          "hit4x_rate": 0.1415525114155251,
+          "avg_over_roll8": null,
+          "position": "DST",
+          "key_values": {
+            "position": "DST",
+            "salary_tier": "mid",
+            "teammate_out_band": "0"
+          },
+          "baseline_hit4x_rate": 0.1173780487804878,
+          "adjusted_hit4x_rate": 0.13212514437122086,
+          "adjusted_hit4x_lift": 0.014747095590733061,
+          "signal_score": 0.21823708532539984
+        },
+        {
+          "name": "DST|cheap|0",
+          "count": 250,
+          "avg_points": 4.2,
+          "avg_value": 1.7109256521256535,
+          "hit3x_rate": 0.232,
+          "hit4x_rate": 0.132,
+          "avg_over_roll8": null,
+          "position": "DST",
+          "key_values": {
+            "position": "DST",
+            "salary_tier": "cheap",
+            "teammate_out_band": "0"
+          },
+          "baseline_hit4x_rate": 0.1173780487804878,
+          "adjusted_hit4x_rate": 0.12675109443402127,
+          "adjusted_hit4x_lift": 0.009373045653533474,
+          "signal_score": 0.14820086438953614
+        },
+        {
+          "name": "WR|premium|0",
+          "count": 360,
+          "avg_points": 12.845222222222212,
+          "avg_value": 1.4193945359306765,
+          "hit3x_rate": 0.11388888888888889,
+          "hit4x_rate": 0.041666666666666664,
+          "avg_over_roll8": -3.192466571155684,
+          "position": "WR",
+          "key_values": {
+            "position": "WR",
+            "salary_tier": "premium",
+            "teammate_out_band": "0"
+          },
+          "baseline_hit4x_rate": 0.03172702783597725,
+          "adjusted_hit4x_rate": 0.038883567794073634,
+          "adjusted_hit4x_lift": 0.0071565399580963834,
+          "signal_score": 0.13578579860154327
+        },
+        {
+          "name": "TE|cheap|0",
+          "count": 3635,
+          "avg_points": 1.8302888583218722,
+          "avg_value": 0.6034850321095828,
+          "hit3x_rate": 0.06850068775790921,
+          "hit4x_rate": 0.03383768913342503,
+          "avg_over_roll8": -1.3132749002134945,
+          "position": "TE",
+          "key_values": {
+            "position": "TE",
+            "salary_tier": "cheap",
+            "teammate_out_band": "0"
+          },
+          "baseline_hit4x_rate": 0.03569553805774278,
+          "adjusted_hit4x_rate": 0.033906589490883175,
+          "adjusted_hit4x_lift": -0.0017889485668596064,
+          "signal_score": 0.10785742859742652
+        },
+        {
+          "name": "WR|cheap|0",
+          "count": 5600,
+          "avg_points": 1.5424499999999979,
+          "avg_value": 0.4448758798790091,
+          "hit3x_rate": 0.04214285714285714,
+          "hit4x_rate": 0.022857142857142857,
+          "avg_over_roll8": -1.7241400228157406,
+          "position": "WR",
+          "key_values": {
+            "position": "WR",
+            "salary_tier": "cheap",
+            "teammate_out_band": "0"
+          },
+          "baseline_hit4x_rate": 0.03172702783597725,
+          "adjusted_hit4x_rate": 0.02307348151516321,
+          "adjusted_hit4x_lift": -0.00865354632081404,
+          "signal_score": 0.6475721102612864
+        },
+        {
+          "name": "QB|cheap|0",
+          "count": 1720,
+          "avg_points": 2.8106744186046493,
+          "avg_value": 0.5583979736272193,
+          "hit3x_rate": 0.08662790697674419,
+          "hit4x_rate": 0.04825581395348837,
+          "avg_over_roll8": -5.304796892381674,
+          "position": "QB",
+          "key_values": {
+            "position": "QB",
+            "salary_tier": "cheap",
+            "teammate_out_band": "0"
+          },
+          "baseline_hit4x_rate": 0.0609597924773022,
+          "adjusted_hit4x_rate": 0.04921202739076468,
+          "adjusted_hit4x_lift": -0.01174776508653752,
+          "signal_score": 0.4872136834993125
+        },
+        {
+          "name": "RB|cheap|0",
+          "count": 2866,
+          "avg_points": 1.200244242847174,
+          "avg_value": 0.300660683485114,
+          "hit3x_rate": 0.020237264480111653,
+          "hit4x_rate": 0.009071877180739707,
+          "avg_over_roll8": -1.8364794514211744,
+          "position": "RB",
+          "key_values": {
+            "position": "RB",
+            "salary_tier": "cheap",
+            "teammate_out_band": "0"
+          },
+          "baseline_hit4x_rate": 0.0244782272610152,
+          "adjusted_hit4x_rate": 0.009789405128590195,
+          "adjusted_hit4x_lift": -0.014688822132425006,
+          "signal_score": 0.7863666107475327
+        },
+        {
+          "name": "QB|premium|0",
+          "count": 286,
+          "avg_points": 8.706923076923076,
+          "avg_value": 0.8523543205361916,
+          "hit3x_rate": 0.09090909090909091,
+          "hit4x_rate": 0.027972027972027972,
+          "avg_over_roll8": -3.630359059725584,
+          "position": "QB",
+          "key_values": {
+            "position": "QB",
+            "salary_tier": "premium",
+            "teammate_out_band": "0"
+          },
+          "baseline_hit4x_rate": 0.0609597924773022,
+          "adjusted_hit4x_rate": 0.038813077339958466,
+          "adjusted_hit4x_lift": -0.022146715137343738,
+          "signal_score": 0.37453493766690177
+        },
+        {
+          "name": "DST|premium|0",
+          "count": 187,
+          "avg_points": 7.288770053475936,
+          "avg_value": 1.787042292117253,
+          "hit3x_rate": 0.15508021390374332,
+          "hit4x_rate": 0.06951871657754011,
+          "avg_over_roll8": null,
+          "position": "DST",
+          "key_values": {
+            "position": "DST",
+            "salary_tier": "premium",
+            "teammate_out_band": "0"
+          },
+          "baseline_hit4x_rate": 0.1173780487804878,
+          "adjusted_hit4x_rate": 0.09000895054822108,
+          "adjusted_hit4x_lift": -0.027369098232266714,
+          "signal_score": 0.37426678935603674
+        }
+      ],
+      "negative": [
+        {
+          "name": "DST|premium|0",
+          "count": 187,
+          "avg_points": 7.288770053475936,
+          "avg_value": 1.787042292117253,
+          "hit3x_rate": 0.15508021390374332,
+          "hit4x_rate": 0.06951871657754011,
+          "avg_over_roll8": null,
+          "position": "DST",
+          "key_values": {
+            "position": "DST",
+            "salary_tier": "premium",
+            "teammate_out_band": "0"
+          },
+          "baseline_hit4x_rate": 0.1173780487804878,
+          "adjusted_hit4x_rate": 0.09000895054822108,
+          "adjusted_hit4x_lift": -0.027369098232266714,
+          "signal_score": 0.37426678935603674
+        },
+        {
+          "name": "QB|premium|0",
+          "count": 286,
+          "avg_points": 8.706923076923076,
+          "avg_value": 0.8523543205361916,
+          "hit3x_rate": 0.09090909090909091,
+          "hit4x_rate": 0.027972027972027972,
+          "avg_over_roll8": -3.630359059725584,
+          "position": "QB",
+          "key_values": {
+            "position": "QB",
+            "salary_tier": "premium",
+            "teammate_out_band": "0"
+          },
+          "baseline_hit4x_rate": 0.0609597924773022,
+          "adjusted_hit4x_rate": 0.038813077339958466,
+          "adjusted_hit4x_lift": -0.022146715137343738,
+          "signal_score": 0.37453493766690177
+        },
+        {
+          "name": "RB|cheap|0",
+          "count": 2866,
+          "avg_points": 1.200244242847174,
+          "avg_value": 0.300660683485114,
+          "hit3x_rate": 0.020237264480111653,
+          "hit4x_rate": 0.009071877180739707,
+          "avg_over_roll8": -1.8364794514211744,
+          "position": "RB",
+          "key_values": {
+            "position": "RB",
+            "salary_tier": "cheap",
+            "teammate_out_band": "0"
+          },
+          "baseline_hit4x_rate": 0.0244782272610152,
+          "adjusted_hit4x_rate": 0.009789405128590195,
+          "adjusted_hit4x_lift": -0.014688822132425006,
+          "signal_score": 0.7863666107475327
+        },
+        {
+          "name": "QB|cheap|0",
+          "count": 1720,
+          "avg_points": 2.8106744186046493,
+          "avg_value": 0.5583979736272193,
+          "hit3x_rate": 0.08662790697674419,
+          "hit4x_rate": 0.04825581395348837,
+          "avg_over_roll8": -5.304796892381674,
+          "position": "QB",
+          "key_values": {
+            "position": "QB",
+            "salary_tier": "cheap",
+            "teammate_out_band": "0"
+          },
+          "baseline_hit4x_rate": 0.0609597924773022,
+          "adjusted_hit4x_rate": 0.04921202739076468,
+          "adjusted_hit4x_lift": -0.01174776508653752,
+          "signal_score": 0.4872136834993125
+        },
+        {
+          "name": "WR|cheap|0",
+          "count": 5600,
+          "avg_points": 1.5424499999999979,
+          "avg_value": 0.4448758798790091,
+          "hit3x_rate": 0.04214285714285714,
+          "hit4x_rate": 0.022857142857142857,
+          "avg_over_roll8": -1.7241400228157406,
+          "position": "WR",
+          "key_values": {
+            "position": "WR",
+            "salary_tier": "cheap",
+            "teammate_out_band": "0"
+          },
+          "baseline_hit4x_rate": 0.03172702783597725,
+          "adjusted_hit4x_rate": 0.02307348151516321,
+          "adjusted_hit4x_lift": -0.00865354632081404,
+          "signal_score": 0.6475721102612864
+        },
+        {
+          "name": "TE|cheap|0",
+          "count": 3635,
+          "avg_points": 1.8302888583218722,
+          "avg_value": 0.6034850321095828,
+          "hit3x_rate": 0.06850068775790921,
+          "hit4x_rate": 0.03383768913342503,
+          "avg_over_roll8": -1.3132749002134945,
+          "position": "TE",
+          "key_values": {
+            "position": "TE",
+            "salary_tier": "cheap",
+            "teammate_out_band": "0"
+          },
+          "baseline_hit4x_rate": 0.03569553805774278,
+          "adjusted_hit4x_rate": 0.033906589490883175,
+          "adjusted_hit4x_lift": -0.0017889485668596064,
+          "signal_score": 0.10785742859742652
+        },
+        {
+          "name": "WR|premium|0",
+          "count": 360,
+          "avg_points": 12.845222222222212,
+          "avg_value": 1.4193945359306765,
+          "hit3x_rate": 0.11388888888888889,
+          "hit4x_rate": 0.041666666666666664,
+          "avg_over_roll8": -3.192466571155684,
+          "position": "WR",
+          "key_values": {
+            "position": "WR",
+            "salary_tier": "premium",
+            "teammate_out_band": "0"
+          },
+          "baseline_hit4x_rate": 0.03172702783597725,
+          "adjusted_hit4x_rate": 0.038883567794073634,
+          "adjusted_hit4x_lift": 0.0071565399580963834,
+          "signal_score": 0.13578579860154327
+        },
+        {
+          "name": "DST|cheap|0",
+          "count": 250,
+          "avg_points": 4.2,
+          "avg_value": 1.7109256521256535,
+          "hit3x_rate": 0.232,
+          "hit4x_rate": 0.132,
+          "avg_over_roll8": null,
+          "position": "DST",
+          "key_values": {
+            "position": "DST",
+            "salary_tier": "cheap",
+            "teammate_out_band": "0"
+          },
+          "baseline_hit4x_rate": 0.1173780487804878,
+          "adjusted_hit4x_rate": 0.12675109443402127,
+          "adjusted_hit4x_lift": 0.009373045653533474,
+          "signal_score": 0.14820086438953614
+        },
+        {
+          "name": "DST|mid|0",
+          "count": 219,
+          "avg_points": 6.100456621004566,
+          "avg_value": 2.002762463738891,
+          "hit3x_rate": 0.2374429223744292,
+          "hit4x_rate": 0.1415525114155251,
+          "avg_over_roll8": null,
+          "position": "DST",
+          "key_values": {
+            "position": "DST",
+            "salary_tier": "mid",
+            "teammate_out_band": "0"
+          },
+          "baseline_hit4x_rate": 0.1173780487804878,
+          "adjusted_hit4x_rate": 0.13212514437122086,
+          "adjusted_hit4x_lift": 0.014747095590733061,
+          "signal_score": 0.21823708532539984
+        },
+        {
+          "name": "TE|mid|0",
+          "count": 127,
+          "avg_points": 11.769291338582677,
+          "avg_value": 2.090989420271985,
+          "hit3x_rate": 0.2283464566929134,
+          "hit4x_rate": 0.10236220472440945,
+          "avg_over_roll8": -1.2102484882842022,
+          "position": "TE",
+          "key_values": {
+            "position": "TE",
+            "salary_tier": "mid",
+            "teammate_out_band": "0"
+          },
+          "baseline_hit4x_rate": 0.03569553805774278,
+          "adjusted_hit4x_rate": 0.06740590010518348,
+          "adjusted_hit4x_lift": 0.031710362047440696,
+          "signal_score": 0.35735763146997496
+        },
+        {
+          "name": "RB|mid|0",
+          "count": 727,
+          "avg_points": 8.767125171939481,
+          "avg_value": 1.4905234647839913,
+          "hit3x_rate": 0.15130674002751032,
+          "hit4x_rate": 0.06464924346629987,
+          "avg_over_roll8": -1.483534055276016,
+          "position": "RB",
+          "key_values": {
+            "position": "RB",
+            "salary_tier": "mid",
+            "teammate_out_band": "0"
+          },
+          "baseline_hit4x_rate": 0.0244782272610152,
+          "adjusted_hit4x_rate": 0.05816257418286289,
+          "adjusted_hit4x_lift": 0.03368434692184769,
+          "signal_score": 0.908228941638539
+        },
+        {
+          "name": "RB|premium|0",
+          "count": 288,
+          "avg_points": 14.526388888888894,
+          "avg_value": 1.6788016945315318,
+          "hit3x_rate": 0.1840277777777778,
+          "hit4x_rate": 0.0763888888888889,
+          "avg_over_roll8": -2.492671906600476,
+          "position": "RB",
+          "key_values": {
+            "position": "RB",
+            "salary_tier": "premium",
+            "teammate_out_band": "0"
+          },
+          "baseline_hit4x_rate": 0.0244782272610152,
+          "adjusted_hit4x_rate": 0.059408765926500295,
+          "adjusted_hit4x_lift": 0.034930538665485095,
+          "signal_score": 0.5927908982607217
+        },
+        {
+          "name": "WR|mid|0",
+          "count": 722,
+          "avg_points": 10.465235457063715,
+          "avg_value": 1.7978893479235052,
+          "hit3x_rate": 0.20221606648199447,
+          "hit4x_rate": 0.09556786703601108,
+          "avg_over_roll8": -1.6870562456866807,
+          "position": "WR",
+          "key_values": {
+            "position": "WR",
+            "salary_tier": "mid",
+            "teammate_out_band": "0"
+          },
+          "baseline_hit4x_rate": 0.03172702783597725,
+          "adjusted_hit4x_rate": 0.08519928526338377,
+          "adjusted_hit4x_lift": 0.05347225742740652,
+          "signal_score": 1.4368026416263315
+        },
+        {
+          "name": "QB|mid|0",
+          "count": 307,
+          "avg_points": 14.715570032573284,
+          "avg_value": 2.3213177984598055,
+          "hit3x_rate": 0.3517915309446254,
+          "hit4x_rate": 0.16286644951140064,
+          "avg_over_roll8": -2.217979784366575,
+          "position": "QB",
+          "key_values": {
+            "position": "QB",
+            "salary_tier": "mid",
+            "teammate_out_band": "0"
+          },
+          "baseline_hit4x_rate": 0.0609597924773022,
+          "adjusted_hit4x_rate": 0.1309493757199604,
+          "adjusted_hit4x_lift": 0.0699895832426582,
+          "signal_score": 1.2263165664222517
+        }
+      ]
+    }
+  },
+  "matchup_cells": {
+    "positive": [
+      {
+        "name": "RB:BUF_vs_NYJ",
+        "count": 16,
+        "avg_points": 5.6625000000000005,
+        "avg_value": 1.1800756818901235,
+        "hit3x_rate": 0.1875,
+        "hit4x_rate": 0.1875,
+        "avg_over_roll8": 1.8086111111111114,
+        "position": "RB",
+        "team": "BUF",
+        "opponent": "NYJ",
+        "baseline_hit4x_rate": 0.0244782272610152,
+        "adjusted_hit4x_rate": 0.09693234847834177,
+        "adjusted_hit4x_lift": 0.07245412121732657,
+        "signal_score": 0.2898164848693063
+      },
+      {
+        "name": "WR:IND_vs_PIT",
+        "count": 18,
+        "avg_points": 3.611111111111111,
+        "avg_value": 0.8060229384142428,
+        "hit3x_rate": 0.16666666666666666,
+        "hit4x_rate": 0.16666666666666666,
+        "avg_over_roll8": -0.19555555555555543,
+        "position": "WR",
+        "team": "IND",
+        "opponent": "PIT",
+        "baseline_hit4x_rate": 0.03172702783597725,
+        "adjusted_hit4x_rate": 0.09564580412419856,
+        "adjusted_hit4x_lift": 0.0639187762882213,
+        "signal_score": 0.2711844009512831
+      },
+      {
+        "name": "WR:DET_vs_JAC",
+        "count": 8,
+        "avg_points": 9.7375,
+        "avg_value": 1.5877404194436395,
+        "hit3x_rate": 0.25,
+        "hit4x_rate": 0.25,
+        "avg_over_roll8": 4.050357142857143,
+        "position": "WR",
+        "team": "DET",
+        "opponent": "JAC",
+        "baseline_hit4x_rate": 0.03172702783597725,
+        "adjusted_hit4x_rate": 0.09409073416855518,
+        "adjusted_hit4x_lift": 0.06236370633257793,
+        "signal_score": 0.17639119859076918
+      },
+      {
+        "name": "WR:CIN_vs_DET",
+        "count": 8,
+        "avg_points": 7.050000000000001,
+        "avg_value": 1.2657336484137331,
+        "hit3x_rate": 0.25,
+        "hit4x_rate": 0.25,
+        "avg_over_roll8": 1.9666666666666666,
+        "position": "WR",
+        "team": "CIN",
+        "opponent": "DET",
+        "baseline_hit4x_rate": 0.03172702783597725,
+        "adjusted_hit4x_rate": 0.09409073416855518,
+        "adjusted_hit4x_lift": 0.06236370633257793,
+        "signal_score": 0.17639119859076918
+      },
+      {
+        "name": "WR:NE_vs_NO",
+        "count": 8,
+        "avg_points": 6.625000000000001,
+        "avg_value": 1.7935284508926275,
+        "hit3x_rate": 0.25,
+        "hit4x_rate": 0.25,
+        "avg_over_roll8": 2.455000000000001,
+        "position": "WR",
+        "team": "NE",
+        "opponent": "NO",
+        "baseline_hit4x_rate": 0.03172702783597725,
+        "adjusted_hit4x_rate": 0.09409073416855518,
+        "adjusted_hit4x_lift": 0.06236370633257793,
+        "signal_score": 0.17639119859076918
+      },
+      {
+        "name": "WR:DEN_vs_DAL",
+        "count": 8,
+        "avg_points": 6.425,
+        "avg_value": 1.5740133522391586,
+        "hit3x_rate": 0.25,
+        "hit4x_rate": 0.25,
+        "avg_over_roll8": 0.7774999999999996,
+        "position": "WR",
+        "team": "DEN",
+        "opponent": "DAL",
+        "baseline_hit4x_rate": 0.03172702783597725,
+        "adjusted_hit4x_rate": 0.09409073416855518,
+        "adjusted_hit4x_lift": 0.06236370633257793,
+        "signal_score": 0.17639119859076918
+      },
+      {
+        "name": "WR:CIN_vs_CHI",
+        "count": 8,
+        "avg_points": 9.275,
+        "avg_value": 1.7257023572140722,
+        "hit3x_rate": 0.25,
+        "hit4x_rate": 0.25,
+        "avg_over_roll8": 5.364583333333335,
+        "position": "WR",
+        "team": "CIN",
+        "opponent": "CHI",
+        "baseline_hit4x_rate": 0.03172702783597725,
+        "adjusted_hit4x_rate": 0.09409073416855518,
+        "adjusted_hit4x_lift": 0.06236370633257793,
+        "signal_score": 0.17639119859076918
+      },
+      {
+        "name": "WR:NE_vs_TB",
+        "count": 8,
+        "avg_points": 6.8500000000000005,
+        "avg_value": 1.796623563218391,
+        "hit3x_rate": 0.25,
+        "hit4x_rate": 0.25,
+        "avg_over_roll8": 2.672916666666667,
+        "position": "WR",
+        "team": "NE",
+        "opponent": "TB",
+        "baseline_hit4x_rate": 0.03172702783597725,
+        "adjusted_hit4x_rate": 0.09409073416855518,
+        "adjusted_hit4x_lift": 0.06236370633257793,
+        "signal_score": 0.17639119859076918
+      },
+      {
+        "name": "WR:NE_vs_HOU",
+        "count": 9,
+        "avg_points": 4.488888888888889,
+        "avg_value": 1.1974089127456418,
+        "hit3x_rate": 0.2222222222222222,
+        "hit4x_rate": 0.2222222222222222,
+        "avg_over_roll8": 1.2700000000000007,
+        "position": "WR",
+        "team": "NE",
+        "opponent": "HOU",
+        "baseline_hit4x_rate": 0.03172702783597725,
+        "adjusted_hit4x_rate": 0.09084622609377742,
+        "adjusted_hit4x_lift": 0.05911919825780017,
+        "signal_score": 0.17735759477340052
+      },
+      {
+        "name": "WR:DEN_vs_ATL",
+        "count": 9,
+        "avg_points": 7.044444444444444,
+        "avg_value": 1.8704792713814038,
+        "hit3x_rate": 0.2222222222222222,
+        "hit4x_rate": 0.2222222222222222,
+        "avg_over_roll8": 1.5250000000000001,
+        "position": "WR",
+        "team": "DEN",
+        "opponent": "ATL",
+        "baseline_hit4x_rate": 0.03172702783597725,
+        "adjusted_hit4x_rate": 0.09084622609377742,
+        "adjusted_hit4x_lift": 0.05911919825780017,
+        "signal_score": 0.17735759477340052
+      },
+      {
+        "name": "WR:CLE_vs_NO",
+        "count": 9,
+        "avg_points": 6.400000000000001,
+        "avg_value": 1.3206465546039434,
+        "hit3x_rate": 0.2222222222222222,
+        "hit4x_rate": 0.2222222222222222,
+        "avg_over_roll8": 3.0937500000000004,
+        "position": "WR",
+        "team": "CLE",
+        "opponent": "NO",
+        "baseline_hit4x_rate": 0.03172702783597725,
+        "adjusted_hit4x_rate": 0.09084622609377742,
+        "adjusted_hit4x_lift": 0.05911919825780017,
+        "signal_score": 0.17735759477340052
+      },
+      {
+        "name": "WR:NYG_vs_IND",
+        "count": 9,
+        "avg_points": 7.48888888888889,
+        "avg_value": 1.4587542087542087,
+        "hit3x_rate": 0.3333333333333333,
+        "hit4x_rate": 0.2222222222222222,
+        "avg_over_roll8": 3.6597222222222223,
+        "position": "WR",
+        "team": "NYG",
+        "opponent": "IND",
+        "baseline_hit4x_rate": 0.03172702783597725,
+        "adjusted_hit4x_rate": 0.09084622609377742,
+        "adjusted_hit4x_lift": 0.05911919825780017,
+        "signal_score": 0.17735759477340052
+      },
+      {
+        "name": "WR:CHI_vs_CIN",
+        "count": 9,
+        "avg_points": 4.5311111111111115,
+        "avg_value": 1.0903522403522403,
+        "hit3x_rate": 0.2222222222222222,
+        "hit4x_rate": 0.2222222222222222,
+        "avg_over_roll8": 0.11950892857142914,
+        "position": "WR",
+        "team": "CHI",
+        "opponent": "CIN",
+        "baseline_hit4x_rate": 0.03172702783597725,
+        "adjusted_hit4x_rate": 0.09084622609377742,
+        "adjusted_hit4x_lift": 0.05911919825780017,
+        "signal_score": 0.17735759477340052
+      },
+      {
+        "name": "RB:ATL_vs_CAR",
+        "count": 10,
+        "avg_points": 9.12,
+        "avg_value": 1.4346272791701566,
+        "hit3x_rate": 0.3,
+        "hit4x_rate": 0.2,
+        "avg_over_roll8": 7.394999999999999,
+        "position": "RB",
+        "team": "ATL",
+        "opponent": "CAR",
+        "baseline_hit4x_rate": 0.0244782272610152,
+        "adjusted_hit4x_rate": 0.0829854848406768,
+        "adjusted_hit4x_lift": 0.0585072575796616,
+        "signal_score": 0.18501619360188098
+      },
+      {
+        "name": "WR:TB_vs_MIA",
+        "count": 10,
+        "avg_points": 6.92,
+        "avg_value": 1.5544915084915085,
+        "hit3x_rate": 0.2,
+        "hit4x_rate": 0.2,
+        "avg_over_roll8": 1.0078124999999996,
+        "position": "WR",
+        "team": "TB",
+        "opponent": "MIA",
+        "baseline_hit4x_rate": 0.03172702783597725,
+        "adjusted_hit4x_rate": 0.08781801855731816,
+        "adjusted_hit4x_lift": 0.05609099072134091,
+        "signal_score": 0.17737528689480822
+      },
+      {
+        "name": "RB:DET_vs_WAS",
+        "count": 11,
+        "avg_points": 8.52727272727273,
+        "avg_value": 1.1728708133971293,
+        "hit3x_rate": 0.18181818181818182,
+        "hit4x_rate": 0.18181818181818182,
+        "avg_over_roll8": 1.0492023809523805,
+        "position": "RB",
+        "team": "DET",
+        "opponent": "WAS",
+        "baseline_hit4x_rate": 0.0244782272610152,
+        "adjusted_hit4x_rate": 0.080308533716784,
+        "adjusted_hit4x_lift": 0.055830306455768794,
+        "signal_score": 0.1851681784443419
+      },
+      {
+        "name": "TE:LAR_vs_SF",
+        "count": 10,
+        "avg_points": 4.12,
+        "avg_value": 2.705408045977012,
+        "hit3x_rate": 0.3,
+        "hit4x_rate": 0.2,
+        "avg_over_roll8": 0.6472222222222227,
+        "position": "TE",
+        "team": "LAR",
+        "opponent": "SF",
+        "baseline_hit4x_rate": 0.03569553805774278,
+        "adjusted_hit4x_rate": 0.09046369203849519,
+        "adjusted_hit4x_lift": 0.05476815398075241,
+        "signal_score": 0.17319210982199526
+      },
+      {
+        "name": "WR:SF_vs_DET",
+        "count": 11,
+        "avg_points": 5.163636363636363,
+        "avg_value": 1.409656620182936,
+        "hit3x_rate": 0.18181818181818182,
+        "hit4x_rate": 0.18181818181818182,
+        "avg_over_roll8": 0.6944444444444441,
+        "position": "WR",
+        "team": "SF",
+        "opponent": "DET",
+        "baseline_hit4x_rate": 0.03172702783597725,
+        "adjusted_hit4x_rate": 0.08498517924901758,
+        "adjusted_hit4x_lift": 0.05325815141304033,
+        "signal_score": 0.17663730526499102
+      },
+      {
+        "name": "WR:PHI_vs_MIN",
+        "count": 11,
+        "avg_points": 6.127272727272728,
+        "avg_value": 1.0664081834680745,
+        "hit3x_rate": 0.18181818181818182,
+        "hit4x_rate": 0.18181818181818182,
+        "avg_over_roll8": 2.8328703703703697,
+        "position": "WR",
+        "team": "PHI",
+        "opponent": "MIN",
+        "baseline_hit4x_rate": 0.03172702783597725,
+        "adjusted_hit4x_rate": 0.08498517924901758,
+        "adjusted_hit4x_lift": 0.05325815141304033,
+        "signal_score": 0.17663730526499102
+      },
+      {
+        "name": "WR:NO_vs_TEN",
+        "count": 11,
+        "avg_points": 4.672727272727273,
+        "avg_value": 1.017929292929293,
+        "hit3x_rate": 0.18181818181818182,
+        "hit4x_rate": 0.18181818181818182,
+        "avg_over_roll8": 0.24545454545454515,
+        "position": "WR",
+        "team": "NO",
+        "opponent": "TEN",
+        "baseline_hit4x_rate": 0.03172702783597725,
+        "adjusted_hit4x_rate": 0.08498517924901758,
+        "adjusted_hit4x_lift": 0.05325815141304033,
+        "signal_score": 0.17663730526499102
+      },
+      {
+        "name": "TE:IND_vs_JAC",
+        "count": 11,
+        "avg_points": 3.3,
+        "avg_value": 1.1739669421487604,
+        "hit3x_rate": 0.18181818181818182,
+        "hit4x_rate": 0.18181818181818182,
+        "avg_over_roll8": 0.9833333333333333,
+        "position": "TE",
+        "team": "IND",
+        "opponent": "JAC",
+        "baseline_hit4x_rate": 0.03569553805774278,
+        "adjusted_hit4x_rate": 0.08754550842435017,
+        "adjusted_hit4x_lift": 0.05184997036660739,
+        "signal_score": 0.17196689709708293
+      },
+      {
+        "name": "TE:LAR_vs_ARI",
+        "count": 11,
+        "avg_points": 3.872727272727273,
+        "avg_value": 1.1324850160077433,
+        "hit3x_rate": 0.18181818181818182,
+        "hit4x_rate": 0.18181818181818182,
+        "avg_over_roll8": -0.41374999999999995,
+        "position": "TE",
+        "team": "LAR",
+        "opponent": "ARI",
+        "baseline_hit4x_rate": 0.03569553805774278,
+        "adjusted_hit4x_rate": 0.08754550842435017,
+        "adjusted_hit4x_lift": 0.05184997036660739,
+        "signal_score": 0.17196689709708293
+      },
+      {
+        "name": "RB:MIA_vs_BUF",
+        "count": 13,
+        "avg_points": 6.884615384615386,
+        "avg_value": 1.0213658836793167,
+        "hit3x_rate": 0.15384615384615385,
+        "hit4x_rate": 0.15384615384615385,
+        "avg_over_roll8": 2.8057291666666675,
+        "position": "RB",
+        "team": "MIA",
+        "opponent": "BUF",
+        "baseline_hit4x_rate": 0.0244782272610152,
+        "adjusted_hit4x_rate": 0.07544134985516072,
+        "adjusted_hit4x_lift": 0.050963122594145524,
+        "signal_score": 0.18375015167094905
+      },
+      {
+        "name": "WR:SEA_vs_WAS",
+        "count": 12,
+        "avg_points": 4.8999999999999995,
+        "avg_value": 4.087962962962963,
+        "hit3x_rate": 0.16666666666666666,
+        "hit4x_rate": 0.16666666666666666,
+        "avg_over_roll8": 3.0276785714285714,
+        "position": "WR",
+        "team": "SEA",
+        "opponent": "WAS",
+        "baseline_hit4x_rate": 0.03172702783597725,
+        "adjusted_hit4x_rate": 0.08232939239748578,
+        "adjusted_hit4x_lift": 0.05060236456150853,
+        "signal_score": 0.17529173280731117
+      },
+      {
+        "name": "TE:ARI_vs_SEA",
+        "count": 12,
+        "avg_points": 5.366666666666667,
+        "avg_value": 1.0004960317460319,
+        "hit3x_rate": 0.16666666666666666,
+        "hit4x_rate": 0.16666666666666666,
+        "avg_over_roll8": 2.7444444444444445,
+        "position": "TE",
+        "team": "ARI",
+        "opponent": "SEA",
+        "baseline_hit4x_rate": 0.03569553805774278,
+        "adjusted_hit4x_rate": 0.08480971128608925,
+        "adjusted_hit4x_lift": 0.049114173228346464,
+        "signal_score": 0.17013648680647045
+      }
+    ],
+    "negative": [
+      {
+        "name": "QB:CLE_vs_CIN",
+        "count": 16,
+        "avg_points": 3.05625,
+        "avg_value": 0.6424649234693878,
+        "hit3x_rate": 0.0,
+        "hit4x_rate": 0.0,
+        "avg_over_roll8": -7.156377551020408,
+        "position": "QB",
+        "team": "CLE",
+        "opponent": "CIN",
+        "baseline_hit4x_rate": 0.0609597924773022,
+        "adjusted_hit4x_rate": 0.033866551376279,
+        "adjusted_hit4x_lift": -0.0270932411010232,
+        "signal_score": 0.1083729644040928
+      },
+      {
+        "name": "QB:BAL_vs_PIT",
+        "count": 15,
+        "avg_points": 4.030666666666667,
+        "avg_value": 0.49946747967479677,
+        "hit3x_rate": 0.0,
+        "hit4x_rate": 0.0,
+        "avg_over_roll8": -5.834166666666668,
+        "position": "QB",
+        "team": "BAL",
+        "opponent": "PIT",
+        "baseline_hit4x_rate": 0.0609597924773022,
+        "adjusted_hit4x_rate": 0.03483416712988697,
+        "adjusted_hit4x_lift": -0.026125625347415235,
+        "signal_score": 0.10118411187979356
+      },
+      {
+        "name": "QB:CIN_vs_CLE",
+        "count": 15,
+        "avg_points": 4.605333333333333,
+        "avg_value": 0.6595864870023285,
+        "hit3x_rate": 0.13333333333333333,
+        "hit4x_rate": 0.0,
+        "avg_over_roll8": -8.29964285714286,
+        "position": "QB",
+        "team": "CIN",
+        "opponent": "CLE",
+        "baseline_hit4x_rate": 0.0609597924773022,
+        "adjusted_hit4x_rate": 0.03483416712988697,
+        "adjusted_hit4x_lift": -0.026125625347415235,
+        "signal_score": 0.10118411187979356
+      },
+      {
+        "name": "QB:ATL_vs_NO",
+        "count": 15,
+        "avg_points": 3.228,
+        "avg_value": 0.6071983343470734,
+        "hit3x_rate": 0.06666666666666667,
+        "hit4x_rate": 0.0,
+        "avg_over_roll8": -5.272986111111112,
+        "position": "QB",
+        "team": "ATL",
+        "opponent": "NO",
+        "baseline_hit4x_rate": 0.0609597924773022,
+        "adjusted_hit4x_rate": 0.03483416712988697,
+        "adjusted_hit4x_lift": -0.026125625347415235,
+        "signal_score": 0.10118411187979356
+      },
+      {
+        "name": "QB:IND_vs_TEN",
+        "count": 13,
+        "avg_points": 4.552307692307694,
+        "avg_value": 0.7847435897435898,
+        "hit3x_rate": 0.15384615384615385,
+        "hit4x_rate": 0.0,
+        "avg_over_roll8": -6.179151785714286,
+        "position": "QB",
+        "team": "IND",
+        "opponent": "TEN",
+        "baseline_hit4x_rate": 0.0609597924773022,
+        "adjusted_hit4x_rate": 0.03694532877412255,
+        "adjusted_hit4x_lift": -0.024014463703179653,
+        "signal_score": 0.08658538023458306
+      },
+      {
+        "name": "QB:NYJ_vs_BUF",
+        "count": 13,
+        "avg_points": 3.4046153846153846,
+        "avg_value": 0.6728885904112271,
+        "hit3x_rate": 0.07692307692307693,
+        "hit4x_rate": 0.0,
+        "avg_over_roll8": -5.2922916666666655,
+        "position": "QB",
+        "team": "NYJ",
+        "opponent": "BUF",
+        "baseline_hit4x_rate": 0.0609597924773022,
+        "adjusted_hit4x_rate": 0.03694532877412255,
+        "adjusted_hit4x_lift": -0.024014463703179653,
+        "signal_score": 0.08658538023458306
+      },
+      {
+        "name": "TE:CIN_vs_CLE",
+        "count": 35,
+        "avg_points": 0.8657142857142858,
+        "avg_value": 0.26475172446601025,
+        "hit3x_rate": 0.02857142857142857,
+        "hit4x_rate": 0.0,
+        "avg_over_roll8": -3.0955882352941173,
+        "position": "TE",
+        "team": "CIN",
+        "opponent": "CLE",
+        "baseline_hit4x_rate": 0.03569553805774278,
+        "adjusted_hit4x_rate": 0.012980195657361011,
+        "adjusted_hit4x_lift": -0.02271534240038177,
+        "signal_score": 0.13438577794108408
+      },
+      {
+        "name": "TE:NO_vs_ATL",
+        "count": 32,
+        "avg_points": 1.7875000000000003,
+        "avg_value": 0.49989682223234855,
+        "hit3x_rate": 0.03125,
+        "hit4x_rate": 0.0,
+        "avg_over_roll8": -2.0377314814814813,
+        "position": "TE",
+        "team": "NO",
+        "opponent": "ATL",
+        "baseline_hit4x_rate": 0.03569553805774278,
+        "adjusted_hit4x_rate": 0.013729053099131838,
+        "adjusted_hit4x_lift": -0.021966484958610942,
+        "signal_score": 0.12426120378452876
+      },
+      {
+        "name": "QB:TEN_vs_JAC",
+        "count": 11,
+        "avg_points": 2.765454545454545,
+        "avg_value": 0.5786146245059288,
+        "hit3x_rate": 0.0,
+        "hit4x_rate": 0.0,
+        "avg_over_roll8": -6.517954545454547,
+        "position": "QB",
+        "team": "TEN",
+        "opponent": "JAC",
+        "baseline_hit4x_rate": 0.0609597924773022,
+        "adjusted_hit4x_rate": 0.039328898372453035,
+        "adjusted_hit4x_lift": -0.02163089410484917,
+        "signal_score": 0.07174155962569523
+      },
+      {
+        "name": "QB:CIN_vs_PIT",
+        "count": 11,
+        "avg_points": 5.918181818181818,
+        "avg_value": 0.6944032756411866,
+        "hit3x_rate": 0.09090909090909091,
+        "hit4x_rate": 0.0,
+        "avg_over_roll8": -6.9988636363636365,
+        "position": "QB",
+        "team": "CIN",
+        "opponent": "PIT",
+        "baseline_hit4x_rate": 0.0609597924773022,
+        "adjusted_hit4x_rate": 0.039328898372453035,
+        "adjusted_hit4x_lift": -0.02163089410484917,
+        "signal_score": 0.07174155962569523
+      },
+      {
+        "name": "QB:NYJ_vs_NE",
+        "count": 11,
+        "avg_points": 3.894545454545454,
+        "avg_value": 0.5222331197148885,
+        "hit3x_rate": 0.09090909090909091,
+        "hit4x_rate": 0.0,
+        "avg_over_roll8": -5.570520833333333,
+        "position": "QB",
+        "team": "NYJ",
+        "opponent": "NE",
+        "baseline_hit4x_rate": 0.0609597924773022,
+        "adjusted_hit4x_rate": 0.039328898372453035,
+        "adjusted_hit4x_lift": -0.02163089410484917,
+        "signal_score": 0.07174155962569523
+      },
+      {
+        "name": "QB:LV_vs_KC",
+        "count": 11,
+        "avg_points": 0.6890909090909091,
+        "avg_value": 0.15766786405084277,
+        "hit3x_rate": 0.0,
+        "hit4x_rate": 0.0,
+        "avg_over_roll8": -9.2690625,
+        "position": "QB",
+        "team": "LV",
+        "opponent": "KC",
+        "baseline_hit4x_rate": 0.0609597924773022,
+        "adjusted_hit4x_rate": 0.039328898372453035,
+        "adjusted_hit4x_lift": -0.02163089410484917,
+        "signal_score": 0.07174155962569523
+      },
+      {
+        "name": "WR:ATL_vs_NO",
+        "count": 40,
+        "avg_points": 2.4325,
+        "avg_value": 0.44302296097802263,
+        "hit3x_rate": 0.025,
+        "hit4x_rate": 0.0,
+        "avg_over_roll8": -2.047028571428572,
+        "position": "WR",
+        "team": "ATL",
+        "opponent": "NO",
+        "baseline_hit4x_rate": 0.03172702783597725,
+        "adjusted_hit4x_rate": 0.010575675945325751,
+        "adjusted_hit4x_lift": -0.0211513518906515,
+        "signal_score": 0.1337728951323349
+      },
+      {
+        "name": "TE:MIN_vs_GB",
+        "count": 29,
+        "avg_points": 1.479310344827586,
+        "avg_value": 0.4553274541859079,
+        "hit3x_rate": 0.034482758620689655,
+        "hit4x_rate": 0.0,
+        "avg_over_roll8": -2.1607142857142856,
+        "position": "TE",
+        "team": "MIN",
+        "opponent": "GB",
+        "baseline_hit4x_rate": 0.03569553805774278,
+        "adjusted_hit4x_rate": 0.014569607370507259,
+        "adjusted_hit4x_lift": -0.021125930687235523,
+        "signal_score": 0.11376661845486358
+      },
+      {
+        "name": "WR:BAL_vs_PIT",
+        "count": 39,
+        "avg_points": 1.7461538461538464,
+        "avg_value": 0.36365233698971616,
+        "hit3x_rate": 0.02564102564102564,
+        "hit4x_rate": 0.0,
+        "avg_over_roll8": -2.7144444444444447,
+        "position": "WR",
+        "team": "BAL",
+        "opponent": "PIT",
+        "baseline_hit4x_rate": 0.03172702783597725,
+        "adjusted_hit4x_rate": 0.01075492469016178,
+        "adjusted_hit4x_lift": -0.02097210314581547,
+        "signal_score": 0.13097074216782237
+      },
+      {
+        "name": "WR:CIN_vs_CLE",
+        "count": 39,
+        "avg_points": 3.830769230769231,
+        "avg_value": 0.5913032176308322,
+        "hit3x_rate": 0.05128205128205128,
+        "hit4x_rate": 0.0,
+        "avg_over_roll8": -2.8060576923076916,
+        "position": "WR",
+        "team": "CIN",
+        "opponent": "CLE",
+        "baseline_hit4x_rate": 0.03172702783597725,
+        "adjusted_hit4x_rate": 0.01075492469016178,
+        "adjusted_hit4x_lift": -0.02097210314581547,
+        "signal_score": 0.13097074216782237
+      },
+      {
+        "name": "TE:DAL_vs_PHI",
+        "count": 27,
+        "avg_points": 1.2962962962962963,
+        "avg_value": 0.2998986698357768,
+        "hit3x_rate": 0.0,
+        "hit4x_rate": 0.0,
+        "avg_over_roll8": -1.7800000000000005,
+        "position": "TE",
+        "team": "DAL",
+        "opponent": "PHI",
+        "baseline_hit4x_rate": 0.03569553805774278,
+        "adjusted_hit4x_rate": 0.015189590662869267,
+        "adjusted_hit4x_lift": -0.020505947394873512,
+        "signal_score": 0.10655202823576675
+      },
+      {
+        "name": "WR:PIT_vs_BAL",
+        "count": 36,
+        "avg_points": 2.3305555555555557,
+        "avg_value": 0.5377857975171572,
+        "hit3x_rate": 0.05555555555555555,
+        "hit4x_rate": 0.0,
+        "avg_over_roll8": -2.0385416666666667,
+        "position": "WR",
+        "team": "PIT",
+        "opponent": "BAL",
+        "baseline_hit4x_rate": 0.03172702783597725,
+        "adjusted_hit4x_rate": 0.011331081369991874,
+        "adjusted_hit4x_lift": -0.020395946465985377,
+        "signal_score": 0.12237567879591227
+      },
+      {
+        "name": "QB:SF_vs_SEA",
+        "count": 10,
+        "avg_points": 3.814,
+        "avg_value": 0.5962365591397849,
+        "hit3x_rate": 0.1,
+        "hit4x_rate": 0.0,
+        "avg_over_roll8": -7.307500000000002,
+        "position": "QB",
+        "team": "SF",
+        "opponent": "SEA",
+        "baseline_hit4x_rate": 0.0609597924773022,
+        "adjusted_hit4x_rate": 0.040639861651534805,
+        "adjusted_hit4x_lift": -0.0203199308257674,
+        "signal_score": 0.06425726330649106
+      },
+      {
+        "name": "QB:HOU_vs_IND",
+        "count": 10,
+        "avg_points": 4.3340000000000005,
+        "avg_value": 0.7806325281803541,
+        "hit3x_rate": 0.1,
+        "hit4x_rate": 0.0,
+        "avg_over_roll8": -4.225,
+        "position": "QB",
+        "team": "HOU",
+        "opponent": "IND",
+        "baseline_hit4x_rate": 0.0609597924773022,
+        "adjusted_hit4x_rate": 0.040639861651534805,
+        "adjusted_hit4x_lift": -0.0203199308257674,
+        "signal_score": 0.06425726330649106
+      },
+      {
+        "name": "WR:JAC_vs_TEN",
+        "count": 35,
+        "avg_points": 3.185714285714286,
+        "avg_value": 0.6149577919388917,
+        "hit3x_rate": 0.08571428571428572,
+        "hit4x_rate": 0.0,
+        "avg_over_roll8": -1.864428571428572,
+        "position": "WR",
+        "team": "JAC",
+        "opponent": "TEN",
+        "baseline_hit4x_rate": 0.03172702783597725,
+        "adjusted_hit4x_rate": 0.011537101031264456,
+        "adjusted_hit4x_lift": -0.020189926804712793,
+        "signal_score": 0.11944521779162239
+      },
+      {
+        "name": "TE:PHI_vs_DAL",
+        "count": 25,
+        "avg_points": 1.328,
+        "avg_value": 0.41116943164362524,
+        "hit3x_rate": 0.04,
+        "hit4x_rate": 0.0,
+        "avg_over_roll8": -2.696064814814815,
+        "position": "TE",
+        "team": "PHI",
+        "opponent": "DAL",
+        "baseline_hit4x_rate": 0.03569553805774278,
+        "adjusted_hit4x_rate": 0.015864683581219015,
+        "adjusted_hit4x_lift": -0.019830854476523767,
+        "signal_score": 0.09915427238261884
+      },
+      {
+        "name": "WR:TEN_vs_JAC",
+        "count": 32,
+        "avg_points": 1.5250000000000001,
+        "avg_value": 0.3597448617669206,
+        "hit3x_rate": 0.0,
+        "hit4x_rate": 0.0,
+        "avg_over_roll8": -2.7050824175824175,
+        "position": "WR",
+        "team": "TEN",
+        "opponent": "JAC",
+        "baseline_hit4x_rate": 0.03172702783597725,
+        "adjusted_hit4x_rate": 0.012202703013837402,
+        "adjusted_hit4x_lift": -0.01952432482213985,
+        "signal_score": 0.11044625983859137
+      },
+      {
+        "name": "WR:DET_vs_CHI",
+        "count": 30,
+        "avg_points": 4.300000000000001,
+        "avg_value": 0.5882261020216395,
+        "hit3x_rate": 0.03333333333333333,
+        "hit4x_rate": 0.0,
+        "avg_over_roll8": -0.8887681159420293,
+        "position": "WR",
+        "team": "DET",
+        "opponent": "CHI",
+        "baseline_hit4x_rate": 0.03172702783597725,
+        "adjusted_hit4x_rate": 0.012690811134390901,
+        "adjusted_hit4x_lift": -0.01903621670158635,
+        "signal_score": 0.10426565297015433
+      },
+      {
+        "name": "QB:PIT_vs_CLE",
+        "count": 9,
+        "avg_points": 2.7577777777777777,
+        "avg_value": 0.5295429769392034,
+        "hit3x_rate": 0.1111111111111111,
+        "hit4x_rate": 0.0,
+        "avg_over_roll8": -4.838928571428572,
+        "position": "QB",
+        "team": "PIT",
+        "opponent": "CLE",
+        "baseline_hit4x_rate": 0.0609597924773022,
+        "adjusted_hit4x_rate": 0.0420412361912429,
+        "adjusted_hit4x_lift": -0.018918556286059304,
+        "signal_score": 0.05675566885817791
+      }
+    ]
+  }
+}

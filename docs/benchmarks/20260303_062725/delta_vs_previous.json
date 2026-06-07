@@ -1,0 +1,87 @@
+{
+  "baseline_run_dir": "/Users/wones/git/football_26/docs/benchmarks/20260302_215301",
+  "current_run_dir": "/Users/wones/git/football_26/docs/benchmarks/20260303_062725",
+  "rows": [
+    {
+      "metric": "classic.mean_gap_points",
+      "label": "Classic mean gap points",
+      "higher_is_better": false,
+      "baseline": null,
+      "current": 130.4526,
+      "delta": null,
+      "trend": "MISSING"
+    },
+    {
+      "metric": "classic.median_gap_points",
+      "label": "Classic median gap points",
+      "higher_is_better": false,
+      "baseline": null,
+      "current": 129.48,
+      "delta": null,
+      "trend": "MISSING"
+    },
+    {
+      "metric": "showdown.mean_gap_points",
+      "label": "Showdown baseline mean gap points",
+      "higher_is_better": false,
+      "baseline": null,
+      "current": 48.6749,
+      "delta": null,
+      "trend": "MISSING"
+    },
+    {
+      "metric": "showdown.median_gap_points",
+      "label": "Showdown baseline median gap points",
+      "higher_is_better": false,
+      "baseline": null,
+      "current": 44.21,
+      "delta": null,
+      "trend": "MISSING"
+    },
+    {
+      "metric": "captain_ab.captain_informed_win_rate",
+      "label": "Captain-informed win rate",
+      "higher_is_better": true,
+      "baseline": 0.4,
+      "current": 0.46153846153846156,
+      "delta": 0.06153846153846154,
+      "trend": "UP"
+    },
+    {
+      "metric": "captain_ab.mean_gap_lift_points",
+      "label": "Captain-informed mean gap lift",
+      "higher_is_better": true,
+      "baseline": 2.6470000000000034,
+      "current": 0.5302564102564079,
+      "delta": -2.1167435897435953,
+      "trend": "DOWN"
+    },
+    {
+      "metric": "captain_ab.stability_lift_stddev_reduction",
+      "label": "Captain-informed stability lift",
+      "higher_is_better": true,
+      "baseline": 2.7372238182493067,
+      "current": 2.3384056368614736,
+      "delta": -0.3988181813878331,
+      "trend": "DOWN"
+    },
+    {
+      "metric": "captain_ab.captain_informed_mean_gap_points",
+      "label": "Captain-informed mean gap points",
+      "higher_is_better": false,
+      "baseline": 48.422,
+      "current": 49.373333333333335,
+      "delta": 0.9513333333333378,
+      "trend": "DOWN"
+    },
+    {
+      "metric": "main.main_slates_analyzed",
+      "label": "Main slates analyzed",
+      "higher_is_better": true,
+      "baseline": 12.0,
+      "current": 25.0,
+      "delta": 13.0,
+      "trend": "UP"
+    }
+  ]
+}
