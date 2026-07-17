@@ -71,7 +71,7 @@ Last updated: 2026-07-17
 - [x] Add classic parameter sweep (candidate lineups per slate, training windows, thresholds) and persist best config.
 
 ## P1 - Showdown Modeling
-- [ ] Add teammate-availability context to captain archetype model (who was active/usage context).
+- [ ] Add teammate-availability context to captain archetype model (feature plumbing and opt-in training are implemented; historical injury coverage is currently zero, and the 41-slate candidate regressed, so the current default remains unchanged).
 - [ ] Add season-segment drift checks and automatic alerts when captain priors shift materially.
 - [ ] Extend captain modeling beyond position class (role/archetype buckets within position).
 - [ ] Add showdown scenario analysis module:

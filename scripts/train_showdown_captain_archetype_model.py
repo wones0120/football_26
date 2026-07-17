@@ -17,40 +17,17 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from backend.app.db import SessionLocal
-from backend.app.services.lineup_learning import LineupLearningService, ShowdownPlayerPoolRow
+from backend.app.services.lineup_learning import (
+    SHOWDOWN_CAPTAIN_BASE_FEATURE_NAMES,
+    SHOWDOWN_CAPTAIN_CONTEXT_FEATURE_NAMES,
+    LineupLearningService,
+    ShowdownPlayerPoolRow,
+    _injury_status_score,
+)
 
 
 POSITION_ORDER = ["QB", "RB", "WR", "TE", "K", "DST"]
-FEATURE_NAMES = [
-    "game_total_line",
-    "game_spread_abs",
-    "max_team_implied_total",
-    "min_team_implied_total",
-    "implied_total_diff",
-    "has_vegas_line",
-    "pool_size",
-    "team_count",
-    "team1_player_count",
-    "team2_player_count",
-    "qb_count",
-    "rb_count",
-    "wr_count",
-    "te_count",
-    "k_count",
-    "dst_count",
-    "top_qb_proj_mean",
-    "top_rb_proj_mean",
-    "top_wr_proj_mean",
-    "top_te_proj_mean",
-    "top_k_proj_mean",
-    "top_dst_proj_mean",
-    "top_qb_salary",
-    "top_rb_salary",
-    "top_wr_salary",
-    "top_te_salary",
-    "top_k_salary",
-    "top_dst_salary",
-]
+FEATURE_NAMES = list(SHOWDOWN_CAPTAIN_CONTEXT_FEATURE_NAMES)
 
 
 def parse_args() -> argparse.Namespace:
@@ -64,6 +41,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-training-slates", type=int, default=8)
     parser.add_argument("--random-seed", type=int, default=42)
     parser.add_argument("--limit-slates", type=int, default=0)
+    parser.add_argument(
+        "--feature-set",
+        choices=["baseline", "availability"],
+        default="baseline",
+        help="Availability is opt-in until historical injury coverage passes validation.",
+    )
     parser.add_argument(
         "--dataset-csv",
         type=str,
@@ -167,6 +150,21 @@ def _build_features(pool: list[ShowdownPlayerPoolRow]) -> dict[str, float]:
         if row.team_spread_line is not None and math.isfinite(float(row.team_spread_line))
     ]
     has_vegas_line = 1.0 if game_totals and spread_abs_values else 0.0
+    team_skill_out_values = [
+        max(int(row.team_skill_out_count) for row in rows)
+        for rows in by_team.values()
+        if rows
+    ]
+    team_position_out_values = [
+        int(row.team_position_out_count)
+        for row in pool
+        if row.position in {"QB", "RB", "WR", "TE"}
+    ]
+    injury_report_rows = [
+        row
+        for row in pool
+        if (row.player_injury_status or "unknown").strip().lower() != "unknown"
+    ]
 
     features = {
         "game_total_line": _safe_median(game_totals),
@@ -183,13 +181,59 @@ def _build_features(pool: list[ShowdownPlayerPoolRow]) -> dict[str, float]:
         "team_count": float(len(by_team)),
         "team1_player_count": team1_count,
         "team2_player_count": team2_count,
+        "max_team_skill_out_count": _max_or_zero(
+            [float(value) for value in team_skill_out_values]
+        ),
+        "team_skill_out_count_diff": (
+            float(max(team_skill_out_values) - min(team_skill_out_values))
+            if team_skill_out_values
+            else 0.0
+        ),
+        "max_team_position_out_count": _max_or_zero(
+            [float(value) for value in team_position_out_values]
+        ),
+        "injury_report_coverage": (
+            float(len(injury_report_rows) / len(pool))
+            if pool
+            else 0.0
+        ),
+        "questionable_or_worse_count": float(
+            sum(1 for row in pool if _injury_status_score(row.player_injury_status) >= 0.5)
+        ),
     }
+    team_available_skill_counts = [
+        sum(
+            1
+            for row in rows
+            if row.position in {"QB", "RB", "WR", "TE"}
+            and _injury_status_score(row.player_injury_status) < 0.8
+        )
+        for rows in by_team.values()
+    ]
+    features.update({
+        "max_team_available_skill_count": _max_or_zero(
+            [float(value) for value in team_available_skill_counts]
+        ),
+        "team_available_skill_count_diff": (
+            float(max(team_available_skill_counts) - min(team_available_skill_counts))
+            if team_available_skill_counts
+            else 0.0
+        ),
+    })
 
     for pos in POSITION_ORDER:
         count, top_proj, top_salary = _position_features(pool, pos)
         features[f"{pos.lower()}_count"] = float(count)
         features[f"top_{pos.lower()}_proj_mean"] = float(top_proj)
         features[f"top_{pos.lower()}_salary"] = float(top_salary)
+    for pos in ("RB", "WR", "TE"):
+        features[f"{pos.lower()}_position_out_max"] = _max_or_zero(
+            [
+                float(row.team_position_out_count)
+                for row in pool
+                if row.position == pos
+            ]
+        )
 
     return features
 
@@ -243,8 +287,12 @@ def _report_markdown(payload: dict[str, Any]) -> str:
     lines.append("")
     lines.append("## Notes")
     lines.append("")
-    lines.append("- This is an initial archetype model using matchup/pool context features only.")
-    lines.append("- Next step is adding teammate-availability context and richer game-state priors.")
+    if summary["feature_set"] == "availability":
+        lines.append("- The model uses matchup, pool, and point-in-time teammate-availability context.")
+        lines.append("- Availability features come from the selected season/week/slate injury snapshot.")
+    else:
+        lines.append("- The model uses the established matchup and salary-pool context feature set.")
+        lines.append("- Use `--feature-set availability` only after validating historical injury coverage.")
     return "\n".join(lines) + "\n"
 
 
@@ -253,6 +301,11 @@ def main() -> None:
     season_start = min(args.season_start, args.season_end)
     season_end = max(args.season_start, args.season_end)
     rng = np.random.default_rng(args.random_seed)
+    selected_feature_names = (
+        list(SHOWDOWN_CAPTAIN_CONTEXT_FEATURE_NAMES)
+        if args.feature_set == "availability"
+        else list(SHOWDOWN_CAPTAIN_BASE_FEATURE_NAMES)
+    )
 
     dataset_rows: list[dict[str, Any]] = []
 
@@ -310,7 +363,10 @@ def main() -> None:
     if not dataset_rows:
         raise ValueError("No showdown slates available to build captain archetype dataset.")
 
-    x = np.asarray([[float(row[name]) for name in FEATURE_NAMES] for row in dataset_rows], dtype=float)
+    x = np.asarray(
+        [[float(row[name]) for name in selected_feature_names] for row in dataset_rows],
+        dtype=float,
+    )
     y_labels = np.asarray([str(row["captain_position"]) for row in dataset_rows], dtype=object)
     classes = sorted({str(value) for value in y_labels})
     class_to_idx = {label: idx for idx, label in enumerate(classes)}
@@ -421,12 +477,13 @@ def main() -> None:
         "slates_warmup": len(dataset_rows) - evaluated,
         "training_window_slates": args.training_window_slates,
         "min_training_slates": args.min_training_slates,
+        "feature_set": args.feature_set,
         "model_top1_accuracy": model_top1_accuracy,
         "model_top2_accuracy": model_top2_accuracy,
         "baseline_top1_accuracy": baseline_top1_accuracy,
         "top1_accuracy_lift": model_top1_accuracy - baseline_top1_accuracy,
         "classes": classes,
-        "features": FEATURE_NAMES,
+        "features": selected_feature_names,
     }
 
     eval_payload = {
@@ -438,7 +495,7 @@ def main() -> None:
         "summary": summary,
         "model": {
             "classes": classes,
-            "feature_names": FEATURE_NAMES,
+            "feature_names": selected_feature_names,
             "x_mean": x_all_mean.tolist(),
             "x_std": x_all_std.tolist(),
             "weights": w_all.tolist(),
@@ -474,6 +531,7 @@ def main() -> None:
                 "model_top2_accuracy": round(model_top2_accuracy, 4),
                 "baseline_top1_accuracy": round(baseline_top1_accuracy, 4),
                 "top1_accuracy_lift": round(model_top1_accuracy - baseline_top1_accuracy, 4),
+                "feature_set": args.feature_set,
                 "dataset_csv": str(dataset_path),
                 "eval_json": str(eval_json_path),
                 "model_json": str(model_json_path),

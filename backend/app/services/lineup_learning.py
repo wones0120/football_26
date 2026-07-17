@@ -152,7 +152,7 @@ SHOWDOWN_FEATURE_NAMES = [
     "captain_has_vegas_line",
 ]
 SHOWDOWN_FEATURE_INDEX = {name: idx for idx, name in enumerate(SHOWDOWN_FEATURE_NAMES)}
-SHOWDOWN_CAPTAIN_CONTEXT_FEATURE_NAMES = [
+SHOWDOWN_CAPTAIN_BASE_FEATURE_NAMES = [
     "game_total_line",
     "game_spread_abs",
     "max_team_implied_total",
@@ -181,6 +181,22 @@ SHOWDOWN_CAPTAIN_CONTEXT_FEATURE_NAMES = [
     "top_te_salary",
     "top_k_salary",
     "top_dst_salary",
+]
+SHOWDOWN_CAPTAIN_AVAILABILITY_FEATURE_NAMES = [
+    "max_team_skill_out_count",
+    "team_skill_out_count_diff",
+    "max_team_position_out_count",
+    "injury_report_coverage",
+    "questionable_or_worse_count",
+    "rb_position_out_max",
+    "wr_position_out_max",
+    "te_position_out_max",
+    "max_team_available_skill_count",
+    "team_available_skill_count_diff",
+]
+SHOWDOWN_CAPTAIN_CONTEXT_FEATURE_NAMES = [
+    *SHOWDOWN_CAPTAIN_BASE_FEATURE_NAMES,
+    *SHOWDOWN_CAPTAIN_AVAILABILITY_FEATURE_NAMES,
 ]
 SHOWDOWN_CAPTAIN_POSITIONS = {"QB", "RB", "WR", "TE", "K", "DST"}
 CLASSIC_VALUE_DRIVER_POSITIONS = ("QB", "RB", "WR", "TE", "DST")
@@ -254,6 +270,9 @@ class ShowdownPlayerPoolRow:
     team_spread_line: float | None = None
     team_implied_total: float | None = None
     opponent_implied_total: float | None = None
+    player_injury_status: str = "unknown"
+    team_skill_out_count: int = 0
+    team_position_out_count: int = 0
     player_master_id: str | None = None
     source_player_key: str | None = None
 
@@ -1150,6 +1169,35 @@ class LineupLearningService:
             if row.team_spread_line is not None and math.isfinite(float(row.team_spread_line))
         ]
         has_vegas_line = 1.0 if game_totals and spread_abs_values else 0.0
+        team_skill_out_values = [
+            max(int(row.team_skill_out_count) for row in rows)
+            for rows in by_team.values()
+            if rows
+        ]
+        team_position_out_values = [
+            int(row.team_position_out_count)
+            for row in players
+            if row.position in {"QB", "RB", "WR", "TE"}
+        ]
+        injury_report_rows = [
+            row
+            for row in players
+            if (row.player_injury_status or "unknown").strip().lower() != "unknown"
+        ]
+        questionable_or_worse_count = sum(
+            1
+            for row in players
+            if _injury_status_score(row.player_injury_status) >= 0.5
+        )
+        team_available_skill_counts = [
+            sum(
+                1
+                for row in rows
+                if row.position in {"QB", "RB", "WR", "TE"}
+                and _injury_status_score(row.player_injury_status) < 0.8
+            )
+            for rows in by_team.values()
+        ]
 
         features = {
             "game_total_line": _safe_median(game_totals),
@@ -1166,6 +1214,31 @@ class LineupLearningService:
             "team_count": float(len(by_team)),
             "team1_player_count": team1_count,
             "team2_player_count": team2_count,
+            "max_team_skill_out_count": _max_or_zero(
+                [float(value) for value in team_skill_out_values]
+            ),
+            "team_skill_out_count_diff": (
+                float(max(team_skill_out_values) - min(team_skill_out_values))
+                if team_skill_out_values
+                else 0.0
+            ),
+            "max_team_position_out_count": _max_or_zero(
+                [float(value) for value in team_position_out_values]
+            ),
+            "injury_report_coverage": (
+                float(len(injury_report_rows) / len(players))
+                if players
+                else 0.0
+            ),
+            "questionable_or_worse_count": float(questionable_or_worse_count),
+            "max_team_available_skill_count": _max_or_zero(
+                [float(value) for value in team_available_skill_counts]
+            ),
+            "team_available_skill_count_diff": (
+                float(max(team_available_skill_counts) - min(team_available_skill_counts))
+                if team_available_skill_counts
+                else 0.0
+            ),
         }
 
         for position in ("QB", "RB", "WR", "TE", "K", "DST"):
@@ -1176,6 +1249,14 @@ class LineupLearningService:
             )
             features[f"top_{position.lower()}_salary"] = _max_or_zero(
                 [float(row.flex_salary) for row in rows]
+            )
+        for position in ("RB", "WR", "TE"):
+            features[f"{position.lower()}_position_out_max"] = _max_or_zero(
+                [
+                    float(row.team_position_out_count)
+                    for row in players
+                    if row.position == position
+                ]
             )
         return features
 
@@ -1892,6 +1973,10 @@ class LineupLearningService:
 
         dst_points_by_team = self._compute_dst_actual_points(season=season, week=week)
         game_context_by_team = self._game_context_by_team(season=season, week=week)
+        projection_feature_cache = self._projection_feature_cache.get(
+            (source_system, season, week, slate),
+            {},
+        )
 
         actual_points_by_master: dict[str, float] = {}
         master_ids = sorted({row.player_master_id for row in salary_rows if row.player_master_id})
@@ -1974,6 +2059,11 @@ class LineupLearningService:
                 points = dst_points_by_team.get(team_key or "", 0.0)
                 if dst_projection_lookup and team_key and team_key in dst_projection_lookup:
                     projected_mean, projected_p90 = dst_projection_lookup[team_key]
+            projection_feature = (
+                projection_feature_cache.get(flex_row.player_master_id or "")
+                or projection_feature_cache.get(flex_row.source_player_key or "")
+                or {}
+            )
 
             pool.append(
                 ShowdownPlayerPoolRow(
@@ -1991,6 +2081,15 @@ class LineupLearningService:
                     team_spread_line=_safe_float(context.get("team_spread_line")),
                     team_implied_total=_safe_float(context.get("team_implied_total")),
                     opponent_implied_total=_safe_float(context.get("opponent_implied_total")),
+                    player_injury_status=str(
+                        projection_feature.get("player_injury_status") or "unknown"
+                    ),
+                    team_skill_out_count=int(
+                        projection_feature.get("team_skill_out_count") or 0
+                    ),
+                    team_position_out_count=int(
+                        projection_feature.get("team_position_out_count") or 0
+                    ),
                     player_master_id=flex_row.player_master_id,
                     source_player_key=flex_row.source_player_key,
                 )

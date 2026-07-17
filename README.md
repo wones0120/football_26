@@ -235,3 +235,22 @@ python scripts/run_classic_parameter_sweep.py \
 ```
 
 The initial eight-configuration sweep selected `250` candidate lineups, a `4`-slate training window, and a `95th`-percentile top-lineup target. It completed 10 of 12 chronological slates with a `134.43` mean gap and `131.11` median gap. The compact best-config artifact includes the clean code revision, feature-set hash, seed, coverage requirement, and acceptance metrics. This is a provisional bounded result; rerun over broader history and larger candidate pools before adopting it as a production default.
+
+## Showdown Availability Candidate
+
+Showdown captain training can build an opt-in teammate-availability candidate without changing the baseline default:
+
+```bash
+source .venv/bin/activate
+python scripts/train_showdown_captain_archetype_model.py \
+  --source-system draftkings \
+  --season-start 2024 \
+  --season-end 2025 \
+  --feature-set availability \
+  --dataset-csv /tmp/showdown_availability_dataset.csv \
+  --eval-json /tmp/showdown_availability_eval.json \
+  --model-json /tmp/showdown_availability_model.json \
+  --report-md /tmp/showdown_availability_report.md
+```
+
+The feature set includes active salary-pool skill-player counts and imbalance plus injury/out context when the selected historical slice contains an injury snapshot. The current 41-slate dataset has zero historical injury-report coverage. Its availability candidate scored `30.3%` top-1 and `51.5%` top-2 versus the current-code baseline at `33.3%` and `57.6%`, so the production captain artifact and baseline training default remain unchanged. Ingest point-in-time historical injuries before reevaluating this candidate.
