@@ -1,6 +1,6 @@
 # Football_26 TODO Backlog
 
-Last updated: 2026-03-03
+Last updated: 2026-07-17
 
 ## Completed Baseline (Reference)
 - [x] Showdown captain descriptive analysis completed for 2024-2025.
@@ -11,7 +11,7 @@ Last updated: 2026-03-03
 - [x] Combined professional report generated for showdown + regular slates.
 
 ## Next Session Runbook (Execute In Order)
-- [ ] Task 1: Productionize showdown defaults.
+- [x] Task 1: Productionize showdown defaults.
   - Goal: no manual model path/strength entry required in normal runs.
   - Deliverable:
     - config keys for `showdown_captain_model_path` and `showdown_captain_prior_strength`.
@@ -32,7 +32,7 @@ Last updated: 2026-03-03
     - outputs change report for mean/median gaps, win rates, and stability.
   - Acceptance:
     - markdown delta report generated with clear up/down indicators.
-- [ ] Task 4: Wire reports into UI.
+- [x] Task 4: Wire reports into UI.
   - Goal: consume analysis without leaving control plane.
   - Deliverable:
     - UI section listing latest generated reports (main slate, showdown, combined).
@@ -41,14 +41,14 @@ Last updated: 2026-03-03
     - no manual filesystem navigation needed to access current reports.
 
 ## P0 - Resume First
-- [ ] Finalize default showdown captain settings in product flows (`model_path`, `prior_strength=0.35`) and expose as saved presets.
-- [ ] Add one-click UI action to run the combined showdown + classic benchmark suite and write timestamped artifacts.
-- [ ] Add a single "Current Model Card" view in UI (data range, slates, key metrics, best params, artifact links).
+- [x] Finalize default showdown captain settings in product flows (`model_path`, `prior_strength=0.35`) and expose as saved presets.
+- [x] Add one-click UI action to run the combined showdown + classic benchmark suite and write timestamped artifacts.
+- [x] Add a single "Current Model Card" view in UI (data range, slates, key metrics, best params, artifact links).
 
 ## P0 - Data Integrity and Coverage
-- [ ] Add ingestion validation gates: enforce required columns, type checks, duplicate checks per file before write.
-- [ ] Add DST-specific identity pipeline rules (team defense aliases, no player-name matching fallback for DST).
-- [ ] Add automated unresolved-queue triage reports (new unresolveds by source/week/slate).
+- [x] Add ingestion validation gates: enforce required columns, type checks, duplicate checks per file before write.
+- [x] Add DST-specific identity pipeline rules (team defense aliases, no player-name matching fallback for DST).
+- [x] Add automated unresolved-queue triage reports (new unresolveds by source/week/slate).
 - [ ] Add data freshness checks for salaries/injuries/schedules/stats with UI status badges.
 
 ## P0 - Evaluation Framework

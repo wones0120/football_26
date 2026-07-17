@@ -326,6 +326,10 @@ select:focus {
   margin-top: 0.55rem;
 }
 
+.model-card-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .mini-card {
   border: 1px solid var(--panel-soft-line);
   border-radius: 12px;
@@ -345,6 +349,87 @@ select:focus {
 .mini-card strong {
   font-family: "Chakra Petch", sans-serif;
   font-size: 1.1rem;
+}
+
+.info-grid {
+  margin-top: 0.7rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.info-card {
+  border: 1px solid var(--panel-soft-line);
+  border-radius: 12px;
+  background: rgb(2 18 29 / 64%);
+  padding: 0.62rem 0.68rem;
+  display: grid;
+  gap: 0.24rem;
+}
+
+.info-card span {
+  color: var(--ink-1);
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.info-card code,
+.artifact-pill code,
+.artifact-links code,
+.run-cell code {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.77rem;
+  color: #c8ecff;
+  word-break: break-word;
+}
+
+.info-card strong,
+.run-cell strong {
+  font-family: "Chakra Petch", sans-serif;
+  font-size: 0.95rem;
+}
+
+.artifact-list {
+  margin-top: 0.68rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.artifact-pill {
+  border: 1px solid var(--panel-soft-line);
+  border-radius: 12px;
+  background: rgb(2 18 29 / 56%);
+  padding: 0.52rem 0.6rem;
+  display: grid;
+  gap: 0.16rem;
+}
+
+.artifact-pill span {
+  color: var(--ink-1);
+  font-size: 0.76rem;
+}
+
+.artifact-pill a,
+.artifact-links a {
+  width: fit-content;
+  text-decoration-color: rgb(116 220 255 / 62%);
+  text-underline-offset: 0.18rem;
+}
+
+.artifact-pill a:hover code,
+.artifact-links a:hover code {
+  color: #ffffff;
+}
+
+.benchmark-table {
+  margin-top: 0.72rem;
+}
+
+.run-cell,
+.artifact-links {
+  display: grid;
+  gap: 0.2rem;
 }
 
 .learning-list {
@@ -518,6 +603,11 @@ tbody tr:hover {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .model-card-grid,
+  .info-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .dual-tables {
     grid-template-columns: 1fr;
   }
@@ -548,6 +638,11 @@ tbody tr:hover {
 
   .backtest-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .model-card-grid,
+  .info-grid {
+    grid-template-columns: 1fr;
   }
 
   .button-row button {

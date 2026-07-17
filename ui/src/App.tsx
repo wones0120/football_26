@@ -3,26 +3,34 @@ import {
   autoDiscoverInjuryFiles,
   autoDiscoverSalaryFiles,
   backtestWeek,
+  benchmarkArtifactUrl,
   bootstrapNflreadpy,
+  fetchBenchmarkRuns,
   fetchCuratedSalarySlices,
+  fetchModelDefaults,
   fetchSeasonCoverage,
   fetchRuns,
   fetchUnresolved,
+  fetchUnresolvedTriage,
   ingestNflreadpySchedules,
   ingestNflreadpyWeeklyStats,
   ingestInjuries,
   ingestSalaries,
+  runBenchmarkSuite,
   runOptimalVsPredictedBacktest,
   resolveUnresolved,
   simulateWeek,
   upsertPlayerMaster,
+  type BenchmarkRun,
   type BacktestWeekResult,
   type IngestResult,
   type CuratedSalarySliceRow,
+  type ModelDefaults,
   type OptimalVsPredictedBacktestResult,
   type SeasonCoverageRow,
   type SimulatedPlayerOutcome,
   type UnresolvedRow,
+  type UnresolvedTriageResult,
 } from "./api";
 
 type ShowdownCaptainABRow = {
@@ -68,6 +76,51 @@ type ShowdownCaptainABResult = {
   paired_rows: ShowdownCaptainABRow[];
 };
 
+const FALLBACK_MODEL_DEFAULTS: ModelDefaults = {
+  showdown_captain_model_path: "docs/showdown_captain_model_2024_2025.json",
+  showdown_captain_prior_strength: 0.35,
+  classic_value_driver_model_path: "docs/main_slate_value_driver_analysis_2024_2025.json",
+  classic_value_driver_prior_strength: 0.45,
+  matchup_outcome_model_path: "docs/matchup_outcome_intelligence_2024_2025.json",
+  matchup_outcome_prior_strength: 0.15,
+  matchup_prior_gate_model_path: "docs/matchup_prior_gate_20slates_5000.json",
+};
+
+function formatMetric(value?: number | null, digits = 2): string {
+  if (value == null || !Number.isFinite(value)) return "-";
+  return value.toFixed(digits);
+}
+
+function formatRate(value?: number | null): string {
+  if (value == null || !Number.isFinite(value)) return "-";
+  return `${(value * 100).toFixed(1)}%`;
+}
+
+function formatDateTime(value: string): string {
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
+}
+
+function findArtifact(run: BenchmarkRun | null, name: string) {
+  return run?.artifacts.find((artifact) => artifact.name === name) ?? null;
+}
+
+function runLabel(path: string): string {
+  const parts = path.split("/");
+  return parts[parts.length - 1] || path;
+}
+
+function hasBenchmarkMetrics(run: BenchmarkRun): boolean {
+  return (
+    run.status === "ok" &&
+    [
+      run.metrics.classic_mean_gap_points,
+      run.metrics.showdown_mean_gap_points,
+      run.metrics.captain_informed_win_rate,
+    ].every((value) => value != null && Number.isFinite(value))
+  );
+}
+
 function App() {
   const slateOptions = ["sunday_main", "sunday_night", "monday_night", "thursday_night"] as const;
   const [sourceSystem, setSourceSystem] = useState<"draftkings" | "fanduel">("draftkings");
@@ -97,23 +150,23 @@ function App() {
   const [lineupBacktestMinTrainingRows, setLineupBacktestMinTrainingRows] = useState(500);
   const [lineupBacktestLimitSlates, setLineupBacktestLimitSlates] = useState(0);
   const [lineupBacktestShowdownCaptainModelPath, setLineupBacktestShowdownCaptainModelPath] = useState(
-    "docs/showdown_captain_model_2024_2025.json"
+    FALLBACK_MODEL_DEFAULTS.showdown_captain_model_path
   );
   const [lineupBacktestShowdownCaptainPriorStrength, setLineupBacktestShowdownCaptainPriorStrength] =
-    useState(0.35);
+    useState(FALLBACK_MODEL_DEFAULTS.showdown_captain_prior_strength);
   const [lineupBacktestClassicValueModelPath, setLineupBacktestClassicValueModelPath] = useState(
-    "docs/main_slate_value_driver_analysis_2024_2025.json"
+    FALLBACK_MODEL_DEFAULTS.classic_value_driver_model_path
   );
   const [lineupBacktestClassicValuePriorStrength, setLineupBacktestClassicValuePriorStrength] = useState(
-    0.45
+    FALLBACK_MODEL_DEFAULTS.classic_value_driver_prior_strength
   );
   const [lineupBacktestMatchupOutcomeModelPath, setLineupBacktestMatchupOutcomeModelPath] = useState(
-    "docs/matchup_outcome_intelligence_2024_2025.json"
+    FALLBACK_MODEL_DEFAULTS.matchup_outcome_model_path
   );
   const [lineupBacktestMatchupOutcomePriorStrength, setLineupBacktestMatchupOutcomePriorStrength] =
-    useState(0.15);
+    useState(FALLBACK_MODEL_DEFAULTS.matchup_outcome_prior_strength);
   const [lineupBacktestMatchupPriorGateModelPath, setLineupBacktestMatchupPriorGateModelPath] =
-    useState("docs/matchup_prior_gate_20slates_5000.json");
+    useState(FALLBACK_MODEL_DEFAULTS.matchup_prior_gate_model_path);
   const [simulationRows, setSimulationRows] = useState<SimulatedPlayerOutcome[]>([]);
   const [simulationRunId, setSimulationRunId] = useState<string | null>(null);
   const [backtestResult, setBacktestResult] = useState<BacktestWeekResult | null>(null);
@@ -132,9 +185,19 @@ function App() {
   const [showCuratedSalarySlices, setShowCuratedSalarySlices] = useState(false);
   const [showRecentRuns, setShowRecentRuns] = useState(false);
   const [unresolved, setUnresolved] = useState<UnresolvedRow[]>([]);
+  const [unresolvedTriage, setUnresolvedTriage] = useState<UnresolvedTriageResult | null>(null);
   const [resolutions, setResolutions] = useState<Record<string, string>>({});
+  const [modelDefaults, setModelDefaults] = useState<ModelDefaults>(FALLBACK_MODEL_DEFAULTS);
+  const [benchmarkRuns, setBenchmarkRuns] = useState<BenchmarkRun[]>([]);
+  const [showBenchmarkRuns, setShowBenchmarkRuns] = useState(true);
+  const [benchmarkLimitSlates, setBenchmarkLimitSlates] = useState(0);
+  const [benchmarkClassicLineupsPerSlate, setBenchmarkClassicLineupsPerSlate] = useState(1000);
+  const [benchmarkShowdownLineupsPerSlate, setBenchmarkShowdownLineupsPerSlate] = useState(1000);
+  const [benchmarkShowdownAbLineupsPerSlate, setBenchmarkShowdownAbLineupsPerSlate] = useState(2500);
+  const [benchmarkLastRun, setBenchmarkLastRun] = useState<BenchmarkRun | null>(null);
 
-  const unresolvedCount = unresolved.length;
+  const unresolvedCount = unresolvedTriage?.open_total ?? unresolved.length;
+  const newUnresolvedCount = unresolvedTriage?.new_total ?? 0;
   const completionPct = useMemo(() => {
     const total = runs.reduce((acc, row) => acc + row.rows_curated, 0);
     const unresolvedRows = runs.reduce((acc, row) => acc + row.rows_unresolved, 0);
@@ -145,16 +208,48 @@ function App() {
     { mode: "classic" as const, result: lineupBacktestClassicResult },
     { mode: "showdown" as const, result: lineupBacktestShowdownResult },
   ];
+  const latestBenchmarkRun = benchmarkLastRun ?? benchmarkRuns[0] ?? null;
+
+  const applyModelDefaults = (defaults: ModelDefaults) => {
+    setLineupBacktestShowdownCaptainModelPath(defaults.showdown_captain_model_path);
+    setLineupBacktestShowdownCaptainPriorStrength(defaults.showdown_captain_prior_strength);
+    setLineupBacktestClassicValueModelPath(defaults.classic_value_driver_model_path);
+    setLineupBacktestClassicValuePriorStrength(defaults.classic_value_driver_prior_strength);
+    setLineupBacktestMatchupOutcomeModelPath(defaults.matchup_outcome_model_path);
+    setLineupBacktestMatchupOutcomePriorStrength(defaults.matchup_outcome_prior_strength);
+    setLineupBacktestMatchupPriorGateModelPath(defaults.matchup_prior_gate_model_path);
+  };
 
   const refresh = async () => {
-    const [runsResp, unresolvedResp, coverageResp] = await Promise.all([
+    const [runsResp, unresolvedResp, triageResp, coverageResp] = await Promise.all([
       fetchRuns(),
       fetchUnresolved(),
+      fetchUnresolvedTriage(24),
       fetchSeasonCoverage(),
     ]);
     setRuns(runsResp.rows);
     setUnresolved(unresolvedResp.rows);
+    setUnresolvedTriage(triageResp);
     setCoverage(coverageResp.rows);
+  };
+
+  const refreshBenchmarkRuns = async () => {
+    const response = await fetchBenchmarkRuns(10);
+    setBenchmarkRuns(response.rows);
+    setBenchmarkLastRun(
+      (current) =>
+        (current && hasBenchmarkMetrics(current) ? current : null) ??
+        response.rows.find(hasBenchmarkMetrics) ??
+        response.rows.find((run) => run.status === "ok") ??
+        response.rows[0] ??
+        null
+    );
+  };
+
+  const refreshModelDefaults = async () => {
+    const defaults = await fetchModelDefaults();
+    setModelDefaults(defaults);
+    applyModelDefaults(defaults);
   };
 
   const refreshCuratedSalarySlices = async () => {
@@ -180,7 +275,9 @@ function App() {
   };
 
   useEffect(() => {
-    refresh().catch((err) => setError(err instanceof Error ? err.message : String(err)));
+    Promise.all([refresh(), refreshModelDefaults(), refreshBenchmarkRuns()]).catch((err) =>
+      setError(err instanceof Error ? err.message : String(err))
+    );
   }, []);
 
   useEffect(() => {
@@ -696,6 +793,42 @@ function App() {
     }
   };
 
+  const runBenchmarkSuiteFromUi = async () => {
+    const seasonStart = Math.min(historyStartSeason, historyEndSeason);
+    const seasonEnd = Math.max(historyStartSeason, historyEndSeason);
+    const captainModelPath =
+      lineupBacktestShowdownCaptainModelPath.trim() || modelDefaults.showdown_captain_model_path;
+    setIsIngesting(true);
+    setError(null);
+    setStatus(`Running benchmark suite for ${sourceSystem} seasons ${seasonStart}-${seasonEnd}...`);
+    try {
+      const result = await runBenchmarkSuite({
+        source_system: sourceSystem,
+        season_start: seasonStart,
+        season_end: seasonEnd,
+        lineups_per_slate_classic: benchmarkClassicLineupsPerSlate,
+        lineups_per_slate_showdown: benchmarkShowdownLineupsPerSlate,
+        lineups_per_slate_showdown_ab: benchmarkShowdownAbLineupsPerSlate,
+        limit_slates: benchmarkLimitSlates,
+        analysis_limit_slates: benchmarkLimitSlates,
+        quiet_progress: true,
+        showdown_captain_model_path: captainModelPath,
+        showdown_captain_prior_strength: lineupBacktestShowdownCaptainPriorStrength,
+      });
+      if (result.status !== "ok" || !result.run) {
+        throw new Error(result.error_message || "Benchmark suite failed");
+      }
+      setBenchmarkLastRun(result.run);
+      await refreshBenchmarkRuns();
+      setStatus(`Benchmark suite completed: ${result.run.run_directory}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setStatus(null);
+    } finally {
+      setIsIngesting(false);
+    }
+  };
+
   const downloadLineupBacktestResult = (
     mode: "classic" | "showdown",
     result: OptimalVsPredictedBacktestResult
@@ -830,6 +963,10 @@ function App() {
           <div className="stat-card">
             <span>Open Unresolved</span>
             <strong>{unresolvedCount}</strong>
+          </div>
+          <div className="stat-card">
+            <span>New Unresolved (24h)</span>
+            <strong>{newUnresolvedCount}</strong>
           </div>
         </div>
       </header>
@@ -1299,6 +1436,234 @@ function App() {
             Runs walk-forward lineup backtests against actual-optimal lineups. Classic and showdown are tracked
             separately.
           </p>
+          <div className="subsection">
+            <div className="section-header">
+              <h3>Current Model Card</h3>
+              <button
+                className="toggle-button"
+                onClick={() => applyModelDefaults(modelDefaults)}
+                disabled={isIngesting}
+              >
+                Reset To Defaults
+              </button>
+            </div>
+            <div className="metric-grid model-card-grid">
+              <div className="mini-card">
+                <span>Source / Range</span>
+                <strong>
+                  {sourceSystem} {Math.min(historyStartSeason, historyEndSeason)}-{Math.max(historyStartSeason, historyEndSeason)}
+                </strong>
+              </div>
+              <div className="mini-card">
+                <span>Classic Mean / Median Gap</span>
+                <strong>
+                  {formatMetric(latestBenchmarkRun?.metrics.classic_mean_gap_points)} /{" "}
+                  {formatMetric(latestBenchmarkRun?.metrics.classic_median_gap_points)}
+                </strong>
+              </div>
+              <div className="mini-card">
+                <span>Showdown Mean / Median Gap</span>
+                <strong>
+                  {formatMetric(latestBenchmarkRun?.metrics.showdown_mean_gap_points)} /{" "}
+                  {formatMetric(latestBenchmarkRun?.metrics.showdown_median_gap_points)}
+                </strong>
+              </div>
+              <div className="mini-card">
+                <span>Captain Win Rate / Lift</span>
+                <strong>
+                  {formatRate(latestBenchmarkRun?.metrics.captain_informed_win_rate)} /{" "}
+                  {formatMetric(latestBenchmarkRun?.metrics.captain_mean_gap_lift_points)}
+                </strong>
+              </div>
+            </div>
+            <div className="info-grid">
+              <div className="info-card">
+                <span>Showdown Captain Default</span>
+                <code>{lineupBacktestShowdownCaptainModelPath || "-"}</code>
+                <strong>strength={lineupBacktestShowdownCaptainPriorStrength.toFixed(2)}</strong>
+              </div>
+              <div className="info-card">
+                <span>Classic Value Default</span>
+                <code>{lineupBacktestClassicValueModelPath || "-"}</code>
+                <strong>strength={lineupBacktestClassicValuePriorStrength.toFixed(2)}</strong>
+              </div>
+              <div className="info-card">
+                <span>Matchup Default</span>
+                <code>{lineupBacktestMatchupOutcomeModelPath || "-"}</code>
+                <strong>strength={lineupBacktestMatchupOutcomePriorStrength.toFixed(2)}</strong>
+              </div>
+              <div className="info-card">
+                <span>Matchup Gate Default</span>
+                <code>{lineupBacktestMatchupPriorGateModelPath || "-"}</code>
+                <strong>{latestBenchmarkRun?.status ?? "no benchmark run"}</strong>
+              </div>
+            </div>
+            <p className="hint">
+              Latest successful benchmark with metrics: {latestBenchmarkRun?.run_directory ?? "none"}
+            </p>
+            <div className="artifact-list">
+              {[findArtifact(latestBenchmarkRun, "summary.md"), findArtifact(latestBenchmarkRun, "delta_vs_previous.md"), findArtifact(latestBenchmarkRun, "run.log")]
+                .flatMap((artifact) => (artifact ? [artifact] : []))
+                .map((artifact) => (
+                  <div className="artifact-pill" key={artifact.name}>
+                    <span>{artifact.name}</span>
+                    {artifact.exists && artifact.download_url ? (
+                      <a
+                        href={benchmarkArtifactUrl(artifact.download_url)}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <code>{artifact.path}</code>
+                      </a>
+                    ) : (
+                      <code>{`${artifact.path} (missing)`}</code>
+                    )}
+                  </div>
+                ))}
+            </div>
+          </div>
+
+          <div className="subsection">
+            <div className="section-header">
+              <h3>Benchmark Suite</h3>
+              <button
+                className="toggle-button"
+                onClick={() => setShowBenchmarkRuns((prev) => !prev)}
+                disabled={isIngesting}
+              >
+                {showBenchmarkRuns ? "Collapse Runs" : "Expand Runs"}
+              </button>
+            </div>
+            <p className="hint">
+              Runs the canonical benchmark stack and records artifacts under `docs/benchmarks`.
+            </p>
+            <div className="backtest-grid">
+              <label>
+                Limit Slates (0 = all)
+                <input
+                  type="number"
+                  min={0}
+                  max={2000}
+                  value={benchmarkLimitSlates}
+                  onChange={(event) => setBenchmarkLimitSlates(Number(event.target.value))}
+                />
+              </label>
+              <label>
+                Classic Lineups / Slate
+                <input
+                  type="number"
+                  min={100}
+                  max={20000}
+                  step={100}
+                  value={benchmarkClassicLineupsPerSlate}
+                  onChange={(event) => setBenchmarkClassicLineupsPerSlate(Number(event.target.value))}
+                />
+              </label>
+              <label>
+                Showdown Lineups / Slate
+                <input
+                  type="number"
+                  min={100}
+                  max={20000}
+                  step={100}
+                  value={benchmarkShowdownLineupsPerSlate}
+                  onChange={(event) => setBenchmarkShowdownLineupsPerSlate(Number(event.target.value))}
+                />
+              </label>
+              <label>
+                Showdown A/B Lineups / Slate
+                <input
+                  type="number"
+                  min={100}
+                  max={20000}
+                  step={100}
+                  value={benchmarkShowdownAbLineupsPerSlate}
+                  onChange={(event) => setBenchmarkShowdownAbLineupsPerSlate(Number(event.target.value))}
+                />
+              </label>
+            </div>
+            <div className="button-row">
+              <button onClick={runBenchmarkSuiteFromUi} disabled={isIngesting}>
+                Run Benchmark Suite
+              </button>
+              <button
+                onClick={() =>
+                  refreshBenchmarkRuns().catch((err) =>
+                    setError(err instanceof Error ? err.message : String(err))
+                  )
+                }
+                disabled={isIngesting}
+              >
+                Refresh Benchmark Runs
+              </button>
+            </div>
+
+            {showBenchmarkRuns && (
+              <div className="table-wrap benchmark-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Run</th>
+                      <th>Status</th>
+                      <th>Classic Mean</th>
+                      <th>Showdown Mean</th>
+                      <th>Captain Win Rate</th>
+                      <th>Artifacts</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {benchmarkRuns.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="empty-row">
+                          No benchmark runs found.
+                        </td>
+                      </tr>
+                    ) : (
+                      benchmarkRuns.map((run) => (
+                        <tr key={run.run_directory}>
+                          <td>
+                            <div className="run-cell">
+                              <strong>{runLabel(run.run_directory)}</strong>
+                              <code>{run.run_directory}</code>
+                            </div>
+                          </td>
+                          <td>{run.status}</td>
+                          <td>{formatMetric(run.metrics.classic_mean_gap_points)}</td>
+                          <td>{formatMetric(run.metrics.showdown_mean_gap_points)}</td>
+                          <td>{formatRate(run.metrics.captain_informed_win_rate)}</td>
+                          <td>
+                            <div className="artifact-links">
+                              {run.artifacts
+                                .filter((artifact) =>
+                                  ["summary.md", "delta_vs_previous.md", "run.log"].includes(artifact.name)
+                                )
+                                .map((artifact) => (
+                                  artifact.exists && artifact.download_url ? (
+                                    <a
+                                      href={benchmarkArtifactUrl(artifact.download_url)}
+                                      key={`${run.run_directory}-${artifact.name}`}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                    >
+                                      <code>{artifact.name}</code>
+                                    </a>
+                                  ) : (
+                                    <code key={`${run.run_directory}-${artifact.name}`}>
+                                      {artifact.name} missing
+                                    </code>
+                                  )
+                                ))}
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
           <div className="backtest-grid">
             <label>
               Mode
@@ -1685,7 +2050,7 @@ function App() {
         <section className="panel wide-panel">
           <div className="section-header">
             <h2>
-              Unresolved Queue <span className="section-badge">{unresolved.length}</span>
+              Unresolved Queue <span className="section-badge">{unresolvedCount}</span>
             </h2>
             <button
               className="toggle-button"
@@ -1696,56 +2061,135 @@ function App() {
             </button>
           </div>
           {!showUnresolvedQueue ? (
-            <p className="hint">Collapsed. Expand to review and resolve open identity matches.</p>
+            <p className="hint">
+              Collapsed. {newUnresolvedCount} new in the last 24 hours across{" "}
+              {unresolvedTriage?.groups_returned ?? 0} source/week/slate groups.
+            </p>
           ) : (
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Team</th>
-                    <th>Pos</th>
-                    <th>Source Key</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {unresolved.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="empty-row">
-                        Queue is clean.
-                      </td>
-                    </tr>
-                  ) : (
-                    unresolved.map((row) => (
-                      <tr key={row.unresolved_id}>
-                        <td>{row.normalized_name}</td>
-                        <td>{row.team ?? "-"}</td>
-                        <td>{row.position ?? "-"}</td>
-                        <td>{row.source_player_key ?? "-"}</td>
-                        <td>
-                          <div className="action-row">
-                            <button onClick={() => createAndResolve(row)}>Create + Resolve</button>
-                            <input
-                              type="text"
-                              placeholder="existing player_master_id"
-                              value={resolutions[row.unresolved_id] ?? ""}
-                              onChange={(event) =>
-                                setResolutions((prev) => ({
-                                  ...prev,
-                                  [row.unresolved_id]: event.target.value,
-                                }))
-                              }
-                            />
-                            <button onClick={() => manualResolve(row)}>Manual Resolve</button>
-                          </div>
-                        </td>
+            <>
+              <div className="metric-grid">
+                <div className="mini-card">
+                  <span>Open Total</span>
+                  <strong>{unresolvedCount}</strong>
+                </div>
+                <div className="mini-card">
+                  <span>New in 24h</span>
+                  <strong>{newUnresolvedCount}</strong>
+                </div>
+                <div className="mini-card">
+                  <span>Groups Shown</span>
+                  <strong>{unresolvedTriage?.groups_returned ?? 0}</strong>
+                </div>
+              </div>
+
+              <div className="subsection">
+                <h3>Automated Triage by Source / Week / Slate</h3>
+                <p className="hint">
+                  Open identity failures are grouped automatically; newest and highest-volume groups appear first.
+                </p>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Source</th>
+                        <th>Table</th>
+                        <th>Season</th>
+                        <th>Week</th>
+                        <th>Slate</th>
+                        <th>New 24h</th>
+                        <th>Open</th>
+                        <th>Newest</th>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+                    </thead>
+                    <tbody>
+                      {!unresolvedTriage || unresolvedTriage.rows.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="empty-row">
+                            No open unresolved groups.
+                          </td>
+                        </tr>
+                      ) : (
+                        unresolvedTriage.rows.map((row) => (
+                          <tr
+                            key={[
+                              row.source_system,
+                              row.source_table,
+                              row.season ?? "none",
+                              row.week ?? "none",
+                              row.slate ?? "none",
+                            ].join("-")}
+                          >
+                            <td>{row.source_system}</td>
+                            <td>{row.source_table}</td>
+                            <td>{row.season ?? "-"}</td>
+                            <td>{row.week ?? "-"}</td>
+                            <td>{row.slate ?? "-"}</td>
+                            <td>{row.new_count}</td>
+                            <td>{row.open_count}</td>
+                            <td>{formatDateTime(row.newest_created_at)}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="subsection">
+                <h3>Detailed Repair Queue</h3>
+                <p className="hint">
+                  Showing the newest {unresolved.length} open records for create-or-link resolution.
+                </p>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Team</th>
+                        <th>Pos</th>
+                        <th>Source Key</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {unresolved.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="empty-row">
+                            Queue is clean.
+                          </td>
+                        </tr>
+                      ) : (
+                        unresolved.map((row) => (
+                          <tr key={row.unresolved_id}>
+                            <td>{row.normalized_name}</td>
+                            <td>{row.team ?? "-"}</td>
+                            <td>{row.position ?? "-"}</td>
+                            <td>{row.source_player_key ?? "-"}</td>
+                            <td>
+                              <div className="action-row">
+                                <button onClick={() => createAndResolve(row)}>Create + Resolve</button>
+                                <input
+                                  type="text"
+                                  placeholder="existing player_master_id"
+                                  value={resolutions[row.unresolved_id] ?? ""}
+                                  onChange={(event) =>
+                                    setResolutions((prev) => ({
+                                      ...prev,
+                                      [row.unresolved_id]: event.target.value,
+                                    }))
+                                  }
+                                />
+                                <button onClick={() => manualResolve(row)}>Manual Resolve</button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
           )}
         </section>
 

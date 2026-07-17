@@ -6,6 +6,7 @@ from backend.app.services.matching import (
     create_player_master,
     find_player_master_id,
     normalize_name,
+    normalize_position,
     parse_opponent_from_game_info,
     upsert_alias,
 )
@@ -28,6 +29,12 @@ def _session() -> Session:
 def test_normalize_name() -> None:
     assert normalize_name("  DJ   Moore ") == "dj moore"
     assert normalize_name("D.J. Moore") == "d j moore"
+
+
+def test_normalize_position_canonicalizes_team_defense_variants() -> None:
+    for position in ("D", "DEF", "Defense", "DST", "D/ST"):
+        assert normalize_position(position) == "DST"
+    assert normalize_position("RB/FLEX") == "RB"
 
 
 def test_parse_opponent() -> None:
@@ -113,3 +120,123 @@ def test_upsert_alias_same_source_key_twice_same_transaction() -> None:
     ).all()
     assert len(aliases) == 1
     assert aliases[0].alias_name == "Tez J."
+
+
+def test_dst_matches_unique_source_team_alias_without_using_name() -> None:
+    session = _session()
+    defense = create_player_master(session, full_name="Bills", team="BUF", position="DST")
+    upsert_alias(
+        session=session,
+        player_master_id=defense.player_master_id,
+        source_system="draftkings",
+        source_key="buf-week-1",
+        alias_name="Buffalo Bills",
+        team="BUF",
+        position="DST",
+        season=2025,
+        week=1,
+    )
+    session.commit()
+
+    found_id, reason = find_player_master_id(
+        session=session,
+        source_system="draftkings",
+        source_key="buf-week-2",
+        name="Completely Different Defense Label",
+        team="BUF",
+        position="D/ST",
+    )
+
+    assert found_id == defense.player_master_id
+    assert reason == "alias_dst_team"
+
+
+def test_dst_matches_unique_team_master_without_using_name() -> None:
+    session = _session()
+    defense = create_player_master(session, full_name="Bills", team="BUF", position="DST")
+    session.commit()
+
+    found_id, reason = find_player_master_id(
+        session=session,
+        source_system="fanduel",
+        source_key="fd-buf-new",
+        name="Buffalo Defense",
+        team="BUF",
+        position="DEF",
+    )
+
+    assert found_id == defense.player_master_id
+    assert reason == "master_dst_team"
+
+
+def test_dst_never_falls_back_to_player_name_matching() -> None:
+    session = _session()
+    create_player_master(session, full_name="Bills", team="BUF", position="DST")
+    session.commit()
+
+    wrong_team_id, wrong_team_reason = find_player_master_id(
+        session=session,
+        source_system="draftkings",
+        source_key="mia-defense",
+        name="Bills",
+        team="MIA",
+        position="DST",
+    )
+    missing_team_id, missing_team_reason = find_player_master_id(
+        session=session,
+        source_system="draftkings",
+        source_key="unknown-defense",
+        name="Bills",
+        team=None,
+        position="DST",
+    )
+
+    assert wrong_team_id is None
+    assert wrong_team_reason == "unresolved_dst_team"
+    assert missing_team_id is None
+    assert missing_team_reason == "dst_team_required"
+
+
+def test_dst_ambiguous_team_masters_remain_unresolved() -> None:
+    session = _session()
+    create_player_master(session, full_name="Titans", team="TEN", position="DST")
+    create_player_master(session, full_name="Tennessee Titans", team="TEN", position="DST")
+    session.commit()
+
+    found_id, reason = find_player_master_id(
+        session=session,
+        source_system="draftkings",
+        source_key="ten-new",
+        name="Titans",
+        team="TEN",
+        position="DST",
+    )
+
+    assert found_id is None
+    assert reason == "ambiguous_dst_team_master"
+
+
+def test_dst_prefers_canonical_master_over_legacy_position_variant() -> None:
+    session = _session()
+    canonical = create_player_master(session, full_name="Titans", team="TEN", position="DST")
+    legacy = create_player_master(
+        session,
+        full_name="Tennessee Titans",
+        team="TEN",
+        position="DST",
+    )
+    legacy.position = "D"
+    session.add(legacy)
+    session.commit()
+
+    found_id, reason = find_player_master_id(
+        session=session,
+        source_system="draftkings",
+        source_key="ten-new",
+        name="Titans",
+        team="TEN",
+        position="DST",
+    )
+
+    assert found_id == canonical.player_master_id
+    assert reason == "master_dst_team"

@@ -1,0 +1,60 @@
+{
+  "summary": {
+    "source_system": "draftkings",
+    "season_start": 2024,
+    "season_end": 2025,
+    "slate_filter": null,
+    "slate_type": "classic",
+    "lineups_per_slate": 120,
+    "training_window_slates": 24,
+    "learned_only": true,
+    "showdown_captain_model_path": null,
+    "showdown_captain_prior_strength": 0.0,
+    "classic_value_driver_model_path": null,
+    "classic_value_driver_prior_strength": 0.0,
+    "matchup_outcome_model_path": null,
+    "matchup_outcome_prior_strength": 0.0,
+    "matchup_prior_gate_model_path": null,
+    "slates_total": 2,
+    "slates_completed": 0,
+    "slates_failed_or_skipped": 2,
+    "mean_gap_points": null,
+    "median_gap_points": null,
+    "best_case_gap_points": null,
+    "worst_case_gap_points": null
+  },
+  "rows": [
+    {
+      "season": 2024,
+      "week": 4,
+      "slate": "main",
+      "slate_type": "classic",
+      "status": "warmup_or_no_signal",
+      "optimal_actual_points": null,
+      "predicted_actual_points": null,
+      "gap_points": null,
+      "optimal_salary_used": null,
+      "predicted_salary_used": null,
+      "predicted_projected_mean_points": null,
+      "predicted_projected_p90_points": null,
+      "predicted_policy_score": null,
+      "error_message": "Insufficient learned history for learned-only mode."
+    },
+    {
+      "season": 2024,
+      "week": 5,
+      "slate": "main",
+      "slate_type": "classic",
+      "status": "warmup_or_no_signal",
+      "optimal_actual_points": null,
+      "predicted_actual_points": null,
+      "gap_points": null,
+      "optimal_salary_used": null,
+      "predicted_salary_used": null,
+      "predicted_projected_mean_points": null,
+      "predicted_projected_p90_points": null,
+      "predicted_policy_score": null,
+      "error_message": "Insufficient learned history for learned-only mode."
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -13,6 +14,78 @@ class HealthResponse(BaseModel):
     status: str
     app_env: str
     timestamp: datetime
+
+
+class ModelDefaultsResponse(BaseModel):
+    showdown_captain_model_path: str
+    showdown_captain_prior_strength: float
+    classic_value_driver_model_path: str
+    classic_value_driver_prior_strength: float
+    matchup_outcome_model_path: str
+    matchup_outcome_prior_strength: float
+    matchup_prior_gate_model_path: str
+
+
+class BenchmarkArtifactResponse(BaseModel):
+    name: str
+    path: str
+    exists: bool
+    download_url: str | None = None
+
+
+class BenchmarkMetricsResponse(BaseModel):
+    classic_mean_gap_points: float | None = None
+    classic_median_gap_points: float | None = None
+    classic_slates_completed: int | None = None
+    showdown_mean_gap_points: float | None = None
+    showdown_median_gap_points: float | None = None
+    showdown_slates_completed: int | None = None
+    captain_informed_win_rate: float | None = None
+    captain_mean_gap_lift_points: float | None = None
+    captain_paired_slates: int | None = None
+
+
+class BenchmarkRunResponse(BaseModel):
+    run_directory: str
+    status: str
+    suite_started_at: str | None = None
+    suite_finished_at: str | None = None
+    config: dict[str, Any] = Field(default_factory=dict)
+    artifacts: list[BenchmarkArtifactResponse] = Field(default_factory=list)
+    metrics: BenchmarkMetricsResponse = Field(default_factory=BenchmarkMetricsResponse)
+
+
+class BenchmarkRunListResponse(BaseModel):
+    rows: list[BenchmarkRunResponse]
+
+
+class BenchmarkSuiteRunRequest(BaseModel):
+    source_system: Literal["draftkings", "fanduel"] = "draftkings"
+    season_start: int = Field(default=2024, ge=2000)
+    season_end: int = Field(default=2025, ge=2000)
+    lineups_per_slate_classic: int = Field(default=1000, ge=100, le=20000)
+    lineups_per_slate_showdown: int = Field(default=1000, ge=100, le=20000)
+    lineups_per_slate_showdown_ab: int = Field(default=2500, ge=100, le=20000)
+    training_window_slates: int = Field(default=24, ge=2, le=120)
+    min_training_slates: int = Field(default=4, ge=1, le=80)
+    min_training_rows: int = Field(default=2000, ge=100, le=2000000)
+    ab_min_training_slates: int = Field(default=2, ge=1, le=80)
+    ab_min_training_rows: int = Field(default=500, ge=100, le=2000000)
+    learned_only: bool = True
+    random_seed: int = 42
+    limit_slates: int = Field(default=0, ge=0, le=2000)
+    analysis_limit_slates: int = Field(default=0, ge=0, le=2000)
+    quiet_progress: bool = True
+    showdown_captain_model_path: str | None = None
+    showdown_captain_prior_strength: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
+class BenchmarkSuiteRunResponse(BaseModel):
+    status: str
+    error_message: str | None = None
+    stdout: str = ""
+    stderr: str = ""
+    run: BenchmarkRunResponse | None = None
 
 
 class SalaryIngestRequest(BaseModel):
@@ -623,6 +696,27 @@ class UnresolvedRowResponse(BaseModel):
 
 class UnresolvedListResponse(BaseModel):
     rows: list[UnresolvedRowResponse]
+
+
+class UnresolvedTriageRowResponse(BaseModel):
+    source_system: str
+    source_table: str
+    season: int | None
+    week: int | None
+    slate: str | None
+    open_count: int
+    new_count: int
+    oldest_created_at: datetime
+    newest_created_at: datetime
+
+
+class UnresolvedTriageResponse(BaseModel):
+    generated_at: datetime
+    lookback_hours: int
+    open_total: int
+    new_total: int
+    groups_returned: int
+    rows: list[UnresolvedTriageRowResponse]
 
 
 class ResolveUnresolvedRequest(BaseModel):

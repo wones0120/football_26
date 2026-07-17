@@ -50,6 +50,23 @@ npm install
 npm run dev
 ```
 
+## CSV Validation Gates
+
+Salary and injury CSVs are validated before any existing curated slice is cleared or new raw/curated rows are written.
+
+- Salary files require source player ID, player name, team, position, and a positive integer salary.
+- Injury files require player name, team, position, and an injury-status column. Native player ID is used when present; otherwise identity validation uses normalized name plus team and position. Blank injury-status values are allowed for unlisted/healthy players.
+- Team defenses normalize `D`, `DEF`, `Defense`, `D/ST`, and `DST` to `DST`. After an exact native source-ID match, defenses resolve only through a unique same-source team-defense alias or unique team DST master; defense display names are never used as a fallback.
+- Duplicate player identities, missing required columns, blank required identity values, empty files, and invalid salaries fail the ingest with source CSV row numbers in the error.
+- Failed validation remains traceable as a failed ingest run, while the last valid curated slice is preserved.
+
+## Unresolved Queue Triage
+
+- `GET /api/unresolved/triage` returns exact open and recent unresolved totals grouped by source system, source table, season, week, and slate.
+- `lookback_hours` defines the trailing window for “new” unresolved records and defaults to 24 hours.
+- The UI section `Automated Triage by Source / Week / Slate` refreshes after ingestion and resolution actions, ranking groups by recent count, open volume, and recency.
+- The detailed repair queue remains available below the grouped report for create-or-link resolution.
+
 ## API Endpoints (Initial)
 
 1. `POST /api/ingest/salaries`
@@ -63,6 +80,11 @@ npm run dev
 9. `POST /api/unresolved/{unresolved_id}/resolve`
 10. `POST /api/player-master/upsert`
 11. `GET /api/health`
+12. `GET /api/model/defaults`
+13. `GET /api/benchmarks/runs`
+14. `POST /api/benchmarks/run-suite`
+15. `GET /api/benchmarks/runs/{run_name}/artifacts/{artifact_name}`
+16. `GET /api/unresolved/triage`
 
 ## Migration Notes
 
@@ -71,7 +93,16 @@ Migrations live in `/migrations`. The migration runner tracks applied files in `
 ## Current Status
 
 1. Phase 1 baseline is implemented.
-2. See `/Users/wones/git/football_26/docs/phase_plan.md` for the build sequence.
+2. Model defaults are exposed from the backend and consumed by the UI lineup backtest controls.
+3. The UI now includes a Current Model Card plus benchmark-suite execution and recent benchmark artifact visibility.
+4. See `/Users/wones/git/football_26/docs/phase_plan.md` for the build sequence.
+
+## Benchmark Control Plane
+
+- `Current Model Card` shows the active model paths and strengths plus metrics and artifact links from the latest successful benchmark with comparable metrics.
+- `Reset To Defaults` restores the backend-configured model settings listed in `.env.example`.
+- `Run Benchmark Suite` runs the canonical classic/showdown stack and writes a unique folder under `docs/benchmarks`.
+- Benchmark execution currently runs synchronously through the API, so full-history suites can keep the request open for several minutes.
 
 ## Backtest Scripts
 

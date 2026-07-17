@@ -13,6 +13,7 @@ from ..models import PlayerAlias, PlayerMaster
 WHITESPACE_RE = re.compile(r"\s+")
 NON_ALNUM_RE = re.compile(r"[^a-z0-9\s]")
 TEAM_TOKEN_RE = re.compile(r"[A-Z]{2,4}")
+TEAM_DEFENSE_POSITIONS = {"D", "DEF", "DEFENSE", "DST", "D/ST"}
 
 
 def utcnow_naive() -> datetime:
@@ -37,6 +38,8 @@ def normalize_position(value: str | None) -> str | None:
     if value is None:
         return None
     cleaned = value.strip().upper()
+    if cleaned in TEAM_DEFENSE_POSITIONS:
+        return "DST"
     if "/" in cleaned:
         cleaned = cleaned.split("/", 1)[0]
     return cleaned or None
@@ -160,6 +163,63 @@ def find_player_master_id(
         ).scalar_one_or_none()
         if alias_by_key:
             return alias_by_key.player_master_id, "alias_source_key"
+
+    if norm_position == "DST":
+        if not norm_team:
+            return None, "dst_team_required"
+
+        team_aliases = session.execute(
+            select(PlayerAlias).where(
+                and_(
+                    PlayerAlias.source_system == source_system,
+                    PlayerAlias.team == norm_team,
+                )
+            )
+        ).scalars().all()
+        canonical_team_alias_master_ids = {
+            alias.player_master_id
+            for alias in team_aliases
+            if alias.position == "DST"
+        }
+        if len(canonical_team_alias_master_ids) == 1:
+            return canonical_team_alias_master_ids.pop(), "alias_dst_team"
+        if len(canonical_team_alias_master_ids) > 1:
+            return None, "ambiguous_dst_team_alias"
+
+        legacy_team_alias_master_ids = {
+            alias.player_master_id
+            for alias in team_aliases
+            if normalize_position(alias.position) == "DST"
+        }
+        if len(legacy_team_alias_master_ids) == 1:
+            return legacy_team_alias_master_ids.pop(), "alias_dst_team"
+        if len(legacy_team_alias_master_ids) > 1:
+            return None, "ambiguous_dst_team_alias"
+
+        team_masters = session.execute(
+            select(PlayerMaster).where(PlayerMaster.primary_team == norm_team)
+        ).scalars().all()
+        canonical_team_master_ids = {
+            master.player_master_id
+            for master in team_masters
+            if master.position == "DST"
+        }
+        if len(canonical_team_master_ids) == 1:
+            return canonical_team_master_ids.pop(), "master_dst_team"
+        if len(canonical_team_master_ids) > 1:
+            return None, "ambiguous_dst_team_master"
+
+        legacy_team_master_ids = {
+            master.player_master_id
+            for master in team_masters
+            if normalize_position(master.position) == "DST"
+        }
+        if len(legacy_team_master_ids) == 1:
+            return legacy_team_master_ids.pop(), "master_dst_team"
+        if len(legacy_team_master_ids) > 1:
+            return None, "ambiguous_dst_team_master"
+
+        return None, "unresolved_dst_team"
 
     if norm_name and norm_team and norm_position:
         alias_exact = session.execute(

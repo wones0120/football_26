@@ -5,12 +5,12 @@ import inspect
 import math
 import re
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
-from sqlalchemy import and_, desc, func, select, text
+from sqlalchemy import and_, case, desc, func, select, text
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
@@ -40,6 +40,8 @@ from ..schemas import (
     SalaryIngestRequest,
     SeasonCoverageRowResponse,
     UnresolvedRowResponse,
+    UnresolvedTriageResponse,
+    UnresolvedTriageRowResponse,
 )
 from .matching import (
     create_player_master,
@@ -59,8 +61,11 @@ def utcnow_naive() -> datetime:
 def _safe_str(value: Any) -> str:
     if value is None:
         return ""
-    if isinstance(value, float) and pd.isna(value):
-        return ""
+    try:
+        if pd.isna(value):
+            return ""
+    except (TypeError, ValueError):
+        pass
     return str(value).strip()
 
 
@@ -73,6 +78,18 @@ def _file_checksum(path: str) -> str:
                 break
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _synthetic_source_key(name: str, team: str, position: str) -> str:
+    semantic_identity = "|".join(
+        (
+            normalize_name(name),
+            normalize_team(team) or "",
+            normalize_position(position) or "",
+        )
+    )
+    digest = hashlib.sha256(semantic_identity.encode("utf-8")).hexdigest()
+    return f"synthetic-{digest[:24]}"
 
 
 def _column_map(row: pd.Series, choices: list[str]) -> Any:
@@ -173,6 +190,199 @@ DISCOVERY_PATTERNS: dict[tuple[str, str], list[re.Pattern[str]]] = {
         re.compile(r"^FanDuelInjuries_(?P<season>\d{4})_(?P<week>\d{1,2})(?P<suffix>[^.]*)\.csv$", re.IGNORECASE),
     ],
 }
+
+INGEST_COLUMN_ALIASES: dict[tuple[str, str], dict[str, tuple[str, ...]]] = {
+    ("draftkings", "salary"): {
+        "source_player_key": ("ID", "Id", "id"),
+        "player_name": ("Name", "name"),
+        "team": ("TeamAbbrev", "Team", "team"),
+        "position": ("Position", "position"),
+        "salary": ("Salary", "salary"),
+    },
+    ("fanduel", "salary"): {
+        "source_player_key": ("Id", "ID", "id"),
+        "player_name": ("Nickname", "Name", "name"),
+        "team": ("Team", "TeamAbbrev", "team"),
+        "position": ("Position", "position"),
+        "salary": ("Salary", "salary"),
+    },
+    ("draftkings", "injury"): {
+        "source_player_key": ("ID", "Id", "id"),
+        "player_name": ("Name", "name"),
+        "team": ("Team", "TeamAbbrev", "team"),
+        "position": ("Position", "position"),
+        "injury_status": ("Injury Indicator", "Status", "injury_indicator"),
+    },
+    ("fanduel", "injury"): {
+        "source_player_key": ("Id", "ID", "id"),
+        "player_name": ("Nickname", "Name", "name"),
+        "team": ("Team", "team"),
+        "position": ("Position", "position"),
+        "injury_status": (
+            "Injury Indicator",
+            "Status",
+            "Injury Status",
+            "injury_status",
+        ),
+    },
+}
+INGEST_REQUIRED_FIELDS: dict[str, tuple[str, ...]] = {
+    "salary": ("source_player_key", "player_name", "team", "position", "salary"),
+    "injury": ("player_name", "team", "position", "injury_status"),
+}
+INGEST_NONEMPTY_FIELDS: dict[str, tuple[str, ...]] = {
+    "salary": ("source_player_key", "player_name", "team", "position", "salary"),
+    "injury": ("player_name", "team", "position"),
+}
+
+
+class IngestValidationError(ValueError):
+    pass
+
+
+def _resolved_ingest_columns(
+    source_system: str,
+    source_table: str,
+    raw_df: pd.DataFrame,
+) -> tuple[dict[str, str], list[str]]:
+    aliases = INGEST_COLUMN_ALIASES[(source_system, source_table)]
+    resolved: dict[str, str] = {}
+    missing: list[str] = []
+    for field in INGEST_REQUIRED_FIELDS[source_table]:
+        column = next((candidate for candidate in aliases[field] if candidate in raw_df.columns), None)
+        if column is None:
+            expected = ", ".join(aliases[field])
+            missing.append(f"{field} (expected one of: {expected})")
+        else:
+            resolved[field] = column
+
+    source_key_column = next(
+        (
+            candidate
+            for candidate in aliases["source_player_key"]
+            if candidate in raw_df.columns
+        ),
+        None,
+    )
+    if source_key_column is not None:
+        resolved["source_player_key"] = source_key_column
+    return resolved, missing
+
+
+def _csv_row_numbers(positions: list[int], limit: int = 10) -> str:
+    displayed = ", ".join(str(position + 2) for position in positions[:limit])
+    if len(positions) > limit:
+        displayed += f", ... (+{len(positions) - limit} more)"
+    return displayed
+
+
+def _duplicate_identity_positions(
+    raw_df: pd.DataFrame,
+    resolved_columns: dict[str, str],
+) -> list[int]:
+    identities: list[str | None] = []
+    for _, row in raw_df.iterrows():
+        source_key = _safe_str(
+            row[resolved_columns["source_player_key"]]
+            if "source_player_key" in resolved_columns
+            else None
+        )
+        if source_key:
+            identities.append(f"source:{source_key}")
+            continue
+
+        if not all(field in resolved_columns for field in ("player_name", "team", "position")):
+            identities.append(None)
+            continue
+        name = normalize_name(_safe_str(row[resolved_columns["player_name"]]))
+        team = normalize_team(_safe_str(row[resolved_columns["team"]]))
+        position = normalize_position(_safe_str(row[resolved_columns["position"]]))
+        identities.append(
+            f"semantic:{name}:{team}:{position}" if name and team and position else None
+        )
+
+    positions_by_identity: dict[str, list[int]] = {}
+    for position, identity in enumerate(identities):
+        if identity is not None:
+            positions_by_identity.setdefault(identity, []).append(position)
+    return sorted(
+        position
+        for positions in positions_by_identity.values()
+        if len(positions) > 1
+        for position in positions
+    )
+
+
+def _validate_ingest_dataframe(
+    source_system: str,
+    source_table: str,
+    raw_df: pd.DataFrame,
+) -> None:
+    if source_table not in INGEST_REQUIRED_FIELDS:
+        raise ValueError(f"Unsupported validation source_table: {source_table}")
+    if (source_system, source_table) not in INGEST_COLUMN_ALIASES:
+        raise ValueError(
+            f"Unsupported validation source: source_system={source_system} "
+            f"source_table={source_table}"
+        )
+
+    errors: list[str] = []
+    if raw_df.empty:
+        errors.append("file contains no data rows")
+
+    resolved_columns, missing_columns = _resolved_ingest_columns(
+        source_system,
+        source_table,
+        raw_df,
+    )
+    if missing_columns:
+        errors.append("missing required columns: " + "; ".join(missing_columns))
+
+    for field in INGEST_NONEMPTY_FIELDS[source_table]:
+        column = resolved_columns.get(field)
+        if column is None:
+            continue
+        blank_positions = [
+            position
+            for position, value in enumerate(raw_df[column].tolist())
+            if not _safe_str(value)
+        ]
+        if blank_positions:
+            errors.append(
+                f"blank {field} values at CSV rows {_csv_row_numbers(blank_positions)}"
+            )
+
+    salary_column = resolved_columns.get("salary")
+    if salary_column is not None:
+        invalid_salary_positions: list[int] = []
+        for position, value in enumerate(raw_df[salary_column].tolist()):
+            text_value = _safe_str(value)
+            if not text_value:
+                continue
+            try:
+                salary = float(text_value)
+            except (TypeError, ValueError):
+                invalid_salary_positions.append(position)
+                continue
+            if not math.isfinite(salary) or salary <= 0 or not salary.is_integer():
+                invalid_salary_positions.append(position)
+        if invalid_salary_positions:
+            errors.append(
+                "invalid salary values (expected positive integers) at CSV rows "
+                + _csv_row_numbers(invalid_salary_positions)
+            )
+
+    duplicate_positions = _duplicate_identity_positions(raw_df, resolved_columns)
+    if duplicate_positions:
+        errors.append(
+            "duplicate player identities at CSV rows "
+            + _csv_row_numbers(duplicate_positions)
+        )
+
+    if errors:
+        raise IngestValidationError(
+            f"{source_system} {source_table} validation failed: " + "; ".join(errors)
+        )
 
 
 def _parse_discovered_slate(suffix: str) -> str:
@@ -294,7 +504,7 @@ class IngestService:
 
     def _normalize_salary_rows(self, source_system: str, raw_df: pd.DataFrame) -> list[dict]:
         normalized: list[dict] = []
-        for idx, row in raw_df.iterrows():
+        for _, row in raw_df.iterrows():
             if source_system == "draftkings":
                 source_player_key = _safe_str(_column_map(row, ["ID", "Id", "id"]))
                 name = _safe_str(_column_map(row, ["Name", "name"]))
@@ -313,7 +523,7 @@ class IngestService:
                 game_info = _safe_str(_column_map(row, ["Game", "Game Info", "game_info"]))
 
             if not source_player_key:
-                source_player_key = f"synthetic-{idx}-{normalize_name(name)}-{normalize_team(team) or ''}"
+                source_player_key = _synthetic_source_key(name, team, position)
             salary = int(float(salary_val)) if salary_val not in (None, "", "nan") else None
             norm_team = normalize_team(team)
 
@@ -328,16 +538,14 @@ class IngestService:
                     "roster_position": normalize_position(roster_position) or normalize_position(position),
                     "salary": salary,
                     "game_info": game_info or None,
-                    "raw_row_json": {
-                        str(k): (None if pd.isna(v) else v) for k, v in row.to_dict().items()
-                    },
+                    "raw_row_json": _row_json(row),
                 }
             )
         return normalized
 
     def _normalize_injury_rows(self, source_system: str, raw_df: pd.DataFrame) -> list[dict]:
         normalized: list[dict] = []
-        for idx, row in raw_df.iterrows():
+        for _, row in raw_df.iterrows():
             if source_system == "draftkings":
                 source_player_key = _safe_str(_column_map(row, ["ID", "Id", "id"]))
                 name = _safe_str(_column_map(row, ["Name", "name"]))
@@ -354,11 +562,21 @@ class IngestService:
                 name = _safe_str(_column_map(row, ["Nickname", "Name", "name"]))
                 team = _safe_str(_column_map(row, ["Team", "team"]))
                 position = _safe_str(_column_map(row, ["Position", "position"]))
-                injury_status = _safe_str(_column_map(row, ["Status", "Injury Status", "injury_status"]))
+                injury_status = _safe_str(
+                    _column_map(
+                        row,
+                        [
+                            "Injury Indicator",
+                            "Status",
+                            "Injury Status",
+                            "injury_status",
+                        ],
+                    )
+                )
                 injury_details = _safe_str(_column_map(row, ["Injury", "Notes", "injury_details"]))
 
             if not source_player_key:
-                source_player_key = f"synthetic-{idx}-{normalize_name(name)}-{normalize_team(team) or ''}"
+                source_player_key = _synthetic_source_key(name, team, position)
 
             normalized.append(
                 {
@@ -369,9 +587,7 @@ class IngestService:
                     "position": normalize_position(position),
                     "injury_status": injury_status or None,
                     "injury_details": injury_details or None,
-                    "raw_row_json": {
-                        str(k): (None if pd.isna(v) else v) for k, v in row.to_dict().items()
-                    },
+                    "raw_row_json": _row_json(row),
                 }
             )
         return normalized
@@ -496,6 +712,8 @@ class IngestService:
         rows_unresolved = 0
         try:
             raw_df = pd.read_csv(path)
+            rows_raw = len(raw_df)
+            _validate_ingest_dataframe(request.source_system, "salary", raw_df)
             normalized_rows = self._normalize_salary_rows(request.source_system, raw_df)
             self._clear_existing_slice(
                 source_system=request.source_system,
@@ -506,7 +724,6 @@ class IngestService:
             )
 
             for row in normalized_rows:
-                rows_raw += 1
                 self.session.add(
                     RawSalaryRow(
                         ingest_run_id=run.ingest_run_id,
@@ -617,6 +834,8 @@ class IngestService:
         rows_unresolved = 0
         try:
             raw_df = pd.read_csv(path)
+            rows_raw = len(raw_df)
+            _validate_ingest_dataframe(request.source_system, "injury", raw_df)
             normalized_rows = self._normalize_injury_rows(request.source_system, raw_df)
             self._clear_existing_slice(
                 source_system=request.source_system,
@@ -627,7 +846,6 @@ class IngestService:
             )
 
             for row in normalized_rows:
-                rows_raw += 1
                 self.session.add(
                     RawInjuryRow(
                         ingest_run_id=run.ingest_run_id,
@@ -1230,6 +1448,100 @@ class IngestService:
             # Table/schema not initialized yet.
             self.session.rollback()
             return []
+
+    def unresolved_triage(
+        self,
+        lookback_hours: int = 24,
+        source_system: str | None = None,
+        limit: int = 200,
+    ) -> UnresolvedTriageResponse:
+        generated_at = utcnow_naive()
+        cutoff = generated_at - timedelta(hours=lookback_hours)
+        filters = [UnresolvedPlayerQueue.resolution_status == "open"]
+        if source_system:
+            filters.append(UnresolvedPlayerQueue.source_system == source_system)
+
+        new_case = case(
+            (UnresolvedPlayerQueue.created_at >= cutoff, 1),
+            else_=0,
+        )
+        try:
+            open_total, new_total = self.session.execute(
+                select(
+                    func.count(UnresolvedPlayerQueue.unresolved_id),
+                    func.coalesce(func.sum(new_case), 0),
+                ).where(*filters)
+            ).one()
+
+            open_count = func.count(UnresolvedPlayerQueue.unresolved_id).label("open_count")
+            new_count = func.coalesce(func.sum(new_case), 0).label("new_count")
+            oldest_created_at = func.min(UnresolvedPlayerQueue.created_at).label(
+                "oldest_created_at"
+            )
+            newest_created_at = func.max(UnresolvedPlayerQueue.created_at).label(
+                "newest_created_at"
+            )
+            grouped_rows = self.session.execute(
+                select(
+                    UnresolvedPlayerQueue.source_system,
+                    UnresolvedPlayerQueue.source_table,
+                    UnresolvedPlayerQueue.season,
+                    UnresolvedPlayerQueue.week,
+                    UnresolvedPlayerQueue.slate,
+                    open_count,
+                    new_count,
+                    oldest_created_at,
+                    newest_created_at,
+                )
+                .where(*filters)
+                .group_by(
+                    UnresolvedPlayerQueue.source_system,
+                    UnresolvedPlayerQueue.source_table,
+                    UnresolvedPlayerQueue.season,
+                    UnresolvedPlayerQueue.week,
+                    UnresolvedPlayerQueue.slate,
+                )
+                .order_by(
+                    desc(new_count),
+                    desc(open_count),
+                    desc(newest_created_at),
+                    UnresolvedPlayerQueue.source_system.asc(),
+                    UnresolvedPlayerQueue.source_table.asc(),
+                )
+                .limit(limit)
+            ).all()
+            rows = [
+                UnresolvedTriageRowResponse(
+                    source_system=row.source_system,
+                    source_table=row.source_table,
+                    season=row.season,
+                    week=row.week,
+                    slate=row.slate,
+                    open_count=int(row.open_count),
+                    new_count=int(row.new_count),
+                    oldest_created_at=row.oldest_created_at,
+                    newest_created_at=row.newest_created_at,
+                )
+                for row in grouped_rows
+            ]
+            return UnresolvedTriageResponse(
+                generated_at=generated_at,
+                lookback_hours=lookback_hours,
+                open_total=int(open_total),
+                new_total=int(new_total),
+                groups_returned=len(rows),
+                rows=rows,
+            )
+        except ProgrammingError:
+            self.session.rollback()
+            return UnresolvedTriageResponse(
+                generated_at=generated_at,
+                lookback_hours=lookback_hours,
+                open_total=0,
+                new_total=0,
+                groups_returned=0,
+                rows=[],
+            )
 
     def resolve_unresolved(
         self,

@@ -1,0 +1,281 @@
+{
+  "summary": {
+    "source_system": "draftkings",
+    "season_start": 2024,
+    "season_end": 2025,
+    "classic_slates_considered": 47,
+    "main_slates_analyzed": 2,
+    "top_players_per_slate": 15,
+    "high_total_threshold": 48.0,
+    "selected_main_slate_names": [
+      "main",
+      "normal",
+      "sunday",
+      "sunday_main"
+    ],
+    "selected_slate_breakdown": [
+      {
+        "slate": "main",
+        "count": 2
+      }
+    ]
+  },
+  "position_value_summary": [
+    {
+      "name": "DST",
+      "count": 54,
+      "avg_points": 5.703703703703703,
+      "avg_value": 1.9260276146474955,
+      "avg_salary": 2964.814814814815,
+      "hit_3x_rate": 0.2222222222222222,
+      "hit_4x_rate": 0.1111111111111111
+    },
+    {
+      "name": "QB",
+      "count": 175,
+      "avg_points": 5.521485714285714,
+      "avg_value": 0.9113268499708203,
+      "avg_salary": 4914.285714285715,
+      "hit_3x_rate": 0.12571428571428572,
+      "hit_4x_rate": 0.06857142857142857
+    },
+    {
+      "name": "RB",
+      "count": 307,
+      "avg_points": 4.269381107491859,
+      "avg_value": 0.7572806342502781,
+      "avg_salary": 4724.104234527687,
+      "hit_3x_rate": 0.08143322475570032,
+      "hit_4x_rate": 0.029315960912052116
+    },
+    {
+      "name": "WR",
+      "count": 509,
+      "avg_points": 3.5647151277013758,
+      "avg_value": 0.7152422368629218,
+      "avg_salary": 3819.6463654223967,
+      "hit_3x_rate": 0.07072691552062868,
+      "hit_4x_rate": 0.03536345776031434
+    },
+    {
+      "name": "TE",
+      "count": 297,
+      "avg_points": 2.198989898989898,
+      "avg_value": 0.6326468570905627,
+      "avg_salary": 2879.7979797979797,
+      "hit_3x_rate": 0.0707070707070707,
+      "hit_4x_rate": 0.026936026936026935
+    }
+  ],
+  "high_point_total_analysis": {
+    "top_players_per_slate": 15,
+    "high_total_threshold": 48.0,
+    "baseline_high_total_share": 0.18777943368107303,
+    "high_players_high_total_share": 0.26666666666666666,
+    "high_total_share_lift": 1.42010582010582,
+    "baseline_total_band_mix": [
+      {
+        "key": "40-44.9",
+        "count": 647,
+        "share": 0.4821162444113264
+      },
+      {
+        "key": "45-49.9",
+        "count": 445,
+        "share": 0.3315946348733234
+      },
+      {
+        "key": "<40",
+        "count": 250,
+        "share": 0.18628912071535023
+      }
+    ],
+    "high_point_total_band_mix": [
+      {
+        "key": "45-49.9",
+        "count": 18,
+        "share": 0.6
+      },
+      {
+        "key": "40-44.9",
+        "count": 12,
+        "share": 0.4
+      }
+    ],
+    "high_point_position_mix": [
+      {
+        "key": "QB",
+        "count": 13,
+        "share": 0.43333333333333335
+      },
+      {
+        "key": "WR",
+        "count": 9,
+        "share": 0.3
+      },
+      {
+        "key": "RB",
+        "count": 7,
+        "share": 0.23333333333333334
+      },
+      {
+        "key": "TE",
+        "count": 1,
+        "share": 0.03333333333333333
+      }
+    ]
+  },
+  "rb_spread_analysis": {
+    "rb_by_spread_role": [
+      {
+        "name": "close",
+        "count": 129,
+        "avg_points": 3.79767441860465,
+        "avg_value": 0.6552733094213505,
+        "avg_salary": 4676.7441860465115,
+        "hit_3x_rate": 0.05426356589147287,
+        "hit_4x_rate": 0.015503875968992248
+      },
+      {
+        "name": "underdog",
+        "count": 65,
+        "avg_points": 5.4569230769230765,
+        "avg_value": 0.9956288730599917,
+        "avg_salary": 4676.923076923077,
+        "hit_3x_rate": 0.13846153846153847,
+        "hit_4x_rate": 0.046153846153846156
+      },
+      {
+        "name": "favorite",
+        "count": 57,
+        "avg_points": 5.031578947368422,
+        "avg_value": 0.8911990287869815,
+        "avg_salary": 4814.035087719299,
+        "hit_3x_rate": 0.12280701754385964,
+        "hit_4x_rate": 0.05263157894736842
+      },
+      {
+        "name": "big_underdog",
+        "count": 30,
+        "avg_points": 2.9900000000000007,
+        "avg_value": 0.48494092776282083,
+        "avg_salary": 5040.0,
+        "hit_3x_rate": 0.03333333333333333,
+        "hit_4x_rate": 0.03333333333333333
+      },
+      {
+        "name": "big_favorite",
+        "count": 26,
+        "avg_points": 3.4461538461538463,
+        "avg_value": 0.6881710991091958,
+        "avg_salary": 4515.384615384615,
+        "hit_3x_rate": 0.038461538461538464,
+        "hit_4x_rate": 0.0
+      }
+    ],
+    "rb_avg_points_favorites": 4.534939759036145,
+    "rb_avg_points_underdogs": 4.677894736842105,
+    "rb_avg_value_favorites": 0.8275999182855065,
+    "rb_avg_value_underdogs": 0.8343589955977272,
+    "rb_spread_to_points_correlation": -0.01399093711530903,
+    "rb_high_point_spread_mix": [
+      {
+        "key": "close",
+        "count": 2,
+        "share": 0.2857142857142857
+      },
+      {
+        "key": "favorite",
+        "count": 2,
+        "share": 0.2857142857142857
+      },
+      {
+        "key": "underdog",
+        "count": 2,
+        "share": 0.2857142857142857
+      },
+      {
+        "key": "big_underdog",
+        "count": 1,
+        "share": 0.14285714285714285
+      }
+    ],
+    "rb_baseline_spread_mix": [
+      {
+        "key": "close",
+        "count": 129,
+        "share": 0.4201954397394137
+      },
+      {
+        "key": "underdog",
+        "count": 65,
+        "share": 0.21172638436482086
+      },
+      {
+        "key": "favorite",
+        "count": 57,
+        "share": 0.18566775244299674
+      },
+      {
+        "key": "big_underdog",
+        "count": 30,
+        "share": 0.09771986970684039
+      },
+      {
+        "key": "big_favorite",
+        "count": 26,
+        "share": 0.08469055374592833
+      }
+    ],
+    "rb_high_point_underdog_share": 0.42857142857142855,
+    "rb_baseline_underdog_share": 0.30944625407166126
+  },
+  "total_line_point_correlations_by_position": {
+    "DST": -0.2041802292936137,
+    "QB": 0.1057463111079118,
+    "RB": 0.03609567267443286,
+    "TE": 0.06524712005474267,
+    "WR": 0.09974660924214661
+  },
+  "optimal_main_lineup_mix": {
+    "position_mix": [
+      {
+        "position": "WR",
+        "count": 7,
+        "share": 0.3888888888888889
+      },
+      {
+        "position": "RB",
+        "count": 5,
+        "share": 0.2777777777777778
+      },
+      {
+        "position": "DST",
+        "count": 2,
+        "share": 0.1111111111111111
+      },
+      {
+        "position": "QB",
+        "count": 2,
+        "share": 0.1111111111111111
+      },
+      {
+        "position": "TE",
+        "count": 2,
+        "share": 0.1111111111111111
+      }
+    ],
+    "flex_position_mix": [
+      {
+        "position": "RB",
+        "count": 1,
+        "share": 0.5
+      },
+      {
+        "position": "WR",
+        "count": 1,
+        "share": 0.5
+      }
+    ]
+  }
+}

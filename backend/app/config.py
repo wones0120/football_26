@@ -22,6 +22,13 @@ class Settings(BaseSettings):
 
     database_url: str | None = None
     auto_create_tables: bool = True
+    showdown_captain_model_path: str = "docs/showdown_captain_model_2024_2025.json"
+    showdown_captain_prior_strength: float = 0.35
+    classic_value_driver_model_path: str = "docs/main_slate_value_driver_analysis_2024_2025.json"
+    classic_value_driver_prior_strength: float = 0.45
+    matchup_outcome_model_path: str = "docs/matchup_outcome_intelligence_2024_2025.json"
+    matchup_outcome_prior_strength: float = 0.15
+    matchup_prior_gate_model_path: str = "docs/matchup_prior_gate_20slates_5000.json"
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
 

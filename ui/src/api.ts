@@ -29,6 +29,27 @@ export type UnresolvedRow = {
   created_at: string;
 };
 
+export type UnresolvedTriageRow = {
+  source_system: string;
+  source_table: string;
+  season?: number | null;
+  week?: number | null;
+  slate?: string | null;
+  open_count: number;
+  new_count: number;
+  oldest_created_at: string;
+  newest_created_at: string;
+};
+
+export type UnresolvedTriageResult = {
+  generated_at: string;
+  lookback_hours: number;
+  open_total: number;
+  new_total: number;
+  groups_returned: number;
+  rows: UnresolvedTriageRow[];
+};
+
 export type PlayerMaster = {
   player_master_id: string;
   full_name: string;
@@ -185,6 +206,53 @@ export type OptimalVsPredictedBacktestResult = {
   best_case_gap_points?: number | null;
   worst_case_gap_points?: number | null;
   rows: OptimalVsPredictedBacktestRow[];
+};
+
+export type ModelDefaults = {
+  showdown_captain_model_path: string;
+  showdown_captain_prior_strength: number;
+  classic_value_driver_model_path: string;
+  classic_value_driver_prior_strength: number;
+  matchup_outcome_model_path: string;
+  matchup_outcome_prior_strength: number;
+  matchup_prior_gate_model_path: string;
+};
+
+export type BenchmarkArtifact = {
+  name: string;
+  path: string;
+  exists: boolean;
+  download_url?: string | null;
+};
+
+export type BenchmarkMetrics = {
+  classic_mean_gap_points?: number | null;
+  classic_median_gap_points?: number | null;
+  classic_slates_completed?: number | null;
+  showdown_mean_gap_points?: number | null;
+  showdown_median_gap_points?: number | null;
+  showdown_slates_completed?: number | null;
+  captain_informed_win_rate?: number | null;
+  captain_mean_gap_lift_points?: number | null;
+  captain_paired_slates?: number | null;
+};
+
+export type BenchmarkRun = {
+  run_directory: string;
+  status: string;
+  suite_started_at?: string | null;
+  suite_finished_at?: string | null;
+  config: Record<string, unknown>;
+  artifacts: BenchmarkArtifact[];
+  metrics: BenchmarkMetrics;
+};
+
+export type BenchmarkSuiteRunResult = {
+  status: string;
+  error_message?: string | null;
+  stdout: string;
+  stderr: string;
+  run?: BenchmarkRun | null;
 };
 
 export type AutoDiscoveredFile = {
@@ -364,6 +432,42 @@ export function fetchRuns(): Promise<{ rows: IngestResult[] }> {
   return getJson("/ingest/runs?limit=50");
 }
 
+export function fetchModelDefaults(): Promise<ModelDefaults> {
+  return getJson("/model/defaults");
+}
+
+export function fetchBenchmarkRuns(limit = 10): Promise<{ rows: BenchmarkRun[] }> {
+  return getJson(`/benchmarks/runs?limit=${encodeURIComponent(String(limit))}`);
+}
+
+export function benchmarkArtifactUrl(downloadUrl: string): string {
+  const apiBase = new URL(API_BASE, window.location.origin);
+  return new URL(downloadUrl, apiBase.origin).toString();
+}
+
+export function runBenchmarkSuite(payload?: {
+  source_system?: "draftkings" | "fanduel";
+  season_start?: number;
+  season_end?: number;
+  lineups_per_slate_classic?: number;
+  lineups_per_slate_showdown?: number;
+  lineups_per_slate_showdown_ab?: number;
+  training_window_slates?: number;
+  min_training_slates?: number;
+  min_training_rows?: number;
+  ab_min_training_slates?: number;
+  ab_min_training_rows?: number;
+  learned_only?: boolean;
+  random_seed?: number;
+  limit_slates?: number;
+  analysis_limit_slates?: number;
+  quiet_progress?: boolean;
+  showdown_captain_model_path?: string;
+  showdown_captain_prior_strength?: number;
+}): Promise<BenchmarkSuiteRunResult> {
+  return postJson("/benchmarks/run-suite", payload ?? {});
+}
+
 export function fetchSeasonCoverage(): Promise<{ rows: SeasonCoverageRow[] }> {
   return getJson("/coverage/season");
 }
@@ -386,6 +490,12 @@ export function fetchCuratedSalarySlices(params?: {
 
 export function fetchUnresolved(): Promise<{ rows: UnresolvedRow[] }> {
   return getJson("/unresolved?status=open&limit=300");
+}
+
+export function fetchUnresolvedTriage(lookbackHours = 24): Promise<UnresolvedTriageResult> {
+  return getJson(
+    `/unresolved/triage?lookback_hours=${encodeURIComponent(String(lookbackHours))}&limit=500`
+  );
 }
 
 export function upsertPlayerMaster(payload: {

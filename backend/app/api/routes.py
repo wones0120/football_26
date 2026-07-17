@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
@@ -14,6 +15,9 @@ from ..schemas import (
     ActualTopLineupLearningResponse,
     AutoDiscoverIngestRequest,
     AutoDiscoverIngestResponse,
+    BenchmarkRunListResponse,
+    BenchmarkSuiteRunRequest,
+    BenchmarkSuiteRunResponse,
     BacktestRangeABRequest,
     BacktestRangeABResponse,
     BacktestWeekABResponse,
@@ -26,6 +30,7 @@ from ..schemas import (
     InjuryIngestRequest,
     LineupLearningRequest,
     LineupLearningResponse,
+    ModelDefaultsResponse,
     UltimateLineupRequest,
     UltimateLineupResponse,
     NflReadPyBootstrapRequest,
@@ -41,6 +46,13 @@ from ..schemas import (
     SeasonCoverageResponse,
     UnresolvedListResponse,
     UnresolvedRowResponse,
+    UnresolvedTriageResponse,
+)
+from ..services.benchmarks import (
+    build_model_defaults_response,
+    list_benchmark_runs,
+    resolve_benchmark_artifact,
+    run_benchmark_suite,
 )
 from ..services.ingest import IngestService
 from ..services.lineup_learning import LineupLearningService
@@ -58,6 +70,41 @@ def health() -> HealthResponse:
         app_env=settings.app_env,
         timestamp=datetime.now(UTC),
     )
+
+
+@router.get("/model/defaults", response_model=ModelDefaultsResponse)
+def model_defaults() -> ModelDefaultsResponse:
+    settings = get_settings()
+    return ModelDefaultsResponse(**build_model_defaults_response(settings))
+
+
+@router.get("/benchmarks/runs", response_model=BenchmarkRunListResponse)
+def benchmark_runs(limit: int = Query(default=10, ge=1, le=50)) -> BenchmarkRunListResponse:
+    return BenchmarkRunListResponse(rows=[*list_benchmark_runs(limit=limit)])
+
+
+@router.get("/benchmarks/runs/{run_name}/artifacts/{artifact_name}")
+def benchmark_artifact(run_name: str, artifact_name: str) -> FileResponse:
+    path = resolve_benchmark_artifact(run_name, artifact_name)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Benchmark artifact not found")
+    return FileResponse(path)
+
+
+@router.post("/benchmarks/run-suite", response_model=BenchmarkSuiteRunResponse)
+def benchmark_run_suite(request: BenchmarkSuiteRunRequest) -> BenchmarkSuiteRunResponse:
+    settings = get_settings()
+    request = request.model_copy(
+        update={
+            "showdown_captain_model_path": request.showdown_captain_model_path
+            or settings.showdown_captain_model_path,
+            "showdown_captain_prior_strength": request.showdown_captain_prior_strength
+            if request.showdown_captain_prior_strength is not None
+            else settings.showdown_captain_prior_strength,
+        }
+    )
+    payload = run_benchmark_suite(request)
+    return BenchmarkSuiteRunResponse(**payload)
 
 
 @router.post("/ingest/salaries", response_model=IngestResultResponse)
@@ -298,6 +345,21 @@ def list_unresolved(
         limit=limit,
     )
     return UnresolvedListResponse(rows=rows)
+
+
+@router.get("/unresolved/triage", response_model=UnresolvedTriageResponse)
+def unresolved_triage(
+    lookback_hours: int = Query(default=24, ge=1, le=8760),
+    source_system: str | None = Query(default=None),
+    limit: int = Query(default=200, ge=1, le=2000),
+    session: Session = Depends(get_db_session),
+) -> UnresolvedTriageResponse:
+    service = IngestService(session)
+    return service.unresolved_triage(
+        lookback_hours=lookback_hours,
+        source_system=source_system,
+        limit=limit,
+    )
 
 
 @router.post("/unresolved/{unresolved_id}/resolve", response_model=UnresolvedRowResponse)

@@ -1,0 +1,101 @@
+
+=== STEP: classic_backtest ===
+COMMAND: /Users/wones/git/football_26/.venv/bin/python /Users/wones/git/football_26/scripts/run_optimal_vs_predicted_lineups.py --source-system draftkings --season-start 2024 --season-end 2025 --slate-type classic --lineups-per-slate 120 --training-window-slates 24 --min-training-slates 4 --min-training-rows 2000 --learned-only --random-seed 42 --output-json /Users/wones/git/football_26/docs/benchmarks/20260717_082041/classic_backtest.json --limit-slates 2 --quiet-progress
+
+{
+  "source_system": "draftkings",
+  "season_start": 2024,
+  "season_end": 2025,
+  "slate_filter": null,
+  "slate_type": "classic",
+  "lineups_per_slate": 120,
+  "training_window_slates": 24,
+  "learned_only": true,
+  "showdown_captain_model_path": null,
+  "showdown_captain_prior_strength": 0.0,
+  "classic_value_driver_model_path": null,
+  "classic_value_driver_prior_strength": 0.0,
+  "matchup_outcome_model_path": null,
+  "matchup_outcome_prior_strength": 0.0,
+  "matchup_prior_gate_model_path": null,
+  "slates_total": 2,
+  "slates_completed": 0,
+  "slates_failed_or_skipped": 2,
+  "mean_gap_points": null,
+  "median_gap_points": null,
+  "best_case_gap_points": null,
+  "worst_case_gap_points": null
+}
+
+Wrote detailed results: /Users/wones/git/football_26/docs/benchmarks/20260717_082041/classic_backtest.json
+
+Top 10 slate gaps (largest missed opportunity):
+
+=== STEP: showdown_backtest_baseline ===
+COMMAND: /Users/wones/git/football_26/.venv/bin/python /Users/wones/git/football_26/scripts/run_optimal_vs_predicted_showdown.py --source-system draftkings --season-start 2024 --season-end 2025 --lineups-per-slate 120 --training-window-slates 24 --min-training-slates 4 --min-training-rows 2000 --learned-only --random-seed 42 --output-json /Users/wones/git/football_26/docs/benchmarks/20260717_082041/showdown_backtest_baseline.json --limit-slates 2 --quiet-progress
+
+{
+  "source_system": "draftkings",
+  "season_start": 2024,
+  "season_end": 2025,
+  "slate_filter": null,
+  "slate_type": "showdown",
+  "lineups_per_slate": 120,
+  "training_window_slates": 24,
+  "learned_only": true,
+  "showdown_captain_model_path": null,
+  "showdown_captain_prior_strength": 0.0,
+  "slates_total": 2,
+  "slates_completed": 0,
+  "slates_failed_or_skipped": 2,
+  "mean_gap_points": null,
+  "median_gap_points": null,
+  "best_case_gap_points": null,
+  "worst_case_gap_points": null
+}
+
+Wrote detailed results: /Users/wones/git/football_26/docs/benchmarks/20260717_082041/showdown_backtest_baseline.json
+
+Top 10 showdown slate gaps (largest missed opportunity):
+
+=== STEP: showdown_captain_ab ===
+COMMAND: /Users/wones/git/football_26/.venv/bin/python /Users/wones/git/football_26/scripts/run_showdown_captain_ab.py --source-system draftkings --season-start 2024 --season-end 2025 --lineups-per-slate 150 --training-window-slates 24 --min-training-slates 2 --min-training-rows 500 --learned-only --random-seed 42 --showdown-captain-model-path docs/showdown_captain_model_2024_2025.json --showdown-captain-prior-strength 0.35 --output-json /Users/wones/git/football_26/docs/benchmarks/20260717_082041/showdown_captain_ab.json --limit-slates 2 --quiet-progress
+
+{
+  "source_system": "draftkings",
+  "season_start": 2024,
+  "season_end": 2025,
+  "lineups_per_slate": 150,
+  "training_window_slates": 24,
+  "learned_only": true,
+  "showdown_captain_model_path": "docs/showdown_captain_model_2024_2025.json",
+  "showdown_captain_prior_strength": 0.35,
+  "paired_slates": 0,
+  "mean_gap_lift_points": null,
+  "median_gap_lift_points": null,
+  "captain_informed_win_rate": null,
+  "baseline_gap_stddev": null,
+  "captain_informed_gap_stddev": null,
+  "stability_lift_stddev_reduction": null,
+  "baseline_near_optimal_rate_90pct": null,
+  "captain_informed_near_optimal_rate_90pct": null,
+  "near_optimal_rate_lift_90pct": null,
+  "baseline_mean_gap_points": null,
+  "captain_informed_mean_gap_points": null
+}
+
+Wrote A/B results: /Users/wones/git/football_26/docs/benchmarks/20260717_082041/showdown_captain_ab.json
+
+Top 10 captain-informed slate lifts:
+
+=== STEP: main_slate_value_analysis ===
+COMMAND: /Users/wones/git/football_26/.venv/bin/python /Users/wones/git/football_26/scripts/analyze_main_slate_value_drivers.py --source-system draftkings --season-start 2024 --season-end 2025 --main-slate-names main,sunday_main,normal,sunday --top-players-per-slate 15 --high-total-threshold 48.0 --output-json /Users/wones/git/football_26/docs/benchmarks/20260717_082041/main_slate_value_driver_analysis.json --output-md /Users/wones/git/football_26/docs/benchmarks/20260717_082041/main_slate_value_driver_analysis.md --limit-slates 2
+
+{
+  "source_system": "draftkings",
+  "season_start": 2024,
+  "season_end": 2025,
+  "main_slates_analyzed": 2,
+  "output_json": "/Users/wones/git/football_26/docs/benchmarks/20260717_082041/main_slate_value_driver_analysis.json",
+  "output_md": "/Users/wones/git/football_26/docs/benchmarks/20260717_082041/main_slate_value_driver_analysis.md"
+}
