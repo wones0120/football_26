@@ -74,6 +74,28 @@ export type CuratedSalarySliceRow = {
   rows: number;
 };
 
+export type DataFreshnessRow = {
+  dataset: "salaries" | "injuries" | "schedules" | "weekly_stats";
+  source_system: string;
+  season: number;
+  week: number;
+  slate?: string | null;
+  rows: number;
+  latest_loaded_at?: string | null;
+  age_hours?: number | null;
+  stale_after_hours: number;
+  status: "fresh" | "stale" | "missing";
+};
+
+export type DataFreshnessResult = {
+  checked_at: string;
+  source_system: "draftkings" | "fanduel";
+  season: number;
+  week: number;
+  slate: string;
+  rows: DataFreshnessRow[];
+};
+
 export type SimulatedPlayerOutcome = {
   player_master_id?: string | null;
   source_player_key?: string | null;
@@ -235,6 +257,23 @@ export type BenchmarkMetrics = {
   captain_informed_win_rate?: number | null;
   captain_mean_gap_lift_points?: number | null;
   captain_paired_slates?: number | null;
+  classic_mean_gap_interval?: BootstrapMetricInterval | null;
+  classic_median_gap_interval?: BootstrapMetricInterval | null;
+  showdown_mean_gap_interval?: BootstrapMetricInterval | null;
+  showdown_median_gap_interval?: BootstrapMetricInterval | null;
+  captain_win_rate_interval?: BootstrapMetricInterval | null;
+  captain_mean_gap_lift_interval?: BootstrapMetricInterval | null;
+};
+
+export type BootstrapMetricInterval = {
+  estimate: number;
+  lower: number;
+  upper: number;
+  standard_error: number;
+  sample_size: number;
+  confidence_level: number;
+  bootstrap_samples: number;
+  method: string;
 };
 
 export type BenchmarkRun = {
@@ -459,6 +498,8 @@ export function runBenchmarkSuite(payload?: {
   ab_min_training_rows?: number;
   learned_only?: boolean;
   random_seed?: number;
+  bootstrap_samples?: number;
+  confidence_level?: number;
   limit_slates?: number;
   analysis_limit_slates?: number;
   quiet_progress?: boolean;
@@ -486,6 +527,21 @@ export function fetchCuratedSalarySlices(params?: {
   }
   search.set("limit", String(params?.limit ?? 2000));
   return getJson(`/coverage/curated-salary-slices?${search.toString()}`);
+}
+
+export function fetchDataFreshness(params: {
+  source_system: "draftkings" | "fanduel";
+  season: number;
+  week: number;
+  slate: string;
+}): Promise<DataFreshnessResult> {
+  const search = new URLSearchParams({
+    source_system: params.source_system,
+    season: String(params.season),
+    week: String(params.week),
+    slate: params.slate,
+  });
+  return getJson(`/coverage/freshness?${search.toString()}`);
 }
 
 export function fetchUnresolved(): Promise<{ rows: UnresolvedRow[] }> {

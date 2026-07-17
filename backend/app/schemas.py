@@ -33,6 +33,17 @@ class BenchmarkArtifactResponse(BaseModel):
     download_url: str | None = None
 
 
+class BootstrapMetricIntervalResponse(BaseModel):
+    estimate: float
+    lower: float
+    upper: float
+    standard_error: float
+    sample_size: int
+    confidence_level: float
+    bootstrap_samples: int
+    method: str
+
+
 class BenchmarkMetricsResponse(BaseModel):
     classic_mean_gap_points: float | None = None
     classic_median_gap_points: float | None = None
@@ -43,6 +54,12 @@ class BenchmarkMetricsResponse(BaseModel):
     captain_informed_win_rate: float | None = None
     captain_mean_gap_lift_points: float | None = None
     captain_paired_slates: int | None = None
+    classic_mean_gap_interval: BootstrapMetricIntervalResponse | None = None
+    classic_median_gap_interval: BootstrapMetricIntervalResponse | None = None
+    showdown_mean_gap_interval: BootstrapMetricIntervalResponse | None = None
+    showdown_median_gap_interval: BootstrapMetricIntervalResponse | None = None
+    captain_win_rate_interval: BootstrapMetricIntervalResponse | None = None
+    captain_mean_gap_lift_interval: BootstrapMetricIntervalResponse | None = None
 
 
 class BenchmarkRunResponse(BaseModel):
@@ -73,6 +90,8 @@ class BenchmarkSuiteRunRequest(BaseModel):
     ab_min_training_rows: int = Field(default=500, ge=100, le=2000000)
     learned_only: bool = True
     random_seed: int = 42
+    bootstrap_samples: int = Field(default=2000, ge=100, le=100000)
+    confidence_level: float = Field(default=0.95, gt=0.0, lt=1.0)
     limit_slates: int = Field(default=0, ge=0, le=2000)
     analysis_limit_slates: int = Field(default=0, ge=0, le=2000)
     quiet_progress: bool = True
@@ -204,6 +223,28 @@ class CuratedSalarySliceRowResponse(BaseModel):
 
 class CuratedSalarySliceResponse(BaseModel):
     rows: list[CuratedSalarySliceRowResponse]
+
+
+class DataFreshnessRowResponse(BaseModel):
+    dataset: Literal["salaries", "injuries", "schedules", "weekly_stats"]
+    source_system: str
+    season: int
+    week: int
+    slate: str | None = None
+    rows: int
+    latest_loaded_at: datetime | None = None
+    age_hours: float | None = None
+    stale_after_hours: int
+    status: Literal["fresh", "stale", "missing"]
+
+
+class DataFreshnessResponse(BaseModel):
+    checked_at: datetime
+    source_system: Literal["draftkings", "fanduel"]
+    season: int
+    week: int
+    slate: str
+    rows: list[DataFreshnessRowResponse]
 
 
 class AutoDiscoveredFileResponse(BaseModel):

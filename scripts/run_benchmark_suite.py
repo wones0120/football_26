@@ -41,6 +41,8 @@ def parse_args() -> argparse.Namespace:
     parser.set_defaults(learned_only=True)
 
     parser.add_argument("--random-seed", type=int, default=42)
+    parser.add_argument("--bootstrap-samples", type=int, default=2000)
+    parser.add_argument("--confidence-level", type=float, default=0.95)
     parser.add_argument("--limit-slates", type=int, default=0)
     parser.add_argument("--showdown-captain-model-path", default="docs/showdown_captain_model_2024_2025.json")
     parser.add_argument("--showdown-captain-prior-strength", type=float, default=0.35)
@@ -108,6 +110,25 @@ def _format_number(value: Any, digits: int = 3) -> str:
     return "n/a"
 
 
+def _format_confidence_interval(summary: dict[str, Any], metric: str) -> str:
+    confidence = summary.get("confidence_intervals", {})
+    metrics = confidence.get("metrics", {}) if isinstance(confidence, dict) else {}
+    interval = metrics.get(metric) if isinstance(metrics, dict) else None
+    if not isinstance(interval, dict):
+        return "n/a"
+    return (
+        f"[{_format_number(interval.get('lower'))}, {_format_number(interval.get('upper'))}] "
+        f"(SE={_format_number(interval.get('standard_error'))}, "
+        f"n={_format_number(interval.get('sample_size'), 0)})"
+    )
+
+
+def _confidence_label(summary: dict[str, Any]) -> str:
+    confidence = summary.get("confidence_intervals", {})
+    level = confidence.get("confidence_level") if isinstance(confidence, dict) else None
+    return f"{float(level) * 100:.1f}%" if isinstance(level, (int, float)) else "confidence"
+
+
 def _write_summary_markdown(
     *,
     output_path: Path,
@@ -134,7 +155,15 @@ def _write_summary_markdown(
         f"- Mean gap points: {_format_number(classic_summary.get('mean_gap_points'))}"
     )
     lines.append(
+        f"- Mean gap {_confidence_label(classic_summary)} CI: "
+        f"{_format_confidence_interval(classic_summary, 'mean_gap_points')}"
+    )
+    lines.append(
         f"- Median gap points: {_format_number(classic_summary.get('median_gap_points'))}"
+    )
+    lines.append(
+        f"- Median gap {_confidence_label(classic_summary)} CI: "
+        f"{_format_confidence_interval(classic_summary, 'median_gap_points')}"
     )
     lines.append(
         f"- Slates completed: {_format_number(classic_summary.get('slates_completed'), 0)}"
@@ -148,7 +177,15 @@ def _write_summary_markdown(
         f"- Mean gap points: {_format_number(showdown_summary.get('mean_gap_points'))}"
     )
     lines.append(
+        f"- Mean gap {_confidence_label(showdown_summary)} CI: "
+        f"{_format_confidence_interval(showdown_summary, 'mean_gap_points')}"
+    )
+    lines.append(
         f"- Median gap points: {_format_number(showdown_summary.get('median_gap_points'))}"
+    )
+    lines.append(
+        f"- Median gap {_confidence_label(showdown_summary)} CI: "
+        f"{_format_confidence_interval(showdown_summary, 'median_gap_points')}"
     )
     lines.append(
         f"- Slates completed: {_format_number(showdown_summary.get('slates_completed'), 0)}"
@@ -162,7 +199,15 @@ def _write_summary_markdown(
         f"- Captain-informed win rate: {_format_number(captain_summary.get('captain_informed_win_rate'))}"
     )
     lines.append(
+        f"- Captain win-rate {_confidence_label(captain_summary)} CI: "
+        f"{_format_confidence_interval(captain_summary, 'captain_informed_win_rate')}"
+    )
+    lines.append(
         f"- Mean gap lift points: {_format_number(captain_summary.get('mean_gap_lift_points'))}"
+    )
+    lines.append(
+        f"- Mean gap-lift {_confidence_label(captain_summary)} CI: "
+        f"{_format_confidence_interval(captain_summary, 'mean_gap_lift_points')}"
     )
     lines.append(
         f"- Stability lift (stddev reduction): {_format_number(captain_summary.get('stability_lift_stddev_reduction'))}"
@@ -238,6 +283,10 @@ def main() -> None:
         _learned_only_flag(args.learned_only),
         "--random-seed",
         str(args.random_seed),
+        "--bootstrap-samples",
+        str(args.bootstrap_samples),
+        "--confidence-level",
+        str(args.confidence_level),
         "--output-json",
         str(classic_json),
     ]
@@ -265,6 +314,10 @@ def main() -> None:
         _learned_only_flag(args.learned_only),
         "--random-seed",
         str(args.random_seed),
+        "--bootstrap-samples",
+        str(args.bootstrap_samples),
+        "--confidence-level",
+        str(args.confidence_level),
         "--output-json",
         str(showdown_json),
     ]
@@ -292,6 +345,10 @@ def main() -> None:
         _learned_only_flag(args.learned_only),
         "--random-seed",
         str(args.random_seed),
+        "--bootstrap-samples",
+        str(args.bootstrap_samples),
+        "--confidence-level",
+        str(args.confidence_level),
         "--showdown-captain-model-path",
         str(args.showdown_captain_model_path),
         "--showdown-captain-prior-strength",
@@ -379,6 +436,8 @@ def main() -> None:
             "ab_min_training_rows": args.ab_min_training_rows,
             "learned_only": args.learned_only,
             "random_seed": args.random_seed,
+            "bootstrap_samples": args.bootstrap_samples,
+            "confidence_level": args.confidence_level,
             "limit_slates": args.limit_slates,
             "analysis_limit_slates": args.analysis_limit_slates,
             "showdown_captain_model_path": args.showdown_captain_model_path,

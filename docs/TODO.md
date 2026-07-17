@@ -49,7 +49,7 @@ Last updated: 2026-07-17
 - [x] Add ingestion validation gates: enforce required columns, type checks, duplicate checks per file before write.
 - [x] Add DST-specific identity pipeline rules (team defense aliases, no player-name matching fallback for DST).
 - [x] Add automated unresolved-queue triage reports (new unresolveds by source/week/slate).
-- [ ] Add data freshness checks for salaries/injuries/schedules/stats with UI status badges.
+- [x] Add data freshness checks for salaries/injuries/schedules/stats with UI status badges.
 
 ## P0 - Evaluation Framework
 - [x] Create a canonical benchmark command that runs:
@@ -58,16 +58,16 @@ Last updated: 2026-07-17
   - showdown captain-informed
   - main-slate value-driver refresh
 - [x] Save benchmark outputs under dated folders and compare against previous run with delta tables.
-- [ ] Add confidence intervals / bootstrap error bars for gap metrics and win-rate metrics.
+- [x] Add confidence intervals / bootstrap error bars for gap metrics and win-rate metrics.
 
 ## P1 - Main Slate Modeling (Classic)
-- [ ] Convert main-slate value-driver findings into learned features used by lineup scoring.
-- [ ] Add game-environment features for classic lineups:
+- [x] Convert main-slate value-driver findings into learned features used by lineup scoring.
+- [x] Add game-environment features for classic lineups:
   - team implied totals
   - game totals
   - spread context
   - opponent-adjusted matchup features
-- [ ] Add ablation tests for classic lineup scoring to measure feature contribution.
+- [x] Add ablation tests for classic lineup scoring to measure feature contribution.
 - [ ] Add classic parameter sweep (candidate lineups per slate, training windows, thresholds) and persist best config.
 
 ## P1 - Showdown Modeling

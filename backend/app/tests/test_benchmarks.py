@@ -4,8 +4,9 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from backend.app.config import Settings
-from backend.app.schemas import BenchmarkSuiteRunRequest
+from backend.app.schemas import BenchmarkRunResponse, BenchmarkSuiteRunRequest
 from backend.app.services import benchmarks
+from scripts.run_benchmark_suite import _write_summary_markdown
 
 
 def _write(path: Path, content: str) -> None:
@@ -41,7 +42,22 @@ def _benchmark_run_dir(root: Path, name: str) -> Path:
           "summary": {
             "mean_gap_points": 101.5,
             "median_gap_points": 99.0,
-            "slates_completed": 12
+            "slates_completed": 12,
+            "confidence_intervals": {
+              "method": "nonparametric_percentile_bootstrap",
+              "confidence_level": 0.95,
+              "bootstrap_samples": 2000,
+              "random_seed": 42,
+              "metrics": {
+                "mean_gap_points": {
+                  "estimate": 101.5,
+                  "lower": 95.0,
+                  "upper": 108.0,
+                  "standard_error": 3.25,
+                  "sample_size": 12
+                }
+              }
+            }
           }
         }
         """,
@@ -53,7 +69,22 @@ def _benchmark_run_dir(root: Path, name: str) -> Path:
           "summary": {
             "mean_gap_points": 45.25,
             "median_gap_points": 44.0,
-            "slates_completed": 9
+            "slates_completed": 9,
+            "confidence_intervals": {
+              "method": "nonparametric_percentile_bootstrap",
+              "confidence_level": 0.95,
+              "bootstrap_samples": 2000,
+              "random_seed": 42,
+              "metrics": {
+                "mean_gap_points": {
+                  "estimate": 45.25,
+                  "lower": 40.0,
+                  "upper": 50.0,
+                  "standard_error": 2.5,
+                  "sample_size": 9
+                }
+              }
+            }
           }
         }
         """,
@@ -65,7 +96,22 @@ def _benchmark_run_dir(root: Path, name: str) -> Path:
           "summary": {
             "captain_informed_win_rate": 0.625,
             "mean_gap_lift_points": 4.2,
-            "paired_slates": 8
+            "paired_slates": 8,
+            "confidence_intervals": {
+              "method": "nonparametric_percentile_bootstrap",
+              "confidence_level": 0.95,
+              "bootstrap_samples": 2000,
+              "random_seed": 42,
+              "metrics": {
+                "captain_informed_win_rate": {
+                  "estimate": 0.625,
+                  "lower": 0.25,
+                  "upper": 0.875,
+                  "standard_error": 0.17,
+                  "sample_size": 8
+                }
+              }
+            }
           }
         }
         """,
@@ -104,6 +150,26 @@ def test_build_model_defaults_response() -> None:
     assert payload["matchup_prior_gate_model_path"] == "docs/gate.json"
 
 
+def test_benchmark_summary_markdown_includes_confidence_intervals(tmp_path: Path) -> None:
+    run_dir = _benchmark_run_dir(tmp_path / "benchmarks", "20260303_120000")
+    main_analysis = run_dir / "main_slate_value_driver_analysis.json"
+    _write(main_analysis, '{"summary": {"main_slates_analyzed": 10}}')
+    output_path = run_dir / "generated_summary.md"
+
+    _write_summary_markdown(
+        output_path=output_path,
+        classic_json=run_dir / "classic_backtest.json",
+        showdown_json=run_dir / "showdown_backtest_baseline.json",
+        captain_ab_json=run_dir / "showdown_captain_ab.json",
+        main_analysis_json=main_analysis,
+    )
+
+    markdown = output_path.read_text(encoding="utf-8")
+    assert "- Mean gap 95.0% CI: [95.000, 108.000] (SE=3.250, n=12)" in markdown
+    assert "- Mean gap 95.0% CI: [40.000, 50.000] (SE=2.500, n=9)" in markdown
+    assert "- Captain win-rate 95.0% CI: [0.250, 0.875] (SE=0.170, n=8)" in markdown
+
+
 def test_list_benchmark_runs_reads_manifest_and_metrics(tmp_path: Path, monkeypatch) -> None:
     root = tmp_path / "benchmarks"
     older = _benchmark_run_dir(root, "20260302_120000")
@@ -116,6 +182,13 @@ def test_list_benchmark_runs_reads_manifest_and_metrics(tmp_path: Path, monkeypa
     assert rows[0]["metrics"]["classic_mean_gap_points"] == 101.5
     assert rows[0]["metrics"]["showdown_mean_gap_points"] == 45.25
     assert rows[0]["metrics"]["captain_informed_win_rate"] == 0.625
+    assert rows[0]["metrics"]["classic_mean_gap_interval"]["lower"] == 95.0
+    assert rows[0]["metrics"]["classic_mean_gap_interval"]["confidence_level"] == 0.95
+    assert rows[0]["metrics"]["showdown_mean_gap_interval"]["upper"] == 50.0
+    assert rows[0]["metrics"]["captain_win_rate_interval"]["sample_size"] == 8
+    validated = BenchmarkRunResponse(**rows[0])
+    assert validated.metrics.classic_mean_gap_interval is not None
+    assert validated.metrics.classic_mean_gap_interval.bootstrap_samples == 2000
     manifest_artifact = next(
         artifact for artifact in rows[0]["artifacts"] if artifact["name"] == "suite_manifest.json"
     )
@@ -168,6 +241,10 @@ def test_run_benchmark_suite_returns_latest_run(tmp_path: Path, monkeypatch) -> 
     assert run_dir.parent == root
     assert run_dir != baseline_dir
     assert any("--limit-slates" in command for command in calls)
+    assert "--bootstrap-samples" in calls[0]
+    assert calls[0][calls[0].index("--bootstrap-samples") + 1] == "2000"
+    assert "--confidence-level" in calls[0]
+    assert calls[0][calls[0].index("--confidence-level") + 1] == "0.95"
     assert len(calls) == 2
     assert calls[1][calls[1].index("--baseline-run-dir") + 1] == str(baseline_dir)
     assert calls[1][calls[1].index("--current-run-dir") + 1] == str(run_dir)

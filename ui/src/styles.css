@@ -351,6 +351,120 @@ select:focus {
   font-size: 1.1rem;
 }
 
+.mini-card small {
+  color: var(--ink-1);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.67rem;
+  line-height: 1.35;
+}
+
+.freshness-grid {
+  margin-top: 0.68rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.58rem;
+}
+
+.freshness-context {
+  color: var(--ink-1);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.76rem;
+}
+
+.freshness-card {
+  min-width: 0;
+  border: 1px solid var(--panel-soft-line);
+  border-radius: 13px;
+  padding: 0.62rem;
+  background: rgb(3 19 31 / 64%);
+  display: grid;
+  gap: 0.28rem;
+}
+
+.freshness-card-fresh {
+  border-color: rgb(0 221 184 / 45%);
+}
+
+.freshness-card-stale {
+  border-color: rgb(255 186 73 / 52%);
+}
+
+.freshness-card-missing {
+  border-color: rgb(255 103 103 / 48%);
+}
+
+.freshness-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+}
+
+.freshness-card-header strong {
+  font-family: "Chakra Petch", sans-serif;
+  font-size: 0.98rem;
+}
+
+.freshness-status {
+  flex: 0 0 auto;
+  border: 1px solid;
+  border-radius: 999px;
+  padding: 0.12rem 0.42rem;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.freshness-status-fresh {
+  color: #aaffed;
+  background: rgb(0 221 184 / 13%);
+  border-color: rgb(0 221 184 / 52%);
+}
+
+.freshness-status-stale {
+  color: #ffe0a8;
+  background: rgb(255 186 73 / 12%);
+  border-color: rgb(255 186 73 / 52%);
+}
+
+.freshness-status-missing {
+  color: #ffd2d2;
+  background: rgb(255 103 103 / 12%);
+  border-color: rgb(255 103 103 / 48%);
+}
+
+.freshness-source {
+  color: var(--ink-2);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.68rem;
+}
+
+.freshness-count {
+  display: flex;
+  align-items: baseline;
+  gap: 0.32rem;
+}
+
+.freshness-count strong {
+  font-family: "Chakra Petch", sans-serif;
+  font-size: 1.28rem;
+}
+
+.freshness-count span,
+.freshness-card p,
+.freshness-card small {
+  color: var(--ink-1);
+  font-size: 0.7rem;
+}
+
+.freshness-card p {
+  min-height: 2.1em;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .info-grid {
   margin-top: 0.7rem;
   display: grid;
@@ -680,7 +794,8 @@ tbody tr:hover {
   }
 
   .backtest-grid,
-  .metric-grid {
+  .metric-grid,
+  .freshness-grid {
     grid-template-columns: 1fr;
   }
 

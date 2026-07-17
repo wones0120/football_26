@@ -30,6 +30,8 @@ from ..schemas import (
     AutoDiscoverIngestRequest,
     AutoDiscoverIngestResponse,
     CuratedSalarySliceRowResponse,
+    DataFreshnessResponse,
+    DataFreshnessRowResponse,
     IngestResultResponse,
     InjuryIngestRequest,
     NflReadPyBootstrapRequest,
@@ -56,6 +58,14 @@ from .matching import (
 
 def utcnow_naive() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
+
+
+FRESHNESS_THRESHOLDS_HOURS = {
+    "salaries": 24,
+    "injuries": 12,
+    "schedules": 168,
+    "weekly_stats": 168,
+}
 
 
 def _safe_str(value: Any) -> str:
@@ -1418,6 +1428,133 @@ class IngestService:
         except ProgrammingError:
             self.session.rollback()
             return []
+
+    def get_data_freshness(
+        self,
+        *,
+        source_system: str,
+        season: int,
+        week: int,
+        slate: str,
+        checked_at: datetime | None = None,
+    ) -> DataFreshnessResponse:
+        checked_at = checked_at or utcnow_naive()
+        specs = (
+            (
+                "salaries",
+                source_system,
+                slate,
+                CuratedSalary.curated_salary_id,
+                CuratedSalary.created_at,
+                (
+                    CuratedSalary.source_system == source_system,
+                    CuratedSalary.season == season,
+                    CuratedSalary.week == week,
+                    CuratedSalary.slate == slate,
+                ),
+            ),
+            (
+                "injuries",
+                source_system,
+                slate,
+                CuratedInjury.curated_injury_id,
+                CuratedInjury.created_at,
+                (
+                    CuratedInjury.source_system == source_system,
+                    CuratedInjury.season == season,
+                    CuratedInjury.week == week,
+                    CuratedInjury.slate == slate,
+                ),
+            ),
+            (
+                "schedules",
+                "nflreadpy",
+                None,
+                RawNflSchedule.raw_nfl_schedule_id,
+                RawNflSchedule.created_at,
+                (
+                    RawNflSchedule.source_system == "nflreadpy",
+                    RawNflSchedule.season == season,
+                    RawNflSchedule.week == week,
+                ),
+            ),
+            (
+                "weekly_stats",
+                "nflreadpy",
+                None,
+                RawNflWeeklyStat.raw_nfl_weekly_stat_id,
+                RawNflWeeklyStat.created_at,
+                (
+                    RawNflWeeklyStat.source_system == "nflreadpy",
+                    RawNflWeeklyStat.season == season,
+                    RawNflWeeklyStat.week == week,
+                ),
+            ),
+        )
+
+        rows: list[DataFreshnessRowResponse] = []
+        try:
+            for dataset, dataset_source, dataset_slate, id_column, created_at_column, filters in specs:
+                row_count, latest_loaded_at = (
+                    self.session.query(
+                        func.count(id_column),
+                        func.max(created_at_column),
+                    )
+                    .filter(*filters)
+                    .one()
+                )
+                count = int(row_count or 0)
+                age_hours = (
+                    max(0.0, (checked_at - latest_loaded_at).total_seconds() / 3600)
+                    if latest_loaded_at is not None
+                    else None
+                )
+                threshold = FRESHNESS_THRESHOLDS_HOURS[dataset]
+                status = (
+                    "missing"
+                    if count == 0 or latest_loaded_at is None
+                    else "fresh"
+                    if age_hours is not None and age_hours <= threshold
+                    else "stale"
+                )
+                rows.append(
+                    DataFreshnessRowResponse(
+                        dataset=dataset,
+                        source_system=dataset_source,
+                        season=season,
+                        week=week,
+                        slate=dataset_slate,
+                        rows=count,
+                        latest_loaded_at=latest_loaded_at,
+                        age_hours=round(age_hours, 2) if age_hours is not None else None,
+                        stale_after_hours=threshold,
+                        status=status,
+                    )
+                )
+        except ProgrammingError:
+            self.session.rollback()
+            rows = [
+                DataFreshnessRowResponse(
+                    dataset=dataset,
+                    source_system=dataset_source,
+                    season=season,
+                    week=week,
+                    slate=dataset_slate,
+                    rows=0,
+                    stale_after_hours=FRESHNESS_THRESHOLDS_HOURS[dataset],
+                    status="missing",
+                )
+                for dataset, dataset_source, dataset_slate, *_ in specs
+            ]
+
+        return DataFreshnessResponse(
+            checked_at=checked_at,
+            source_system=source_system,
+            season=season,
+            week=week,
+            slate=slate,
+            rows=rows,
+        )
 
     def list_unresolved(
         self,

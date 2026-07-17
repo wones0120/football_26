@@ -67,6 +67,22 @@ def build_model_defaults_response(settings: Settings) -> dict[str, Any]:
     }
 
 
+def _metric_interval(summary: dict[str, Any], metric: str) -> dict[str, Any] | None:
+    confidence = summary.get("confidence_intervals")
+    if not isinstance(confidence, dict):
+        return None
+    metrics = confidence.get("metrics")
+    interval = metrics.get(metric) if isinstance(metrics, dict) else None
+    if not isinstance(interval, dict):
+        return None
+    return {
+        **interval,
+        "confidence_level": confidence.get("confidence_level"),
+        "bootstrap_samples": confidence.get("bootstrap_samples"),
+        "method": confidence.get("method"),
+    }
+
+
 def _extract_metric_summary(run_dir: Path) -> dict[str, Any]:
     classic = _load_json(run_dir / "classic_backtest.json").get("summary", {})
     showdown = _load_json(run_dir / "showdown_backtest_baseline.json").get("summary", {})
@@ -81,6 +97,18 @@ def _extract_metric_summary(run_dir: Path) -> dict[str, Any]:
         "captain_informed_win_rate": captain_ab.get("captain_informed_win_rate"),
         "captain_mean_gap_lift_points": captain_ab.get("mean_gap_lift_points"),
         "captain_paired_slates": captain_ab.get("paired_slates"),
+        "classic_mean_gap_interval": _metric_interval(classic, "mean_gap_points"),
+        "classic_median_gap_interval": _metric_interval(classic, "median_gap_points"),
+        "showdown_mean_gap_interval": _metric_interval(showdown, "mean_gap_points"),
+        "showdown_median_gap_interval": _metric_interval(showdown, "median_gap_points"),
+        "captain_win_rate_interval": _metric_interval(
+            captain_ab,
+            "captain_informed_win_rate",
+        ),
+        "captain_mean_gap_lift_interval": _metric_interval(
+            captain_ab,
+            "mean_gap_lift_points",
+        ),
     }
 
 
@@ -208,6 +236,10 @@ def run_benchmark_suite(request: Any) -> dict[str, Any]:
         str(request.ab_min_training_rows),
         "--random-seed",
         str(request.random_seed),
+        "--bootstrap-samples",
+        str(request.bootstrap_samples),
+        "--confidence-level",
+        str(request.confidence_level),
         "--showdown-captain-model-path",
         str(request.showdown_captain_model_path),
         "--showdown-captain-prior-strength",

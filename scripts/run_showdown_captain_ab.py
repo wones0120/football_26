@@ -13,6 +13,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from backend.app.db import SessionLocal
 from backend.app.schemas import OptimalVsPredictedBacktestRequest
+from backend.app.services.bootstrap_metrics import bootstrap_confidence_intervals
 from backend.app.services.lineup_learning import LineupLearningService
 
 
@@ -34,6 +35,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--allow-heuristics", dest="learned_only", action="store_false")
     parser.set_defaults(learned_only=True)
     parser.add_argument("--random-seed", type=int, default=42)
+    parser.add_argument("--bootstrap-samples", type=int, default=2000)
+    parser.add_argument("--confidence-level", type=float, default=0.95)
     parser.add_argument("--limit-slates", type=int, default=0)
     parser.add_argument(
         "--showdown-captain-model-path",
@@ -215,6 +218,19 @@ def main() -> None:
         "near_optimal_rate_lift_90pct": near_optimal_lift,
         "baseline_mean_gap_points": baseline.get("mean_gap_points"),
         "captain_informed_mean_gap_points": informed.get("mean_gap_points"),
+        "confidence_intervals": bootstrap_confidence_intervals(
+            {
+                "mean_gap_lift_points": (gap_lifts, "mean"),
+                "median_gap_lift_points": (gap_lifts, "median"),
+                "captain_informed_win_rate": (
+                    [1.0 if lift > 0 else 0.0 for lift in gap_lifts],
+                    "mean",
+                ),
+            },
+            confidence_level=args.confidence_level,
+            bootstrap_samples=args.bootstrap_samples,
+            random_seed=args.random_seed,
+        ),
     }
     payload = {
         "summary": summary,

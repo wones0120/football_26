@@ -56,6 +56,17 @@ from .simulation import calculate_dk_points
 
 
 DK_SALARY_CAP = 50000
+CLASSIC_VALUE_DRIVER_FEATURE_NAMES = [
+    "lineup_projected_value",
+    "high_total_offense_share",
+    "offense_vegas_coverage",
+    "rb_avg_team_spread",
+    "rb_underdog_share",
+    "rb_spread_coverage",
+    "flex_is_rb",
+    "flex_is_wr",
+    "flex_is_te",
+]
 FEATURE_NAMES = [
     "salary_used",
     "salary_left",
@@ -83,9 +94,25 @@ FEATURE_NAMES = [
     "game_stack_x_total_line",
     "double_stack_x_close_spread",
     "bringback_x_close_spread",
+    *CLASSIC_VALUE_DRIVER_FEATURE_NAMES,
 ]
 
 PATTERN_FEATURE_INDEX = {name: idx for idx, name in enumerate(FEATURE_NAMES)}
+CLASSIC_FEATURE_ABLATION_GROUPS = {
+    "value_drivers": tuple(CLASSIC_VALUE_DRIVER_FEATURE_NAMES),
+    "game_environment": (
+        "qb_game_total_line",
+        "qb_game_spread_abs",
+        "qb_team_implied_total",
+        "qb_opp_implied_total",
+        "qb_has_vegas_line",
+        "double_stack_x_total_line",
+        "bringback_x_total_line",
+        "game_stack_x_total_line",
+        "double_stack_x_close_spread",
+        "bringback_x_close_spread",
+    ),
+}
 TOP_TARGET_PERCENTILE = 98.0
 CEILING_TARGET_PERCENTILE = 90.0
 BUST_TARGET_PERCENTILE = 35.0
@@ -664,10 +691,29 @@ class LineupLearningService:
         self._projection_feature_cache: dict[tuple[str, int, int, str], dict[str, dict[str, Any]]] = {}
         self._matchup_model_cache: dict[tuple[str, int, int, str], dict[str, PlayerMatchupProjectionModel]] = {}
         self._use_matrix_matchup_model = True
+        self._disabled_classic_feature_indices: tuple[int, ...] = ()
 
     def set_matchup_matrix_projection_enabled(self, enabled: bool) -> None:
         self._use_matrix_matchup_model = bool(enabled)
         self._player_projection_cache.clear()
+
+    def set_classic_feature_ablation_groups(self, groups: list[str] | tuple[str, ...]) -> None:
+        unknown = sorted(set(groups) - set(CLASSIC_FEATURE_ABLATION_GROUPS))
+        if unknown:
+            raise ValueError(
+                "Unknown classic feature ablation group(s): "
+                f"{', '.join(unknown)}. Available: {', '.join(sorted(CLASSIC_FEATURE_ABLATION_GROUPS))}."
+            )
+        disabled_names = {
+            feature_name
+            for group in groups
+            for feature_name in CLASSIC_FEATURE_ABLATION_GROUPS[group]
+        }
+        self._disabled_classic_feature_indices = tuple(
+            PATTERN_FEATURE_INDEX[feature_name]
+            for feature_name in FEATURE_NAMES
+            if feature_name in disabled_names
+        )
 
     def _game_context_by_team(self, *, season: int, week: int) -> dict[str, dict[str, float]]:
         cache_key = (season, week)
@@ -2193,8 +2239,49 @@ class LineupLearningService:
         qb_opp_implied_total = float(qb.opponent_implied_total or 0.0)
         qb_has_vegas_line = 1.0 if qb.game_total_line is not None and qb.team_spread_line is not None else 0.0
         close_spread_strength = 1.0 / (1.0 + qb_spread_abs)
+        lineup_projected_value = lineup_projected_mean / max(salary_used / 1000.0, 1.0)
+        offense_with_total = [
+            row
+            for row in offense
+            if row.game_total_line is not None and math.isfinite(float(row.game_total_line))
+        ]
+        high_total_offense = [
+            row for row in offense_with_total if float(row.game_total_line) >= 48.0
+        ]
+        high_total_offense_share = float(len(high_total_offense) / len(offense)) if offense else 0.0
+        offense_vegas_coverage = float(len(offense_with_total) / len(offense)) if offense else 0.0
+        running_backs = [row for row in lineup if row.position == "RB"]
+        running_backs_with_spread = [
+            row
+            for row in running_backs
+            if row.team_spread_line is not None and math.isfinite(float(row.team_spread_line))
+        ]
+        rb_avg_team_spread = (
+            float(np.mean([float(row.team_spread_line) for row in running_backs_with_spread]))
+            if running_backs_with_spread
+            else 0.0
+        )
+        rb_underdog_share = (
+            float(
+                sum(1 for row in running_backs_with_spread if float(row.team_spread_line) >= 3.0)
+                / len(running_backs_with_spread)
+            )
+            if running_backs_with_spread
+            else 0.0
+        )
+        rb_spread_coverage = (
+            float(len(running_backs_with_spread) / len(running_backs))
+            if running_backs
+            else 0.0
+        )
+        position_counts = Counter(row.position for row in lineup)
+        flex_position = "TE"
+        if position_counts.get("RB", 0) > 2:
+            flex_position = "RB"
+        elif position_counts.get("WR", 0) > 3:
+            flex_position = "WR"
 
-        return np.asarray(
+        features = np.asarray(
             [
                 salary_used,
                 salary_left,
@@ -2222,9 +2309,21 @@ class LineupLearningService:
                 float(game_stack_size) * qb_total_line,
                 double_stack * close_spread_strength,
                 bringback * close_spread_strength,
+                lineup_projected_value,
+                high_total_offense_share,
+                offense_vegas_coverage,
+                rb_avg_team_spread,
+                rb_underdog_share,
+                rb_spread_coverage,
+                1.0 if flex_position == "RB" else 0.0,
+                1.0 if flex_position == "WR" else 0.0,
+                1.0 if flex_position == "TE" else 0.0,
             ],
             dtype=float,
         )
+        if self._disabled_classic_feature_indices:
+            features[list(self._disabled_classic_feature_indices)] = 0.0
+        return features
 
     def _qb_game_stack_archetype(self, lineup: list[PlayerPoolRow]) -> tuple[str, str | None]:
         qb = next((row for row in lineup if row.position == "QB"), None)

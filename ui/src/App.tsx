@@ -7,6 +7,7 @@ import {
   bootstrapNflreadpy,
   fetchBenchmarkRuns,
   fetchCuratedSalarySlices,
+  fetchDataFreshness,
   fetchModelDefaults,
   fetchSeasonCoverage,
   fetchRuns,
@@ -23,8 +24,11 @@ import {
   upsertPlayerMaster,
   type BenchmarkRun,
   type BacktestWeekResult,
-  type IngestResult,
+  type BootstrapMetricInterval,
   type CuratedSalarySliceRow,
+  type DataFreshnessResult,
+  type DataFreshnessRow,
+  type IngestResult,
   type ModelDefaults,
   type OptimalVsPredictedBacktestResult,
   type SeasonCoverageRow,
@@ -86,6 +90,13 @@ const FALLBACK_MODEL_DEFAULTS: ModelDefaults = {
   matchup_prior_gate_model_path: "docs/matchup_prior_gate_20slates_5000.json",
 };
 
+const FRESHNESS_LABELS: Record<DataFreshnessRow["dataset"], string> = {
+  salaries: "Salaries",
+  injuries: "Injuries",
+  schedules: "Schedules",
+  weekly_stats: "Weekly Stats",
+};
+
 function formatMetric(value?: number | null, digits = 2): string {
   if (value == null || !Number.isFinite(value)) return "-";
   return value.toFixed(digits);
@@ -94,6 +105,17 @@ function formatMetric(value?: number | null, digits = 2): string {
 function formatRate(value?: number | null): string {
   if (value == null || !Number.isFinite(value)) return "-";
   return `${(value * 100).toFixed(1)}%`;
+}
+
+function formatBootstrapInterval(
+  interval?: BootstrapMetricInterval | null,
+  asRate = false
+): string | null {
+  if (!interval) return null;
+  const level = `${(interval.confidence_level * 100).toFixed(0)}% CI`;
+  const lower = asRate ? formatRate(interval.lower) : formatMetric(interval.lower);
+  const upper = asRate ? formatRate(interval.upper) : formatMetric(interval.upper);
+  return `${level} ${lower}–${upper} · SE ${formatMetric(interval.standard_error)}`;
 }
 
 function formatDateTime(value: string): string {
@@ -179,6 +201,7 @@ function App() {
   const [runs, setRuns] = useState<IngestResult[]>([]);
   const [coverage, setCoverage] = useState<SeasonCoverageRow[]>([]);
   const [salarySlices, setSalarySlices] = useState<CuratedSalarySliceRow[]>([]);
+  const [dataFreshness, setDataFreshness] = useState<DataFreshnessResult | null>(null);
   const [salarySliceSeasonFilter, setSalarySliceSeasonFilter] = useState("");
   const [showUnresolvedQueue, setShowUnresolvedQueue] = useState(false);
   const [showSeasonCoverage, setShowSeasonCoverage] = useState(false);
@@ -209,6 +232,16 @@ function App() {
     { mode: "showdown" as const, result: lineupBacktestShowdownResult },
   ];
   const latestBenchmarkRun = benchmarkLastRun ?? benchmarkRuns[0] ?? null;
+  const classicGapInterval = formatBootstrapInterval(
+    latestBenchmarkRun?.metrics.classic_mean_gap_interval
+  );
+  const showdownGapInterval = formatBootstrapInterval(
+    latestBenchmarkRun?.metrics.showdown_mean_gap_interval
+  );
+  const captainWinRateInterval = formatBootstrapInterval(
+    latestBenchmarkRun?.metrics.captain_win_rate_interval,
+    true
+  );
 
   const applyModelDefaults = (defaults: ModelDefaults) => {
     setLineupBacktestShowdownCaptainModelPath(defaults.showdown_captain_model_path);
@@ -220,7 +253,7 @@ function App() {
     setLineupBacktestMatchupPriorGateModelPath(defaults.matchup_prior_gate_model_path);
   };
 
-  const refresh = async () => {
+  const refreshOperationalData = async () => {
     const [runsResp, unresolvedResp, triageResp, coverageResp] = await Promise.all([
       fetchRuns(),
       fetchUnresolved(),
@@ -231,6 +264,20 @@ function App() {
     setUnresolved(unresolvedResp.rows);
     setUnresolvedTriage(triageResp);
     setCoverage(coverageResp.rows);
+  };
+
+  const refreshDataFreshness = async () => {
+    const response = await fetchDataFreshness({
+      source_system: sourceSystem,
+      season,
+      week,
+      slate,
+    });
+    setDataFreshness(response);
+  };
+
+  const refresh = async () => {
+    await Promise.all([refreshOperationalData(), refreshDataFreshness()]);
   };
 
   const refreshBenchmarkRuns = async () => {
@@ -275,10 +322,31 @@ function App() {
   };
 
   useEffect(() => {
-    Promise.all([refresh(), refreshModelDefaults(), refreshBenchmarkRuns()]).catch((err) =>
-      setError(err instanceof Error ? err.message : String(err))
+    Promise.all([refreshOperationalData(), refreshModelDefaults(), refreshBenchmarkRuns()]).catch(
+      (err) =>
+        setError(err instanceof Error ? err.message : String(err))
     );
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setDataFreshness(null);
+    fetchDataFreshness({
+      source_system: sourceSystem,
+      season,
+      week,
+      slate,
+    })
+      .then((response) => {
+        if (!cancelled) setDataFreshness(response);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sourceSystem, season, week, slate]);
 
   useEffect(() => {
     if (!showCuratedSalarySlices) return;
@@ -1053,6 +1121,50 @@ function App() {
             </button>
           </div>
 
+          <div className="subsection freshness-section">
+            <div className="section-header">
+              <h3>Data Freshness</h3>
+              {dataFreshness && (
+                <span className="freshness-context">
+                  {dataFreshness.season} W{dataFreshness.week} · {dataFreshness.slate}
+                </span>
+              )}
+            </div>
+            <p className="hint">
+              Exact selected slice. Schedule and weekly-stat checks use nflreadpy season/week data.
+            </p>
+            {dataFreshness ? (
+              <div className="freshness-grid">
+                {dataFreshness.rows.map((row) => (
+                  <article
+                    className={`freshness-card freshness-card-${row.status}`}
+                    key={row.dataset}
+                  >
+                    <div className="freshness-card-header">
+                      <strong>{FRESHNESS_LABELS[row.dataset]}</strong>
+                      <span className={`freshness-status freshness-status-${row.status}`}>
+                        {row.status}
+                      </span>
+                    </div>
+                    <span className="freshness-source">{row.source_system}</span>
+                    <div className="freshness-count">
+                      <strong>{row.rows.toLocaleString()}</strong>
+                      <span>rows</span>
+                    </div>
+                    <p>
+                      {row.latest_loaded_at && row.age_hours != null
+                        ? `${row.age_hours.toFixed(1)}h old · ${formatDateTime(row.latest_loaded_at)}`
+                        : "No rows loaded for this slice"}
+                    </p>
+                    <small>Stale after {row.stale_after_hours}h</small>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="hint">Checking selected slice...</p>
+            )}
+          </div>
+
           <div className="subsection">
             <h3>Auto-Discover Local CSVs</h3>
             <p className="hint">Bulk import files by filename pattern from one directory.</p>
@@ -1460,6 +1572,7 @@ function App() {
                   {formatMetric(latestBenchmarkRun?.metrics.classic_mean_gap_points)} /{" "}
                   {formatMetric(latestBenchmarkRun?.metrics.classic_median_gap_points)}
                 </strong>
+                {classicGapInterval && <small>{classicGapInterval}</small>}
               </div>
               <div className="mini-card">
                 <span>Showdown Mean / Median Gap</span>
@@ -1467,6 +1580,7 @@ function App() {
                   {formatMetric(latestBenchmarkRun?.metrics.showdown_mean_gap_points)} /{" "}
                   {formatMetric(latestBenchmarkRun?.metrics.showdown_median_gap_points)}
                 </strong>
+                {showdownGapInterval && <small>{showdownGapInterval}</small>}
               </div>
               <div className="mini-card">
                 <span>Captain Win Rate / Lift</span>
@@ -1474,6 +1588,7 @@ function App() {
                   {formatRate(latestBenchmarkRun?.metrics.captain_informed_win_rate)} /{" "}
                   {formatMetric(latestBenchmarkRun?.metrics.captain_mean_gap_lift_points)}
                 </strong>
+                {captainWinRateInterval && <small>{captainWinRateInterval}</small>}
               </div>
             </div>
             <div className="info-grid">

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Converted the main-slate value-driver findings into nine pregame-only features learned by walk-forward classic lineup scoring, covering projected value, high-total exposure, RB spread context, and FLEX construction.
+- Added deterministic classic feature-group ablation through `scripts/run_classic_feature_ablation.py`, with paired mean-gap contribution reporting for value-driver and game-environment inputs.
+- Added reproducible percentile-bootstrap confidence intervals and standard errors for classic/showdown gap metrics and captain A/B win-rate/gap-lift metrics, with configurable sample count/confidence level in benchmark CLI/API runs and interval display in new benchmark summaries and the Current Model Card.
+- Added selected-slice salary, injury, schedule, and weekly-stat freshness checks through `GET /api/coverage/freshness`, with exact row counts, load ages, explicit thresholds, and `fresh`/`stale`/`missing` badges in the ingestion control plane.
 - Added `GET /api/unresolved/triage` and an `Automated Triage by Source / Week / Slate` control-plane report with exact open/recent totals, configurable lookback, grouped source/week/slate counts, and automatic refresh after ingest or resolution actions.
 - Added DST-specific identity rules that canonicalize common defense position labels, reuse source/team defense aliases, reject ambiguous team mappings, and prevent defense display-name fallback matching.
 - Added pre-write salary and injury CSV validation for required schemas, required identity values, positive integer salaries, and duplicate player identities; failed files preserve the last valid curated slice, report source CSV row numbers, and use deterministic semantic keys when injury IDs are absent.

@@ -24,6 +24,7 @@ from ..schemas import (
     BacktestWeekRequest,
     BacktestWeekResponse,
     CuratedSalarySliceResponse,
+    DataFreshnessResponse,
     HealthResponse,
     IngestRunListResponse,
     IngestResultResponse,
@@ -214,6 +215,23 @@ def curated_salary_slices(
             source_system=source_system,
             limit=limit,
         )
+    )
+
+
+@router.get("/coverage/freshness", response_model=DataFreshnessResponse)
+def data_freshness(
+    source_system: str = Query(default="draftkings", pattern="^(draftkings|fanduel)$"),
+    season: int = Query(..., ge=2000),
+    week: int = Query(..., ge=1, le=25),
+    slate: str = Query(..., min_length=1),
+    session: Session = Depends(get_db_session),
+) -> DataFreshnessResponse:
+    service = IngestService(session)
+    return service.get_data_freshness(
+        source_system=source_system,
+        season=season,
+        week=week,
+        slate=slate,
     )
 
 

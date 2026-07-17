@@ -13,6 +13,8 @@ from backend.app.models import (
     CuratedSalary,
     IngestRun,
     PlayerAlias,
+    RawNflSchedule,
+    RawNflWeeklyStat,
     RawSalaryRow,
     UnresolvedPlayerQueue,
 )
@@ -443,3 +445,102 @@ def test_unresolved_triage_groups_open_and_recent_rows() -> None:
     assert draftkings_report.open_total == 2
     assert draftkings_report.new_total == 1
     assert draftkings_report.groups_returned == 1
+
+
+def test_data_freshness_scopes_rows_and_classifies_age() -> None:
+    session = _session()
+    checked_at = utcnow_naive()
+    run = IngestRun(
+        ingest_run_id="freshness-run",
+        source_system="test",
+        source_table="freshness",
+        status="completed",
+        started_at=checked_at,
+        completed_at=checked_at,
+    )
+    session.add(run)
+    session.flush()
+    session.add_all(
+        [
+            CuratedSalary(
+                ingest_run_id=run.ingest_run_id,
+                source_system="draftkings",
+                season=2025,
+                week=1,
+                slate="sunday_main",
+                source_player_key="salary-1",
+                player_name="Example Receiver",
+                normalized_name="example receiver",
+                team="BUF",
+                position="WR",
+                salary=6000,
+                created_at=checked_at - timedelta(hours=2),
+            ),
+            CuratedInjury(
+                ingest_run_id=run.ingest_run_id,
+                source_system="draftkings",
+                season=2025,
+                week=1,
+                slate="sunday_main",
+                source_player_key="injury-1",
+                player_name="Example Receiver",
+                normalized_name="example receiver",
+                team="BUF",
+                position="WR",
+                injury_status="Q",
+                created_at=checked_at - timedelta(hours=13),
+            ),
+            RawNflSchedule(
+                ingest_run_id=run.ingest_run_id,
+                source_system="nflreadpy",
+                season=2025,
+                week=1,
+                game_id="2025_01_BUF_MIA",
+                home_team="MIA",
+                away_team="BUF",
+                raw_row_json={},
+                created_at=checked_at - timedelta(hours=3),
+            ),
+            RawNflWeeklyStat(
+                ingest_run_id=run.ingest_run_id,
+                source_system="nflreadpy",
+                season=2025,
+                week=2,
+                player_id="player-1",
+                player_name="Example Receiver",
+                raw_row_json={},
+                created_at=checked_at - timedelta(hours=1),
+            ),
+        ]
+    )
+    session.commit()
+
+    result = IngestService(session).get_data_freshness(
+        source_system="draftkings",
+        season=2025,
+        week=1,
+        slate="sunday_main",
+        checked_at=checked_at,
+    )
+    rows = {row.dataset: row for row in result.rows}
+
+    assert result.checked_at == checked_at
+    assert [row.dataset for row in result.rows] == [
+        "salaries",
+        "injuries",
+        "schedules",
+        "weekly_stats",
+    ]
+    assert rows["salaries"].status == "fresh"
+    assert rows["salaries"].rows == 1
+    assert rows["salaries"].age_hours == 2
+    assert rows["salaries"].stale_after_hours == 24
+    assert rows["injuries"].status == "stale"
+    assert rows["injuries"].age_hours == 13
+    assert rows["injuries"].stale_after_hours == 12
+    assert rows["schedules"].status == "fresh"
+    assert rows["schedules"].source_system == "nflreadpy"
+    assert rows["schedules"].slate is None
+    assert rows["weekly_stats"].status == "missing"
+    assert rows["weekly_stats"].rows == 0
+    assert rows["weekly_stats"].latest_loaded_at is None

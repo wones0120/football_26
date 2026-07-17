@@ -11,6 +11,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from backend.app.db import SessionLocal
 from backend.app.schemas import OptimalVsPredictedBacktestRequest
+from backend.app.services.bootstrap_metrics import bootstrap_confidence_intervals
 from backend.app.services.lineup_learning import LineupLearningService
 
 
@@ -33,6 +34,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--allow-heuristics", dest="learned_only", action="store_false")
     parser.set_defaults(learned_only=True)
     parser.add_argument("--random-seed", type=int, default=42)
+    parser.add_argument("--bootstrap-samples", type=int, default=2000)
+    parser.add_argument("--confidence-level", type=float, default=0.95)
     parser.add_argument("--limit-slates", type=int, default=0)
     parser.add_argument("--classic-value-driver-model-path", type=str, default=None)
     parser.add_argument("--classic-value-driver-prior-strength", type=float, default=0.0)
@@ -74,6 +77,20 @@ def main() -> None:
         result = service.run_optimal_vs_predicted_backtest(request, progress_hook=progress_hook)
     payload = {"summary": result.model_dump(exclude={"rows"}), "rows": result.model_dump()["rows"]}
     summary = payload["summary"]
+    gaps = [
+        float(row["gap_points"])
+        for row in payload["rows"]
+        if row.get("status") == "ok" and row.get("gap_points") is not None
+    ]
+    summary["confidence_intervals"] = bootstrap_confidence_intervals(
+        {
+            "mean_gap_points": (gaps, "mean"),
+            "median_gap_points": (gaps, "median"),
+        },
+        confidence_level=args.confidence_level,
+        bootstrap_samples=args.bootstrap_samples,
+        random_seed=args.random_seed,
+    )
 
     print(json.dumps(summary, indent=2))
     if args.output_json:

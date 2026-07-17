@@ -67,6 +67,13 @@ Salary and injury CSVs are validated before any existing curated slice is cleare
 - The UI section `Automated Triage by Source / Week / Slate` refreshes after ingestion and resolution actions, ranking groups by recent count, open volume, and recency.
 - The detailed repair queue remains available below the grouped report for create-or-link resolution.
 
+## Data Freshness
+
+- `GET /api/coverage/freshness` checks the selected source, season, week, and slate for curated salaries/injuries plus nflreadpy schedules/weekly stats.
+- Each dataset reports its exact slice row count, latest load time, age in hours, staleness threshold, and `fresh`, `stale`, or `missing` status.
+- Thresholds are 24 hours for salaries, 12 hours for injuries, and 168 hours for schedules and weekly stats.
+- The UI section `Data Freshness` refreshes when the selected slice changes and after ingest actions.
+
 ## API Endpoints (Initial)
 
 1. `POST /api/ingest/salaries`
@@ -85,6 +92,7 @@ Salary and injury CSVs are validated before any existing curated slice is cleare
 14. `POST /api/benchmarks/run-suite`
 15. `GET /api/benchmarks/runs/{run_name}/artifacts/{artifact_name}`
 16. `GET /api/unresolved/triage`
+17. `GET /api/coverage/freshness`
 
 ## Migration Notes
 
@@ -95,11 +103,15 @@ Migrations live in `/migrations`. The migration runner tracks applied files in `
 1. Phase 1 baseline is implemented.
 2. Model defaults are exposed from the backend and consumed by the UI lineup backtest controls.
 3. The UI now includes a Current Model Card plus benchmark-suite execution and recent benchmark artifact visibility.
-4. See `/Users/wones/git/football_26/docs/phase_plan.md` for the build sequence.
+4. Selected-slice data freshness is available through the API and ingestion control plane.
+5. Classic walk-forward scoring learns from value-driver and game-environment lineup features.
+6. See `/Users/wones/git/football_26/docs/phase_plan.md` for the build sequence.
 
 ## Benchmark Control Plane
 
 - `Current Model Card` shows the active model paths and strengths plus metrics and artifact links from the latest successful benchmark with comparable metrics.
+- New benchmark runs attach deterministic nonparametric percentile bootstrap intervals to classic/showdown mean and median gaps plus captain A/B win-rate and gap-lift metrics. Defaults are 2,000 samples at 95% confidence, with seed, sample count, standard error, and bounds stored in the artifacts.
+- `--bootstrap-samples` and `--confidence-level` override the defaults for CLI runs; the benchmark API accepts matching fields and records them in `suite_manifest.json`.
 - `Reset To Defaults` restores the backend-configured model settings listed in `.env.example`.
 - `Run Benchmark Suite` runs the canonical classic/showdown stack and writes a unique folder under `docs/benchmarks`.
 - Benchmark execution currently runs synchronously through the API, so full-history suites can keep the request open for several minutes.
@@ -182,3 +194,23 @@ python scripts/train_matchup_prior_gate.py \
 ```
 
 The current-code 20-slate comparison has mean gaps of `133.46` with no matchup prior, `128.76` with always-on `0.15`, and `127.24` with the gated prior. The gate is experimental and should be validated on broader slates before treating it as production logic.
+
+6. Classic learned-feature ablation:
+
+```bash
+source .venv/bin/activate
+python scripts/run_classic_feature_ablation.py \
+  --source-system draftkings \
+  --season-start 2024 \
+  --season-end 2025 \
+  --lineups-per-slate 200 \
+  --training-window-slates 8 \
+  --min-training-slates 2 \
+  --min-training-rows 200 \
+  --limit-slates 12 \
+  --output-json docs/classic_feature_ablation.json
+```
+
+Classic lineup models now learn nine pregame-only value-driver fields covering projected salary value, high-total exposure and coverage, RB spread/underdog context, and FLEX position. The existing game-environment group covers QB game totals, spreads, implied totals, and stack interactions; opponent-adjusted rolling context also feeds the player projection layer.
+
+The ablation command reruns the same walk-forward slices and seed with each feature group disabled. Positive `mean_gap_contribution_points` means the full feature set produced a smaller actual-optimal gap. A 12-slate wiring validation produced 10 scored pairs with contributions of `+0.29` points for value drivers and `+2.26` for game environment. Treat those small-sample results as implementation validation, not production parameter evidence.
