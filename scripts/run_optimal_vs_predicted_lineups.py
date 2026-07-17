@@ -30,6 +30,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--training-window-slates", type=int, default=24)
     parser.add_argument("--min-training-slates", type=int, default=4)
     parser.add_argument("--min-training-rows", type=int, default=2000)
+    parser.add_argument("--classic-top-target-percentile", type=float, default=98.0)
     parser.add_argument("--learned-only", dest="learned_only", action="store_true")
     parser.add_argument("--allow-heuristics", dest="learned_only", action="store_false")
     parser.set_defaults(learned_only=True)
@@ -61,6 +62,7 @@ def main() -> None:
         training_window_slates=args.training_window_slates,
         min_training_slates=args.min_training_slates,
         min_training_rows=args.min_training_rows,
+        classic_top_target_percentile=args.classic_top_target_percentile,
         learned_only=args.learned_only,
         random_seed=args.random_seed,
         limit_slates=args.limit_slates,

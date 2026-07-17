@@ -488,6 +488,7 @@ class OptimalVsPredictedBacktestRequest(BaseModel):
     training_window_slates: int = Field(default=24, ge=2, le=120)
     min_training_slates: int = Field(default=2, ge=1, le=80)
     min_training_rows: int = Field(default=500, ge=100, le=2000000)
+    classic_top_target_percentile: float = Field(default=98.0, ge=80.0, le=99.5)
     learned_only: bool = True
     random_seed: int | None = None
     limit_slates: int = Field(default=0, ge=0, le=2000)
@@ -525,6 +526,9 @@ class OptimalVsPredictedBacktestResponse(BaseModel):
     slate_type: Literal["classic", "showdown"]
     lineups_per_slate: int
     training_window_slates: int
+    min_training_slates: int
+    min_training_rows: int
+    classic_top_target_percentile: float
     learned_only: bool
     showdown_captain_model_path: str | None = None
     showdown_captain_prior_strength: float = 0.0

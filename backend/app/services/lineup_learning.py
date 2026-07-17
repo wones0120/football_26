@@ -6042,7 +6042,7 @@ class LineupLearningService:
                     projected_p90 = x_slate[:, PATTERN_FEATURE_INDEX["lineup_projected_p90"]]
                     projected_mean_idx = PATTERN_FEATURE_INDEX["lineup_projected_mean"]
                     projected_p90_idx = PATTERN_FEATURE_INDEX["lineup_projected_p90"]
-                    threshold_percentile = TOP_TARGET_PERCENTILE
+                    threshold_percentile = float(request.classic_top_target_percentile)
                     classic_prior_scores = self._classic_lineup_prior_scores(
                         lineups=generated_classic,
                         model=classic_value_model,
@@ -6264,6 +6264,9 @@ class LineupLearningService:
             slate_type=request.slate_type,
             lineups_per_slate=request.lineups_per_slate,
             training_window_slates=request.training_window_slates,
+            min_training_slates=request.min_training_slates,
+            min_training_rows=request.min_training_rows,
+            classic_top_target_percentile=float(request.classic_top_target_percentile),
             learned_only=request.learned_only,
             showdown_captain_model_path=captain_model_path,
             showdown_captain_prior_strength=captain_prior_strength,
