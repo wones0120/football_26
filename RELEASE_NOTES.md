@@ -4,6 +4,8 @@
 
 - Converted the main-slate value-driver findings into nine pregame-only features learned by walk-forward classic lineup scoring, covering projected value, high-total exposure, RB spread context, and FLEX construction.
 - Added deterministic classic feature-group ablation through `scripts/run_classic_feature_ablation.py`, with paired mean-gap contribution reporting for value-driver and game-environment inputs.
+- Added `scripts/run_classic_parameter_sweep.py` with reproducible candidate-count, training-window, and top-target-percentile grids plus compact best-config persistence and source/feature lineage.
+- Persisted the initial bounded sweep in `docs/classic_parameter_sweep_12slates.json` and `docs/classic_best_config_12slates.json`; the provisional winner uses 250 candidates, a 4-slate window, and a 95th-percentile target.
 - Added reproducible percentile-bootstrap confidence intervals and standard errors for classic/showdown gap metrics and captain A/B win-rate/gap-lift metrics, with configurable sample count/confidence level in benchmark CLI/API runs and interval display in new benchmark summaries and the Current Model Card.
 - Added selected-slice salary, injury, schedule, and weekly-stat freshness checks through `GET /api/coverage/freshness`, with exact row counts, load ages, explicit thresholds, and `fresh`/`stale`/`missing` badges in the ingestion control plane.
 - Added `GET /api/unresolved/triage` and an `Automated Triage by Source / Week / Slate` control-plane report with exact open/recent totals, configurable lookback, grouped source/week/slate counts, and automatic refresh after ingest or resolution actions.

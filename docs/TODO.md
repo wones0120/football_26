@@ -68,7 +68,7 @@ Last updated: 2026-07-17
   - spread context
   - opponent-adjusted matchup features
 - [x] Add ablation tests for classic lineup scoring to measure feature contribution.
-- [ ] Add classic parameter sweep (candidate lineups per slate, training windows, thresholds) and persist best config.
+- [x] Add classic parameter sweep (candidate lineups per slate, training windows, thresholds) and persist best config.
 
 ## P1 - Showdown Modeling
 - [ ] Add teammate-availability context to captain archetype model (who was active/usage context).

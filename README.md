@@ -214,3 +214,24 @@ python scripts/run_classic_feature_ablation.py \
 Classic lineup models now learn nine pregame-only value-driver fields covering projected salary value, high-total exposure and coverage, RB spread/underdog context, and FLEX position. The existing game-environment group covers QB game totals, spreads, implied totals, and stack interactions; opponent-adjusted rolling context also feeds the player projection layer.
 
 The ablation command reruns the same walk-forward slices and seed with each feature group disabled. Positive `mean_gap_contribution_points` means the full feature set produced a smaller actual-optimal gap. A 12-slate wiring validation produced 10 scored pairs with contributions of `+0.29` points for value drivers and `+2.26` for game environment. Treat those small-sample results as implementation validation, not production parameter evidence.
+
+7. Classic parameter sweep:
+
+```bash
+source .venv/bin/activate
+python scripts/run_classic_parameter_sweep.py \
+  --source-system draftkings \
+  --season-start 2024 \
+  --season-end 2025 \
+  --candidate-lineups 150,250 \
+  --training-windows 4,8 \
+  --top-target-percentiles 95,98 \
+  --min-training-slates 2 \
+  --min-training-rows 200 \
+  --min-completed-rate 0.75 \
+  --limit-slates 12 \
+  --output-json docs/classic_parameter_sweep_12slates.json \
+  --best-config-json docs/classic_best_config_12slates.json
+```
+
+The initial eight-configuration sweep selected `250` candidate lineups, a `4`-slate training window, and a `95th`-percentile top-lineup target. It completed 10 of 12 chronological slates with a `134.43` mean gap and `131.11` median gap. The compact best-config artifact includes the clean code revision, feature-set hash, seed, coverage requirement, and acceptance metrics. This is a provisional bounded result; rerun over broader history and larger candidate pools before adopting it as a production default.
