@@ -254,3 +254,17 @@ python scripts/train_showdown_captain_archetype_model.py \
 ```
 
 The feature set includes active salary-pool skill-player counts and imbalance plus injury/out context when the selected historical slice contains an injury snapshot. The current 41-slate dataset has zero historical injury-report coverage. Its availability candidate scored `30.3%` top-1 and `51.5%` top-2 versus the current-code baseline at `33.3%` and `57.6%`, so the production captain artifact and baseline training default remain unchanged. Ingest point-in-time historical injuries before reevaluating this candidate.
+
+## Showdown Captain Drift
+
+Run season-segment captain-prior monitoring with:
+
+```bash
+source .venv/bin/activate
+python scripts/analyze_showdown_captain_drift.py \
+  --dataset-csv docs/showdown_captain_training_dataset_2024_2025.csv \
+  --alert-threshold 0.25 \
+  --min-segment-slates 5
+```
+
+The analyzer groups each season into early (weeks 1-6), mid (7-12), and late (13+) segments, then measures total variation in captain-position shares between consecutive populated segments. Alerts require both segments to meet the minimum sample size. The current report at `docs/showdown_captain_drift_2024_2025.md` found one alert: 2024 mid-to-late moved `0.480`, driven primarily by a 48.0-point drop in WR captain share.

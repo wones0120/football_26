@@ -1,0 +1,177 @@
+{
+  "dataset_csv": "/Users/wones/git/football_26/docs/showdown_captain_training_dataset_2024_2025.csv",
+  "alert_threshold": 0.25,
+  "min_segment_slates": 5,
+  "segment_definition": {
+    "early": "weeks 1-6",
+    "mid": "weeks 7-12",
+    "late": "weeks 13+"
+  },
+  "segments": [
+    {
+      "segment_id": "2024_mid",
+      "season": 2024,
+      "segment": "mid",
+      "slates": 6,
+      "distribution": {
+        "QB": 0.0,
+        "RB": 0.16666666666666666,
+        "WR": 0.8333333333333334,
+        "TE": 0.0,
+        "K": 0.0,
+        "DST": 0.0
+      }
+    },
+    {
+      "segment_id": "2024_late",
+      "season": 2024,
+      "segment": "late",
+      "slates": 17,
+      "distribution": {
+        "QB": 0.17647058823529413,
+        "RB": 0.23529411764705882,
+        "WR": 0.35294117647058826,
+        "TE": 0.17647058823529413,
+        "K": 0.0,
+        "DST": 0.058823529411764705
+      }
+    },
+    {
+      "segment_id": "2025_early",
+      "season": 2025,
+      "segment": "early",
+      "slates": 4,
+      "distribution": {
+        "QB": 0.5,
+        "RB": 0.25,
+        "WR": 0.25,
+        "TE": 0.0,
+        "K": 0.0,
+        "DST": 0.0
+      }
+    },
+    {
+      "segment_id": "2025_mid",
+      "season": 2025,
+      "segment": "mid",
+      "slates": 10,
+      "distribution": {
+        "QB": 0.4,
+        "RB": 0.2,
+        "WR": 0.3,
+        "TE": 0.1,
+        "K": 0.0,
+        "DST": 0.0
+      }
+    },
+    {
+      "segment_id": "2025_late",
+      "season": 2025,
+      "segment": "late",
+      "slates": 4,
+      "distribution": {
+        "QB": 0.25,
+        "RB": 0.25,
+        "WR": 0.5,
+        "TE": 0.0,
+        "K": 0.0,
+        "DST": 0.0
+      }
+    }
+  ],
+  "comparisons": [
+    {
+      "from_segment": "2024_mid",
+      "to_segment": "2024_late",
+      "from_slates": 6,
+      "to_slates": 17,
+      "total_variation_distance": 0.4803921568627451,
+      "position_share_deltas": {
+        "QB": 0.17647058823529413,
+        "RB": 0.06862745098039216,
+        "WR": -0.4803921568627451,
+        "TE": 0.17647058823529413,
+        "K": 0.0,
+        "DST": 0.058823529411764705
+      },
+      "largest_position_shift": "WR",
+      "enough_data": true,
+      "alert": true
+    },
+    {
+      "from_segment": "2024_late",
+      "to_segment": "2025_early",
+      "from_slates": 17,
+      "to_slates": 4,
+      "total_variation_distance": 0.3382352941176471,
+      "position_share_deltas": {
+        "QB": 0.32352941176470584,
+        "RB": 0.01470588235294118,
+        "WR": -0.10294117647058826,
+        "TE": -0.17647058823529413,
+        "K": 0.0,
+        "DST": -0.058823529411764705
+      },
+      "largest_position_shift": "QB",
+      "enough_data": false,
+      "alert": false
+    },
+    {
+      "from_segment": "2025_early",
+      "to_segment": "2025_mid",
+      "from_slates": 4,
+      "to_slates": 10,
+      "total_variation_distance": 0.14999999999999997,
+      "position_share_deltas": {
+        "QB": -0.09999999999999998,
+        "RB": -0.04999999999999999,
+        "WR": 0.04999999999999999,
+        "TE": 0.1,
+        "K": 0.0,
+        "DST": 0.0
+      },
+      "largest_position_shift": "TE",
+      "enough_data": false,
+      "alert": false
+    },
+    {
+      "from_segment": "2025_mid",
+      "to_segment": "2025_late",
+      "from_slates": 10,
+      "to_slates": 4,
+      "total_variation_distance": 0.25,
+      "position_share_deltas": {
+        "QB": -0.15000000000000002,
+        "RB": 0.04999999999999999,
+        "WR": 0.2,
+        "TE": -0.1,
+        "K": 0.0,
+        "DST": 0.0
+      },
+      "largest_position_shift": "WR",
+      "enough_data": false,
+      "alert": false
+    }
+  ],
+  "alert_count": 1,
+  "alerts": [
+    {
+      "from_segment": "2024_mid",
+      "to_segment": "2024_late",
+      "from_slates": 6,
+      "to_slates": 17,
+      "total_variation_distance": 0.4803921568627451,
+      "position_share_deltas": {
+        "QB": 0.17647058823529413,
+        "RB": 0.06862745098039216,
+        "WR": -0.4803921568627451,
+        "TE": 0.17647058823529413,
+        "K": 0.0,
+        "DST": 0.058823529411764705
+      },
+      "largest_position_shift": "WR",
+      "enough_data": true,
+      "alert": true
+    }
+  ]
+}

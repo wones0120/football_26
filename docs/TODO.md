@@ -72,7 +72,7 @@ Last updated: 2026-07-17
 
 ## P1 - Showdown Modeling
 - [ ] Add teammate-availability context to captain archetype model (feature plumbing and opt-in training are implemented; historical injury coverage is currently zero, and the 41-slate candidate regressed, so the current default remains unchanged).
-- [ ] Add season-segment drift checks and automatic alerts when captain priors shift materially.
+- [x] Add season-segment drift checks and automatic alerts when captain priors shift materially.
 - [ ] Extend captain modeling beyond position class (role/archetype buckets within position).
 - [ ] Add showdown scenario analysis module:
   - which captain archetypes win by matchup/game context
