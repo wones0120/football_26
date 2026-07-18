@@ -127,7 +127,8 @@ Last updated: 2026-07-18
 - [x] Popularity and duplication proxy (default penalty zero; `0.25` retained as an opt-in research setting).
 - [x] Role-shock opportunity reallocation simulations with UI controls and lineup-fragility reporting.
   - Evidence: `docs/role_shock_fragility_2025_w18.{json,md}`; Gibbs exposure `30%` to `0%`, 70% lineup overlap, `+6.69` reoptimization lift.
-- [ ] Online weekly residual learning with shrinkage.
+- [x] Online weekly residual learning with validation-selected shrinkage and strict prior-week cutoffs.
+  - Evidence: `docs/online_residual_learning_2024_2025.{json,md}`; untouched-test MAE `4.818` to `4.602` (`+4.48%`) across 1,205 observations. Promotion candidate; production unchanged pending persistence/integration.
 - [ ] Future-safe game-regime ensemble.
 - Roadmap: `docs/NEXT_IDEAS.md`.
 

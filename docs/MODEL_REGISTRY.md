@@ -17,6 +17,7 @@ Last reviewed: 2026-07-18
 | Matchup prior gate | `docs/matchup_prior_gate_20slates_5000.json` | 18 paired slates | Future-safe rule gate; broader validation still required | Experimental |
 | Player matchup ridge blend | Built point-in-time from `player_game_feature_matrix` | All rows before target week, position-specific | Enabled only when validation MAE improves by more than `0.5%`; blend weight scales with lift | Production |
 | Projection family comparison | `docs/projection_model_family_comparison_2024_2025.json` | Train through 2025 W07; validate W08-W11; test W12-W18 | Tree test MAE `2.610`, ridge `3.044`, neural `2.901` | Research; not promoted |
+| Online weekly residual learner | `docs/online_residual_learning_2024_2025.json` | 15 Sunday-main slates; validation 2025 W05-W10; untouched test W11-W18 | Prior `5.0`; test MAE `4.818` to `4.602` (`+4.48%`), all positions improved | Promotion candidate; production unchanged |
 | Simulation uncertainty calibration | `docs/projection_calibration_drift_2024_2025.json` | 15 Sunday-main slates; 2,856 players | P75/P90/P95 `76.4%` / `90.3%` / `94.7%`; tail error `+0.2` points; zero alerts | Accepted |
 | Historical top-lineup policy | `actual_top_lineup*` tables and `run_actual_top_lineup_learning` | Strictly prior slates within configured window | Top-k labels, walk-forward selection uplift, feature insights | Production-capable |
 

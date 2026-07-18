@@ -397,5 +397,18 @@ python scripts/analyze_role_shock_fragility.py \
 
 In the stored Week 18 stress test, Gibbs exposure moved from `30%` to `0%`, Montgomery moved from `5%` to `25%`, top-lineup overlap was `70%`, and scenario reoptimization recovered `6.69` projected-blend points versus keeping the baseline portfolio. This is a hypothetical pre-lock stress test, not a claim that an injury or role change occurred historically. Evidence is in `docs/role_shock_fragility_2025_w18.{json,md}`.
 
+## Online Weekly Residual Learning
+
+The DraftKings research workflow can now learn shrinkage-adjusted weekly projection residuals from QB/RB/WR/TE history without injury or ownership feeds. It combines only point-in-time-safe player identity, team-position, opponent-position, salary bucket, projected-value bucket, and total/spread regime signals. Every target week uses residuals from strictly earlier completed weeks, and the shrinkage strength is selected on an earlier validation window before evaluation on an untouched later test.
+
+Run the deterministic comparison with:
+
+```bash
+source .venv/bin/activate
+python scripts/analyze_online_residual_learning.py
+```
+
+Across 3,342 observations from 15 Sunday-main slates, validation selected prior strength `5.0`. On the untouched 2025 W11-W18 test window, residual adjustment improved MAE from `4.818` to `4.602` (`+4.48%`) and RMSE from `6.551` to `6.389` (`+2.47%`). Every test slice and each eligible position improved. This is a promotion candidate for broader integration; production projections remain unchanged. Evidence is in `docs/online_residual_learning_2024_2025.{json,md}`.
+
 Architecture decisions and acceptance status are maintained in `docs/DECISIONS.md` and `docs/MODEL_REGISTRY.md`.
 An empty-database environment can be reproduced using `docs/BOOTSTRAP_RUNBOOK.md`.

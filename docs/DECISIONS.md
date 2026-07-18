@@ -2,6 +2,13 @@
 
 This log records decisions that affect reproducibility, production defaults, or historical-model acceptance. The operational backlog remains in `docs/TODO.md`.
 
+## 2026-07-18 — Accept residual learning as an integration candidate
+
+- Decision: retain prior strength `5.0` as the validation-selected online residual-learning candidate, using a 12-slice rolling window, sample-size shrinkage, and a six-point adjustment cap.
+- Evidence: across 1,205 untouched-test observations from 2025 W11-W18, MAE improved `4.818` to `4.602` (`+4.48%`), RMSE improved `6.551` to `6.389` (`+2.47%`), every test slice improved, and QB/RB/WR/TE each improved.
+- Rationale: the learner uses only strictly earlier completed weeks and canonical/source identities; validation chooses shrinkage strength before the later test is opened.
+- Production impact: none yet. The candidate is accepted for broader integration, but the production projection path remains unchanged until residual snapshot persistence and scoring integration are implemented and regression-tested.
+
 ## 2026-07-18 — Treat role shocks as explicit stress tests
 
 - Decision: accept manual RB/WR/TE role shocks as scenario inputs, reallocate prior four-game carries/targets, damp recipient projection changes to 65% of opportunity changes, default simulation seed to `42`, and persist the effective seed plus full request.
