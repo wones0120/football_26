@@ -71,7 +71,9 @@ Last updated: 2026-07-18
 - [x] Add classic parameter sweep (candidate lineups per slate, training windows, thresholds) and persist best config.
 
 ## P1 - Showdown Modeling
-- [ ] Add teammate-availability context to captain archetype model (feature plumbing and opt-in training are implemented; historical injury coverage is currently zero, and the 41-slate candidate regressed, so the current default remains unchanged).
+- [x] Retire historical injury reports as a dependency; keep the rejected injury-based candidate documented but off the critical path.
+- [x] Add injury-free usage-weighted roster continuity from prior carries/targets and the current salary pool.
+  - Evidence: with unresolved salary players included in identity coverage, continuity scored `27.3%` top-1 / `51.5%` top-2 versus baseline `33.3%` / `57.6%` across 33 evaluated slates; not promoted.
 - [x] Add season-segment drift checks and automatic alerts when captain priors shift materially.
 - [x] Extend captain modeling beyond position class with salary-relative `premium`, `core`, and `value` role buckets within position.
 - [x] Add showdown scenario analysis module:
@@ -90,7 +92,8 @@ Last updated: 2026-07-18
 ## P1 - Lineup Generator and Policy Learning
 - [x] Build policy-learning loop from historical actual top lineups (top-k per slate) into lineup scoring.
 - [x] Add salary-structure priors, learned player/QB/DST exposure caps, and correlation/anti-correlation controls.
-- [ ] Add ownership-aware leverage (blocked on point-in-time historical ownership inputs; do not substitute realized outcomes).
+- [x] Retire observed historical ownership as a dependency; do not substitute realized outcomes.
+- [ ] Add a clearly named pre-lock `popularity_proxy` and lineup duplication-risk score from salary, projection, value, game environment, and generated-lineup concentration.
 - [x] Add robust validity checks for every generated candidate and selected lineup with hard-fail violation details.
 - [x] Support 100k+ candidate experiments with deterministic seeds (request default `100000`, maximum `500000`).
 - [ ] Add interrupted-run checkpoint/resume support for 100k+ candidate experiments.
@@ -114,9 +117,17 @@ Last updated: 2026-07-18
 - [x] Add `docs/MODEL_REGISTRY.md` with model versions, training windows, and acceptance metrics.
 
 ## External-Data / Runtime Blockers
-- [ ] Ingest point-in-time historical injury snapshots, then rerun the opt-in showdown availability candidate.
-- [ ] Ingest point-in-time historical ownership projections/results, then add ownership-aware leverage.
+- [x] Historical injury snapshots are unavailable; superseded by usage-weighted roster continuity.
+- [x] Historical ownership is unavailable; superseded by the planned popularity/duplication proxy.
 - [ ] Add durable checkpoint storage and interrupted-run resume for large candidate generation.
+
+## New Ideas Without Vendor History
+- [x] Usage-weighted roster continuity for latent availability (rejected as a standalone captain feature set; retained for role-shock research).
+- [ ] Popularity and duplication proxy.
+- [ ] Role-shock opportunity reallocation simulations.
+- [ ] Online weekly residual learning with shrinkage.
+- [ ] Future-safe game-regime ensemble.
+- Roadmap: `docs/NEXT_IDEAS.md`.
 
 ## Parking Lot
 - [ ] Add contest-specific objective functions (cash vs GPP) with separate optimization targets.

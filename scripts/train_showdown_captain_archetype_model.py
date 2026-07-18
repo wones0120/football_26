@@ -19,6 +19,7 @@ if str(REPO_ROOT) not in sys.path:
 from backend.app.db import SessionLocal
 from backend.app.services.lineup_learning import (
     SHOWDOWN_CAPTAIN_BASE_FEATURE_NAMES,
+    SHOWDOWN_CAPTAIN_CONTINUITY_FEATURE_NAMES,
     SHOWDOWN_CAPTAIN_CONTEXT_FEATURE_NAMES,
     LineupLearningService,
     ShowdownPlayerPoolRow,
@@ -43,9 +44,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--limit-slates", type=int, default=0)
     parser.add_argument(
         "--feature-set",
-        choices=["baseline", "availability"],
+        choices=["baseline", "availability", "continuity"],
         default="baseline",
-        help="Availability is opt-in until historical injury coverage passes validation.",
+        help=(
+            "Availability uses injury snapshots; continuity uses only prior usage and the "
+            "current salary pool. Both remain opt-in."
+        ),
     )
     parser.add_argument(
         "--dataset-csv",
@@ -165,6 +169,21 @@ def _build_features(pool: list[ShowdownPlayerPoolRow]) -> dict[str, float]:
         for row in pool
         if (row.player_injury_status or "unknown").strip().lower() != "unknown"
     ]
+    team_missing_usage_shares = [
+        max(float(row.team_missing_usage_share) for row in rows)
+        for rows in by_team.values()
+        if rows
+    ]
+    team_available_usage_concentrations = [
+        max(float(row.team_available_usage_concentration) for row in rows)
+        for rows in by_team.values()
+        if rows
+    ]
+    team_usage_identity_coverages = [
+        max(float(row.team_usage_identity_coverage) for row in rows)
+        for rows in by_team.values()
+        if rows
+    ]
 
     features = {
         "game_total_line": _safe_median(game_totals),
@@ -199,6 +218,28 @@ def _build_features(pool: list[ShowdownPlayerPoolRow]) -> dict[str, float]:
         ),
         "questionable_or_worse_count": float(
             sum(1 for row in pool if _injury_status_score(row.player_injury_status) >= 0.5)
+        ),
+        "max_team_missing_usage_share": _max_or_zero(team_missing_usage_shares),
+        "team_missing_usage_share_diff": (
+            float(max(team_missing_usage_shares) - min(team_missing_usage_shares))
+            if team_missing_usage_shares
+            else 0.0
+        ),
+        "max_team_available_usage_concentration": _max_or_zero(
+            team_available_usage_concentrations
+        ),
+        "team_available_usage_concentration_diff": (
+            float(
+                max(team_available_usage_concentrations)
+                - min(team_available_usage_concentrations)
+            )
+            if team_available_usage_concentrations
+            else 0.0
+        ),
+        "min_team_usage_identity_coverage": (
+            float(min(team_usage_identity_coverages))
+            if team_usage_identity_coverages
+            else 0.0
         ),
     }
     team_available_skill_counts = [
@@ -290,6 +331,11 @@ def _report_markdown(payload: dict[str, Any]) -> str:
     if summary["feature_set"] == "availability":
         lines.append("- The model uses matchup, pool, and point-in-time teammate-availability context.")
         lines.append("- Availability features come from the selected season/week/slate injury snapshot.")
+    elif summary["feature_set"] == "continuity":
+        lines.append("- The model uses matchup, pool, and injury-free usage-continuity context.")
+        lines.append(
+            "- Missing usage is derived only from prior carries/targets and current salary-pool identity."
+        )
     else:
         lines.append("- The model uses the established matchup and salary-pool context feature set.")
         lines.append("- Use `--feature-set availability` only after validating historical injury coverage.")
@@ -301,11 +347,23 @@ def main() -> None:
     season_start = min(args.season_start, args.season_end)
     season_end = max(args.season_start, args.season_end)
     rng = np.random.default_rng(args.random_seed)
-    selected_feature_names = (
-        list(SHOWDOWN_CAPTAIN_CONTEXT_FEATURE_NAMES)
-        if args.feature_set == "availability"
-        else list(SHOWDOWN_CAPTAIN_BASE_FEATURE_NAMES)
-    )
+    if args.feature_set == "availability":
+        selected_feature_names = [
+            *SHOWDOWN_CAPTAIN_BASE_FEATURE_NAMES,
+            *[
+                name
+                for name in SHOWDOWN_CAPTAIN_CONTEXT_FEATURE_NAMES
+                if name not in SHOWDOWN_CAPTAIN_BASE_FEATURE_NAMES
+                and name not in SHOWDOWN_CAPTAIN_CONTINUITY_FEATURE_NAMES
+            ],
+        ]
+    elif args.feature_set == "continuity":
+        selected_feature_names = [
+            *SHOWDOWN_CAPTAIN_BASE_FEATURE_NAMES,
+            *SHOWDOWN_CAPTAIN_CONTINUITY_FEATURE_NAMES,
+        ]
+    else:
+        selected_feature_names = list(SHOWDOWN_CAPTAIN_BASE_FEATURE_NAMES)
 
     dataset_rows: list[dict[str, Any]] = []
 

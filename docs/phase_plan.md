@@ -17,10 +17,11 @@ Last reviewed: 2026-07-18
 3. Preserve current production defaults until broader walk-forward acceptance gates beat them.
 
 ### Next
-1. Ingest point-in-time historical injury snapshots and rerun the rejected showdown availability candidate.
-2. Ingest point-in-time ownership data before implementing ownership-aware leverage.
-3. Add durable checkpoint/resume for 100k-500k candidate runs.
-4. Add nightly benchmark scheduling, retention, and CI database/migration smoke coverage.
+1. Build and validate a transparent pre-lock popularity/duplication proxy without calling it observed ownership.
+2. Add role-shock opportunity reallocation simulations, reusing the research-only continuity signal.
+3. Add online weekly residual learning with shrinkage and strict prior-week cutoffs.
+4. Add durable checkpoint/resume for 100k-500k candidate runs.
+5. Add nightly benchmark scheduling, retention, and CI database/migration smoke coverage.
 
 ### Later
 1. Add contest-specific cash/GPP objectives.

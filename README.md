@@ -255,7 +255,24 @@ python scripts/train_showdown_captain_archetype_model.py \
   --report-md /tmp/showdown_availability_report.md
 ```
 
-The feature set includes active salary-pool skill-player counts and imbalance plus injury/out context when the selected historical slice contains an injury snapshot. The current 41-slate dataset has zero historical injury-report coverage. Its availability candidate scored `30.3%` top-1 and `51.5%` top-2 versus the current-code baseline at `33.3%` and `57.6%`, so the production captain artifact and baseline training default remain unchanged. Ingest point-in-time historical injuries before reevaluating this candidate.
+The feature set includes active salary-pool skill-player counts and imbalance plus injury/out context when the selected historical slice contains an injury snapshot. The current 41-slate dataset has zero historical injury-report coverage. Its availability candidate scored `30.3%` top-1 and `51.5%` top-2 versus the current-code baseline at `33.3%` and `57.6%`, so the production captain artifact and baseline training default remain unchanged. The rejected candidate remains documented, but no historical injury ingestion is assumed.
+
+Historical injury ingestion is no longer on the critical path. The injury-free replacement derives missing opportunity from prior carries/targets and current salary-pool membership:
+
+```bash
+source .venv/bin/activate
+python scripts/train_showdown_captain_archetype_model.py \
+  --source-system draftkings \
+  --season-start 2024 \
+  --season-end 2025 \
+  --feature-set continuity \
+  --dataset-csv docs/showdown_captain_continuity_dataset_2024_2025.csv \
+  --eval-json docs/showdown_captain_continuity_eval_2024_2025.json \
+  --model-json docs/showdown_captain_continuity_model_2024_2025.json \
+  --report-md docs/showdown_captain_continuity_eval_2024_2025.md
+```
+
+The continuity candidate uses the prior four team games and suppresses missing-usage signals below 50% identity coverage. With unresolved current salary players included in the coverage denominator, it scored `27.3%` top-1 and `51.5%` top-2 versus the refreshed baseline at `33.3%` and `57.6%`. It remains available for research and role-shock scenarios but was rejected as a standalone captain feature set; production defaults are unchanged. Further injury/ownership-independent work is ranked in `docs/NEXT_IDEAS.md`.
 
 ## Showdown Captain Drift
 

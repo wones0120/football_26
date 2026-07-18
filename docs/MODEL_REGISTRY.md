@@ -7,6 +7,7 @@ Last reviewed: 2026-07-18
 | Showdown captain archetype | `docs/showdown_captain_model_2024_2025.json` | DraftKings 2024-2025; 41 slates, 33 evaluated | Top-1 `36.4%`, top-2 `60.6%`; baseline top-1 `24.2%` | Production input |
 | Showdown captain prior strength | `docs/showdown_captain_strength_sweep_2024_2025_2500.json` | 39 paired slates; 2,500 candidates/slate | Strength `0.35`; mean-gap lift `+6.741`, win rate `61.5%` | Production default |
 | Showdown availability candidate | Opt-in `--feature-set availability`; no production artifact | 41 slates; zero injury-report coverage | `30.3%` top-1 / `51.5%` top-2, below current-code baseline | Rejected pending data |
+| Showdown usage-continuity candidate | `docs/showdown_captain_continuity_model_2024_2025.json` | 2024-2025; prior four-game carries/targets; 41 slates, 33 evaluated | `27.3%` top-1 / `51.5%` top-2 versus refreshed baseline `33.3%` / `57.6%` | Rejected standalone; retained for role-shock research |
 | Showdown role/scenario priors | `docs/showdown_captain_scenarios_2024_2025.json` | 2024-2025; 41 slates | 11 role archetypes; seven total/spread cells; five-slate fallback gate | Research |
 | Classic value-driver prior | `docs/main_slate_value_driver_analysis_2024_2025.json` | DraftKings 2024-2025; 27 main slates | Nine learned pregame value/construction features | Production input |
 | Classic lineup parameter sweep | `docs/classic_best_config_12slates.json` | 12 chronological slates | 10/12 completed; mean gap `134.428`; median `131.110` | Provisional |

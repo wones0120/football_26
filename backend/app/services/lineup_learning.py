@@ -194,9 +194,17 @@ SHOWDOWN_CAPTAIN_AVAILABILITY_FEATURE_NAMES = [
     "max_team_available_skill_count",
     "team_available_skill_count_diff",
 ]
+SHOWDOWN_CAPTAIN_CONTINUITY_FEATURE_NAMES = [
+    "max_team_missing_usage_share",
+    "team_missing_usage_share_diff",
+    "max_team_available_usage_concentration",
+    "team_available_usage_concentration_diff",
+    "min_team_usage_identity_coverage",
+]
 SHOWDOWN_CAPTAIN_CONTEXT_FEATURE_NAMES = [
     *SHOWDOWN_CAPTAIN_BASE_FEATURE_NAMES,
     *SHOWDOWN_CAPTAIN_AVAILABILITY_FEATURE_NAMES,
+    *SHOWDOWN_CAPTAIN_CONTINUITY_FEATURE_NAMES,
 ]
 SHOWDOWN_CAPTAIN_POSITIONS = {"QB", "RB", "WR", "TE", "K", "DST"}
 CLASSIC_VALUE_DRIVER_POSITIONS = ("QB", "RB", "WR", "TE", "DST")
@@ -273,6 +281,9 @@ class ShowdownPlayerPoolRow:
     player_injury_status: str = "unknown"
     team_skill_out_count: int = 0
     team_position_out_count: int = 0
+    team_missing_usage_share: float = 0.0
+    team_available_usage_concentration: float = 0.0
+    team_usage_identity_coverage: float = 0.0
     player_master_id: str | None = None
     source_player_key: str | None = None
 
@@ -740,6 +751,10 @@ class LineupLearningService:
         self._matchup_prior_gate_cache: dict[str, MatchupPriorGateModel] = {}
         self._projection_feature_cache: dict[tuple[str, int, int, str], dict[str, dict[str, Any]]] = {}
         self._matchup_model_cache: dict[tuple[str, int, int, str], dict[str, PlayerMatchupProjectionModel]] = {}
+        self._showdown_usage_cache: dict[
+            tuple[str, int, int, str, int],
+            dict[str, dict[str, float]],
+        ] = {}
         self._use_matrix_matchup_model = True
         self._disabled_classic_feature_indices: tuple[int, ...] = ()
 
@@ -1229,6 +1244,21 @@ class LineupLearningService:
             )
             for rows in by_team.values()
         ]
+        team_missing_usage_shares = [
+            max(float(row.team_missing_usage_share) for row in rows)
+            for rows in by_team.values()
+            if rows
+        ]
+        team_available_usage_concentrations = [
+            max(float(row.team_available_usage_concentration) for row in rows)
+            for rows in by_team.values()
+            if rows
+        ]
+        team_usage_identity_coverages = [
+            max(float(row.team_usage_identity_coverage) for row in rows)
+            for rows in by_team.values()
+            if rows
+        ]
 
         features = {
             "game_total_line": _safe_median(game_totals),
@@ -1268,6 +1298,28 @@ class LineupLearningService:
             "team_available_skill_count_diff": (
                 float(max(team_available_skill_counts) - min(team_available_skill_counts))
                 if team_available_skill_counts
+                else 0.0
+            ),
+            "max_team_missing_usage_share": _max_or_zero(team_missing_usage_shares),
+            "team_missing_usage_share_diff": (
+                float(max(team_missing_usage_shares) - min(team_missing_usage_shares))
+                if team_missing_usage_shares
+                else 0.0
+            ),
+            "max_team_available_usage_concentration": _max_or_zero(
+                team_available_usage_concentrations
+            ),
+            "team_available_usage_concentration_diff": (
+                float(
+                    max(team_available_usage_concentrations)
+                    - min(team_available_usage_concentrations)
+                )
+                if team_available_usage_concentrations
+                else 0.0
+            ),
+            "min_team_usage_identity_coverage": (
+                float(min(team_usage_identity_coverages))
+                if team_usage_identity_coverages
                 else 0.0
             ),
         }
@@ -1979,6 +2031,162 @@ class LineupLearningService:
             dtype=float,
         )
 
+    def _showdown_usage_continuity(
+        self,
+        *,
+        source_system: str,
+        season: int,
+        week: int,
+        slate: str,
+        salary_rows: list[CuratedSalary],
+        history_weeks: int = 4,
+    ) -> dict[str, dict[str, float]]:
+        cache_key = (source_system, season, week, slate, history_weeks)
+        cached = self._showdown_usage_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        current_skill_rows = [
+            row
+            for row in salary_rows
+            if _normalize_pool_position(row.position) in {"RB", "WR", "TE"}
+            and _canonical_team(row.team)
+        ]
+        if not current_skill_rows:
+            self._showdown_usage_cache[cache_key] = {}
+            return {}
+        master_ids = sorted(
+            {
+                str(row.player_master_id)
+                for row in current_skill_rows
+                if row.player_master_id
+            }
+        )
+
+        alias_rows = (
+            self.session.execute(
+                select(PlayerAlias.player_master_id, PlayerAlias.source_key).where(
+                    and_(
+                        PlayerAlias.source_system == "nflreadpy",
+                        PlayerAlias.player_master_id.in_(master_ids),
+                    )
+                )
+            ).all()
+            if master_ids
+            else []
+        )
+        player_ids_by_master: dict[str, set[str]] = defaultdict(set)
+        for player_master_id, source_key in alias_rows:
+            if source_key:
+                player_ids_by_master[str(player_master_id)].add(str(source_key))
+
+        available_ids_by_team: dict[str, set[str]] = defaultdict(set)
+        salary_identities_by_team: dict[str, set[str]] = defaultdict(set)
+        mapped_identities_by_team: dict[str, set[str]] = defaultdict(set)
+        for row in current_skill_rows:
+            team = _canonical_team(row.team)
+            if not team:
+                continue
+            salary_identity = str(
+                row.player_master_id
+                or row.source_player_key
+                or f"{row.normalized_name}:{team}:{row.position}"
+            )
+            salary_identities_by_team[team].add(salary_identity)
+            if not row.player_master_id:
+                continue
+            master_id = str(row.player_master_id)
+            player_ids = player_ids_by_master.get(master_id, set())
+            if player_ids:
+                mapped_identities_by_team[team].add(salary_identity)
+                available_ids_by_team[team].update(player_ids)
+
+        target_teams = sorted(salary_identities_by_team)
+        history_rows = self.session.execute(
+            select(RawNflWeeklyStat).where(
+                and_(
+                    RawNflWeeklyStat.source_system == "nflreadpy",
+                    RawNflWeeklyStat.team.in_(target_teams),
+                    RawNflWeeklyStat.position.in_(["RB", "WR", "TE"]),
+                    or_(
+                        RawNflWeeklyStat.season < season,
+                        and_(
+                            RawNflWeeklyStat.season == season,
+                            RawNflWeeklyStat.week < week,
+                        ),
+                    ),
+                )
+            )
+        ).scalars().all()
+
+        rows_by_team_slice: dict[str, dict[tuple[int, int], list[RawNflWeeklyStat]]] = defaultdict(
+            lambda: defaultdict(list)
+        )
+        for row in history_rows:
+            team = _canonical_team(row.team)
+            if team:
+                rows_by_team_slice[team][(int(row.season), int(row.week))].append(row)
+
+        result: dict[str, dict[str, float]] = {}
+        for team in target_teams:
+            slices = rows_by_team_slice.get(team, {})
+            recent_keys = sorted(slices, reverse=True)[: max(1, history_weeks)]
+            opportunity_by_player: dict[str, float] = defaultdict(float)
+            total_opportunity = 0.0
+            for slice_key in recent_keys:
+                for row in slices[slice_key]:
+                    if not row.player_id:
+                        continue
+                    payload = row.raw_row_json or {}
+                    opportunity = max(
+                        0.0,
+                        (_safe_float(payload.get("carries")) or 0.0)
+                        + (_safe_float(payload.get("targets")) or 0.0),
+                    )
+                    opportunity_by_player[str(row.player_id)] += opportunity
+                    total_opportunity += opportunity
+
+            salary_identities = salary_identities_by_team.get(team, set())
+            identity_coverage = (
+                len(mapped_identities_by_team.get(team, set())) / len(salary_identities)
+                if salary_identities
+                else 0.0
+            )
+            available_ids = available_ids_by_team.get(team, set())
+            available_opportunities = [
+                opportunity
+                for player_id, opportunity in opportunity_by_player.items()
+                if player_id in available_ids and opportunity > 0.0
+            ]
+            available_total = float(sum(available_opportunities))
+            if total_opportunity > 0.0 and identity_coverage >= 0.5:
+                missing_share = max(
+                    0.0,
+                    min(1.0, 1.0 - (available_total / total_opportunity)),
+                )
+                concentration = (
+                    float(
+                        sum(
+                            (opportunity / available_total) ** 2
+                            for opportunity in available_opportunities
+                        )
+                    )
+                    if available_total > 0.0
+                    else 0.0
+                )
+            else:
+                missing_share = 0.0
+                concentration = 0.0
+            result[team] = {
+                "missing_usage_share": missing_share,
+                "available_usage_concentration": concentration,
+                "identity_coverage": float(identity_coverage),
+                "history_weeks": float(len(recent_keys)),
+            }
+
+        self._showdown_usage_cache[cache_key] = result
+        return result
+
     def _fetch_showdown_player_pool(
         self,
         *,
@@ -2004,6 +2212,13 @@ class LineupLearningService:
 
         dst_points_by_team = self._compute_dst_actual_points(season=season, week=week)
         game_context_by_team = self._game_context_by_team(season=season, week=week)
+        usage_continuity_by_team = self._showdown_usage_continuity(
+            source_system=source_system,
+            season=season,
+            week=week,
+            slate=slate,
+            salary_rows=salary_rows,
+        )
         projection_feature_cache = self._projection_feature_cache.get(
             (source_system, season, week, slate),
             {},
@@ -2076,6 +2291,7 @@ class LineupLearningService:
             team_key = _canonical_team(flex_row.team)
             opponent_key = _canonical_team(flex_row.opponent)
             context = game_context_by_team.get(team_key or "", {})
+            usage_context = usage_continuity_by_team.get(team_key or "", {})
 
             points = actual_points_by_master.get(flex_row.player_master_id or "", 0.0)
             projected_mean = 0.0
@@ -2120,6 +2336,15 @@ class LineupLearningService:
                     ),
                     team_position_out_count=int(
                         projection_feature.get("team_position_out_count") or 0
+                    ),
+                    team_missing_usage_share=float(
+                        usage_context.get("missing_usage_share") or 0.0
+                    ),
+                    team_available_usage_concentration=float(
+                        usage_context.get("available_usage_concentration") or 0.0
+                    ),
+                    team_usage_identity_coverage=float(
+                        usage_context.get("identity_coverage") or 0.0
                     ),
                     player_master_id=flex_row.player_master_id,
                     source_player_key=flex_row.source_player_key,

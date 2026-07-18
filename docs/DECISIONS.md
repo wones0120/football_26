@@ -2,6 +2,13 @@
 
 This log records decisions that affect reproducibility, production defaults, or historical-model acceptance. The operational backlog remains in `docs/TODO.md`.
 
+## 2026-07-18 — Remove unavailable injury and ownership feeds from the critical path
+
+- Decision: derive latent availability from usage-weighted roster continuity and pursue a clearly labeled popularity/duplication proxy instead of observed ownership.
+- Evidence: honest identity coverage includes unresolved current salary players. Under that accounting, the continuity candidate scored `27.3%` top-1 and `51.5%` top-2 versus the current-code baseline at `33.3%` and `57.6%`.
+- Rationale: prior carries/targets, current salary pools, projections, and generated lineups are reproducible inputs we control. We will not fabricate unavailable injury or ownership history.
+- Production impact: none; continuity was rejected as a standalone captain feature set and remains research-only for role-shock scenarios.
+
 ## 2026-07-18 — Keep rejected availability candidate out of production
 
 - Decision: retain the baseline showdown captain feature set and production prior strength `0.35`.
