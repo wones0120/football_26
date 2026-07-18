@@ -32,6 +32,7 @@ import {
   type IngestResult,
   type ModelDefaults,
   type OptimalVsPredictedBacktestResult,
+  type RoleShockImpact,
   type SeasonCoverageRow,
   type SimulatedPlayerOutcome,
   type UnresolvedRow,
@@ -163,6 +164,10 @@ function App() {
   const [simulationMinHistoryGames, setSimulationMinHistoryGames] = useState(4);
   const [simulationPriorWeight, setSimulationPriorWeight] = useState(12);
   const [simulationNoiseScale, setSimulationNoiseScale] = useState(0.12);
+  const [roleShockPlayerIdentity, setRoleShockPlayerIdentity] = useState("");
+  const [roleShockRetainedShare, setRoleShockRetainedShare] = useState(0);
+  const [roleShockScope, setRoleShockScope] =
+    useState<"same_position" | "skill_players">("same_position");
   const [backtestTopN, setBacktestTopN] = useState(25);
   const [backtestLowSalaryThreshold, setBacktestLowSalaryThreshold] = useState(4500);
   const [backtestLowSalaryHitPoints, setBacktestLowSalaryHitPoints] = useState(15);
@@ -191,6 +196,9 @@ function App() {
   const [lineupBacktestMatchupPriorGateModelPath, setLineupBacktestMatchupPriorGateModelPath] =
     useState(FALLBACK_MODEL_DEFAULTS.matchup_prior_gate_model_path);
   const [simulationRows, setSimulationRows] = useState<SimulatedPlayerOutcome[]>([]);
+  const [roleShockCandidates, setRoleShockCandidates] = useState<SimulatedPlayerOutcome[]>([]);
+  const [roleShockImpacts, setRoleShockImpacts] = useState<RoleShockImpact[]>([]);
+  const [scenarioWarnings, setScenarioWarnings] = useState<string[]>([]);
   const [simulationRunId, setSimulationRunId] = useState<string | null>(null);
   const [backtestResult, setBacktestResult] = useState<BacktestWeekResult | null>(null);
   const [lineupBacktestClassicResult, setLineupBacktestClassicResult] =
@@ -407,6 +415,13 @@ function App() {
   }, [sourceSystem, season, week, slate]);
 
   useEffect(() => {
+    setRoleShockCandidates([]);
+    setRoleShockPlayerIdentity("");
+    setRoleShockImpacts([]);
+    setScenarioWarnings([]);
+  }, [sourceSystem, season, week, slate]);
+
+  useEffect(() => {
     if (!showCuratedSalarySlices) return;
     refreshCuratedSalarySlices().catch((err) =>
       setError(err instanceof Error ? err.message : String(err))
@@ -620,9 +635,25 @@ function App() {
   };
 
   const runSimulation = async () => {
+    const roleShock =
+      roleShockPlayerIdentity.startsWith("master:")
+        ? {
+            player_master_id: roleShockPlayerIdentity.slice("master:".length),
+            retained_opportunity_share: roleShockRetainedShare,
+            reallocation_scope: roleShockScope,
+          }
+        : roleShockPlayerIdentity.startsWith("source:")
+          ? {
+              source_player_key: roleShockPlayerIdentity.slice("source:".length),
+              retained_opportunity_share: roleShockRetainedShare,
+              reallocation_scope: roleShockScope,
+            }
+          : null;
     setIsIngesting(true);
     setSimulationRows([]);
     setSimulationRunId(null);
+    setRoleShockImpacts([]);
+    setScenarioWarnings([]);
     setStatus(`Simulating ${sourceSystem} season ${season} week ${week} (${slate})...`);
     setError(null);
     try {
@@ -636,11 +667,23 @@ function App() {
         min_history_games: simulationMinHistoryGames,
         prior_weight: simulationPriorWeight,
         noise_scale: simulationNoiseScale,
+        role_shocks: roleShock ? [roleShock] : [],
       });
       setSimulationRows(result.top_rows);
+      if (!roleShock) {
+        setRoleShockCandidates(
+          result.top_rows.filter(
+            (row) =>
+              ["RB", "WR", "TE"].includes(row.position ?? "") &&
+              Boolean(row.player_master_id || row.source_player_key)
+          )
+        );
+      }
       setSimulationRunId(result.simulation_run_id);
+      setRoleShockImpacts(result.role_shock_impacts);
+      setScenarioWarnings(result.scenario_warnings);
       setStatus(
-        `Simulation completed: players=${result.players_simulated}/${result.players_considered} iterations=${result.iterations}`
+        `Simulation completed: players=${result.players_simulated}/${result.players_considered} iterations=${result.iterations} role_impacts=${result.role_shock_impacts.length}`
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -1340,7 +1383,59 @@ function App() {
                 onChange={(event) => setSimulationNoiseScale(Number(event.target.value))}
               />
             </label>
+            <label>
+              Role Shock Player
+              <select
+                value={roleShockPlayerIdentity}
+                onChange={(event) => setRoleShockPlayerIdentity(event.target.value)}
+                disabled={roleShockCandidates.length === 0}
+              >
+                <option value="">
+                  {roleShockCandidates.length === 0 ? "Run baseline first" : "No role shock"}
+                </option>
+                {roleShockCandidates.map((row) => {
+                  const identity = row.player_master_id
+                    ? `master:${row.player_master_id}`
+                    : `source:${row.source_player_key}`;
+                  return (
+                    <option key={identity} value={identity}>
+                      {row.player_name} ({row.team ?? "-"} {row.position ?? "-"})
+                    </option>
+                  );
+                })}
+              </select>
+            </label>
+            <label>
+              Retained Opportunity
+              <input
+                type="number"
+                min={0}
+                max={1}
+                step={0.05}
+                value={roleShockRetainedShare}
+                onChange={(event) => setRoleShockRetainedShare(Number(event.target.value))}
+                disabled={!roleShockPlayerIdentity}
+              />
+            </label>
+            <label>
+              Reallocation Scope
+              <select
+                value={roleShockScope}
+                onChange={(event) =>
+                  setRoleShockScope(event.target.value as "same_position" | "skill_players")
+                }
+                disabled={!roleShockPlayerIdentity}
+              >
+                <option value="same_position">Same position</option>
+                <option value="skill_players">All RB/WR/TE</option>
+              </select>
+            </label>
           </div>
+          <p className="hint">
+            Run an unshocked baseline first to populate eligible players. A role shock manually reduces the
+            selected player&apos;s opportunity and reallocates it from the prior four team games; it does not
+            claim historical injury knowledge. Increase Top Results if the player you need is not listed.
+          </p>
           <div className="button-row">
             <button onClick={runSimulation} disabled={isIngesting}>
               Run Simulation
@@ -1351,6 +1446,10 @@ function App() {
             <button
               onClick={() => {
                 setSimulationRows([]);
+                setRoleShockCandidates([]);
+                setRoleShockPlayerIdentity("");
+                setRoleShockImpacts([]);
+                setScenarioWarnings([]);
                 setSimulationRunId(null);
                 setBacktestResult(null);
               }}
@@ -1406,6 +1505,58 @@ function App() {
               </tbody>
             </table>
           </div>
+          {scenarioWarnings.length > 0 && (
+            <div className="scenario-warnings" role="status">
+              {scenarioWarnings.map((warning) => (
+                <p key={warning}>{warning}</p>
+              ))}
+            </div>
+          )}
+          {roleShockImpacts.length > 0 && (
+            <div className="subsection">
+              <h3>Role Shock Impact</h3>
+              <p className="hint">
+                Opportunity and projection multipliers are shown separately because fantasy points respond
+                less than one-for-one to added carries and targets.
+              </p>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Player</th>
+                      <th>Role</th>
+                      <th>Opp ×</th>
+                      <th>Proj ×</th>
+                      <th>Mean Before</th>
+                      <th>Mean After</th>
+                      <th>Mean Δ</th>
+                      <th>P90 Before</th>
+                      <th>P90 After</th>
+                      <th>P90 Δ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {roleShockImpacts.map((row) => (
+                      <tr key={`${row.player_master_id ?? row.source_player_key ?? row.player_name}-${row.shock_role}`}>
+                        <td>
+                          {row.player_name} ({row.team ?? "-"} {row.position ?? "-"})
+                        </td>
+                        <td>{row.shock_role.replaceAll("_", " ")}</td>
+                        <td>{row.opportunity_multiplier.toFixed(2)}</td>
+                        <td>{row.projection_multiplier.toFixed(2)}</td>
+                        <td>{row.baseline_mean_points.toFixed(2)}</td>
+                        <td>{row.scenario_mean_points.toFixed(2)}</td>
+                        <td>{row.mean_points_delta.toFixed(2)}</td>
+                        <td>{row.baseline_p90_points.toFixed(2)}</td>
+                        <td>{row.scenario_p90_points.toFixed(2)}</td>
+                        <td>{row.p90_points_delta.toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           <div className="subsection">
             <h3>Backtest Learning Controls</h3>

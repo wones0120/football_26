@@ -361,6 +361,8 @@ class SimulationRun(Base):
     week: Mapped[int] = mapped_column(Integer, nullable=False)
     slate: Mapped[str] = mapped_column(String(64), nullable=False)
     iterations: Mapped[int] = mapped_column(Integer, nullable=False)
+    random_seed: Mapped[int | None] = mapped_column(Integer)
+    parameters_json: Mapped[dict | None] = mapped_column(JSON)
     players_considered: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     players_simulated: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="running")

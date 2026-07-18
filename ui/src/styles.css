@@ -288,6 +288,24 @@ select:focus {
   font-size: 0.83rem;
 }
 
+.scenario-warnings {
+  margin-top: 0.7rem;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid rgb(255 192 95 / 42%);
+  border-radius: 12px;
+  color: #ffe3ad;
+  background: rgb(91 55 8 / 32%);
+}
+
+.scenario-warnings p {
+  margin: 0;
+  font-size: 0.83rem;
+}
+
+.scenario-warnings p + p {
+  margin-top: 0.35rem;
+}
+
 .range-grid {
   margin-top: 0.6rem;
   display: grid;
@@ -299,7 +317,7 @@ select:focus {
   margin-top: 0.7rem;
   display: grid;
   gap: 0.68rem;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
 }
 
 .simulation-grid input {

@@ -360,5 +360,42 @@ python scripts/analyze_popularity_proxy.py \
 
 Across the latest 12 eligible classic slates, penalty `0.25` reduced mean proxy risk by `1.1%` with a `0.2%` projected-blend cost and `0.28` fewer realized points. Penalty `0.75` reduced risk by `6.7%` but cost `5.0%` projection and `8.37` actual points. The default remains `0.0`; `0.25` is an opt-in research setting. Full evidence is in `docs/popularity_proxy_validation_2024_2025.{json,md}`.
 
+## Manual Role-Shock Simulation
+
+Projection simulation now supports manually triggered role shocks for RB/WR/TE players. A shock retains a caller-selected share of the target’s prior four-game carries/targets and reallocates removed opportunity to same-position teammates or all team skill players. Recipient projection changes use 65% elasticity versus opportunity changes and honor a caller-controlled multiplier cap.
+
+Run and persist a scenario with:
+
+```bash
+source .venv/bin/activate
+python scripts/run_role_shock_simulation.py \
+  --season 2025 \
+  --week 18 \
+  --slate sunday_main \
+  --player-name "Jahmyr Gibbs" \
+  --retained-opportunity-share 0 \
+  --reallocation-scope same_position \
+  --random-seed 42
+```
+
+The Projection Simulation UI exposes the same workflow: run an unshocked baseline, select an eligible player, choose retained opportunity and reallocation scope, then rerun. Simulation runs default to seed `42` and persist the effective seed and full parameter JSON.
+
+Measure downstream portfolio fragility with:
+
+```bash
+python scripts/analyze_role_shock_fragility.py \
+  --season 2025 \
+  --week 18 \
+  --slate sunday_main \
+  --player-name "Jahmyr Gibbs" \
+  --retained-opportunity-share 0 \
+  --iterations 3000 \
+  --candidate-lineups 2500 \
+  --selected-lineups 20 \
+  --random-seed 42
+```
+
+In the stored Week 18 stress test, Gibbs exposure moved from `30%` to `0%`, Montgomery moved from `5%` to `25%`, top-lineup overlap was `70%`, and scenario reoptimization recovered `6.69` projected-blend points versus keeping the baseline portfolio. This is a hypothetical pre-lock stress test, not a claim that an injury or role change occurred historically. Evidence is in `docs/role_shock_fragility_2025_w18.{json,md}`.
+
 Architecture decisions and acceptance status are maintained in `docs/DECISIONS.md` and `docs/MODEL_REGISTRY.md`.
 An empty-database environment can be reproduced using `docs/BOOTSTRAP_RUNBOOK.md`.

@@ -28,6 +28,8 @@ from ..schemas import (
     BacktestWeekRequest,
     BacktestWeekResponse,
     PositionLearningRowResponse,
+    RoleShockImpactResponse,
+    RoleShockRequest,
     SalaryBucketLearningRowResponse,
     SimulatedPlayerOutcomeResponse,
     SimulateWeekRequest,
@@ -142,12 +144,189 @@ def _low_salary_group_key(position: str | None, salary: int | None) -> str | Non
     return f"{pos}|{bucket}"
 
 
+def _team_key(team: str | None) -> str:
+    return (team or "").strip().upper()
+
+
+def _role_shock_projection_multiplier(
+    opportunity_multiplier: float,
+    shock_roles: set[str],
+) -> float:
+    if "target" in shock_roles:
+        return max(0.0, float(opportunity_multiplier))
+    return max(0.0, 1.0 + (0.65 * (float(opportunity_multiplier) - 1.0)))
+
+
 class SimulationService:
     DEFAULT_LOW_SALARY_THRESHOLD = 4500
     DEFAULT_LOW_SALARY_HIT_POINTS = 15.0
 
     def __init__(self, session: Session) -> None:
         self.session = session
+
+    def _recent_opportunity_by_master(
+        self,
+        *,
+        history_rows: list[RawNflWeeklyStat],
+        player_id_to_masters: dict[str, set[str]],
+        salary_rows: list[CuratedSalary],
+        history_weeks: int = 4,
+    ) -> dict[str, float]:
+        team_by_master = {
+            str(row.player_master_id): _team_key(row.team)
+            for row in salary_rows
+            if row.player_master_id and _team_key(row.team)
+        }
+        rows_by_team_slice: dict[
+            str,
+            dict[tuple[int, int], list[RawNflWeeklyStat]],
+        ] = defaultdict(lambda: defaultdict(list))
+        for row in history_rows:
+            team = _team_key(row.team)
+            if team:
+                rows_by_team_slice[team][(int(row.season), int(row.week))].append(row)
+
+        opportunity_by_master: dict[str, float] = defaultdict(float)
+        for team, slices in rows_by_team_slice.items():
+            recent_keys = sorted(slices, reverse=True)[: max(1, history_weeks)]
+            for slice_key in recent_keys:
+                for row in slices[slice_key]:
+                    if not row.player_id:
+                        continue
+                    opportunity = max(
+                        0.0,
+                        _num(row.raw_row_json or {}, "carries")
+                        + _num(row.raw_row_json or {}, "targets"),
+                    )
+                    for master_id in player_id_to_masters.get(row.player_id, set()):
+                        if team_by_master.get(str(master_id)) == team:
+                            opportunity_by_master[str(master_id)] += opportunity
+        return dict(opportunity_by_master)
+
+    def _role_shock_multipliers(
+        self,
+        *,
+        salary_rows: list[CuratedSalary],
+        opportunity_by_master: dict[str, float],
+        role_shocks: list[RoleShockRequest],
+    ) -> tuple[dict[str, float], dict[str, set[str]], list[str]]:
+        unique_rows_by_master: dict[str, CuratedSalary] = {}
+        rows_by_source_key: dict[str, CuratedSalary] = {}
+        for row in salary_rows:
+            if row.player_master_id:
+                unique_rows_by_master.setdefault(str(row.player_master_id), row)
+            if row.source_player_key:
+                rows_by_source_key.setdefault(str(row.source_player_key), row)
+
+        multipliers: dict[str, float] = {
+            master_id: 1.0 for master_id in unique_rows_by_master
+        }
+        roles_by_master: dict[str, set[str]] = defaultdict(set)
+        warnings: list[str] = []
+        seen_targets: set[str] = set()
+
+        for index, shock in enumerate(role_shocks, start=1):
+            target_row: CuratedSalary | None = None
+            if shock.player_master_id:
+                target_row = unique_rows_by_master.get(str(shock.player_master_id))
+            if target_row is None and shock.source_player_key:
+                target_row = rows_by_source_key.get(str(shock.source_player_key))
+            if target_row is None or not target_row.player_master_id:
+                warnings.append(
+                    f"role_shock[{index}] target was not found in the selected salary slice"
+                )
+                continue
+
+            target_master = str(target_row.player_master_id)
+            if target_master in seen_targets:
+                warnings.append(
+                    f"role_shock[{index}] duplicates target {target_master}; ignored"
+                )
+                continue
+            seen_targets.add(target_master)
+            target_position = normalize_position(target_row.position)
+            if target_position not in {"RB", "WR", "TE"}:
+                warnings.append(
+                    f"role_shock[{index}] target {target_row.player_name} has unsupported "
+                    f"position {target_position or 'unknown'}"
+                )
+                continue
+
+            target_team = _team_key(target_row.team)
+            recipients = [
+                row
+                for master_id, row in unique_rows_by_master.items()
+                if master_id != target_master
+                and _team_key(row.team) == target_team
+                and (
+                    normalize_position(row.position) == target_position
+                    if shock.reallocation_scope == "same_position"
+                    else normalize_position(row.position) in {"RB", "WR", "TE"}
+                )
+            ]
+            roles_by_master[target_master].add("target")
+            multipliers[target_master] *= float(shock.retained_opportunity_share)
+
+            if not recipients or shock.retained_opportunity_share >= 1.0:
+                if not recipients and shock.retained_opportunity_share < 1.0:
+                    warnings.append(
+                        f"role_shock[{index}] found no eligible recipients for "
+                        f"{target_row.player_name}"
+                    )
+                continue
+
+            recipient_opportunities = {
+                str(row.player_master_id): float(
+                    opportunity_by_master.get(str(row.player_master_id), 0.0)
+                )
+                for row in recipients
+                if row.player_master_id
+                and float(
+                    opportunity_by_master.get(str(row.player_master_id), 0.0)
+                )
+                > 0.0
+            }
+            if not recipient_opportunities:
+                recipient_opportunities = {
+                    str(row.player_master_id): 1.0
+                    for row in recipients
+                    if row.player_master_id
+                }
+                warnings.append(
+                    f"role_shock[{index}] inferred recipient opportunity for "
+                    f"{target_row.player_name}"
+                )
+            target_opportunity = float(opportunity_by_master.get(target_master, 0.0))
+            if target_opportunity <= 0.0:
+                target_opportunity = float(
+                    np.median(list(recipient_opportunities.values()))
+                )
+                warnings.append(
+                    f"role_shock[{index}] inferred recent opportunity for "
+                    f"{target_row.player_name}"
+                )
+            removed_opportunity = target_opportunity * (
+                1.0 - float(shock.retained_opportunity_share)
+            )
+            recipient_total = float(sum(recipient_opportunities.values()))
+            if removed_opportunity <= 0.0 or recipient_total <= 0.0:
+                continue
+
+            for recipient_master, recipient_opportunity in recipient_opportunities.items():
+                allocated = removed_opportunity * (
+                    recipient_opportunity / recipient_total
+                )
+                recipient_boost = min(
+                    float(shock.max_recipient_multiplier),
+                    1.0 + (allocated / recipient_opportunity),
+                )
+                multipliers[recipient_master] = min(
+                    float(shock.max_recipient_multiplier),
+                    multipliers.get(recipient_master, 1.0) * recipient_boost,
+                )
+                roles_by_master[recipient_master].add("recipient")
+
+        return multipliers, dict(roles_by_master), warnings
 
     def _load_calibration_multipliers(
         self,
@@ -356,7 +535,15 @@ class SimulationService:
         random_seed: int | None,
         use_calibration: bool = True,
         low_hit_points: float | None = None,
-    ) -> tuple[int, list[dict[str, Any]], dict[str, set[str]], list[str]]:
+        role_shocks: list[RoleShockRequest] | None = None,
+    ) -> tuple[
+        int,
+        list[dict[str, Any]],
+        dict[str, set[str]],
+        list[str],
+        list[dict[str, Any]],
+        list[str],
+    ]:
         salary_rows = self.session.execute(
             select(CuratedSalary).where(
                 and_(
@@ -411,6 +598,7 @@ class SimulationService:
         history_rows = self.session.execute(
             select(RawNflWeeklyStat).where(
                 and_(
+                    RawNflWeeklyStat.source_system == "nflreadpy",
                     RawNflWeeklyStat.player_id.in_(tracked_player_ids),
                     history_filter,
                 )
@@ -441,6 +629,7 @@ class SimulationService:
             prior_rows = self.session.execute(
                 select(RawNflWeeklyStat).where(
                     and_(
+                        RawNflWeeklyStat.source_system == "nflreadpy",
                         RawNflWeeklyStat.position.in_(sorted(missing_positions)),
                         history_filter,
                     )
@@ -459,6 +648,21 @@ class SimulationService:
         for values in position_prior_points.values():
             global_prior.extend(values)
 
+        opportunity_by_master = self._recent_opportunity_by_master(
+            history_rows=history_rows,
+            player_id_to_masters=player_id_to_masters,
+            salary_rows=rows_with_master,
+        )
+        (
+            role_shock_multipliers,
+            role_shock_roles,
+            scenario_warnings,
+        ) = self._role_shock_multipliers(
+            salary_rows=rows_with_master,
+            opportunity_by_master=opportunity_by_master,
+            role_shocks=list(role_shocks or []),
+        )
+
         if use_calibration:
             (
                 position_multipliers,
@@ -475,6 +679,8 @@ class SimulationService:
 
         rng = np.random.default_rng(random_seed)
         simulated_rows: list[dict[str, Any]] = []
+        role_shock_impacts: list[dict[str, Any]] = []
+        impacted_masters_simulated: set[str] = set()
 
         for salary_row in rows_with_master:
             if not salary_row.player_master_id:
@@ -526,6 +732,19 @@ class SimulationService:
                         combined_multiplier *= low_salary_group_multipliers.get(low_group_key, 1.0)
             combined_multiplier = _clip_multiplier(combined_multiplier, low=0.75, high=1.3)
             draws = np.clip(draws * combined_multiplier, 0.0, None)
+            baseline_draws = draws
+            opportunity_multiplier = float(
+                role_shock_multipliers.get(str(salary_row.player_master_id), 1.0)
+            )
+            shock_roles = role_shock_roles.get(
+                str(salary_row.player_master_id),
+                set(),
+            )
+            projection_multiplier = _role_shock_projection_multiplier(
+                opportunity_multiplier,
+                shock_roles,
+            )
+            draws = np.clip(baseline_draws * projection_multiplier, 0.0, None)
 
             hit_points = (
                 low_hit_points
@@ -536,6 +755,36 @@ class SimulationService:
             history_games = int(player_history.size)
             if history_games < min_history_games and prior.size == 0:
                 continue
+
+            if shock_roles:
+                impacted_masters_simulated.add(str(salary_row.player_master_id))
+                baseline_mean = float(np.mean(baseline_draws))
+                baseline_p90 = float(np.percentile(baseline_draws, 90))
+                scenario_mean = float(np.mean(draws))
+                scenario_p90 = float(np.percentile(draws, 90))
+                shock_role = (
+                    "target_and_recipient"
+                    if shock_roles == {"target", "recipient"}
+                    else next(iter(shock_roles))
+                )
+                role_shock_impacts.append(
+                    {
+                        "player_master_id": salary_row.player_master_id,
+                        "source_player_key": salary_row.source_player_key,
+                        "player_name": salary_row.player_name,
+                        "team": salary_row.team,
+                        "position": salary_row.position,
+                        "shock_role": shock_role,
+                        "opportunity_multiplier": opportunity_multiplier,
+                        "projection_multiplier": projection_multiplier,
+                        "baseline_mean_points": baseline_mean,
+                        "scenario_mean_points": scenario_mean,
+                        "mean_points_delta": scenario_mean - baseline_mean,
+                        "baseline_p90_points": baseline_p90,
+                        "scenario_p90_points": scenario_p90,
+                        "p90_points_delta": scenario_p90 - baseline_p90,
+                    }
+                )
 
             simulated_rows.append(
                 {
@@ -562,7 +811,20 @@ class SimulationService:
                 "Simulation produced no rows. Ensure salary slice has mapped player_master_id values with historical stats."
             )
 
-        return players_considered, simulated_rows, player_id_to_masters, tracked_player_ids
+        for master_id in sorted(role_shock_roles):
+            if master_id not in impacted_masters_simulated:
+                scenario_warnings.append(
+                    f"role shock player {master_id} had no simulated outcome"
+                )
+
+        return (
+            players_considered,
+            simulated_rows,
+            player_id_to_masters,
+            tracked_player_ids,
+            role_shock_impacts,
+            scenario_warnings,
+        )
 
     def _new_run(self, request: SimulateWeekRequest) -> SimulationRun:
         run = SimulationRun(
@@ -572,6 +834,8 @@ class SimulationService:
             week=request.week,
             slate=request.slate,
             iterations=request.iterations,
+            random_seed=request.random_seed,
+            parameters_json=request.model_dump(mode="json"),
             players_considered=0,
             players_simulated=0,
             status="running",
@@ -607,8 +871,17 @@ class SimulationService:
         players_considered = 0
         players_simulated = 0
         top_rows: list[SimulatedPlayerOutcomeResponse] = []
+        role_shock_impacts: list[RoleShockImpactResponse] = []
+        scenario_warnings: list[str] = []
         try:
-            players_considered, simulated_calc_rows, _player_map, _tracked_ids = self._simulate_salary_slice(
+            (
+                players_considered,
+                simulated_calc_rows,
+                _player_map,
+                _tracked_ids,
+                role_shock_calc_rows,
+                scenario_warnings,
+            ) = self._simulate_salary_slice(
                 source_system=request.source_system,
                 season=request.season,
                 week=request.week,
@@ -619,7 +892,12 @@ class SimulationService:
                 noise_scale=request.noise_scale,
                 random_seed=request.random_seed,
                 use_calibration=True,
+                role_shocks=request.role_shocks,
             )
+            role_shock_impacts = [
+                RoleShockImpactResponse(**row)
+                for row in role_shock_calc_rows
+            ]
 
             simulated_rows = [
                 SimulatedPlayerOutcome(
@@ -689,6 +967,8 @@ class SimulationService:
                 started_at=run.started_at,
                 completed_at=run.completed_at,
                 top_rows=top_rows,
+                role_shock_impacts=role_shock_impacts,
+                scenario_warnings=scenario_warnings,
             )
         except Exception as exc:  # noqa: BLE001
             self.session.rollback()
@@ -713,6 +993,8 @@ class SimulationService:
                 started_at=run.started_at,
                 completed_at=run.completed_at,
                 top_rows=[],
+                role_shock_impacts=[],
+                scenario_warnings=scenario_warnings,
             )
 
     def _backtest_week_internal(
@@ -723,7 +1005,14 @@ class SimulationService:
         persist_calibration: bool,
         include_rows: bool,
     ) -> BacktestWeekResponse:
-        players_considered, simulated_rows, player_id_to_masters, tracked_player_ids = self._simulate_salary_slice(
+        (
+            players_considered,
+            simulated_rows,
+            player_id_to_masters,
+            tracked_player_ids,
+            _role_shock_impacts,
+            _scenario_warnings,
+        ) = self._simulate_salary_slice(
             source_system=request.source_system,
             season=request.season,
             week=request.week,

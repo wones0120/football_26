@@ -2,6 +2,13 @@
 
 This log records decisions that affect reproducibility, production defaults, or historical-model acceptance. The operational backlog remains in `docs/TODO.md`.
 
+## 2026-07-18 — Treat role shocks as explicit stress tests
+
+- Decision: accept manual RB/WR/TE role shocks as scenario inputs, reallocate prior four-game carries/targets, damp recipient projection changes to 65% of opportunity changes, default simulation seed to `42`, and persist the effective seed plus full request.
+- Evidence: the Week 18 Gibbs zero-retention scenario changed top-lineup overlap to `70%`, moved Gibbs exposure `30%` to `0%`, moved Montgomery `5%` to `25%`, and produced a `+6.69` projected-blend reoptimization lift.
+- Rationale: manual controls let us respond to current news without fabricating historical injury data. Damping keeps fantasy-point changes from scaling one-for-one with opportunity.
+- Production impact: no automatic shock is inferred; baseline behavior is unchanged when `role_shocks` is empty.
+
 ## 2026-07-18 — Keep duplication-risk penalty opt-in
 
 - Decision: expose the pre-lock `popularity_proxy`, generated-candidate exposure, and lineup duplication risk, but keep `duplication_risk_penalty=0.0` by default.

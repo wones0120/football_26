@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 SourceSystem = Literal["draftkings", "fanduel", "nflreadpy"]
@@ -138,6 +138,22 @@ class AutoDiscoverIngestRequest(BaseModel):
     directory: str = Field(default="~/Downloads", min_length=1)
 
 
+class RoleShockRequest(BaseModel):
+    player_master_id: str | None = None
+    source_player_key: str | None = None
+    retained_opportunity_share: float = Field(default=0.0, ge=0.0, le=1.0)
+    reallocation_scope: Literal["same_position", "skill_players"] = "same_position"
+    max_recipient_multiplier: float = Field(default=2.0, ge=1.0, le=3.0)
+
+    @model_validator(mode="after")
+    def validate_identity(self) -> RoleShockRequest:
+        if not self.player_master_id and not self.source_player_key:
+            raise ValueError(
+                "Role shock requires player_master_id or source_player_key."
+            )
+        return self
+
+
 class SimulateWeekRequest(BaseModel):
     source_system: Literal["draftkings", "fanduel"] = "draftkings"
     season: int = Field(..., ge=2000)
@@ -148,7 +164,8 @@ class SimulateWeekRequest(BaseModel):
     min_history_games: int = Field(default=4, ge=1, le=30)
     prior_weight: float = Field(default=12.0, ge=0.0, le=100.0)
     noise_scale: float = Field(default=0.12, ge=0.0, le=1.0)
-    random_seed: int | None = None
+    random_seed: int = 42
+    role_shocks: list[RoleShockRequest] = Field(default_factory=list, max_length=1)
 
 
 class BacktestWeekRequest(BaseModel):
@@ -288,6 +305,23 @@ class SimulatedPlayerOutcomeResponse(BaseModel):
     ceiling_prob_25: float
 
 
+class RoleShockImpactResponse(BaseModel):
+    player_master_id: str | None
+    source_player_key: str | None
+    player_name: str
+    team: str | None
+    position: str | None
+    shock_role: Literal["target", "recipient", "target_and_recipient"]
+    opportunity_multiplier: float
+    projection_multiplier: float
+    baseline_mean_points: float
+    scenario_mean_points: float
+    mean_points_delta: float
+    baseline_p90_points: float
+    scenario_p90_points: float
+    p90_points_delta: float
+
+
 class SimulateWeekResponse(BaseModel):
     simulation_run_id: str
     source_system: str
@@ -302,6 +336,8 @@ class SimulateWeekResponse(BaseModel):
     started_at: datetime
     completed_at: datetime | None = None
     top_rows: list[SimulatedPlayerOutcomeResponse]
+    role_shock_impacts: list[RoleShockImpactResponse] = Field(default_factory=list)
+    scenario_warnings: list[str] = Field(default_factory=list)
 
 
 class BacktestPlayerRowResponse(BaseModel):

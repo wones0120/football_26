@@ -125,7 +125,8 @@ Last updated: 2026-07-18
 ## New Ideas Without Vendor History
 - [x] Usage-weighted roster continuity for latent availability (rejected as a standalone captain feature set; retained for role-shock research).
 - [x] Popularity and duplication proxy (default penalty zero; `0.25` retained as an opt-in research setting).
-- [ ] Role-shock opportunity reallocation simulations.
+- [x] Role-shock opportunity reallocation simulations with UI controls and lineup-fragility reporting.
+  - Evidence: `docs/role_shock_fragility_2025_w18.{json,md}`; Gibbs exposure `30%` to `0%`, 70% lineup overlap, `+6.69` reoptimization lift.
 - [ ] Online weekly residual learning with shrinkage.
 - [ ] Future-safe game-regime ensemble.
 - Roadmap: `docs/NEXT_IDEAS.md`.

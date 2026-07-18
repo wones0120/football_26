@@ -1,0 +1,5 @@
+ALTER TABLE IF EXISTS simulation_run
+ADD COLUMN IF NOT EXISTS random_seed INT;
+
+ALTER TABLE IF EXISTS simulation_run
+ADD COLUMN IF NOT EXISTS parameters_json JSONB;

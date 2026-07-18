@@ -7,7 +7,7 @@ Last reviewed: 2026-07-18
 1. Phase 1 data foundation and deterministic identity workflows are demoable.
 2. Phase 2 control-plane ingestion, unresolved repair, freshness, model defaults, and benchmark visibility are demoable.
 3. Phase 3 historical feature, projection, uncertainty, calibration, and walk-forward learning workflows are implemented and evidence-backed.
-4. Phase 4 historical replay, showdown/classic lineup intelligence, exposure controls, pre-lock popularity/duplication proxies, and 100k candidate research are implemented; durable large-run resume remains.
+4. Phase 4 historical replay, showdown/classic lineup intelligence, exposure controls, pre-lock popularity/duplication proxies, manual role-shock stress tests, and 100k candidate research are implemented; durable large-run resume remains.
 
 ## Execution Board
 
@@ -17,11 +17,10 @@ Last reviewed: 2026-07-18
 3. Preserve current production defaults until broader walk-forward acceptance gates beat them.
 
 ### Next
-1. Add role-shock opportunity reallocation simulations, reusing the research-only continuity signal.
-2. Add online weekly residual learning with shrinkage and strict prior-week cutoffs.
-3. Add a future-safe game-regime ensemble with global fallback.
-4. Add durable checkpoint/resume for 100k-500k candidate runs.
-5. Add nightly benchmark scheduling, retention, and CI database/migration smoke coverage.
+1. Add online weekly residual learning with shrinkage and strict prior-week cutoffs.
+2. Add a future-safe game-regime ensemble with global fallback.
+3. Add durable checkpoint/resume for 100k-500k candidate runs.
+4. Add nightly benchmark scheduling, retention, and CI database/migration smoke coverage.
 
 ### Later
 1. Add contest-specific cash/GPP objectives.

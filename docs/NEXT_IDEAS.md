@@ -30,7 +30,7 @@ Call this a `popularity_proxy`, never observed ownership. Validate it by lineup 
 
 The ultimate classic lineup workflow now returns per-player proxy/candidate exposure and per-lineup duplication risk, with an opt-in risk penalty that defaults to zero. On 12 historical classic slates, penalty `0.25` reduced proxy risk `1.1%` with a `0.2%` projected-blend cost and `0.28` fewer actual points. Penalty `0.75` reduced risk `6.7%` but cost `5.0%` projection and `8.37` actual points. No nonzero default was promoted.
 
-## 3. Role-Shock Simulation
+## 3. Role-Shock Simulation — Implemented
 
 Create controlled scenarios that remove or reduce a player’s opportunity share and reallocate it within the team by position and recent role. Measure:
 
@@ -40,6 +40,8 @@ Create controlled scenarios that remove or reduce a player’s opportunity share
 - fragility of the top portfolio across shocks.
 
 This gives useful pre-lock stress testing even when the triggering news itself is entered manually.
+
+The simulation API and UI now support a deterministic manual target, retained-opportunity share, same-position/all-skill reallocation, recipient cap, and separate opportunity/projection multipliers. Seeds and the complete request are stored on `simulation_run`. The Week 18 Gibbs zero-retention example moved target exposure from `30%` to `0%`, retained `70%` top-lineup overlap, and recovered `6.69` projected-blend points after scenario reoptimization.
 
 ## 4. Online Residual Learning
 

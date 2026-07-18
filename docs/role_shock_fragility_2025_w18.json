@@ -1,0 +1,206 @@
+{
+  "metadata": {
+    "generated_at": "2026-07-18T12:35:20.180796+00:00",
+    "code_revision": "89e99e6400700fc54306b8dab9505eea6ee053c8",
+    "tracked_worktree_dirty": true,
+    "source_system": "draftkings",
+    "season": 2025,
+    "week": 18,
+    "slate": "sunday_main",
+    "target_player_master_id": "693463af-73ba-41d5-889c-388c36703430",
+    "target_source_player_key": "41367687",
+    "target_player_name": "Jahmyr Gibbs",
+    "retained_opportunity_share": 0.0,
+    "reallocation_scope": "same_position",
+    "max_recipient_multiplier": 2.0,
+    "iterations": 3000,
+    "candidate_lineups_requested": 2500,
+    "candidate_lineups_generated": 341,
+    "selected_lineups": 20,
+    "min_salary_floor": 43000,
+    "random_seed": 42,
+    "scenario_claim": "manual_prelock_stress_test_not_historical_injury"
+  },
+  "summary": {
+    "top_lineup_overlap_rate": 0.7,
+    "baseline_portfolio_score": 138.6407285534973,
+    "baseline_portfolio_scenario_score": 132.2307811967057,
+    "scenario_portfolio_score": 138.92254661576314,
+    "scenario_reoptimization_lift": 6.691765419057447,
+    "target_baseline_exposure": 0.3,
+    "target_scenario_exposure": 0.0
+  },
+  "role_shock_impacts": [
+    {
+      "player_master_id": "693463af-73ba-41d5-889c-388c36703430",
+      "source_player_key": "41367687",
+      "player_name": "Jahmyr Gibbs",
+      "team": "DET",
+      "position": "RB",
+      "shock_role": "target",
+      "opportunity_multiplier": 0.0,
+      "projection_multiplier": 0.0,
+      "baseline_mean_points": 17.562270120197645,
+      "scenario_mean_points": 0.0,
+      "mean_points_delta": -17.562270120197645,
+      "baseline_p90_points": 33.2003068545692,
+      "scenario_p90_points": 0.0,
+      "p90_points_delta": -33.2003068545692
+    },
+    {
+      "player_master_id": "b05ae628-27e9-4e5a-b7d7-449aeba78e5d",
+      "source_player_key": "41367755",
+      "player_name": "David Montgomery",
+      "team": "DET",
+      "position": "RB",
+      "shock_role": "recipient",
+      "opportunity_multiplier": 2.0,
+      "projection_multiplier": 1.65,
+      "baseline_mean_points": 11.882314014516975,
+      "scenario_mean_points": 19.605818123953004,
+      "mean_points_delta": 7.723504109436028,
+      "baseline_p90_points": 21.95284859956439,
+      "scenario_p90_points": 36.22220018928124,
+      "p90_points_delta": 14.269351589716848
+    }
+  ],
+  "largest_exposure_changes": [
+    {
+      "uid": "693463af-73ba-41d5-889c-388c36703430",
+      "player_name": "Jahmyr Gibbs",
+      "team": "DET",
+      "position": "RB",
+      "baseline_exposure": 0.3,
+      "scenario_exposure": 0.0,
+      "exposure_delta": -0.3
+    },
+    {
+      "uid": "b05ae628-27e9-4e5a-b7d7-449aeba78e5d",
+      "player_name": "David Montgomery",
+      "team": "DET",
+      "position": "RB",
+      "baseline_exposure": 0.05,
+      "scenario_exposure": 0.25,
+      "exposure_delta": 0.2
+    },
+    {
+      "uid": "6b49e50c-7ccb-40be-ab23-c836128c4ad3",
+      "player_name": "Travis Kelce",
+      "team": "KC",
+      "position": "TE",
+      "baseline_exposure": 0.1,
+      "scenario_exposure": 0.2,
+      "exposure_delta": 0.1
+    },
+    {
+      "uid": "0ad9dc76-9ee5-4940-9f07-ca9839134784",
+      "player_name": "Caleb Williams",
+      "team": "CHI",
+      "position": "QB",
+      "baseline_exposure": 0.1,
+      "scenario_exposure": 0.0,
+      "exposure_delta": -0.1
+    },
+    {
+      "uid": "466b791d-7771-4fa5-9ae1-1d84cf1b40a3",
+      "player_name": "Packers",
+      "team": "GB",
+      "position": "DST",
+      "baseline_exposure": 0.0,
+      "scenario_exposure": 0.1,
+      "exposure_delta": 0.1
+    },
+    {
+      "uid": "252e3485-cb15-473b-a501-76694fa8abd0",
+      "player_name": "Saints",
+      "team": "NO",
+      "position": "DST",
+      "baseline_exposure": 0.15,
+      "scenario_exposure": 0.05,
+      "exposure_delta": -0.09999999999999999
+    },
+    {
+      "uid": "7443c7ef-fa92-48b3-987b-a14153e3163b",
+      "player_name": "Bills",
+      "team": "BUF",
+      "position": "DST",
+      "baseline_exposure": 0.05,
+      "scenario_exposure": 0.15,
+      "exposure_delta": 0.09999999999999999
+    },
+    {
+      "uid": "a7d14336-632e-48c8-b0c1-45916b8476e4",
+      "player_name": "Puka Nacua",
+      "team": "LAR",
+      "position": "WR",
+      "baseline_exposure": 0.15,
+      "scenario_exposure": 0.2,
+      "exposure_delta": 0.05000000000000002
+    },
+    {
+      "uid": "220c527d-9daf-4348-8f38-c244c8c512b3",
+      "player_name": "Amon-Ra St. Brown",
+      "team": "DET",
+      "position": "WR",
+      "baseline_exposure": 0.15,
+      "scenario_exposure": 0.2,
+      "exposure_delta": 0.05000000000000002
+    },
+    {
+      "uid": "7e4bc294-c085-432c-8413-a76ab5b57911",
+      "player_name": "D'Andre Swift",
+      "team": "CHI",
+      "position": "RB",
+      "baseline_exposure": 0.0,
+      "scenario_exposure": 0.05,
+      "exposure_delta": 0.05
+    },
+    {
+      "uid": "3d28c26e-1f7f-4512-98ea-1dc546b9fa58",
+      "player_name": "Sean McKeon",
+      "team": "IND",
+      "position": "TE",
+      "baseline_exposure": 0.05,
+      "scenario_exposure": 0.0,
+      "exposure_delta": -0.05
+    },
+    {
+      "uid": "3bc24b9f-8cdb-4a6e-84b1-042a987e435f",
+      "player_name": "Julian Hill",
+      "team": "MIA",
+      "position": "TE",
+      "baseline_exposure": 0.05,
+      "scenario_exposure": 0.0,
+      "exposure_delta": -0.05
+    },
+    {
+      "uid": "944d6215-fd10-4b8d-9686-24fc22ce145e",
+      "player_name": "Breece Hall",
+      "team": "NYJ",
+      "position": "RB",
+      "baseline_exposure": 0.05,
+      "scenario_exposure": 0.0,
+      "exposure_delta": -0.05
+    },
+    {
+      "uid": "1f3ab2b3-189f-420b-a120-d0acec6b43d1",
+      "player_name": "Dolphins",
+      "team": "MIA",
+      "position": "DST",
+      "baseline_exposure": 0.0,
+      "scenario_exposure": 0.05,
+      "exposure_delta": 0.05
+    },
+    {
+      "uid": "c23e5343-efb7-4ef5-b334-fbdf2212dff5",
+      "player_name": "Khalil Shakir",
+      "team": "BUF",
+      "position": "WR",
+      "baseline_exposure": 0.05,
+      "scenario_exposure": 0.0,
+      "exposure_delta": -0.05
+    }
+  ],
+  "baseline_warnings": [],
+  "scenario_warnings": []
+}
