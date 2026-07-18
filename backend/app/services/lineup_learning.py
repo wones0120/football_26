@@ -258,6 +258,8 @@ class PlayerPoolRow:
     team_spread_line: float | None = None
     team_implied_total: float | None = None
     opponent_implied_total: float | None = None
+    popularity_proxy: float = 0.0
+    candidate_exposure_rate: float = 0.0
     player_master_id: str | None = None
     source_player_key: str | None = None
 
@@ -381,6 +383,20 @@ def _zscore(values: np.ndarray) -> np.ndarray:
     if std < 1e-9:
         return np.zeros(len(values), dtype=float)
     return (values - mean) / std
+
+
+def _percentile_ranks(values: np.ndarray) -> np.ndarray:
+    if values.size == 0:
+        return np.asarray([], dtype=float)
+    finite = np.where(np.isfinite(values), values, 0.0)
+    unique = np.unique(finite)
+    if unique.size <= 1:
+        return np.full(len(finite), 0.5, dtype=float)
+    rank_by_value = {
+        float(value): float(index / (len(unique) - 1))
+        for index, value in enumerate(unique)
+    }
+    return np.asarray([rank_by_value[float(value)] for value in finite], dtype=float)
 
 
 def _softmax_vector(values: np.ndarray) -> np.ndarray:
@@ -2557,6 +2573,168 @@ class LineupLearningService:
         weights = weights / np.sum(weights)
         idxs = rng.choice(len(eligible), size=count, replace=False, p=weights)
         return [eligible[int(idx)] for idx in idxs]
+
+    def _classic_player_popularity_proxy(
+        self,
+        *,
+        players: list[PlayerPoolRow],
+        candidate_lineups: list[list[PlayerPoolRow]],
+    ) -> tuple[dict[str, float], dict[str, float]]:
+        if not players:
+            return {}, {}
+
+        candidate_count = max(1, len(candidate_lineups))
+        candidate_exposure_counts: Counter[str] = Counter(
+            player.uid
+            for lineup in candidate_lineups
+            for player in lineup
+        )
+        candidate_exposure_rates = {
+            player.uid: float(candidate_exposure_counts.get(player.uid, 0) / candidate_count)
+            for player in players
+        }
+
+        implied_total_ranks = _percentile_ranks(
+            np.asarray(
+                [float(player.team_implied_total or 0.0) for player in players],
+                dtype=float,
+            )
+        )
+        exposure_ranks = _percentile_ranks(
+            np.asarray(
+                [candidate_exposure_rates[player.uid] for player in players],
+                dtype=float,
+            )
+        )
+        implied_total_by_uid = {
+            player.uid: float(implied_total_ranks[index])
+            for index, player in enumerate(players)
+        }
+        exposure_rank_by_uid = {
+            player.uid: float(exposure_ranks[index])
+            for index, player in enumerate(players)
+        }
+
+        popularity_by_uid: dict[str, float] = {}
+        players_by_position: dict[str, list[PlayerPoolRow]] = defaultdict(list)
+        for player in players:
+            players_by_position[player.position].append(player)
+
+        for position_players in players_by_position.values():
+            salary_ranks = _percentile_ranks(
+                np.asarray([float(player.salary) for player in position_players], dtype=float)
+            )
+            mean_ranks = _percentile_ranks(
+                np.asarray(
+                    [float(max(0.0, player.projected_mean_points)) for player in position_players],
+                    dtype=float,
+                )
+            )
+            p90_ranks = _percentile_ranks(
+                np.asarray(
+                    [float(max(0.0, player.projected_p90_points)) for player in position_players],
+                    dtype=float,
+                )
+            )
+            value_ranks = _percentile_ranks(
+                np.asarray(
+                    [
+                        float(max(0.0, player.projected_mean_points))
+                        / max(1.0, player.salary / 1000.0)
+                        for player in position_players
+                    ],
+                    dtype=float,
+                )
+            )
+            for index, player in enumerate(position_players):
+                proxy = (
+                    (0.17 * float(salary_ranks[index]))
+                    + (0.27 * float(mean_ranks[index]))
+                    + (0.15 * float(p90_ranks[index]))
+                    + (0.16 * float(value_ranks[index]))
+                    + (0.10 * implied_total_by_uid[player.uid])
+                    + (0.15 * exposure_rank_by_uid[player.uid])
+                )
+                popularity_by_uid[player.uid] = _clamp(proxy, 0.0, 1.0)
+
+        return popularity_by_uid, candidate_exposure_rates
+
+    def _classic_lineup_duplication_risk_scores(
+        self,
+        *,
+        lineups: list[list[PlayerPoolRow]],
+        popularity_by_uid: dict[str, float],
+        reference_lineups: list[list[PlayerPoolRow]] | None = None,
+    ) -> np.ndarray:
+        if not lineups:
+            return np.asarray([], dtype=float)
+        reference = reference_lineups if reference_lineups is not None else lineups
+        reference_count = max(1, len(reference))
+        pair_counts: Counter[tuple[str, str]] = Counter()
+        for lineup in reference:
+            uids = sorted({player.uid for player in lineup})
+            pair_counts.update(combinations(uids, 2))
+        max_pair_rate = max(
+            (count / reference_count for count in pair_counts.values()),
+            default=0.0,
+        )
+
+        scores: list[float] = []
+        for lineup in lineups:
+            player_proxies = sorted(
+                [float(popularity_by_uid.get(player.uid, 0.0)) for player in lineup],
+                reverse=True,
+            )
+            top_player_count = min(5, len(player_proxies))
+            player_pressure = (
+                float(np.mean(player_proxies[:top_player_count]))
+                if top_player_count
+                else 0.0
+            )
+            pair_rates = [
+                pair_counts.get(pair, 0) / reference_count
+                for pair in combinations(sorted({player.uid for player in lineup}), 2)
+            ]
+            pair_pressure = (
+                float(np.mean(pair_rates) / max_pair_rate)
+                if pair_rates and max_pair_rate > 1e-9
+                else 0.0
+            )
+            salary_pressure = float(
+                sum(player.salary for player in lineup) / DK_SALARY_CAP
+            )
+            scores.append(
+                _clamp(
+                    (0.60 * player_pressure)
+                    + (0.25 * pair_pressure)
+                    + (0.15 * salary_pressure),
+                    0.0,
+                    1.0,
+                )
+            )
+        return np.asarray(scores, dtype=float)
+
+    def _apply_duplication_risk_penalty(
+        self,
+        *,
+        composite_scores: np.ndarray,
+        duplication_risk_scores: np.ndarray,
+        penalty_strength: float,
+    ) -> np.ndarray:
+        composite = np.asarray(composite_scores, dtype=float)
+        risks = np.asarray(duplication_risk_scores, dtype=float)
+        strength = _clamp(float(penalty_strength), 0.0, 1.0)
+        if (
+            strength <= 0.0
+            or composite.size == 0
+            or composite.shape != risks.shape
+            or not np.isfinite(risks).all()
+        ):
+            return composite.copy()
+        composite_std = float(np.std(composite))
+        if composite_std < 1e-9:
+            return composite.copy()
+        return composite - (strength * composite_std * _zscore(risks))
 
     def _lineup_features(self, lineup: list[PlayerPoolRow]) -> np.ndarray:
         qb = next(row for row in lineup if row.position == "QB")
@@ -6811,6 +6989,19 @@ class LineupLearningService:
                 f"slate={request.slate} candidates"
             ),
         )
+        popularity_by_uid, candidate_exposure_rates = self._classic_player_popularity_proxy(
+            players=target_pool,
+            candidate_lineups=candidate_lineups,
+        )
+        for player in target_pool:
+            player.popularity_proxy = float(popularity_by_uid.get(player.uid, 0.0))
+            player.candidate_exposure_rate = float(
+                candidate_exposure_rates.get(player.uid, 0.0)
+            )
+        duplication_risk_scores = self._classic_lineup_duplication_risk_scores(
+            lineups=candidate_lineups,
+            popularity_by_uid=popularity_by_uid,
+        )
         x_candidates = np.vstack([self._lineup_features(lineup) for lineup in candidate_lineups])
         mean_points = np.asarray(
             [sum(player.projected_mean_points for player in lineup) for lineup in candidate_lineups],
@@ -6891,6 +7082,11 @@ class LineupLearningService:
                 prior_strength=effective_matchup_prior_strength,
             )
 
+        composite = self._apply_duplication_risk_penalty(
+            composite_scores=composite,
+            duplication_risk_scores=duplication_risk_scores,
+            penalty_strength=request.duplication_risk_penalty,
+        )
         matchup_stack_rules = self._summarize_matchup_stack_rules(
             candidate_lineups=candidate_lineups,
             ranking_scores=composite,
@@ -7004,6 +7200,8 @@ class LineupLearningService:
                         salary=int(player.salary),
                         projected_mean_points=float(player.projected_mean_points),
                         projected_p90_points=float(player.projected_p90_points),
+                        popularity_proxy=float(player.popularity_proxy),
+                        candidate_exposure_rate=float(player.candidate_exposure_rate),
                     )
                 )
                 existing = exposure_counts.get(player.uid)
@@ -7020,6 +7218,7 @@ class LineupLearningService:
                     projected_p90_points=float(p90_points[idx]),
                     policy_score=float(policy_scores[idx]),
                     composite_score=float(composite[idx]),
+                    duplication_risk_score=float(duplication_risk_scores[idx]),
                     players=lineup_players,
                 )
             )
@@ -7038,6 +7237,8 @@ class LineupLearningService:
                     salary=int(player.salary),
                     exposure_count=int(count),
                     exposure_rate=(count / keep) if keep > 0 else 0.0,
+                    popularity_proxy=float(player.popularity_proxy),
+                    candidate_exposure_rate=float(player.candidate_exposure_rate),
                 )
             )
 
@@ -7049,6 +7250,16 @@ class LineupLearningService:
         selected_policy_mean = float(np.mean(policy_scores[top_idx])) if keep > 0 else 0.0
         selected_ceiling_mean = float(np.mean(ceiling_scores[top_idx])) if keep > 0 else 0.0
         selected_bust_mean = float(np.mean(bust_scores[top_idx])) if keep > 0 else 0.0
+        candidate_duplication_risk_mean = (
+            float(np.mean(duplication_risk_scores))
+            if duplication_risk_scores.size
+            else 0.0
+        )
+        selected_duplication_risk_mean = (
+            float(np.mean(duplication_risk_scores[top_idx]))
+            if keep > 0
+            else 0.0
+        )
         discovered_patterns = [
             f"Models trained on {training_slates_used} slates and {training_rows_used} historical lineups.",
             (
@@ -7073,6 +7284,16 @@ class LineupLearningService:
             (
                 "Effective exposure caps (count): "
                 f"player<={effective_player_cap}, QB<={effective_qb_cap}, DST<={effective_dst_cap}."
+            ),
+            (
+                "Popularity proxy (not observed ownership): "
+                "salary/projection/value/game-environment ranks plus generated-candidate exposure."
+            ),
+            (
+                "Duplication proxy risk: "
+                f"candidate mean={candidate_duplication_risk_mean:.3f}, "
+                f"selected mean={selected_duplication_risk_mean:.3f}, "
+                f"penalty={request.duplication_risk_penalty:.2f}."
             ),
         ]
         if cap_multiplier_used > 1.0:
@@ -7136,6 +7357,7 @@ class LineupLearningService:
             matchup_outcome_model_path=matchup_outcome_model_path,
             matchup_outcome_prior_strength=matchup_outcome_prior_strength,
             matchup_prior_gate_model_path=matchup_prior_gate_model_path,
+            duplication_risk_penalty=float(request.duplication_risk_penalty),
             discovered_patterns=discovered_patterns,
             rows=rows,
             exposures=exposures,

@@ -15,7 +15,7 @@ Estimate recent team opportunity from the prior four games:
 
 With unresolved current salary players included in the identity-coverage denominator, the 41-slate walk-forward candidate scored `27.3%` top-1 and `51.5%` top-2 versus the current-code baseline at `33.3%` and `57.6%`. It was rejected as a standalone captain feature set. The time-safe signal remains useful as an input to manually triggered role-shock and lineup-fragility research.
 
-## 2. Popularity and Duplication Proxy — Next
+## 2. Popularity and Duplication Proxy — Implemented
 
 Build a transparent expected-popularity score from only pre-lock fields:
 
@@ -27,6 +27,8 @@ Build a transparent expected-popularity score from only pre-lock fields:
 - similarity/duplication risk across generated lineups.
 
 Call this a `popularity_proxy`, never observed ownership. Validate it by lineup concentration, uniqueness, and historical actual-points tradeoffs rather than pretending to measure field ownership.
+
+The ultimate classic lineup workflow now returns per-player proxy/candidate exposure and per-lineup duplication risk, with an opt-in risk penalty that defaults to zero. On 12 historical classic slates, penalty `0.25` reduced proxy risk `1.1%` with a `0.2%` projected-blend cost and `0.28` fewer actual points. Penalty `0.75` reduced risk `6.7%` but cost `5.0%` projection and `8.37` actual points. No nonzero default was promoted.
 
 ## 3. Role-Shock Simulation
 

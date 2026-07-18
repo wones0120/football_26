@@ -93,7 +93,8 @@ Last updated: 2026-07-18
 - [x] Build policy-learning loop from historical actual top lineups (top-k per slate) into lineup scoring.
 - [x] Add salary-structure priors, learned player/QB/DST exposure caps, and correlation/anti-correlation controls.
 - [x] Retire observed historical ownership as a dependency; do not substitute realized outcomes.
-- [ ] Add a clearly named pre-lock `popularity_proxy` and lineup duplication-risk score from salary, projection, value, game environment, and generated-lineup concentration.
+- [x] Add a clearly named pre-lock `popularity_proxy` and lineup duplication-risk score from salary, projection, value, game environment, and generated-lineup concentration.
+  - Evidence: `docs/popularity_proxy_validation_2024_2025.{json,md}`; penalty `0.25` reduced risk `1.1%` for a `0.2%` projected-blend cost across 12 slates. Default remains zero.
 - [x] Add robust validity checks for every generated candidate and selected lineup with hard-fail violation details.
 - [x] Support 100k+ candidate experiments with deterministic seeds (request default `100000`, maximum `500000`).
 - [ ] Add interrupted-run checkpoint/resume support for 100k+ candidate experiments.
@@ -118,12 +119,12 @@ Last updated: 2026-07-18
 
 ## External-Data / Runtime Blockers
 - [x] Historical injury snapshots are unavailable; superseded by usage-weighted roster continuity.
-- [x] Historical ownership is unavailable; superseded by the planned popularity/duplication proxy.
+- [x] Historical ownership is unavailable; superseded by the implemented popularity/duplication proxy.
 - [ ] Add durable checkpoint storage and interrupted-run resume for large candidate generation.
 
 ## New Ideas Without Vendor History
 - [x] Usage-weighted roster continuity for latent availability (rejected as a standalone captain feature set; retained for role-shock research).
-- [ ] Popularity and duplication proxy.
+- [x] Popularity and duplication proxy (default penalty zero; `0.25` retained as an opt-in research setting).
 - [ ] Role-shock opportunity reallocation simulations.
 - [ ] Online weekly residual learning with shrinkage.
 - [ ] Future-safe game-regime ensemble.

@@ -328,5 +328,37 @@ The current 15-slate, 2,856-player report observed P75/P90/P95 coverage of `76.4
 
 Classic candidate generation hard-fails before scoring if any candidate or selected lineup violates roster size, uniqueness, position, salary-cap, or offense-versus-DST rules. Errors include the lineup index and exact violation codes.
 
+## Popularity and Duplication Proxy
+
+Ultimate classic lineup output now reports a `popularity_proxy` for each player and a `duplication_risk_score` for each lineup. These are explicitly not observed ownership. They use only pre-lock salary, projection, value, implied-total ranks, generated-candidate exposure, pair concentration, and salary usage.
+
+Current rankings remain unchanged unless an explicit penalty is requested:
+
+```bash
+source .venv/bin/activate
+python scripts/run_ultimate_lineups.py \
+  --season 2025 \
+  --week 18 \
+  --slate sunday_main \
+  --candidate-lineups 2500 \
+  --allow-heuristics \
+  --duplication-risk-penalty 0.25
+```
+
+Validate the risk/projection tradeoff historically with:
+
+```bash
+python scripts/analyze_popularity_proxy.py \
+  --source-system draftkings \
+  --season-start 2024 \
+  --season-end 2025 \
+  --candidate-lineups 2500 \
+  --selected-lineups 20 \
+  --penalties 0,0.25,0.5,0.75 \
+  --limit-slates 12
+```
+
+Across the latest 12 eligible classic slates, penalty `0.25` reduced mean proxy risk by `1.1%` with a `0.2%` projected-blend cost and `0.28` fewer realized points. Penalty `0.75` reduced risk by `6.7%` but cost `5.0%` projection and `8.37` actual points. The default remains `0.0`; `0.25` is an opt-in research setting. Full evidence is in `docs/popularity_proxy_validation_2024_2025.{json,md}`.
+
 Architecture decisions and acceptance status are maintained in `docs/DECISIONS.md` and `docs/MODEL_REGISTRY.md`.
 An empty-database environment can be reproduced using `docs/BOOTSTRAP_RUNBOOK.md`.

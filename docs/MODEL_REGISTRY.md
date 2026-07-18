@@ -11,6 +11,7 @@ Last reviewed: 2026-07-18
 | Showdown role/scenario priors | `docs/showdown_captain_scenarios_2024_2025.json` | 2024-2025; 41 slates | 11 role archetypes; seven total/spread cells; five-slate fallback gate | Research |
 | Classic value-driver prior | `docs/main_slate_value_driver_analysis_2024_2025.json` | DraftKings 2024-2025; 27 main slates | Nine learned pregame value/construction features | Production input |
 | Classic lineup parameter sweep | `docs/classic_best_config_12slates.json` | 12 chronological slates | 10/12 completed; mean gap `134.428`; median `131.110` | Provisional |
+| Classic popularity/duplication proxy | `docs/popularity_proxy_validation_2024_2025.json` | Latest 12 eligible 2024-2025 classic slates; 20 selected/slate | Penalty `0.25`: risk `-1.1%`, projected blend `-0.2%`, actual points `-0.28` | Observable; penalty default `0.0`, `0.25` research-only |
 | Matchup outcome intelligence | `docs/matchup_outcome_intelligence_2024_2025.json` | DraftKings 2024-2025 | `0.15` prior improved mean gap by `4.65` at 5,000 candidates | Experimental default |
 | Matchup prior gate | `docs/matchup_prior_gate_20slates_5000.json` | 18 paired slates | Future-safe rule gate; broader validation still required | Experimental |
 | Player matchup ridge blend | Built point-in-time from `player_game_feature_matrix` | All rows before target week, position-specific | Enabled only when validation MAE improves by more than `0.5%`; blend weight scales with lift | Production |

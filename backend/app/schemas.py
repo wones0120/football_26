@@ -671,6 +671,7 @@ class UltimateLineupRequest(BaseModel):
     matchup_outcome_model_path: str | None = None
     matchup_outcome_prior_strength: float = Field(default=0.0, ge=0.0, le=1.0)
     matchup_prior_gate_model_path: str | None = None
+    duplication_risk_penalty: float = Field(default=0.0, ge=0.0, le=1.0)
     random_seed: int | None = None
 
 
@@ -681,6 +682,8 @@ class UltimateLineupPlayerRowResponse(BaseModel):
     salary: int
     projected_mean_points: float
     projected_p90_points: float
+    popularity_proxy: float
+    candidate_exposure_rate: float
 
 
 class UltimateLineupRowResponse(BaseModel):
@@ -691,6 +694,7 @@ class UltimateLineupRowResponse(BaseModel):
     projected_p90_points: float
     policy_score: float
     composite_score: float
+    duplication_risk_score: float
     players: list[UltimateLineupPlayerRowResponse]
 
 
@@ -701,6 +705,8 @@ class UltimateLineupExposureRowResponse(BaseModel):
     salary: int
     exposure_count: int
     exposure_rate: float
+    popularity_proxy: float
+    candidate_exposure_rate: float
 
 
 class UltimateLineupResponse(BaseModel):
@@ -719,6 +725,7 @@ class UltimateLineupResponse(BaseModel):
     matchup_outcome_model_path: str | None = None
     matchup_outcome_prior_strength: float = 0.0
     matchup_prior_gate_model_path: str | None = None
+    duplication_risk_penalty: float = 0.0
     discovered_patterns: list[str]
     rows: list[UltimateLineupRowResponse]
     exposures: list[UltimateLineupExposureRowResponse]

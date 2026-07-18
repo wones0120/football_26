@@ -39,6 +39,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--matchup-outcome-model-path", type=str, default=None)
     parser.add_argument("--matchup-outcome-prior-strength", type=float, default=0.0)
     parser.add_argument("--matchup-prior-gate-model-path", type=str, default=None)
+    parser.add_argument("--duplication-risk-penalty", type=float, default=0.0)
     parser.add_argument("--random-seed", type=int, default=42)
     parser.add_argument("--show-lineups", type=int, default=20)
     parser.add_argument("--show-exposures", type=int, default=35)
@@ -69,6 +70,7 @@ def main() -> None:
         matchup_outcome_model_path=args.matchup_outcome_model_path,
         matchup_outcome_prior_strength=args.matchup_outcome_prior_strength,
         matchup_prior_gate_model_path=args.matchup_prior_gate_model_path,
+        duplication_risk_penalty=args.duplication_risk_penalty,
         random_seed=args.random_seed,
     )
     with SessionLocal() as session:
@@ -91,6 +93,7 @@ def main() -> None:
         "matchup_outcome_model_path": result.matchup_outcome_model_path,
         "matchup_outcome_prior_strength": result.matchup_outcome_prior_strength,
         "matchup_prior_gate_model_path": result.matchup_prior_gate_model_path,
+        "duplication_risk_penalty": result.duplication_risk_penalty,
         "discovered_patterns": result.discovered_patterns,
     }
     print(json.dumps(summary, indent=2))
@@ -104,7 +107,8 @@ def main() -> None:
         print(
             f"  #{row.rank:03d} salary={row.salary_used} left={row.salary_left} "
             f"mean={row.projected_mean_points:.2f} p90={row.projected_p90_points:.2f} "
-            f"policy={row.policy_score:.4f} score={row.composite_score:.4f}"
+            f"policy={row.policy_score:.4f} score={row.composite_score:.4f} "
+            f"dup_proxy={row.duplication_risk_score:.3f}"
         )
         print(f"    {names}")
 
@@ -112,7 +116,8 @@ def main() -> None:
     for row in result.exposures[: args.show_exposures]:
         print(
             f"  {row.player_name:<28} {row.position:<3} {row.team or '-':<4} "
-            f"{row.salary:>5}  {row.exposure_count:>4}/{result.output_lineups} ({row.exposure_rate:.1%})"
+            f"{row.salary:>5}  {row.exposure_count:>4}/{result.output_lineups} ({row.exposure_rate:.1%}) "
+            f"pop_proxy={row.popularity_proxy:.3f} candidate_exp={row.candidate_exposure_rate:.1%}"
         )
 
 
