@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
@@ -50,6 +50,7 @@ from ..schemas import (
     UnresolvedTriageResponse,
 )
 from ..services.benchmarks import (
+    build_benchmark_export_bundle,
     build_model_defaults_response,
     list_benchmark_runs,
     resolve_benchmark_artifact,
@@ -90,6 +91,20 @@ def benchmark_artifact(run_name: str, artifact_name: str) -> FileResponse:
     if path is None:
         raise HTTPException(status_code=404, detail="Benchmark artifact not found")
     return FileResponse(path)
+
+
+@router.get("/benchmarks/runs/{run_name}/bundle")
+def benchmark_export_bundle(run_name: str) -> StreamingResponse:
+    payload = build_benchmark_export_bundle(run_name)
+    if payload is None:
+        raise HTTPException(status_code=404, detail="Benchmark run not found")
+    return StreamingResponse(
+        payload,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{run_name}_analysis_bundle.zip"',
+        },
+    )
 
 
 @router.post("/benchmarks/run-suite", response_model=BenchmarkSuiteRunResponse)

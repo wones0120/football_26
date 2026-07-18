@@ -487,6 +487,15 @@ export function benchmarkArtifactUrl(downloadUrl: string): string {
   return new URL(downloadUrl, apiBase.origin).toString();
 }
 
+export function benchmarkBundleUrl(runDirectory: string): string {
+  const apiBase = new URL(API_BASE, window.location.origin);
+  const runName = runDirectory.split("/").filter(Boolean).pop() ?? runDirectory;
+  return new URL(
+    `/api/benchmarks/runs/${encodeURIComponent(runName)}/bundle`,
+    apiBase.origin
+  ).toString();
+}
+
 export function runBenchmarkSuite(payload?: {
   source_system?: "draftkings" | "fanduel";
   season_start?: number;

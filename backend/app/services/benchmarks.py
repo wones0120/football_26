@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import io
 import json
 import subprocess
 import sys
+import zipfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -167,6 +169,28 @@ def resolve_benchmark_artifact(run_name: str, artifact_name: str) -> Path | None
     if path.parent != run_dir:
         return None
     return path if path.is_file() else None
+
+
+def build_benchmark_export_bundle(run_name: str) -> io.BytesIO | None:
+    if Path(run_name).name != run_name:
+        return None
+    root = BENCHMARK_ROOT.resolve()
+    run_dir = (root / run_name).resolve()
+    try:
+        run_dir.relative_to(root)
+    except ValueError:
+        return None
+    if not run_dir.is_dir() or not (run_dir / "suite_manifest.json").is_file():
+        return None
+
+    payload = io.BytesIO()
+    with zipfile.ZipFile(payload, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for artifact_name in sorted(set(ARTIFACT_LABELS.values())):
+            path = resolve_benchmark_artifact(run_name, artifact_name)
+            if path is not None:
+                archive.write(path, arcname=artifact_name)
+    payload.seek(0)
+    return payload
 
 
 def _allocate_run_directory() -> Path:

@@ -96,15 +96,15 @@ Last updated: 2026-07-18
 - [ ] Add interrupted-run checkpoint/resume support for 100k+ candidate experiments.
 
 ## P2 - UI / Control Plane
-- [ ] Add dedicated "Analysis" area for generated reports (showdown, main slate, combined).
-- [ ] Add run history explorer with filters (source, season range, slate type, model config).
-- [ ] Add expandable/collapsible sections for all heavy tables by default.
-- [ ] Add export bundle action (JSON + MD report + config snapshot).
+- [x] Add dedicated "Analysis" area for generated reports (showdown, main slate, combined).
+- [x] Add run history explorer with filters (source, season range, slate type, model config).
+- [ ] Add expandable/collapsible sections for all heavy tables by default (ingest queues, coverage, recent runs, and benchmark history default collapsed; simulation/backtest result tables remain).
+- [x] Add export bundle action (JSON + MD report + config snapshot).
 
 ## P2 - Ops / Engineering
 - [ ] Add integration tests for ingestion->curation->backtest critical path.
 - [ ] Add migration smoke test and schema drift checker in CI.
-- [ ] Add runbook for full environment bootstrap from empty database.
+- [x] Add runbook for full environment bootstrap from empty database (`docs/BOOTSTRAP_RUNBOOK.md`).
 - [ ] Add scheduled nightly benchmark automation and artifact retention policy.
 
 ## P2 - Documentation

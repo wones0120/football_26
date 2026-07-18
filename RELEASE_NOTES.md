@@ -13,6 +13,8 @@
 - Extended historical simulation backtest rows and UI output with p75 and p95 plus 25-point tail probability, and added a read-only calibration-drift analyzer. The full 15-slate run covered 2,856 players with P75/P90/P95 coverage of `76.4%` / `90.3%` / `94.7%` and no alerts.
 - Added explicit classic lineup violation reporting and batch-level hard failures before candidate scoring and final output.
 - Added dated architecture decisions and a model registry covering production, experimental, provisional, research, and rejected artifacts.
+- Added a dedicated `Analysis & Reports` control-plane area, filtered/collapsed benchmark history, and a safe in-memory ZIP export containing available JSON/Markdown reports and the exact suite config manifest.
+- Added `docs/BOOTSTRAP_RUNBOOK.md` with empty-database setup, ingest, identity repair, historical feature/policy build, smoke benchmark, acceptance, and recovery steps.
 - Added reproducible percentile-bootstrap confidence intervals and standard errors for classic/showdown gap metrics and captain A/B win-rate/gap-lift metrics, with configurable sample count/confidence level in benchmark CLI/API runs and interval display in new benchmark summaries and the Current Model Card.
 - Added selected-slice salary, injury, schedule, and weekly-stat freshness checks through `GET /api/coverage/freshness`, with exact row counts, load ages, explicit thresholds, and `fresh`/`stale`/`missing` badges in the ingestion control plane.
 - Added `GET /api/unresolved/triage` and an `Automated Triage by Source / Week / Slate` control-plane report with exact open/recent totals, configurable lookback, grouped source/week/slate counts, and automatic refresh after ingest or resolution actions.

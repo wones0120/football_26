@@ -4,6 +4,7 @@ import {
   autoDiscoverSalaryFiles,
   backtestWeek,
   benchmarkArtifactUrl,
+  benchmarkBundleUrl,
   bootstrapNflreadpy,
   fetchBenchmarkRuns,
   fetchCuratedSalarySlices,
@@ -212,7 +213,13 @@ function App() {
   const [resolutions, setResolutions] = useState<Record<string, string>>({});
   const [modelDefaults, setModelDefaults] = useState<ModelDefaults>(FALLBACK_MODEL_DEFAULTS);
   const [benchmarkRuns, setBenchmarkRuns] = useState<BenchmarkRun[]>([]);
-  const [showBenchmarkRuns, setShowBenchmarkRuns] = useState(true);
+  const [showBenchmarkRuns, setShowBenchmarkRuns] = useState(false);
+  const [benchmarkSourceFilter, setBenchmarkSourceFilter] = useState("all");
+  const [benchmarkStatusFilter, setBenchmarkStatusFilter] = useState("all");
+  const [benchmarkSlateFilter, setBenchmarkSlateFilter] = useState("all");
+  const [benchmarkSeasonStartFilter, setBenchmarkSeasonStartFilter] = useState("");
+  const [benchmarkSeasonEndFilter, setBenchmarkSeasonEndFilter] = useState("");
+  const [benchmarkConfigFilter, setBenchmarkConfigFilter] = useState("");
   const [benchmarkLimitSlates, setBenchmarkLimitSlates] = useState(0);
   const [benchmarkClassicLineupsPerSlate, setBenchmarkClassicLineupsPerSlate] = useState(1000);
   const [benchmarkShowdownLineupsPerSlate, setBenchmarkShowdownLineupsPerSlate] = useState(1000);
@@ -232,6 +239,57 @@ function App() {
     { mode: "showdown" as const, result: lineupBacktestShowdownResult },
   ];
   const latestBenchmarkRun = benchmarkLastRun ?? benchmarkRuns[0] ?? null;
+  const filteredBenchmarkRuns = useMemo(
+    () =>
+      benchmarkRuns.filter((run) => {
+        const source = String(run.config.source_system ?? "");
+        if (benchmarkSourceFilter !== "all" && source !== benchmarkSourceFilter) return false;
+        if (benchmarkStatusFilter !== "all" && run.status !== benchmarkStatusFilter) return false;
+        const runSeasonStart = Number(run.config.season_start);
+        const runSeasonEnd = Number(run.config.season_end);
+        const filterSeasonStart = Number(benchmarkSeasonStartFilter);
+        const filterSeasonEnd = Number(benchmarkSeasonEndFilter);
+        if (
+          benchmarkSeasonStartFilter &&
+          Number.isFinite(runSeasonEnd) &&
+          runSeasonEnd < filterSeasonStart
+        ) {
+          return false;
+        }
+        if (
+          benchmarkSeasonEndFilter &&
+          Number.isFinite(runSeasonStart) &&
+          runSeasonStart > filterSeasonEnd
+        ) {
+          return false;
+        }
+        if (
+          benchmarkSlateFilter === "classic" &&
+          !run.artifacts.some((artifact) => artifact.name === "classic_backtest.json" && artifact.exists)
+        ) {
+          return false;
+        }
+        if (
+          benchmarkSlateFilter === "showdown" &&
+          !run.artifacts.some(
+            (artifact) => artifact.name === "showdown_backtest_baseline.json" && artifact.exists
+          )
+        ) {
+          return false;
+        }
+        const configQuery = benchmarkConfigFilter.trim().toLowerCase();
+        return !configQuery || JSON.stringify(run.config).toLowerCase().includes(configQuery);
+      }),
+    [
+      benchmarkConfigFilter,
+      benchmarkRuns,
+      benchmarkSeasonEndFilter,
+      benchmarkSeasonStartFilter,
+      benchmarkSlateFilter,
+      benchmarkSourceFilter,
+      benchmarkStatusFilter,
+    ]
+  );
   const classicGapInterval = formatBootstrapInterval(
     latestBenchmarkRun?.metrics.classic_mean_gap_interval
   );
@@ -1547,6 +1605,52 @@ function App() {
         </section>
 
         <section className="panel wide-panel">
+          <div className="section-header">
+            <h2>Analysis &amp; Reports</h2>
+            <span className="section-badge">
+              {latestBenchmarkRun ? runLabel(latestBenchmarkRun.run_directory) : "no runs"}
+            </span>
+          </div>
+          <p className="hint">
+            Open current showdown, classic, combined, and comparison artifacts or export the complete
+            reproducible run bundle.
+          </p>
+          {latestBenchmarkRun ? (
+            <>
+              <div className="artifact-list">
+                {latestBenchmarkRun.artifacts
+                  .filter(
+                    (artifact) =>
+                      artifact.exists &&
+                      artifact.download_url &&
+                      (artifact.name.endsWith(".json") || artifact.name.endsWith(".md"))
+                  )
+                  .map((artifact) => (
+                    <div className="artifact-pill" key={`analysis-${artifact.name}`}>
+                      <span>{artifact.name}</span>
+                      <a
+                        href={benchmarkArtifactUrl(artifact.download_url!)}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <code>{artifact.path}</code>
+                      </a>
+                    </div>
+                  ))}
+                <div className="artifact-pill">
+                  <span>JSON + Markdown + config snapshot</span>
+                  <a href={benchmarkBundleUrl(latestBenchmarkRun.run_directory)}>
+                    <code>Download complete analysis bundle (.zip)</code>
+                  </a>
+                </div>
+              </div>
+            </>
+          ) : (
+            <p className="hint">Run the benchmark suite to populate analysis artifacts.</p>
+          )}
+        </section>
+
+        <section className="panel wide-panel">
           <h2>Lineup Backtests (Optimal vs Predicted)</h2>
           <p className="hint">
             Runs walk-forward lineup backtests against actual-optimal lineups. Classic and showdown are tracked
@@ -1718,8 +1822,76 @@ function App() {
             </div>
 
             {showBenchmarkRuns && (
-              <div className="table-wrap benchmark-table">
-                <table>
+              <>
+                <div className="backtest-grid">
+                  <label>
+                    Source Filter
+                    <select
+                      value={benchmarkSourceFilter}
+                      onChange={(event) => setBenchmarkSourceFilter(event.target.value)}
+                    >
+                      <option value="all">all</option>
+                      <option value="draftkings">draftkings</option>
+                      <option value="fanduel">fanduel</option>
+                    </select>
+                  </label>
+                  <label>
+                    Status Filter
+                    <select
+                      value={benchmarkStatusFilter}
+                      onChange={(event) => setBenchmarkStatusFilter(event.target.value)}
+                    >
+                      <option value="all">all</option>
+                      <option value="ok">ok</option>
+                      <option value="failed">failed</option>
+                      <option value="running">running</option>
+                    </select>
+                  </label>
+                  <label>
+                    Slate Track
+                    <select
+                      value={benchmarkSlateFilter}
+                      onChange={(event) => setBenchmarkSlateFilter(event.target.value)}
+                    >
+                      <option value="all">all</option>
+                      <option value="classic">classic</option>
+                      <option value="showdown">showdown</option>
+                    </select>
+                  </label>
+                  <label>
+                    Season From
+                    <input
+                      type="number"
+                      min={2000}
+                      value={benchmarkSeasonStartFilter}
+                      onChange={(event) => setBenchmarkSeasonStartFilter(event.target.value)}
+                      placeholder="any"
+                    />
+                  </label>
+                  <label>
+                    Season Through
+                    <input
+                      type="number"
+                      min={2000}
+                      value={benchmarkSeasonEndFilter}
+                      onChange={(event) => setBenchmarkSeasonEndFilter(event.target.value)}
+                      placeholder="any"
+                    />
+                  </label>
+                  <label>
+                    Model Config Search
+                    <input
+                      value={benchmarkConfigFilter}
+                      onChange={(event) => setBenchmarkConfigFilter(event.target.value)}
+                      placeholder="path, strength, season..."
+                    />
+                  </label>
+                </div>
+                <p className="hint">
+                  Showing {filteredBenchmarkRuns.length} of {benchmarkRuns.length} recorded runs.
+                </p>
+                <div className="table-wrap benchmark-table">
+                  <table>
                   <thead>
                     <tr>
                       <th>Run</th>
@@ -1731,14 +1903,14 @@ function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {benchmarkRuns.length === 0 ? (
+                    {filteredBenchmarkRuns.length === 0 ? (
                       <tr>
                         <td colSpan={6} className="empty-row">
-                          No benchmark runs found.
+                          No benchmark runs match the current filters.
                         </td>
                       </tr>
                     ) : (
-                      benchmarkRuns.map((run) => (
+                      filteredBenchmarkRuns.map((run) => (
                         <tr key={run.run_directory}>
                           <td>
                             <div className="run-cell">
@@ -1778,8 +1950,9 @@ function App() {
                       ))
                     )}
                   </tbody>
-                </table>
-              </div>
+                  </table>
+                </div>
+              </>
             )}
           </div>
 

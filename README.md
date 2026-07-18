@@ -114,6 +114,8 @@ Migrations live in `/migrations`. The migration runner tracks applied files in `
 - `--bootstrap-samples` and `--confidence-level` override the defaults for CLI runs; the benchmark API accepts matching fields and records them in `suite_manifest.json`.
 - `Reset To Defaults` restores the backend-configured model settings listed in `.env.example`.
 - `Run Benchmark Suite` runs the canonical classic/showdown stack and writes a unique folder under `docs/benchmarks`.
+- `Analysis & Reports` opens the latest JSON/Markdown outputs and downloads a ZIP containing all available benchmark artifacts plus `suite_manifest.json` as the exact config snapshot.
+- Benchmark run history defaults collapsed and can be filtered by source, status, overlapping season range, classic/showdown track, or any model-config value.
 - Benchmark execution currently runs synchronously through the API, so full-history suites can keep the request open for several minutes.
 
 ## Backtest Scripts
@@ -310,3 +312,4 @@ The current 15-slate, 2,856-player report observed P75/P90/P95 coverage of `76.4
 Classic candidate generation hard-fails before scoring if any candidate or selected lineup violates roster size, uniqueness, position, salary-cap, or offense-versus-DST rules. Errors include the lineup index and exact violation codes.
 
 Architecture decisions and acceptance status are maintained in `docs/DECISIONS.md` and `docs/MODEL_REGISTRY.md`.
+An empty-database environment can be reproduced using `docs/BOOTSTRAP_RUNBOOK.md`.

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+import zipfile
+from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -205,6 +208,30 @@ def test_list_benchmark_runs_reads_manifest_and_metrics(tmp_path: Path, monkeypa
     _write(outside / "summary.md", "# Outside\n")
     (root / "linked-run").symlink_to(outside, target_is_directory=True)
     assert benchmarks.resolve_benchmark_artifact("linked-run", "summary.md") is None
+
+
+def test_benchmark_export_bundle_contains_reports_and_config(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    run_dir = tmp_path / "20260303_120000"
+    run_dir.mkdir()
+    _write(run_dir / "suite_manifest.json", '{"status":"ok","config":{"source_system":"draftkings"}}')
+    _write(run_dir / "summary.md", "# Summary\n")
+    _write(run_dir / "classic_backtest.json", '{"summary":{}}')
+    monkeypatch.setattr(benchmarks, "BENCHMARK_ROOT", tmp_path)
+
+    payload = benchmarks.build_benchmark_export_bundle(run_dir.name)
+
+    assert payload is not None
+    with zipfile.ZipFile(BytesIO(payload.read())) as archive:
+        assert set(archive.namelist()) == {
+            "classic_backtest.json",
+            "suite_manifest.json",
+            "summary.md",
+        }
+        assert json.loads(archive.read("suite_manifest.json"))["config"]["source_system"] == "draftkings"
+    assert benchmarks.build_benchmark_export_bundle("../escape") is None
 
 
 def test_run_benchmark_suite_returns_latest_run(tmp_path: Path, monkeypatch) -> None:
