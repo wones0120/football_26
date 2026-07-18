@@ -100,7 +100,20 @@ python scripts/train_actual_top_lineup_model.py \
 
 All training/evaluation windows must remain chronological and point-in-time safe.
 
-## 7. Run the smoke benchmark
+## 7. Build online residual snapshots
+
+After salary slices, weekly stats, and canonical identities are available, build the immutable DraftKings residual history:
+
+```bash
+python scripts/build_online_residual_snapshots.py \
+  --season-start 2024 \
+  --season-end 2025 \
+  --slate sunday_main
+```
+
+The command is idempotent: matching snapshots are reused, while an existing slice with different parameters is rejected rather than overwritten. Verify the JSON summary reports zero failures before enabling the default-off residual gate.
+
+## 8. Run the smoke benchmark
 
 Use `Run Benchmark Suite` in the UI with a small slate limit, or:
 
@@ -117,7 +130,7 @@ python scripts/run_benchmark_suite.py \
 
 Expected artifacts are written under a new `docs/benchmarks/<timestamp>/` directory. Confirm `suite_manifest.json`, `summary.md`, JSON backtests, and `run.log` are present. The UI Analysis area should open them and download a ZIP bundle containing the config manifest.
 
-## 8. Final acceptance
+## 9. Final acceptance
 
 ```bash
 PYTHONPATH=. .venv/bin/pytest -q backend/app/tests

@@ -435,6 +435,52 @@ class SimulationCalibrationFactor(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow_naive)
 
 
+class ProjectionResidualSnapshot(Base):
+    __tablename__ = "projection_residual_snapshot"
+    __table_args__ = (
+        UniqueConstraint(
+            "source_system",
+            "season",
+            "week",
+            "slate",
+            name="uq_projection_residual_snapshot_slice",
+        ),
+        Index(
+            "idx_projection_residual_snapshot_lookup",
+            "source_system",
+            "slate",
+            "season",
+            "week",
+            "status",
+        ),
+    )
+
+    projection_residual_snapshot_id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+    )
+    source_system: Mapped[str] = mapped_column(String(32), nullable=False)
+    season: Mapped[int] = mapped_column(Integer, nullable=False)
+    week: Mapped[int] = mapped_column(Integer, nullable=False)
+    slate: Mapped[str] = mapped_column(String(64), nullable=False)
+    parameters_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    parameters_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    feature_set_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    code_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    observations_json: Mapped[list[dict]] = mapped_column(JSON, nullable=False)
+    observations_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default="completed",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=utcnow_naive,
+    )
+
+
 class ActualTopLineup(Base):
     __tablename__ = "actual_top_lineup"
     __table_args__ = (

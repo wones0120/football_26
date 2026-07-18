@@ -408,7 +408,17 @@ source .venv/bin/activate
 python scripts/analyze_online_residual_learning.py
 ```
 
-Across 3,342 observations from 15 Sunday-main slates, validation selected prior strength `5.0`. On the untouched 2025 W11-W18 test window, residual adjustment improved MAE from `4.818` to `4.602` (`+4.48%`) and RMSE from `6.551` to `6.389` (`+2.47%`). Every test slice and each eligible position improved. This is a promotion candidate for broader integration; production projections remain unchanged. Evidence is in `docs/online_residual_learning_2024_2025.{json,md}`.
+Across 3,342 observations from 15 Sunday-main slates, validation selected prior strength `5.0`. On the untouched 2025 W11-W18 test window, residual adjustment improved MAE from `4.818` to `4.602` (`+4.48%`) and RMSE from `6.551` to `6.389` (`+2.47%`). Every test slice and each eligible position improved. The research gate passed; production defaults remain unchanged because scoring integration is opt-in. Evidence is in `docs/online_residual_learning_2024_2025.{json,md}`.
+
+The accepted learner is also available as a DraftKings-only, default-off simulation gate backed by immutable weekly snapshots. Build or reuse the historical snapshots with:
+
+```bash
+source .venv/bin/activate
+python scripts/apply_migrations.py
+python scripts/build_online_residual_snapshots.py
+```
+
+The 2024-2025 backfill persisted 15 completed snapshots containing 3,342 canonical QB/RB/WR/TE observations with zero failures; a second run reused all 15 snapshots. In the UI, keep `Online Residual Gate` off for baseline behavior or explicitly enable it for a DraftKings simulation. Scoring uses only strictly earlier compatible snapshots, requires at least four, and reports a visible fallback warning instead of changing projections when history is insufficient. Backfill lineage is in `docs/online_residual_snapshot_backfill_2024_2025.json`.
 
 Architecture decisions and acceptance status are maintained in `docs/DECISIONS.md` and `docs/MODEL_REGISTRY.md`.
 An empty-database environment can be reproduced using `docs/BOOTSTRAP_RUNBOOK.md`.

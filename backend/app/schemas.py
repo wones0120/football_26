@@ -165,7 +165,20 @@ class SimulateWeekRequest(BaseModel):
     prior_weight: float = Field(default=12.0, ge=0.0, le=100.0)
     noise_scale: float = Field(default=0.12, ge=0.0, le=1.0)
     random_seed: int = 42
+    use_residual_learning: bool = False
     role_shocks: list[RoleShockRequest] = Field(default_factory=list, max_length=1)
+
+
+class ResidualSnapshotBuildRequest(BaseModel):
+    source_system: Literal["draftkings"] = "draftkings"
+    season: int = Field(..., ge=2000)
+    week: int = Field(..., ge=1, le=25)
+    slate: str = Field(default="sunday_main", min_length=1)
+    iterations: int = Field(default=1000, ge=500, le=50000)
+    min_history_games: int = Field(default=4, ge=1, le=30)
+    prior_weight: float = Field(default=12.0, ge=0.0, le=100.0)
+    noise_scale: float = Field(default=0.12, ge=0.0, le=1.0)
+    random_seed: int = 42
 
 
 class BacktestWeekRequest(BaseModel):
@@ -322,6 +335,35 @@ class RoleShockImpactResponse(BaseModel):
     p90_points_delta: float
 
 
+class ResidualAdjustmentImpactResponse(BaseModel):
+    player_master_id: str | None
+    source_player_key: str | None
+    player_name: str
+    team: str | None
+    position: str | None
+    adjustment_points: float
+    scopes_used: int
+    baseline_mean_points: float
+    adjusted_mean_points: float
+    baseline_p90_points: float
+    adjusted_p90_points: float
+
+
+class ResidualSnapshotResponse(BaseModel):
+    projection_residual_snapshot_id: str
+    source_system: str
+    season: int
+    week: int
+    slate: str
+    parameters_hash: str
+    feature_set_hash: str
+    code_version: str
+    observations_count: int
+    status: str
+    created_at: datetime
+    created: bool
+
+
 class SimulateWeekResponse(BaseModel):
     simulation_run_id: str
     source_system: str
@@ -337,6 +379,11 @@ class SimulateWeekResponse(BaseModel):
     completed_at: datetime | None = None
     top_rows: list[SimulatedPlayerOutcomeResponse]
     role_shock_impacts: list[RoleShockImpactResponse] = Field(default_factory=list)
+    residual_learning_applied: bool = False
+    residual_snapshot_count: int = 0
+    residual_adjustment_impacts: list[ResidualAdjustmentImpactResponse] = Field(
+        default_factory=list
+    )
     scenario_warnings: list[str] = Field(default_factory=list)
 
 

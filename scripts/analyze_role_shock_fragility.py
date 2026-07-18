@@ -275,6 +275,8 @@ def main() -> None:
             _baseline_player_map,
             _baseline_ids,
             _baseline_impacts,
+            _baseline_residual_impacts,
+            _baseline_residual_snapshot_count,
             baseline_warnings,
         ) = simulation_service._simulate_salary_slice(
             source_system=args.source_system,
@@ -294,6 +296,8 @@ def main() -> None:
             _scenario_player_map,
             _scenario_ids,
             role_shock_impacts,
+            _scenario_residual_impacts,
+            _scenario_residual_snapshot_count,
             scenario_warnings,
         ) = simulation_service._simulate_salary_slice(
             source_system=args.source_system,

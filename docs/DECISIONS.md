@@ -2,12 +2,12 @@
 
 This log records decisions that affect reproducibility, production defaults, or historical-model acceptance. The operational backlog remains in `docs/TODO.md`.
 
-## 2026-07-18 — Accept residual learning as an integration candidate
+## 2026-07-18 — Integrate residual learning behind a default-off gate
 
 - Decision: retain prior strength `5.0` as the validation-selected online residual-learning candidate, using a 12-slice rolling window, sample-size shrinkage, and a six-point adjustment cap.
 - Evidence: across 1,205 untouched-test observations from 2025 W11-W18, MAE improved `4.818` to `4.602` (`+4.48%`), RMSE improved `6.551` to `6.389` (`+2.47%`), every test slice improved, and QB/RB/WR/TE each improved.
 - Rationale: the learner uses only strictly earlier completed weeks and canonical/source identities; validation chooses shrinkage strength before the later test is opened.
-- Production impact: none yet. The candidate is accepted for broader integration, but the production projection path remains unchanged until residual snapshot persistence and scoring integration are implemented and regression-tested.
+- Production impact: DraftKings weekly simulation can explicitly enable the learner, but the gate defaults off and FanDuel remains unsupported. Immutable source/season/week/slate snapshots store exact canonical observations, parameters, feature hash, and code version. Scoring requires at least four strictly prior compatible snapshots and visibly falls back to baseline otherwise. The initial backfill created 15 snapshots containing 3,342 observations with zero failures, and its idempotency rerun reused all 15.
 
 ## 2026-07-18 — Treat role shocks as explicit stress tests
 

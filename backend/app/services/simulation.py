@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import math
+import subprocess
 import uuid
 from collections import defaultdict
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -14,6 +18,8 @@ from sqlalchemy.orm import Session
 from ..models import (
     CuratedSalary,
     PlayerAlias,
+    ProjectionResidualSnapshot,
+    RawNflSchedule,
     RawNflWeeklyStat,
     SimulatedPlayerOutcome,
     SimulationCalibrationFactor,
@@ -28,6 +34,9 @@ from ..schemas import (
     BacktestWeekRequest,
     BacktestWeekResponse,
     PositionLearningRowResponse,
+    ResidualAdjustmentImpactResponse,
+    ResidualSnapshotBuildRequest,
+    ResidualSnapshotResponse,
     RoleShockImpactResponse,
     RoleShockRequest,
     SalaryBucketLearningRowResponse,
@@ -36,6 +45,19 @@ from ..schemas import (
     SimulateWeekResponse,
 )
 from .matching import normalize_position
+from .residual_learning import (
+    DEFAULT_HISTORY_WINDOW_SLICES,
+    DEFAULT_MAX_ABS_ADJUSTMENT,
+    DEFAULT_MIN_TRAINING_SLICES,
+    DEFAULT_PRIOR_STRENGTH,
+    ELIGIBLE_POSITIONS,
+    FEATURE_SET_HASH,
+    ResidualModel,
+    ResidualObservation,
+    fit_residual_model,
+    game_context_by_team,
+    team_key,
+)
 
 
 def utcnow_naive() -> datetime:
@@ -157,12 +179,397 @@ def _role_shock_projection_multiplier(
     return max(0.0, 1.0 + (0.65 * (float(opportunity_multiplier) - 1.0)))
 
 
+def _current_code_version() -> str:
+    result = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=Path(__file__).resolve().parents[3],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return "unknown"
+    return result.stdout.strip() or "unknown"
+
+
+def _snapshot_parameters(request: ResidualSnapshotBuildRequest) -> dict[str, Any]:
+    return request.model_dump(mode="json")
+
+
+def _snapshot_parameters_hash(parameters: dict[str, Any]) -> str:
+    return hashlib.sha256(
+        json.dumps(
+            parameters,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+
+
 class SimulationService:
     DEFAULT_LOW_SALARY_THRESHOLD = 4500
     DEFAULT_LOW_SALARY_HIT_POINTS = 15.0
 
     def __init__(self, session: Session) -> None:
         self.session = session
+
+    def _load_residual_model(
+        self,
+        *,
+        source_system: str,
+        season: int,
+        week: int,
+        slate: str,
+    ) -> tuple[ResidualModel | None, int, list[str]]:
+        if source_system != "draftkings":
+            return (
+                None,
+                0,
+                [
+                    "online residual learning is currently available only for draftkings"
+                ],
+            )
+
+        try:
+            snapshots = self.session.execute(
+                select(ProjectionResidualSnapshot)
+                .where(
+                    and_(
+                        ProjectionResidualSnapshot.source_system
+                        == source_system,
+                        ProjectionResidualSnapshot.slate == slate,
+                        ProjectionResidualSnapshot.status == "completed",
+                        ProjectionResidualSnapshot.feature_set_hash
+                        == FEATURE_SET_HASH,
+                        or_(
+                            ProjectionResidualSnapshot.season < season,
+                            and_(
+                                ProjectionResidualSnapshot.season == season,
+                                ProjectionResidualSnapshot.week < week,
+                            ),
+                        ),
+                    )
+                )
+                .order_by(
+                    ProjectionResidualSnapshot.season.desc(),
+                    ProjectionResidualSnapshot.week.desc(),
+                )
+                .limit(DEFAULT_HISTORY_WINDOW_SLICES)
+            ).scalars().all()
+        except ProgrammingError:
+            self.session.rollback()
+            return (
+                None,
+                0,
+                [
+                    "online residual learning is unavailable until migration "
+                    "0009_projection_residual_snapshots.sql is applied"
+                ],
+            )
+        snapshots = list(reversed(snapshots))
+        if len(snapshots) < DEFAULT_MIN_TRAINING_SLICES:
+            return (
+                None,
+                len(snapshots),
+                [
+                    "online residual learning requested but only "
+                    f"{len(snapshots)}/{DEFAULT_MIN_TRAINING_SLICES} required "
+                    "prior snapshots are available; baseline projections were used"
+                ],
+            )
+
+        observations: list[ResidualObservation] = []
+        valid_snapshots = 0
+        warnings: list[str] = []
+        for snapshot in snapshots:
+            try:
+                snapshot_observations = [
+                    ResidualObservation.from_dict(row)
+                    for row in list(snapshot.observations_json or [])
+                ]
+            except (KeyError, TypeError, ValueError) as exc:
+                warnings.append(
+                    "ignored invalid residual snapshot "
+                    f"{snapshot.projection_residual_snapshot_id}: {exc}"
+                )
+                continue
+            if not snapshot_observations:
+                warnings.append(
+                    "ignored empty residual snapshot "
+                    f"{snapshot.projection_residual_snapshot_id}"
+                )
+                continue
+            observations.extend(snapshot_observations)
+            valid_snapshots += 1
+
+        if valid_snapshots < DEFAULT_MIN_TRAINING_SLICES:
+            warnings.append(
+                "online residual learning had fewer than "
+                f"{DEFAULT_MIN_TRAINING_SLICES} valid prior snapshots; "
+                "baseline projections were used"
+            )
+            return None, valid_snapshots, warnings
+
+        model = fit_residual_model(
+            observations,
+            prior_strength=DEFAULT_PRIOR_STRENGTH,
+            max_abs_adjustment=DEFAULT_MAX_ABS_ADJUSTMENT,
+        )
+        if model.trained_through >= (season, week):
+            raise AssertionError(
+                "Residual snapshot selection included the target or a future week."
+            )
+        return model, valid_snapshots, warnings
+
+    def _actual_points_by_master(
+        self,
+        *,
+        season: int,
+        week: int,
+        tracked_player_ids: list[str],
+        player_id_to_masters: dict[str, set[str]],
+    ) -> dict[str, float]:
+        if not tracked_player_ids:
+            return {}
+        rows = self.session.execute(
+            select(RawNflWeeklyStat).where(
+                and_(
+                    RawNflWeeklyStat.source_system == "nflreadpy",
+                    RawNflWeeklyStat.season == season,
+                    RawNflWeeklyStat.week == week,
+                    RawNflWeeklyStat.player_id.in_(tracked_player_ids),
+                )
+            )
+        ).scalars().all()
+        points_by_master: dict[str, float] = {}
+        for row in rows:
+            if not row.player_id:
+                continue
+            points = calculate_dk_points(row.raw_row_json or {})
+            if not math.isfinite(points):
+                continue
+            for master_id in player_id_to_masters.get(row.player_id, set()):
+                points_by_master[str(master_id)] = max(
+                    points_by_master.get(str(master_id), 0.0),
+                    float(points),
+                )
+        return points_by_master
+
+    def build_residual_snapshot(
+        self,
+        request: ResidualSnapshotBuildRequest,
+    ) -> ResidualSnapshotResponse:
+        parameters = _snapshot_parameters(request)
+        parameters_hash = _snapshot_parameters_hash(parameters)
+        existing = self.session.execute(
+            select(ProjectionResidualSnapshot).where(
+                and_(
+                    ProjectionResidualSnapshot.source_system
+                    == request.source_system,
+                    ProjectionResidualSnapshot.season == request.season,
+                    ProjectionResidualSnapshot.week == request.week,
+                    ProjectionResidualSnapshot.slate == request.slate,
+                )
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            if existing.parameters_hash != parameters_hash:
+                raise ValueError(
+                    "An immutable residual snapshot already exists for "
+                    f"{request.source_system} {request.season}-W{request.week:02d} "
+                    f"{request.slate} with different parameters."
+                )
+            return ResidualSnapshotResponse(
+                projection_residual_snapshot_id=(
+                    existing.projection_residual_snapshot_id
+                ),
+                source_system=existing.source_system,
+                season=existing.season,
+                week=existing.week,
+                slate=existing.slate,
+                parameters_hash=existing.parameters_hash,
+                feature_set_hash=existing.feature_set_hash,
+                code_version=existing.code_version,
+                observations_count=existing.observations_count,
+                status=existing.status,
+                created_at=existing.created_at,
+                created=False,
+            )
+
+        (
+            _players_considered,
+            simulated_rows,
+            player_id_to_masters,
+            tracked_player_ids,
+            _role_shock_impacts,
+            _residual_adjustment_impacts,
+            _residual_snapshot_count,
+            _scenario_warnings,
+        ) = self._simulate_salary_slice(
+            source_system=request.source_system,
+            season=request.season,
+            week=request.week,
+            slate=request.slate,
+            iterations=request.iterations,
+            min_history_games=request.min_history_games,
+            prior_weight=request.prior_weight,
+            noise_scale=request.noise_scale,
+            random_seed=request.random_seed,
+            use_calibration=True,
+            role_shocks=[],
+        )
+        actual_by_master = self._actual_points_by_master(
+            season=request.season,
+            week=request.week,
+            tracked_player_ids=tracked_player_ids,
+            player_id_to_masters=player_id_to_masters,
+        )
+        salary_rows = self.session.execute(
+            select(CuratedSalary).where(
+                and_(
+                    CuratedSalary.source_system == request.source_system,
+                    CuratedSalary.season == request.season,
+                    CuratedSalary.week == request.week,
+                    CuratedSalary.slate == request.slate,
+                )
+            )
+        ).scalars().all()
+        salary_by_master = {
+            str(row.player_master_id): row
+            for row in salary_rows
+            if row.player_master_id
+        }
+        salary_by_source = {
+            str(row.source_player_key): row
+            for row in salary_rows
+            if row.source_player_key
+        }
+        schedule_rows = self.session.execute(
+            select(RawNflSchedule).where(
+                and_(
+                    RawNflSchedule.source_system == "nflreadpy",
+                    RawNflSchedule.season == request.season,
+                    RawNflSchedule.week == request.week,
+                )
+            )
+        ).scalars().all()
+        context_by_team = game_context_by_team(schedule_rows)
+
+        observations_by_identity: dict[str, ResidualObservation] = {}
+        for row in simulated_rows:
+            position = normalize_position(row.get("position"))
+            if position not in ELIGIBLE_POSITIONS:
+                continue
+            master_id = (
+                str(row["player_master_id"])
+                if row.get("player_master_id")
+                else None
+            )
+            source_key = (
+                str(row["source_player_key"])
+                if row.get("source_player_key")
+                else None
+            )
+            if not master_id and not source_key:
+                continue
+            actual_points = actual_by_master.get(master_id or "")
+            if actual_points is None:
+                continue
+            salary_row = (
+                salary_by_master.get(master_id or "")
+                or salary_by_source.get(source_key or "")
+            )
+            team = team_key(
+                (salary_row.team if salary_row is not None else None)
+                or row.get("team")
+            )
+            context = context_by_team.get(team, {})
+            identity = (
+                f"master:{master_id}"
+                if master_id
+                else f"source:{source_key}"
+            )
+            observations_by_identity[identity] = ResidualObservation(
+                season=request.season,
+                week=request.week,
+                player_master_id=master_id,
+                source_player_key=source_key,
+                team=team or None,
+                opponent=(
+                    team_key(salary_row.opponent) or None
+                    if salary_row is not None
+                    else None
+                ),
+                position=position,
+                salary=(
+                    int(salary_row.salary)
+                    if salary_row is not None
+                    and salary_row.salary is not None
+                    else (
+                        int(row["salary"])
+                        if row.get("salary") is not None
+                        else None
+                    )
+                ),
+                game_total_line=(
+                    float(context["game_total_line"])
+                    if context.get("game_total_line") is not None
+                    else None
+                ),
+                team_spread_line=(
+                    float(context["team_spread_line"])
+                    if context.get("team_spread_line") is not None
+                    else None
+                ),
+                baseline_points=float(row["mean_points"]),
+                actual_points=float(actual_points),
+            )
+        observations = sorted(
+            observations_by_identity.values(),
+            key=lambda row: (
+                row.position,
+                row.identity_key or "",
+            ),
+        )
+        if not observations:
+            raise ValueError(
+                "Residual snapshot produced no canonical observations with actuals."
+            )
+
+        snapshot = ProjectionResidualSnapshot(
+            projection_residual_snapshot_id=str(uuid.uuid4()),
+            source_system=request.source_system,
+            season=request.season,
+            week=request.week,
+            slate=request.slate,
+            parameters_hash=parameters_hash,
+            parameters_json=parameters,
+            feature_set_hash=FEATURE_SET_HASH,
+            code_version=_current_code_version(),
+            observations_json=[row.to_dict() for row in observations],
+            observations_count=len(observations),
+            status="completed",
+            created_at=utcnow_naive(),
+        )
+        self.session.add(snapshot)
+        self.session.commit()
+        self.session.refresh(snapshot)
+        return ResidualSnapshotResponse(
+            projection_residual_snapshot_id=(
+                snapshot.projection_residual_snapshot_id
+            ),
+            source_system=snapshot.source_system,
+            season=snapshot.season,
+            week=snapshot.week,
+            slate=snapshot.slate,
+            parameters_hash=snapshot.parameters_hash,
+            feature_set_hash=snapshot.feature_set_hash,
+            code_version=snapshot.code_version,
+            observations_count=snapshot.observations_count,
+            status=snapshot.status,
+            created_at=snapshot.created_at,
+            created=True,
+        )
 
     def _recent_opportunity_by_master(
         self,
@@ -534,6 +941,7 @@ class SimulationService:
         noise_scale: float,
         random_seed: int | None,
         use_calibration: bool = True,
+        use_residual_learning: bool = False,
         low_hit_points: float | None = None,
         role_shocks: list[RoleShockRequest] | None = None,
     ) -> tuple[
@@ -542,6 +950,8 @@ class SimulationService:
         dict[str, set[str]],
         list[str],
         list[dict[str, Any]],
+        list[dict[str, Any]],
+        int,
         list[str],
     ]:
         salary_rows = self.session.execute(
@@ -677,9 +1087,37 @@ class SimulationService:
         else:
             position_multipliers, salary_bucket_multipliers, low_salary_group_multipliers = {}, {}, {}
 
+        residual_model: ResidualModel | None = None
+        residual_snapshot_count = 0
+        residual_context_by_team: dict[str, dict[str, float]] = {}
+        if use_residual_learning:
+            (
+                residual_model,
+                residual_snapshot_count,
+                residual_warnings,
+            ) = self._load_residual_model(
+                source_system=source_system,
+                season=season,
+                week=week,
+                slate=slate,
+            )
+            scenario_warnings.extend(residual_warnings)
+            if residual_model is not None:
+                schedule_rows = self.session.execute(
+                    select(RawNflSchedule).where(
+                        and_(
+                            RawNflSchedule.source_system == "nflreadpy",
+                            RawNflSchedule.season == season,
+                            RawNflSchedule.week == week,
+                        )
+                    )
+                ).scalars().all()
+                residual_context_by_team = game_context_by_team(schedule_rows)
+
         rng = np.random.default_rng(random_seed)
         simulated_rows: list[dict[str, Any]] = []
         role_shock_impacts: list[dict[str, Any]] = []
+        residual_adjustment_impacts: list[dict[str, Any]] = []
         impacted_masters_simulated: set[str] = set()
 
         for salary_row in rows_with_master:
@@ -732,6 +1170,61 @@ class SimulationService:
                         combined_multiplier *= low_salary_group_multipliers.get(low_group_key, 1.0)
             combined_multiplier = _clip_multiplier(combined_multiplier, low=0.75, high=1.3)
             draws = np.clip(draws * combined_multiplier, 0.0, None)
+            if residual_model is not None and pos in ELIGIBLE_POSITIONS:
+                residual_baseline_draws = draws
+                residual_baseline_mean = float(np.mean(residual_baseline_draws))
+                residual_baseline_p90 = float(
+                    np.percentile(residual_baseline_draws, 90)
+                )
+                team = team_key(salary_row.team)
+                residual_context = residual_context_by_team.get(team, {})
+                residual_observation = ResidualObservation(
+                    season=season,
+                    week=week,
+                    player_master_id=salary_row.player_master_id,
+                    source_player_key=salary_row.source_player_key,
+                    team=team or None,
+                    opponent=team_key(salary_row.opponent) or None,
+                    position=pos,
+                    salary=salary_row.salary,
+                    game_total_line=(
+                        float(residual_context["game_total_line"])
+                        if residual_context.get("game_total_line") is not None
+                        else None
+                    ),
+                    team_spread_line=(
+                        float(residual_context["team_spread_line"])
+                        if residual_context.get("team_spread_line") is not None
+                        else None
+                    ),
+                    baseline_points=residual_baseline_mean,
+                    actual_points=0.0,
+                )
+                residual_adjustment, scopes_used = (
+                    residual_model.adjustment_for(residual_observation)
+                )
+                draws = np.clip(
+                    residual_baseline_draws + residual_adjustment,
+                    0.0,
+                    None,
+                )
+                residual_adjustment_impacts.append(
+                    {
+                        "player_master_id": salary_row.player_master_id,
+                        "source_player_key": salary_row.source_player_key,
+                        "player_name": salary_row.player_name,
+                        "team": salary_row.team,
+                        "position": salary_row.position,
+                        "adjustment_points": residual_adjustment,
+                        "scopes_used": scopes_used,
+                        "baseline_mean_points": residual_baseline_mean,
+                        "adjusted_mean_points": float(np.mean(draws)),
+                        "baseline_p90_points": residual_baseline_p90,
+                        "adjusted_p90_points": float(
+                            np.percentile(draws, 90)
+                        ),
+                    }
+                )
             baseline_draws = draws
             opportunity_multiplier = float(
                 role_shock_multipliers.get(str(salary_row.player_master_id), 1.0)
@@ -823,6 +1316,8 @@ class SimulationService:
             player_id_to_masters,
             tracked_player_ids,
             role_shock_impacts,
+            residual_adjustment_impacts,
+            residual_snapshot_count,
             scenario_warnings,
         )
 
@@ -872,6 +1367,10 @@ class SimulationService:
         players_simulated = 0
         top_rows: list[SimulatedPlayerOutcomeResponse] = []
         role_shock_impacts: list[RoleShockImpactResponse] = []
+        residual_adjustment_impacts: list[
+            ResidualAdjustmentImpactResponse
+        ] = []
+        residual_snapshot_count = 0
         scenario_warnings: list[str] = []
         try:
             (
@@ -880,6 +1379,8 @@ class SimulationService:
                 _player_map,
                 _tracked_ids,
                 role_shock_calc_rows,
+                residual_adjustment_calc_rows,
+                residual_snapshot_count,
                 scenario_warnings,
             ) = self._simulate_salary_slice(
                 source_system=request.source_system,
@@ -892,11 +1393,16 @@ class SimulationService:
                 noise_scale=request.noise_scale,
                 random_seed=request.random_seed,
                 use_calibration=True,
+                use_residual_learning=request.use_residual_learning,
                 role_shocks=request.role_shocks,
             )
             role_shock_impacts = [
                 RoleShockImpactResponse(**row)
                 for row in role_shock_calc_rows
+            ]
+            residual_adjustment_impacts = [
+                ResidualAdjustmentImpactResponse(**row)
+                for row in residual_adjustment_calc_rows
             ]
 
             simulated_rows = [
@@ -968,6 +1474,11 @@ class SimulationService:
                 completed_at=run.completed_at,
                 top_rows=top_rows,
                 role_shock_impacts=role_shock_impacts,
+                residual_learning_applied=bool(
+                    residual_adjustment_impacts
+                ),
+                residual_snapshot_count=residual_snapshot_count,
+                residual_adjustment_impacts=residual_adjustment_impacts,
                 scenario_warnings=scenario_warnings,
             )
         except Exception as exc:  # noqa: BLE001
@@ -994,6 +1505,9 @@ class SimulationService:
                 completed_at=run.completed_at,
                 top_rows=[],
                 role_shock_impacts=[],
+                residual_learning_applied=False,
+                residual_snapshot_count=0,
+                residual_adjustment_impacts=[],
                 scenario_warnings=scenario_warnings,
             )
 
@@ -1011,6 +1525,8 @@ class SimulationService:
             player_id_to_masters,
             tracked_player_ids,
             _role_shock_impacts,
+            _residual_adjustment_impacts,
+            _residual_snapshot_count,
             _scenario_warnings,
         ) = self._simulate_salary_slice(
             source_system=request.source_system,

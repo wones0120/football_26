@@ -43,7 +43,7 @@ This gives useful pre-lock stress testing even when the triggering news itself i
 
 The simulation API and UI now support a deterministic manual target, retained-opportunity share, same-position/all-skill reallocation, recipient cap, and separate opportunity/projection multipliers. Seeds and the complete request are stored on `simulation_run`. The Week 18 Gibbs zero-retention example moved target exposure from `30%` to `0%`, retained `70%` top-lineup overlap, and recovered `6.69` projected-blend points after scenario reoptimization.
 
-## 4. Online Residual Learning — Implemented, Promotion Candidate
+## 4. Online Residual Learning — Implemented, Default-Off Integration
 
 After each completed week, learn rolling residual adjustments by:
 
@@ -55,7 +55,9 @@ After each completed week, learn rolling residual adjustments by:
 
 Use shrinkage and strict prior-week cutoffs. Promote an adjustment only when it improves later-window calibration or MAE.
 
-The deterministic walk-forward implementation combines canonical player, team-position, opponent-position, salary, projected-value, and pre-lock game-regime residuals over a rolling 12-slice window. Prior strength `5.0` was selected only on 2025 W05-W10. On the untouched 2025 W11-W18 test window, it improved MAE `4.818` to `4.602` (`+4.48%`) and RMSE `6.551` to `6.389` (`+2.47%`) across 1,205 observations. All five test slices and QB/RB/WR/TE improved. The candidate passed the research gate; production integration remains separate.
+The deterministic walk-forward implementation combines canonical player, team-position, opponent-position, salary, projected-value, and pre-lock game-regime residuals over a rolling 12-slice window. Prior strength `5.0` was selected only on 2025 W05-W10. On the untouched 2025 W11-W18 test window, it improved MAE `4.818` to `4.602` (`+4.48%`) and RMSE `6.551` to `6.389` (`+2.47%`) across 1,205 observations. All five test slices and QB/RB/WR/TE improved.
+
+The learner is integrated into DraftKings weekly simulation behind a default-off gate. Immutable snapshots preserve observations and model lineage, scoring reads only strictly prior compatible snapshots, and insufficient history visibly falls back to baseline. The initial backfill created 15 snapshots with 3,342 observations and zero failures; a repeat run reused all 15.
 
 ## 5. Game-Regime Ensemble
 

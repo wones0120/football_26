@@ -41,6 +41,8 @@ from ..schemas import (
     PlayerMasterResponse,
     PlayerMasterUpsertRequest,
     ResolveUnresolvedRequest,
+    ResidualSnapshotBuildRequest,
+    ResidualSnapshotResponse,
     SalaryIngestRequest,
     SimulateWeekRequest,
     SimulateWeekResponse,
@@ -260,6 +262,21 @@ def simulate_week(
     if result.status == "failed":
         raise HTTPException(status_code=422, detail=result.error_message or "simulation failed")
     return result
+
+
+@router.post(
+    "/simulate/residual-snapshot",
+    response_model=ResidualSnapshotResponse,
+)
+def build_residual_snapshot(
+    request: ResidualSnapshotBuildRequest,
+    session: Session = Depends(get_db_session),
+) -> ResidualSnapshotResponse:
+    service = SimulationService(session)
+    try:
+        return service.build_residual_snapshot(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.post("/simulate/backtest-week", response_model=BacktestWeekResponse)

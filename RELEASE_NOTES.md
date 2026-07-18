@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added immutable weekly projection-residual snapshots with source/slice uniqueness, feature and parameter hashes, code-version lineage, canonical observations, idempotent reuse, and a deterministic 2024-2025 DraftKings backfill CLI.
+- Integrated the accepted online residual learner into weekly simulation behind a DraftKings-only `Online Residual Gate` that defaults off, reads strictly prior compatible snapshots, requires four historical snapshots, and exposes adjustment/fallback observability in the API and UI.
+- Persisted a successful 15-slate residual snapshot backfill containing 3,342 observations with zero failures; an idempotency rerun reused all 15 snapshots.
 - Converted the main-slate value-driver findings into nine pregame-only features learned by walk-forward classic lineup scoring, covering projected value, high-total exposure, RB spread context, and FLEX construction.
 - Added deterministic classic feature-group ablation through `scripts/run_classic_feature_ablation.py`, with paired mean-gap contribution reporting for value-driver and game-environment inputs.
 - Added `scripts/run_classic_parameter_sweep.py` with reproducible candidate-count, training-window, and top-target-percentile grids plus compact best-config persistence and source/feature lineage.
@@ -14,7 +17,7 @@
 - Added deterministic manual RB/WR/TE role-shock simulations with prior four-game opportunity reallocation, same-position/all-skill scopes, recipient caps, 65% projection elasticity, default seed `42`, persisted seed/parameters, API response impacts, and baseline-first UI controls.
 - Added `scripts/run_role_shock_simulation.py`, `scripts/analyze_role_shock_fragility.py`, and a Week 18 Gibbs artifact. The zero-retention stress test produced 70% top-lineup overlap and a `+6.69` projected-blend reoptimization lift.
 - Added validation-selected online weekly residual learning with canonical player, team-position, opponent-position, salary/value, and pre-lock game-regime scopes plus sample-size shrinkage and strict prior-week cutoffs.
-- Added 15-slate walk-forward evidence: the selected prior strength improved untouched-test MAE `4.818` to `4.602` (`+4.48%`) and RMSE `6.551` to `6.389` (`+2.47%`) across 1,205 players; production remains unchanged pending integration.
+- Added 15-slate walk-forward evidence: the selected prior strength improved untouched-test MAE `4.818` to `4.602` (`+4.48%`) and RMSE `6.551` to `6.389` (`+2.47%`) across 1,205 players; the accepted learner is now production-capable behind the default-off gate.
 - Added `scripts/analyze_showdown_captain_drift.py` with sample-gated total-variation alerts across early/mid/late season captain-position priors, plus persisted 2024-2025 JSON and Markdown reports.
 - Added salary-relative showdown captain role archetypes and sample-gated, Laplace-smoothed total/spread scenario priors through `scripts/analyze_showdown_captain_scenarios.py`, with persisted 41-slate JSON and Markdown reports.
 - Added a no-new-dependency, strict whole-week comparison of rolling baseline, ridge linear, regression-tree, and shallow-neural player projection families; the validation-selected tree achieved `2.610` MAE on the untouched 2025 W12-W18 test window and was not automatically promoted.

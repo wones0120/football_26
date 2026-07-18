@@ -130,6 +130,20 @@ export type RoleShockImpact = {
   p90_points_delta: number;
 };
 
+export type ResidualAdjustmentImpact = {
+  player_master_id?: string | null;
+  source_player_key?: string | null;
+  player_name: string;
+  team?: string | null;
+  position?: string | null;
+  adjustment_points: number;
+  scopes_used: number;
+  baseline_mean_points: number;
+  adjusted_mean_points: number;
+  baseline_p90_points: number;
+  adjusted_p90_points: number;
+};
+
 export type SimulateWeekResult = {
   simulation_run_id: string;
   source_system: string;
@@ -145,6 +159,9 @@ export type SimulateWeekResult = {
   completed_at?: string | null;
   top_rows: SimulatedPlayerOutcome[];
   role_shock_impacts: RoleShockImpact[];
+  residual_learning_applied: boolean;
+  residual_snapshot_count: number;
+  residual_adjustment_impacts: ResidualAdjustmentImpact[];
   scenario_warnings: string[];
 };
 
@@ -444,6 +461,7 @@ export function simulateWeek(payload: {
   prior_weight?: number;
   noise_scale?: number;
   random_seed?: number;
+  use_residual_learning?: boolean;
   role_shocks?: Array<{
     player_master_id?: string;
     source_player_key?: string;

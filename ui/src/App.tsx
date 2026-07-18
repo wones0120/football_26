@@ -32,6 +32,7 @@ import {
   type IngestResult,
   type ModelDefaults,
   type OptimalVsPredictedBacktestResult,
+  type ResidualAdjustmentImpact,
   type RoleShockImpact,
   type SeasonCoverageRow,
   type SimulatedPlayerOutcome,
@@ -164,6 +165,8 @@ function App() {
   const [simulationMinHistoryGames, setSimulationMinHistoryGames] = useState(4);
   const [simulationPriorWeight, setSimulationPriorWeight] = useState(12);
   const [simulationNoiseScale, setSimulationNoiseScale] = useState(0.12);
+  const [simulationUseResidualLearning, setSimulationUseResidualLearning] =
+    useState(false);
   const [roleShockPlayerIdentity, setRoleShockPlayerIdentity] = useState("");
   const [roleShockRetainedShare, setRoleShockRetainedShare] = useState(0);
   const [roleShockScope, setRoleShockScope] =
@@ -198,6 +201,11 @@ function App() {
   const [simulationRows, setSimulationRows] = useState<SimulatedPlayerOutcome[]>([]);
   const [roleShockCandidates, setRoleShockCandidates] = useState<SimulatedPlayerOutcome[]>([]);
   const [roleShockImpacts, setRoleShockImpacts] = useState<RoleShockImpact[]>([]);
+  const [residualAdjustmentImpacts, setResidualAdjustmentImpacts] = useState<
+    ResidualAdjustmentImpact[]
+  >([]);
+  const [residualSnapshotCount, setResidualSnapshotCount] = useState(0);
+  const [residualLearningApplied, setResidualLearningApplied] = useState(false);
   const [scenarioWarnings, setScenarioWarnings] = useState<string[]>([]);
   const [simulationRunId, setSimulationRunId] = useState<string | null>(null);
   const [backtestResult, setBacktestResult] = useState<BacktestWeekResult | null>(null);
@@ -418,6 +426,10 @@ function App() {
     setRoleShockCandidates([]);
     setRoleShockPlayerIdentity("");
     setRoleShockImpacts([]);
+    setSimulationUseResidualLearning(false);
+    setResidualAdjustmentImpacts([]);
+    setResidualSnapshotCount(0);
+    setResidualLearningApplied(false);
     setScenarioWarnings([]);
   }, [sourceSystem, season, week, slate]);
 
@@ -653,6 +665,9 @@ function App() {
     setSimulationRows([]);
     setSimulationRunId(null);
     setRoleShockImpacts([]);
+    setResidualAdjustmentImpacts([]);
+    setResidualSnapshotCount(0);
+    setResidualLearningApplied(false);
     setScenarioWarnings([]);
     setStatus(`Simulating ${sourceSystem} season ${season} week ${week} (${slate})...`);
     setError(null);
@@ -667,6 +682,7 @@ function App() {
         min_history_games: simulationMinHistoryGames,
         prior_weight: simulationPriorWeight,
         noise_scale: simulationNoiseScale,
+        use_residual_learning: simulationUseResidualLearning,
         role_shocks: roleShock ? [roleShock] : [],
       });
       setSimulationRows(result.top_rows);
@@ -681,9 +697,12 @@ function App() {
       }
       setSimulationRunId(result.simulation_run_id);
       setRoleShockImpacts(result.role_shock_impacts);
+      setResidualAdjustmentImpacts(result.residual_adjustment_impacts);
+      setResidualSnapshotCount(result.residual_snapshot_count);
+      setResidualLearningApplied(result.residual_learning_applied);
       setScenarioWarnings(result.scenario_warnings);
       setStatus(
-        `Simulation completed: players=${result.players_simulated}/${result.players_considered} iterations=${result.iterations} role_impacts=${result.role_shock_impacts.length}`
+        `Simulation completed: players=${result.players_simulated}/${result.players_considered} iterations=${result.iterations} residual_impacts=${result.residual_adjustment_impacts.length} role_impacts=${result.role_shock_impacts.length}`
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -1384,6 +1403,19 @@ function App() {
               />
             </label>
             <label>
+              Online Residual Gate
+              <select
+                value={simulationUseResidualLearning ? "enabled" : "off"}
+                onChange={(event) =>
+                  setSimulationUseResidualLearning(event.target.value === "enabled")
+                }
+                disabled={sourceSystem !== "draftkings"}
+              >
+                <option value="off">Off (default)</option>
+                <option value="enabled">Enabled</option>
+              </select>
+            </label>
+            <label>
               Role Shock Player
               <select
                 value={roleShockPlayerIdentity}
@@ -1432,6 +1464,11 @@ function App() {
             </label>
           </div>
           <p className="hint">
+            Online residual learning is DraftKings-only and default-off. When enabled, it uses immutable
+            snapshots from strictly earlier completed weeks and visibly falls back to baseline when fewer
+            than four snapshots exist.
+          </p>
+          <p className="hint">
             Run an unshocked baseline first to populate eligible players. A role shock manually reduces the
             selected player&apos;s opportunity and reallocates it from the prior four team games; it does not
             claim historical injury knowledge. Increase Top Results if the player you need is not listed.
@@ -1449,6 +1486,9 @@ function App() {
                 setRoleShockCandidates([]);
                 setRoleShockPlayerIdentity("");
                 setRoleShockImpacts([]);
+                setResidualAdjustmentImpacts([]);
+                setResidualSnapshotCount(0);
+                setResidualLearningApplied(false);
                 setScenarioWarnings([]);
                 setSimulationRunId(null);
                 setBacktestResult(null);
@@ -1459,6 +1499,12 @@ function App() {
             </button>
           </div>
           {simulationRunId && <p className="hint">Run ID: {simulationRunId}</p>}
+          {simulationUseResidualLearning && (
+            <p className="hint">
+              Residual learning: {residualLearningApplied ? "applied" : "not applied"} using{" "}
+              {residualSnapshotCount} prior snapshot{residualSnapshotCount === 1 ? "" : "s"}.
+            </p>
+          )}
           <div className="table-wrap">
             <table>
               <thead>
@@ -1510,6 +1556,45 @@ function App() {
               {scenarioWarnings.map((warning) => (
                 <p key={warning}>{warning}</p>
               ))}
+            </div>
+          )}
+          {residualAdjustmentImpacts.length > 0 && (
+            <div className="subsection">
+              <h3>Online Residual Adjustments</h3>
+              <p className="hint">
+                Additive adjustments are learned only from prior immutable snapshots. Production baseline
+                behavior is unchanged while the gate is off.
+              </p>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Player</th>
+                      <th>Adjustment</th>
+                      <th>Scopes</th>
+                      <th>Mean Before</th>
+                      <th>Mean After</th>
+                      <th>P90 Before</th>
+                      <th>P90 After</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {residualAdjustmentImpacts.map((row) => (
+                      <tr key={`${row.player_master_id ?? row.source_player_key ?? row.player_name}-residual`}>
+                        <td>
+                          {row.player_name} ({row.team ?? "-"} {row.position ?? "-"})
+                        </td>
+                        <td>{row.adjustment_points.toFixed(2)}</td>
+                        <td>{row.scopes_used}</td>
+                        <td>{row.baseline_mean_points.toFixed(2)}</td>
+                        <td>{row.adjusted_mean_points.toFixed(2)}</td>
+                        <td>{row.baseline_p90_points.toFixed(2)}</td>
+                        <td>{row.adjusted_p90_points.toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
           {roleShockImpacts.length > 0 && (
