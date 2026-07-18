@@ -1,0 +1,302 @@
+{
+  "summary": {
+    "rows": 17342,
+    "features": 26,
+    "random_seed": 42,
+    "selection_metric": "validation_mae",
+    "selected_family": "regression_tree",
+    "selected_validation_mae": 2.7906222030937147,
+    "selected_test_mae": 2.6095158532724327,
+    "production_model_changed": false,
+    "source_system": "draftkings",
+    "season_start": 2024,
+    "season_end": 2025
+  },
+  "time_split": {
+    "train": {
+      "rows": 12008,
+      "slices": 19,
+      "start": {
+        "season": 2024,
+        "week": 4
+      },
+      "end": {
+        "season": 2025,
+        "week": 7
+      }
+    },
+    "validation": {
+      "rows": 2600,
+      "slices": 4,
+      "start": {
+        "season": 2025,
+        "week": 8
+      },
+      "end": {
+        "season": 2025,
+        "week": 11
+      }
+    },
+    "test": {
+      "rows": 2734,
+      "slices": 5,
+      "start": {
+        "season": 2025,
+        "week": 12
+      },
+      "end": {
+        "season": 2025,
+        "week": 18
+      }
+    }
+  },
+  "feature_names": [
+    "salary_k",
+    "is_home",
+    "game_total_line",
+    "team_spread_line",
+    "team_implied_total",
+    "opponent_implied_total",
+    "player_games_history",
+    "player_roll3_mean",
+    "player_roll8_mean",
+    "player_roll8_std",
+    "player_vs_opp_roll4",
+    "defense_pos_allowed_roll3",
+    "defense_pos_allowed_roll8",
+    "defense_pos_allowed_p90_roll8",
+    "injury_status_score",
+    "team_skill_out_count",
+    "team_position_out_count",
+    "kickoff_early",
+    "kickoff_late",
+    "kickoff_prime",
+    "kickoff_unknown",
+    "position_qb",
+    "position_rb",
+    "position_wr",
+    "position_te",
+    "position_dst"
+  ],
+  "feature_set_hash": "c19534c2c1c1865c52bffdcd9e5409076adeb5cfdc8b423ae275fa9bb05cdb51",
+  "families": {
+    "rolling_mean_baseline": {
+      "validation": {
+        "rows": 2600,
+        "mae": 4.577481268983071,
+        "rmse": 6.191283776728704,
+        "mean_error": 2.4356306840982693,
+        "r_squared": 0.1520393486026428
+      },
+      "test": {
+        "rows": 2734,
+        "mae": 4.483467171883669,
+        "rmse": 6.141026269644222,
+        "mean_error": 2.526061254666395,
+        "r_squared": 0.08268064054670687
+      },
+      "test_by_position": {
+        "QB": {
+          "rows": 374,
+          "mae": 6.880862389507921,
+          "rmse": 8.660858191481886,
+          "mean_error": 4.891603529401586,
+          "r_squared": -0.038744885973094556
+        },
+        "RB": {
+          "rows": 621,
+          "mae": 4.2433703686845075,
+          "rmse": 6.126574820168504,
+          "mean_error": 2.250897365358401,
+          "r_squared": 0.24056237804032288
+        },
+        "WR": {
+          "rows": 1033,
+          "mae": 4.316440328368803,
+          "rmse": 5.8610212980454115,
+          "mean_error": 2.533868049920653,
+          "r_squared": 0.03466478351354785
+        },
+        "TE": {
+          "rows": 602,
+          "mae": 3.4919381541873524,
+          "rmse": 4.480825349011597,
+          "mean_error": 2.2457338352504754,
+          "r_squared": 0.00020558604217246756
+        },
+        "DST": {
+          "rows": 104,
+          "mae": 4.69417391610721,
+          "rmse": 6.332198486890048,
+          "mean_error": -2.79262478860247,
+          "r_squared": -0.2414625351552584
+        }
+      }
+    },
+    "ridge_linear": {
+      "validation": {
+        "rows": 2600,
+        "mae": 3.176401468410657,
+        "rmse": 5.313588053024355,
+        "mean_error": 0.07970920105387876,
+        "r_squared": 0.3754171676411442
+      },
+      "test": {
+        "rows": 2734,
+        "mae": 3.0438639535652405,
+        "rmse": 5.07951827636599,
+        "mean_error": 0.20064256987036738,
+        "r_squared": 0.3723988895864272
+      },
+      "test_by_position": {
+        "QB": {
+          "rows": 374,
+          "mae": 4.550969734160947,
+          "rmse": 6.555295311804625,
+          "mean_error": 0.40145574162773356,
+          "r_squared": 0.40492519157069495
+        },
+        "RB": {
+          "rows": 621,
+          "mae": 3.082206870275607,
+          "rmse": 5.40564220304982,
+          "mean_error": 0.10569347716864437,
+          "r_squared": 0.408777140287083
+        },
+        "WR": {
+          "rows": 1033,
+          "mae": 2.911249563819576,
+          "rmse": 4.981104450454926,
+          "mean_error": 0.2546387712760557,
+          "r_squared": 0.30275911041092873
+        },
+        "TE": {
+          "rows": 602,
+          "mae": 2.101736780345986,
+          "rmse": 3.5200068584347686,
+          "mean_error": 0.20716465071152174,
+          "r_squared": 0.38300493249086043
+        },
+        "DST": {
+          "rows": 104,
+          "mae": 4.1658130849626405,
+          "rmse": 5.576719540576253,
+          "mean_error": -0.5286373184751719,
+          "r_squared": 0.03709778343654646
+        }
+      }
+    },
+    "regression_tree": {
+      "validation": {
+        "rows": 2600,
+        "mae": 2.7906222030937147,
+        "rmse": 5.1407451400955155,
+        "mean_error": -0.0051091697594736725,
+        "r_squared": 0.4153897488578583
+      },
+      "test": {
+        "rows": 2734,
+        "mae": 2.6095158532724327,
+        "rmse": 4.823095510850669,
+        "mean_error": 0.03987932499859939,
+        "r_squared": 0.4341642627929724
+      },
+      "test_by_position": {
+        "QB": {
+          "rows": 374,
+          "mae": 3.387967492443942,
+          "rmse": 6.048760685895679,
+          "mean_error": 0.04279871240991966,
+          "r_squared": 0.4933362328448029
+        },
+        "RB": {
+          "rows": 621,
+          "mae": 2.6487108754775655,
+          "rmse": 5.205208859094949,
+          "mean_error": 0.055783095440722644,
+          "r_squared": 0.4518076821955538
+        },
+        "WR": {
+          "rows": 1033,
+          "mae": 2.6025363015600123,
+          "rmse": 4.786206024355079,
+          "mean_error": 0.08865576624669858,
+          "r_squared": 0.3562543178388423
+        },
+        "TE": {
+          "rows": 602,
+          "mae": 1.8681567276832325,
+          "rmse": 3.2723507445958333,
+          "mean_error": 0.0520377635973493,
+          "r_squared": 0.46677025580528475
+        },
+        "DST": {
+          "rows": 104,
+          "mae": 3.9366990136964364,
+          "rmse": 5.352622254907472,
+          "mean_error": -0.6204431382910762,
+          "r_squared": 0.11293025010276159
+        }
+      }
+    },
+    "shallow_neural_net": {
+      "validation": {
+        "rows": 2600,
+        "mae": 3.0661172934705565,
+        "rmse": 5.220764850292316,
+        "mean_error": -0.1778491037082756,
+        "r_squared": 0.3970482719462598
+      },
+      "test": {
+        "rows": 2734,
+        "mae": 2.9013279815414936,
+        "rmse": 4.9438993067844565,
+        "mean_error": -0.12490048276906314,
+        "r_squared": 0.405464375774238
+      },
+      "test_by_position": {
+        "QB": {
+          "rows": 374,
+          "mae": 4.101069747580394,
+          "rmse": 6.345929369304352,
+          "mean_error": -0.5782351412341418,
+          "r_squared": 0.4423297057558053
+        },
+        "RB": {
+          "rows": 621,
+          "mae": 2.9098642637782626,
+          "rmse": 5.245095888158396,
+          "mean_error": -0.1912671650450797,
+          "r_squared": 0.44337399926150556
+        },
+        "WR": {
+          "rows": 1033,
+          "mae": 2.843789727263283,
+          "rmse": 4.868391554604662,
+          "mean_error": 0.024626912251236244,
+          "r_squared": 0.3339565654326532
+        },
+        "TE": {
+          "rows": 602,
+          "mae": 2.0583279526601097,
+          "rmse": 3.4714304121874107,
+          "mean_error": 0.06019020243932887,
+          "r_squared": 0.39991661737136064
+        },
+        "DST": {
+          "rows": 104,
+          "mae": 3.987083580468446,
+          "rmse": 5.317965552989512,
+          "mean_error": -0.6549535557697895,
+          "r_squared": 0.12438010949941647
+        }
+      }
+    }
+  },
+  "acceptance": {
+    "strict_time_split": true,
+    "whole_week_boundaries": true,
+    "test_used_for_selection": false,
+    "note": "The validation winner is reported for research only. Production projection blending remains gated by its existing walk-forward checks."
+  }
+}

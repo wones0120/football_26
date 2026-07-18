@@ -313,7 +313,10 @@ class BacktestPlayerRowResponse(BaseModel):
     salary: int | None
     history_games: int
     predicted_mean_points: float
+    predicted_p75_points: float
     predicted_p90_points: float
+    predicted_p95_points: float
+    predicted_ceiling_prob_25: float
     predicted_low_hit_prob: float | None = None
     actual_points: float
     error: float

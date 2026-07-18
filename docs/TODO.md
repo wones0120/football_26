@@ -1,6 +1,6 @@
 # Football_26 TODO Backlog
 
-Last updated: 2026-07-17
+Last updated: 2026-07-18
 
 ## Completed Baseline (Reference)
 - [x] Showdown captain descriptive analysis completed for 2024-2025.
@@ -73,25 +73,27 @@ Last updated: 2026-07-17
 ## P1 - Showdown Modeling
 - [ ] Add teammate-availability context to captain archetype model (feature plumbing and opt-in training are implemented; historical injury coverage is currently zero, and the 41-slate candidate regressed, so the current default remains unchanged).
 - [x] Add season-segment drift checks and automatic alerts when captain priors shift materially.
-- [ ] Extend captain modeling beyond position class (role/archetype buckets within position).
-- [ ] Add showdown scenario analysis module:
+- [x] Extend captain modeling beyond position class with salary-relative `premium`, `core`, and `value` role buckets within position.
+- [x] Add showdown scenario analysis module:
   - which captain archetypes win by matchup/game context
   - descriptive and predictive views for future slates
+  - Evidence: `docs/showdown_captain_scenarios_2024_2025.{json,md}` contains 41-slate role distributions and sample-gated, Laplace-smoothed future-safe scenario priors.
 
 ## P1 - Player Projection Engine
-- [ ] Implement opponent-specific player scoring distributions (not just global history).
-- [ ] Add teammate-on/off context features (availability and usage interactions).
-- [ ] Train and compare model families (baseline linear/tree vs neural net) under strict time-split validation.
-- [ ] Calibrate uncertainty (mean, p75, p90, tail risk) and track calibration drift.
+- [x] Implement opponent-specific player scoring distributions (player-vs-opponent history plus rolling defense-by-position mean and p90 context).
+- [x] Add teammate-on/off context features (player injury status, team skill-position outs, same-position outs, and usage multipliers).
+- [x] Train and compare model families (rolling baseline, ridge linear, regression tree, and shallow neural net) under strict whole-week time-split validation.
+  - Evidence: `docs/projection_model_family_comparison_2024_2025.{json,md}`; the validation-selected tree achieved `2.610` MAE on the untouched 2025 W12-W18 test window. Production was not automatically changed.
+- [x] Calibrate uncertainty (mean, p75, p90, p95, and 25+ point tail risk) and track calibration drift.
+  - Evidence: `docs/projection_calibration_drift_2024_2025.{json,md}` covers 15/15 Sunday-main slates and 2,856 players with no configured alerts.
 
 ## P1 - Lineup Generator and Policy Learning
-- [ ] Build policy-learning loop from historical actual top lineups (top-k per slate) into lineup scoring.
-- [ ] Add richer constraints and learned exposures:
-  - ownership-aware leverage
-  - salary structure priors
-  - correlation and anti-correlation controls
-- [ ] Add robust validity checks for every generated lineup with hard fail logs for violations.
-- [ ] Support 100k+ candidate experiments with deterministic seeds and resumable runs.
+- [x] Build policy-learning loop from historical actual top lineups (top-k per slate) into lineup scoring.
+- [x] Add salary-structure priors, learned player/QB/DST exposure caps, and correlation/anti-correlation controls.
+- [ ] Add ownership-aware leverage (blocked on point-in-time historical ownership inputs; do not substitute realized outcomes).
+- [x] Add robust validity checks for every generated candidate and selected lineup with hard-fail violation details.
+- [x] Support 100k+ candidate experiments with deterministic seeds (request default `100000`, maximum `500000`).
+- [ ] Add interrupted-run checkpoint/resume support for 100k+ candidate experiments.
 
 ## P2 - UI / Control Plane
 - [ ] Add dedicated "Analysis" area for generated reports (showdown, main slate, combined).
@@ -106,10 +108,15 @@ Last updated: 2026-07-17
 - [ ] Add scheduled nightly benchmark automation and artifact retention policy.
 
 ## P2 - Documentation
-- [ ] Keep `docs/phase_plan.md` as executive roadmap.
-- [ ] Keep this file (`docs/TODO.md`) as operational backlog.
-- [ ] Add `docs/DECISIONS.md` for architecture/parameter decisions with dates and rationale.
-- [ ] Add `docs/MODEL_REGISTRY.md` with model versions, training windows, and acceptance metrics.
+- [x] Keep `docs/phase_plan.md` as executive roadmap.
+- [x] Keep this file (`docs/TODO.md`) as operational backlog.
+- [x] Add `docs/DECISIONS.md` for architecture/parameter decisions with dates and rationale.
+- [x] Add `docs/MODEL_REGISTRY.md` with model versions, training windows, and acceptance metrics.
+
+## External-Data / Runtime Blockers
+- [ ] Ingest point-in-time historical injury snapshots, then rerun the opt-in showdown availability candidate.
+- [ ] Ingest point-in-time historical ownership projections/results, then add ownership-aware leverage.
+- [ ] Add durable checkpoint storage and interrupted-run resume for large candidate generation.
 
 ## Parking Lot
 - [ ] Add contest-specific objective functions (cash vs GPP) with separate optimization targets.

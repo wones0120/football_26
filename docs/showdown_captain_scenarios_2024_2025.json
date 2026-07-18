@@ -1,0 +1,732 @@
+{
+  "summary": {
+    "dataset_csv": "/Users/wones/git/football_26/docs/showdown_captain_training_dataset_2024_2025.csv",
+    "slates": 41,
+    "archetypes": 11,
+    "scenario_cells": 7,
+    "smoothing_alpha": 1.0,
+    "min_scenario_slates": 5,
+    "future_safe_context": [
+      "game_total_line",
+      "game_spread_abs"
+    ]
+  },
+  "role_definition": {
+    "premium": "captain salary >= 90% of position maximum",
+    "core": "captain salary >= 70% and < 90% of position maximum",
+    "value": "captain salary < 70% of position maximum"
+  },
+  "scenario_definition": {
+    "total": {
+      "low": "<42",
+      "mid": "42-47.9",
+      "high": "48+"
+    },
+    "spread_abs": {
+      "close": "<=3",
+      "moderate": "3-7",
+      "wide": ">7"
+    }
+  },
+  "archetype_distribution": [
+    {
+      "archetype": "QB:premium",
+      "count": 9,
+      "share": 0.21951219512195122
+    },
+    {
+      "archetype": "WR:premium",
+      "count": 8,
+      "share": 0.1951219512195122
+    },
+    {
+      "archetype": "RB:premium",
+      "count": 6,
+      "share": 0.14634146341463414
+    },
+    {
+      "archetype": "WR:core",
+      "count": 6,
+      "share": 0.14634146341463414
+    },
+    {
+      "archetype": "WR:value",
+      "count": 3,
+      "share": 0.07317073170731707
+    },
+    {
+      "archetype": "RB:value",
+      "count": 3,
+      "share": 0.07317073170731707
+    },
+    {
+      "archetype": "TE:premium",
+      "count": 2,
+      "share": 0.04878048780487805
+    },
+    {
+      "archetype": "TE:value",
+      "count": 1,
+      "share": 0.024390243902439025
+    },
+    {
+      "archetype": "DST:premium",
+      "count": 1,
+      "share": 0.024390243902439025
+    },
+    {
+      "archetype": "TE:core",
+      "count": 1,
+      "share": 0.024390243902439025
+    },
+    {
+      "archetype": "QB:core",
+      "count": 1,
+      "share": 0.024390243902439025
+    }
+  ],
+  "scenario_priors": [
+    {
+      "scenario": "high_total__close",
+      "slates": 2,
+      "observed_counts": {
+        "WR:premium": 2
+      },
+      "smoothed_archetype_priors": {
+        "DST:premium": 0.07692307692307693,
+        "QB:core": 0.07692307692307693,
+        "QB:premium": 0.07692307692307693,
+        "RB:premium": 0.07692307692307693,
+        "RB:value": 0.07692307692307693,
+        "TE:core": 0.07692307692307693,
+        "TE:premium": 0.07692307692307693,
+        "TE:value": 0.07692307692307693,
+        "WR:core": 0.07692307692307693,
+        "WR:premium": 0.23076923076923078,
+        "WR:value": 0.07692307692307693
+      },
+      "recommended_archetype_priors": {
+        "DST:premium": 0.038461538461538464,
+        "QB:core": 0.038461538461538464,
+        "QB:premium": 0.19230769230769232,
+        "RB:premium": 0.1346153846153846,
+        "RB:value": 0.07692307692307693,
+        "TE:core": 0.038461538461538464,
+        "TE:premium": 0.057692307692307696,
+        "TE:value": 0.038461538461538464,
+        "WR:core": 0.1346153846153846,
+        "WR:premium": 0.17307692307692307,
+        "WR:value": 0.07692307692307693
+      },
+      "prior_source": "global_fallback",
+      "leading_archetype": "QB:premium",
+      "leading_probability": 0.19230769230769232
+    },
+    {
+      "scenario": "high_total__moderate",
+      "slates": 8,
+      "observed_counts": {
+        "QB:core": 1,
+        "TE:premium": 1,
+        "WR:core": 3,
+        "WR:premium": 2,
+        "WR:value": 1
+      },
+      "smoothed_archetype_priors": {
+        "DST:premium": 0.05263157894736842,
+        "QB:core": 0.10526315789473684,
+        "QB:premium": 0.05263157894736842,
+        "RB:premium": 0.05263157894736842,
+        "RB:value": 0.05263157894736842,
+        "TE:core": 0.05263157894736842,
+        "TE:premium": 0.10526315789473684,
+        "TE:value": 0.05263157894736842,
+        "WR:core": 0.21052631578947367,
+        "WR:premium": 0.15789473684210525,
+        "WR:value": 0.10526315789473684
+      },
+      "recommended_archetype_priors": {
+        "DST:premium": 0.05263157894736842,
+        "QB:core": 0.10526315789473684,
+        "QB:premium": 0.05263157894736842,
+        "RB:premium": 0.05263157894736842,
+        "RB:value": 0.05263157894736842,
+        "TE:core": 0.05263157894736842,
+        "TE:premium": 0.10526315789473684,
+        "TE:value": 0.05263157894736842,
+        "WR:core": 0.21052631578947367,
+        "WR:premium": 0.15789473684210525,
+        "WR:value": 0.10526315789473684
+      },
+      "prior_source": "scenario",
+      "leading_archetype": "WR:core",
+      "leading_probability": 0.21052631578947367
+    },
+    {
+      "scenario": "high_total__wide",
+      "slates": 3,
+      "observed_counts": {
+        "QB:premium": 1,
+        "RB:premium": 1,
+        "WR:premium": 1
+      },
+      "smoothed_archetype_priors": {
+        "DST:premium": 0.07142857142857142,
+        "QB:core": 0.07142857142857142,
+        "QB:premium": 0.14285714285714285,
+        "RB:premium": 0.14285714285714285,
+        "RB:value": 0.07142857142857142,
+        "TE:core": 0.07142857142857142,
+        "TE:premium": 0.07142857142857142,
+        "TE:value": 0.07142857142857142,
+        "WR:core": 0.07142857142857142,
+        "WR:premium": 0.14285714285714285,
+        "WR:value": 0.07142857142857142
+      },
+      "recommended_archetype_priors": {
+        "DST:premium": 0.038461538461538464,
+        "QB:core": 0.038461538461538464,
+        "QB:premium": 0.19230769230769232,
+        "RB:premium": 0.1346153846153846,
+        "RB:value": 0.07692307692307693,
+        "TE:core": 0.038461538461538464,
+        "TE:premium": 0.057692307692307696,
+        "TE:value": 0.038461538461538464,
+        "WR:core": 0.1346153846153846,
+        "WR:premium": 0.17307692307692307,
+        "WR:value": 0.07692307692307693
+      },
+      "prior_source": "global_fallback",
+      "leading_archetype": "QB:premium",
+      "leading_probability": 0.19230769230769232
+    },
+    {
+      "scenario": "low_total__close",
+      "slates": 1,
+      "observed_counts": {
+        "RB:premium": 1
+      },
+      "smoothed_archetype_priors": {
+        "DST:premium": 0.08333333333333333,
+        "QB:core": 0.08333333333333333,
+        "QB:premium": 0.08333333333333333,
+        "RB:premium": 0.16666666666666666,
+        "RB:value": 0.08333333333333333,
+        "TE:core": 0.08333333333333333,
+        "TE:premium": 0.08333333333333333,
+        "TE:value": 0.08333333333333333,
+        "WR:core": 0.08333333333333333,
+        "WR:premium": 0.08333333333333333,
+        "WR:value": 0.08333333333333333
+      },
+      "recommended_archetype_priors": {
+        "DST:premium": 0.038461538461538464,
+        "QB:core": 0.038461538461538464,
+        "QB:premium": 0.19230769230769232,
+        "RB:premium": 0.1346153846153846,
+        "RB:value": 0.07692307692307693,
+        "TE:core": 0.038461538461538464,
+        "TE:premium": 0.057692307692307696,
+        "TE:value": 0.038461538461538464,
+        "WR:core": 0.1346153846153846,
+        "WR:premium": 0.17307692307692307,
+        "WR:value": 0.07692307692307693
+      },
+      "prior_source": "global_fallback",
+      "leading_archetype": "QB:premium",
+      "leading_probability": 0.19230769230769232
+    },
+    {
+      "scenario": "mid_total__close",
+      "slates": 9,
+      "observed_counts": {
+        "QB:premium": 4,
+        "RB:premium": 1,
+        "WR:core": 1,
+        "WR:premium": 2,
+        "WR:value": 1
+      },
+      "smoothed_archetype_priors": {
+        "DST:premium": 0.05,
+        "QB:core": 0.05,
+        "QB:premium": 0.25,
+        "RB:premium": 0.1,
+        "RB:value": 0.05,
+        "TE:core": 0.05,
+        "TE:premium": 0.05,
+        "TE:value": 0.05,
+        "WR:core": 0.1,
+        "WR:premium": 0.15,
+        "WR:value": 0.1
+      },
+      "recommended_archetype_priors": {
+        "DST:premium": 0.05,
+        "QB:core": 0.05,
+        "QB:premium": 0.25,
+        "RB:premium": 0.1,
+        "RB:value": 0.05,
+        "TE:core": 0.05,
+        "TE:premium": 0.05,
+        "TE:value": 0.05,
+        "WR:core": 0.1,
+        "WR:premium": 0.15,
+        "WR:value": 0.1
+      },
+      "prior_source": "scenario",
+      "leading_archetype": "QB:premium",
+      "leading_probability": 0.25
+    },
+    {
+      "scenario": "mid_total__moderate",
+      "slates": 14,
+      "observed_counts": {
+        "DST:premium": 1,
+        "QB:premium": 4,
+        "RB:value": 2,
+        "TE:core": 1,
+        "TE:premium": 1,
+        "TE:value": 1,
+        "WR:core": 2,
+        "WR:premium": 1,
+        "WR:value": 1
+      },
+      "smoothed_archetype_priors": {
+        "DST:premium": 0.08,
+        "QB:core": 0.04,
+        "QB:premium": 0.2,
+        "RB:premium": 0.04,
+        "RB:value": 0.12,
+        "TE:core": 0.08,
+        "TE:premium": 0.08,
+        "TE:value": 0.08,
+        "WR:core": 0.12,
+        "WR:premium": 0.08,
+        "WR:value": 0.08
+      },
+      "recommended_archetype_priors": {
+        "DST:premium": 0.08,
+        "QB:core": 0.04,
+        "QB:premium": 0.2,
+        "RB:premium": 0.04,
+        "RB:value": 0.12,
+        "TE:core": 0.08,
+        "TE:premium": 0.08,
+        "TE:value": 0.08,
+        "WR:core": 0.12,
+        "WR:premium": 0.08,
+        "WR:value": 0.08
+      },
+      "prior_source": "scenario",
+      "leading_archetype": "QB:premium",
+      "leading_probability": 0.2
+    },
+    {
+      "scenario": "mid_total__wide",
+      "slates": 4,
+      "observed_counts": {
+        "RB:premium": 3,
+        "RB:value": 1
+      },
+      "smoothed_archetype_priors": {
+        "DST:premium": 0.06666666666666667,
+        "QB:core": 0.06666666666666667,
+        "QB:premium": 0.06666666666666667,
+        "RB:premium": 0.26666666666666666,
+        "RB:value": 0.13333333333333333,
+        "TE:core": 0.06666666666666667,
+        "TE:premium": 0.06666666666666667,
+        "TE:value": 0.06666666666666667,
+        "WR:core": 0.06666666666666667,
+        "WR:premium": 0.06666666666666667,
+        "WR:value": 0.06666666666666667
+      },
+      "recommended_archetype_priors": {
+        "DST:premium": 0.038461538461538464,
+        "QB:core": 0.038461538461538464,
+        "QB:premium": 0.19230769230769232,
+        "RB:premium": 0.1346153846153846,
+        "RB:value": 0.07692307692307693,
+        "TE:core": 0.038461538461538464,
+        "TE:premium": 0.057692307692307696,
+        "TE:value": 0.038461538461538464,
+        "WR:core": 0.1346153846153846,
+        "WR:premium": 0.17307692307692307,
+        "WR:value": 0.07692307692307693
+      },
+      "prior_source": "global_fallback",
+      "leading_archetype": "QB:premium",
+      "leading_probability": 0.19230769230769232
+    }
+  ],
+  "rows": [
+    {
+      "season": 2024,
+      "week": 7,
+      "slate": "sunday_night",
+      "captain_position": "RB",
+      "captain_role": "premium",
+      "captain_archetype": "RB:premium",
+      "scenario": "low_total__close"
+    },
+    {
+      "season": 2024,
+      "week": 8,
+      "slate": "sunday",
+      "captain_position": "WR",
+      "captain_role": "premium",
+      "captain_archetype": "WR:premium",
+      "scenario": "high_total__moderate"
+    },
+    {
+      "season": 2024,
+      "week": 8,
+      "slate": "thursday",
+      "captain_position": "WR",
+      "captain_role": "value",
+      "captain_archetype": "WR:value",
+      "scenario": "mid_total__close"
+    },
+    {
+      "season": 2024,
+      "week": 9,
+      "slate": "thursday",
+      "captain_position": "WR",
+      "captain_role": "premium",
+      "captain_archetype": "WR:premium",
+      "scenario": "mid_total__close"
+    },
+    {
+      "season": 2024,
+      "week": 10,
+      "slate": "main",
+      "captain_position": "WR",
+      "captain_role": "premium",
+      "captain_archetype": "WR:premium",
+      "scenario": "high_total__close"
+    },
+    {
+      "season": 2024,
+      "week": 10,
+      "slate": "thursday",
+      "captain_position": "WR",
+      "captain_role": "premium",
+      "captain_archetype": "WR:premium",
+      "scenario": "high_total__moderate"
+    },
+    {
+      "season": 2024,
+      "week": 15,
+      "slate": "main",
+      "captain_position": "WR",
+      "captain_role": "value",
+      "captain_archetype": "WR:value",
+      "scenario": "mid_total__moderate"
+    },
+    {
+      "season": 2024,
+      "week": 15,
+      "slate": "monday_second_captain",
+      "captain_position": "RB",
+      "captain_role": "value",
+      "captain_archetype": "RB:value",
+      "scenario": "mid_total__moderate"
+    },
+    {
+      "season": 2024,
+      "week": 15,
+      "slate": "sunday_night",
+      "captain_position": "RB",
+      "captain_role": "value",
+      "captain_archetype": "RB:value",
+      "scenario": "mid_total__moderate"
+    },
+    {
+      "season": 2024,
+      "week": 15,
+      "slate": "thursday",
+      "captain_position": "WR",
+      "captain_role": "premium",
+      "captain_archetype": "WR:premium",
+      "scenario": "high_total__close"
+    },
+    {
+      "season": 2024,
+      "week": 16,
+      "slate": "monday_night",
+      "captain_position": "RB",
+      "captain_role": "premium",
+      "captain_archetype": "RB:premium",
+      "scenario": "mid_total__wide"
+    },
+    {
+      "season": 2024,
+      "week": 16,
+      "slate": "saturday_kc_vs_hou",
+      "captain_position": "QB",
+      "captain_role": "premium",
+      "captain_archetype": "QB:premium",
+      "scenario": "mid_total__moderate"
+    },
+    {
+      "season": 2024,
+      "week": 16,
+      "slate": "saturday_pit_vs_bal",
+      "captain_position": "TE",
+      "captain_role": "value",
+      "captain_archetype": "TE:value",
+      "scenario": "mid_total__moderate"
+    },
+    {
+      "season": 2024,
+      "week": 16,
+      "slate": "sunday_det_vs_chi",
+      "captain_position": "WR",
+      "captain_role": "core",
+      "captain_archetype": "WR:core",
+      "scenario": "mid_total__moderate"
+    },
+    {
+      "season": 2024,
+      "week": 16,
+      "slate": "sunday_night",
+      "captain_position": "QB",
+      "captain_role": "premium",
+      "captain_archetype": "QB:premium",
+      "scenario": "mid_total__moderate"
+    },
+    {
+      "season": 2024,
+      "week": 17,
+      "slate": "monday_night",
+      "captain_position": "WR",
+      "captain_role": "value",
+      "captain_archetype": "WR:value",
+      "scenario": "high_total__moderate"
+    },
+    {
+      "season": 2024,
+      "week": 17,
+      "slate": "saturday_night_ari_vs_lar",
+      "captain_position": "TE",
+      "captain_role": "premium",
+      "captain_archetype": "TE:premium",
+      "scenario": "high_total__moderate"
+    },
+    {
+      "season": 2024,
+      "week": 17,
+      "slate": "saturday_night_lac_vs_ne",
+      "captain_position": "WR",
+      "captain_role": "premium",
+      "captain_archetype": "WR:premium",
+      "scenario": "mid_total__moderate"
+    },
+    {
+      "season": 2024,
+      "week": 17,
+      "slate": "sunday_night_atl_vs_was",
+      "captain_position": "TE",
+      "captain_role": "premium",
+      "captain_archetype": "TE:premium",
+      "scenario": "mid_total__moderate"
+    },
+    {
+      "season": 2024,
+      "week": 17,
+      "slate": "thursday_night_sea_vs_chi",
+      "captain_position": "DST",
+      "captain_role": "premium",
+      "captain_archetype": "DST:premium",
+      "scenario": "mid_total__moderate"
+    },
+    {
+      "season": 2024,
+      "week": 17,
+      "slate": "wednesday_night_hou_vs_bal",
+      "captain_position": "QB",
+      "captain_role": "premium",
+      "captain_archetype": "QB:premium",
+      "scenario": "mid_total__moderate"
+    },
+    {
+      "season": 2024,
+      "week": 17,
+      "slate": "wednesday_night_kc_vs_pit",
+      "captain_position": "WR",
+      "captain_role": "core",
+      "captain_archetype": "WR:core",
+      "scenario": "mid_total__close"
+    },
+    {
+      "season": 2024,
+      "week": 19,
+      "slate": "saturday_night_pit_vs_bal",
+      "captain_position": "RB",
+      "captain_role": "premium",
+      "captain_archetype": "RB:premium",
+      "scenario": "mid_total__wide"
+    },
+    {
+      "season": 2025,
+      "week": 1,
+      "slate": "friday",
+      "captain_position": "QB",
+      "captain_role": "premium",
+      "captain_archetype": "QB:premium",
+      "scenario": "mid_total__close"
+    },
+    {
+      "season": 2025,
+      "week": 1,
+      "slate": "thursday",
+      "captain_position": "RB",
+      "captain_role": "value",
+      "captain_archetype": "RB:value",
+      "scenario": "mid_total__wide"
+    },
+    {
+      "season": 2025,
+      "week": 5,
+      "slate": "monday_night",
+      "captain_position": "QB",
+      "captain_role": "premium",
+      "captain_archetype": "QB:premium",
+      "scenario": "mid_total__moderate"
+    },
+    {
+      "season": 2025,
+      "week": 5,
+      "slate": "sunday_late",
+      "captain_position": "WR",
+      "captain_role": "premium",
+      "captain_archetype": "WR:premium",
+      "scenario": "high_total__wide"
+    },
+    {
+      "season": 2025,
+      "week": 7,
+      "slate": "thursday_night",
+      "captain_position": "TE",
+      "captain_role": "core",
+      "captain_archetype": "TE:core",
+      "scenario": "mid_total__moderate"
+    },
+    {
+      "season": 2025,
+      "week": 8,
+      "slate": "thursday_night",
+      "captain_position": "QB",
+      "captain_role": "premium",
+      "captain_archetype": "QB:premium",
+      "scenario": "mid_total__close"
+    },
+    {
+      "season": 2025,
+      "week": 9,
+      "slate": "monday_night",
+      "captain_position": "QB",
+      "captain_role": "core",
+      "captain_archetype": "QB:core",
+      "scenario": "high_total__moderate"
+    },
+    {
+      "season": 2025,
+      "week": 9,
+      "slate": "sunday_night",
+      "captain_position": "QB",
+      "captain_role": "premium",
+      "captain_archetype": "QB:premium",
+      "scenario": "mid_total__close"
+    },
+    {
+      "season": 2025,
+      "week": 9,
+      "slate": "thursday_night",
+      "captain_position": "QB",
+      "captain_role": "premium",
+      "captain_archetype": "QB:premium",
+      "scenario": "high_total__wide"
+    },
+    {
+      "season": 2025,
+      "week": 10,
+      "slate": "monday_night",
+      "captain_position": "RB",
+      "captain_role": "premium",
+      "captain_archetype": "RB:premium",
+      "scenario": "mid_total__close"
+    },
+    {
+      "season": 2025,
+      "week": 10,
+      "slate": "sunday_night",
+      "captain_position": "WR",
+      "captain_role": "premium",
+      "captain_archetype": "WR:premium",
+      "scenario": "mid_total__close"
+    },
+    {
+      "season": 2025,
+      "week": 11,
+      "slate": "monday_night",
+      "captain_position": "WR",
+      "captain_role": "core",
+      "captain_archetype": "WR:core",
+      "scenario": "high_total__moderate"
+    },
+    {
+      "season": 2025,
+      "week": 11,
+      "slate": "thursday_night",
+      "captain_position": "RB",
+      "captain_role": "premium",
+      "captain_archetype": "RB:premium",
+      "scenario": "mid_total__wide"
+    },
+    {
+      "season": 2025,
+      "week": 12,
+      "slate": "sunday_night",
+      "captain_position": "WR",
+      "captain_role": "core",
+      "captain_archetype": "WR:core",
+      "scenario": "high_total__moderate"
+    },
+    {
+      "season": 2025,
+      "week": 16,
+      "slate": "monday_night",
+      "captain_position": "WR",
+      "captain_role": "core",
+      "captain_archetype": "WR:core",
+      "scenario": "mid_total__moderate"
+    },
+    {
+      "season": 2025,
+      "week": 17,
+      "slate": "monday_night",
+      "captain_position": "RB",
+      "captain_role": "premium",
+      "captain_archetype": "RB:premium",
+      "scenario": "high_total__wide"
+    },
+    {
+      "season": 2025,
+      "week": 17,
+      "slate": "sunday_late",
+      "captain_position": "QB",
+      "captain_role": "premium",
+      "captain_archetype": "QB:premium",
+      "scenario": "mid_total__close"
+    },
+    {
+      "season": 2025,
+      "week": 17,
+      "slate": "sunday_night",
+      "captain_position": "WR",
+      "captain_role": "core",
+      "captain_archetype": "WR:core",
+      "scenario": "high_total__moderate"
+    }
+  ]
+}

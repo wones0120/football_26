@@ -1,59 +1,31 @@
 # Phase Plan
 
+Last reviewed: 2026-07-18
+
+## Executive Status
+
+1. Phase 1 data foundation and deterministic identity workflows are demoable.
+2. Phase 2 control-plane ingestion, unresolved repair, freshness, model defaults, and benchmark visibility are demoable.
+3. Phase 3 historical feature, projection, uncertainty, calibration, and walk-forward learning workflows are implemented and evidence-backed.
+4. Phase 4 historical replay, showdown/classic lineup intelligence, exposure controls, and 100k candidate research are implemented; durable large-run resume and external ownership/news inputs remain.
+
 ## Execution Board
 
 ### Now
 1. Keep `classic` and `showdown` lineup backtests as separate tracks with stable API/UI workflows.
-2. Track baseline quality every run:
-   - Classic: `slates_completed`, `mean_gap_points`, `worst_case_gap_points`.
-   - Showdown: `slates_completed`, `mean_gap_points`, `worst_case_gap_points`.
-3. Start showdown captain descriptive research on historical winners:
-   - Captain position mix.
-   - Captain as top scorer overall vs top scorer on team.
-   - Captain archetype performance by spread/total/implied-team-total bands.
-   - Status: completed for `draftkings` seasons 2024-2025.
-   - Artifacts:
-     - `docs/showdown_captain_descriptive_2024_2025.md`
-     - `docs/showdown_captain_descriptive_2024_2025.json`
+2. Track classic/showdown gap metrics, bootstrap intervals, projection interval coverage, and captain-prior drift every recurring benchmark cycle.
+3. Preserve current production defaults until broader walk-forward acceptance gates beat them.
 
 ### Next
-1. Build matchup-aware captain archetype prediction model for showdown slates.
-   - Status: completed (initial v1).
-   - Artifacts:
-     - `docs/showdown_captain_training_dataset_2024_2025.csv`
-     - `docs/showdown_captain_model_2024_2025.json`
-     - `docs/showdown_captain_model_eval_2024_2025.json`
-     - `docs/showdown_captain_model_eval_2024_2025.md`
-2. Add captain archetype probabilities as lineup-construction inputs for showdown generation.
-   - Status: completed (captain prior wired into showdown candidate generation and backtests).
-   - Code:
-     - `backend/app/services/lineup_learning.py`
-     - `backend/app/schemas.py`
-     - `scripts/run_optimal_vs_predicted_showdown.py`
-3. Run walk-forward A/B backtests:
-   - Baseline showdown construction vs captain-informed showdown construction.
-   - Measure lift in mean gap reduction, top-percentile hit rate, and stability.
-   - Status: completed for `draftkings` seasons `2024-2025` at `2,500` lineups/slate.
-   - Result snapshot:
-     - Baseline mean gap: `56.0362`
-     - Captain-informed mean gap: `49.2954`
-     - Mean gap lift: `+6.7408` points
-     - Win rate across shared slates: `61.54%`
-     - Gap stddev reduction (stability lift): `+3.0083`
-   - Artifact:
-     - `docs/optimal_vs_predicted_showdown_captain_ab_2024_2025.json`
-   - Hyperparameter sweep (captain prior strength):
-     - Artifact:
-       - `docs/showdown_captain_strength_sweep_2024_2025.json`
-       - `docs/showdown_captain_strength_sweep_2024_2025.md`
-       - `docs/showdown_captain_strength_sweep_2024_2025_2500.json`
-       - `docs/showdown_captain_strength_sweep_2024_2025_2500.md`
-     - Current best at production scale (`2,500` lineups/slate): `showdown_captain_prior_strength=0.35`.
+1. Ingest point-in-time historical injury snapshots and rerun the rejected showdown availability candidate.
+2. Ingest point-in-time ownership data before implementing ownership-aware leverage.
+3. Add durable checkpoint/resume for 100k-500k candidate runs.
+4. Add nightly benchmark scheduling, retention, and CI database/migration smoke coverage.
 
 ### Later
-1. Extend captain-archetype learning to teammate-context features (who was active/available in-game).
-2. Add automated drift monitoring for captain archetype priors by season segment and slate type.
-3. Promote the highest-performing lineup policy into production weekly build workflows.
+1. Add contest-specific cash/GPP objectives.
+2. Add late swap for staggered lock times.
+3. Add point-in-time weather/news shock scenarios.
 
 ## Phase 1 (Now): Data Foundation
 1. Canonical identity tables (`player_master`, `player_alias`, `unresolved_player_queue`).
@@ -77,13 +49,16 @@
 3. Exposure diversification and scenario stress testing tools.
 
 ## Future To-Do: Showdown Captain Intelligence
-1. Run descriptive analysis on historical showdown winners:
+1. Completed: descriptive analysis on historical showdown winners:
    - Captain position mix (QB/RB/WR/TE/DST).
    - Captain as top scorer overall vs top scorer on captain's team.
    - Captain archetypes by game context (spread, total, implied team totals).
-2. Build matchup-aware captain archetype prediction for future schedules:
+2. Completed: matchup-aware captain archetype prediction for future schedules:
    - Train on historical showdown slates and outcomes.
    - Predict which captain type is most likely to be optimal for a given matchup.
-3. Use predicted captain archetype probabilities to guide lineup generation:
+3. Completed: predicted captain archetype probabilities guide lineup generation:
    - Weight captain candidate selection by learned archetype likelihood.
    - Track backtest lift versus baseline showdown lineup construction.
+4. Completed: salary-relative role archetypes and future-safe total/spread scenario priors:
+   - `docs/showdown_captain_scenarios_2024_2025.json`
+   - `docs/showdown_captain_scenarios_2024_2025.md`

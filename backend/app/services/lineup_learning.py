@@ -593,46 +593,77 @@ def _kickoff_bucket_flags(bucket: str | None) -> tuple[float, float, float, floa
     )
 
 
-def _lineup_satisfies_roster_rules(lineup: list[PlayerPoolRow]) -> bool:
+def _classic_lineup_rule_violations(lineup: list[PlayerPoolRow]) -> list[str]:
+    violations: list[str] = []
     if len(lineup) != 9:
-        return False
+        violations.append(f"roster_size={len(lineup)} expected=9")
     if len({row.uid for row in lineup}) != 9:
-        return False
+        violations.append("duplicate_player")
 
     counts: dict[str, int] = defaultdict(int)
     for row in lineup:
         counts[row.position] += 1
 
     if counts.get("QB", 0) != 1:
-        return False
+        violations.append(f"qb_count={counts.get('QB', 0)} expected=1")
     if counts.get("DST", 0) != 1:
-        return False
+        violations.append(f"dst_count={counts.get('DST', 0)} expected=1")
     if counts.get("RB", 0) < 2:
-        return False
+        violations.append(f"rb_count={counts.get('RB', 0)} minimum=2")
     if counts.get("WR", 0) < 3:
-        return False
+        violations.append(f"wr_count={counts.get('WR', 0)} minimum=3")
     if counts.get("TE", 0) < 1:
-        return False
+        violations.append(f"te_count={counts.get('TE', 0)} minimum=1")
     if counts.get("RB", 0) + counts.get("WR", 0) + counts.get("TE", 0) != 7:
-        return False
+        violations.append(
+            "skill_count="
+            f"{counts.get('RB', 0) + counts.get('WR', 0) + counts.get('TE', 0)} expected=7"
+        )
+
+    salary_used = int(sum(row.salary for row in lineup))
+    if salary_used > DK_SALARY_CAP:
+        violations.append(f"salary_used={salary_used} cap={DK_SALARY_CAP}")
 
     dst = next((row for row in lineup if row.position == "DST"), None)
     if dst is None:
-        return False
+        return violations
     dst_team = dst.team
     dst_opponent = dst.opponent
     if dst_team is None and dst_opponent is None:
-        return True
+        return violations
 
     for row in lineup:
         if row.position == "DST":
             continue
         # Do not roster offensive players against the selected defense.
         if dst_team and row.opponent and row.opponent == dst_team:
-            return False
+            violations.append(f"offense_against_dst={row.uid}")
         if dst_opponent and row.team and row.team == dst_opponent:
-            return False
-    return True
+            violations.append(f"offense_against_dst={row.uid}")
+    return sorted(set(violations))
+
+
+def _lineup_satisfies_roster_rules(lineup: list[PlayerPoolRow]) -> bool:
+    return not _classic_lineup_rule_violations(lineup)
+
+
+def _validate_classic_lineup_batch(
+    lineups: list[list[PlayerPoolRow]],
+    *,
+    context: str,
+) -> None:
+    invalid: list[str] = []
+    for index, lineup in enumerate(lineups):
+        violations = _classic_lineup_rule_violations(lineup)
+        if violations:
+            invalid.append(f"lineup={index} violations={','.join(violations)}")
+            if len(invalid) >= 10:
+                break
+    if invalid:
+        raise ValueError(
+            f"Classic lineup validation failed ({context}): "
+            + "; ".join(invalid)
+        )
 
 
 def _showdown_lineup_satisfies_rules(lineup: ShowdownLineup) -> bool:
@@ -6548,6 +6579,13 @@ class LineupLearningService:
                 matchup_sampling_multipliers,
             ),
         )
+        _validate_classic_lineup_batch(
+            candidate_lineups,
+            context=(
+                f"{request.source_system} {request.season}-W{request.week:02d} "
+                f"slate={request.slate} candidates"
+            ),
+        )
         x_candidates = np.vstack([self._lineup_features(lineup) for lineup in candidate_lineups])
         mean_points = np.asarray(
             [sum(player.projected_mean_points for player in lineup) for lineup in candidate_lineups],
@@ -6717,6 +6755,13 @@ class LineupLearningService:
 
         top_idx = np.asarray(selected_idx[:keep], dtype=int)
         keep = int(len(top_idx))
+        _validate_classic_lineup_batch(
+            [candidate_lineups[int(idx)] for idx in top_idx],
+            context=(
+                f"{request.source_system} {request.season}-W{request.week:02d} "
+                f"slate={request.slate} selected"
+            ),
+        )
 
         rows: list[UltimateLineupRowResponse] = []
         exposure_counts: dict[str, tuple[PlayerPoolRow, int]] = {}

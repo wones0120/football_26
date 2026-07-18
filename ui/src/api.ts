@@ -138,7 +138,10 @@ export type BacktestPlayerRow = {
   salary?: number | null;
   history_games: number;
   predicted_mean_points: number;
+  predicted_p75_points: number;
   predicted_p90_points: number;
+  predicted_p95_points: number;
+  predicted_ceiling_prob_25: number;
   actual_points: number;
   error: number;
   abs_error: number;

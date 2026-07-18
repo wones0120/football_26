@@ -1,9 +1,13 @@
+import pytest
+
 from backend.app.services.lineup_learning import (
     PlayerPoolRow,
     ShowdownLineup,
     ShowdownPlayerPoolRow,
+    _classic_lineup_rule_violations,
     _lineup_satisfies_roster_rules,
     _showdown_lineup_satisfies_rules,
+    _validate_classic_lineup_batch,
 )
 
 
@@ -64,6 +68,37 @@ def test_lineup_rules_block_bad_slot_construction() -> None:
         _player("dst1", "DST", "NYJ", "NE"),
     ]
     assert not _lineup_satisfies_roster_rules(lineup)
+
+
+def test_lineup_rule_violations_are_actionable() -> None:
+    lineup = [
+        _player("qb1", "QB", "DAL", "NYG"),
+        _player("qb2", "QB", "ATL", "NO"),
+        _player("rb1", "RB", "PHI", "WAS"),
+        _player("wr1", "WR", "SEA", "SF"),
+        _player("wr2", "WR", "TB", "CAR"),
+        _player("wr3", "WR", "MIA", "BUF"),
+        _player("te1", "TE", "DET", "GB"),
+        _player("flex1", "RB", "LV", "DEN"),
+        _player("dst1", "DST", "NYJ", "NE"),
+    ]
+
+    violations = _classic_lineup_rule_violations(lineup)
+
+    assert "qb_count=2 expected=1" in violations
+
+
+def test_lineup_batch_validation_hard_fails_with_context() -> None:
+    lineup = [
+        _player("qb1", "QB", "DAL", "NYG"),
+        _player("qb1", "QB", "DAL", "NYG"),
+    ]
+
+    with pytest.raises(
+        ValueError,
+        match=r"validation failed \(unit-test\).*duplicate_player",
+    ):
+        _validate_classic_lineup_batch([lineup], context="unit-test")
 
 
 def _showdown_player(uid: str, position: str, team: str, opponent: str) -> ShowdownPlayerPoolRow:

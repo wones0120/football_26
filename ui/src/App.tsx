@@ -1515,7 +1515,9 @@ function App() {
                       <th>Pos</th>
                       <th>Salary</th>
                       <th>Pred Mean</th>
+                      <th>Pred P75</th>
                       <th>Pred P90</th>
+                      <th>Pred P95</th>
                       <th>Actual</th>
                       <th>Error</th>
                       <th>Value</th>
@@ -1529,7 +1531,9 @@ function App() {
                         <td>{row.position ?? "-"}</td>
                         <td>{row.salary != null ? `$${row.salary.toLocaleString()}` : "-"}</td>
                         <td>{row.predicted_mean_points.toFixed(2)}</td>
+                        <td>{row.predicted_p75_points.toFixed(2)}</td>
                         <td>{row.predicted_p90_points.toFixed(2)}</td>
+                        <td>{row.predicted_p95_points.toFixed(2)}</td>
                         <td>{row.actual_points.toFixed(2)}</td>
                         <td>{row.error.toFixed(2)}</td>
                         <td>{row.salary_value_actual == null ? "-" : `${row.salary_value_actual.toFixed(2)}x`}</td>

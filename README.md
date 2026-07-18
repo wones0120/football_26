@@ -268,3 +268,45 @@ python scripts/analyze_showdown_captain_drift.py \
 ```
 
 The analyzer groups each season into early (weeks 1-6), mid (7-12), and late (13+) segments, then measures total variation in captain-position shares between consecutive populated segments. Alerts require both segments to meet the minimum sample size. The current report at `docs/showdown_captain_drift_2024_2025.md` found one alert: 2024 mid-to-late moved `0.480`, driven primarily by a 48.0-point drop in WR captain share.
+
+## Showdown Role and Scenario Priors
+
+```bash
+source .venv/bin/activate
+python scripts/analyze_showdown_captain_scenarios.py \
+  --dataset-csv docs/showdown_captain_training_dataset_2024_2025.csv
+```
+
+The analyzer extends captain classes into salary-relative `premium`, `core`, and `value` roles within position. It groups future-safe pregame totals and absolute spreads into scenario cells, applies Laplace smoothing, and falls back to the global archetype distribution when a cell has fewer than five slates. The current 41-slate outputs are `docs/showdown_captain_scenarios_2024_2025.json` and `.md`; they are research priors and do not replace the production captain artifact.
+
+## Projection Family and Calibration Validation
+
+Compare rolling-history, ridge linear, regression-tree, and shallow-neural projection families with whole-week chronological splits:
+
+```bash
+source .venv/bin/activate
+python scripts/compare_projection_model_families.py \
+  --source-system draftkings \
+  --season-start 2024 \
+  --season-end 2025
+```
+
+The validation-selected regression tree achieved `2.610` MAE on the untouched 2025 W12-W18 test window, versus `3.044` for ridge and `2.901` for the shallow neural net. The result is persisted in `docs/projection_model_family_comparison_2024_2025.{json,md}` and does not automatically change production.
+
+Track point-in-time simulation interval and tail-probability calibration with:
+
+```bash
+source .venv/bin/activate
+python scripts/analyze_projection_calibration_drift.py \
+  --source-system draftkings \
+  --season-start 2024 \
+  --season-end 2025 \
+  --slate sunday_main \
+  --iterations 1000
+```
+
+The current 15-slate, 2,856-player report observed P75/P90/P95 coverage of `76.4%` / `90.3%` / `94.7%`, a `+0.2` percentage-point 25+ tail-probability error, and no configured drift alerts. Historical backtest rows and the UI now expose mean, p75, p90, and p95 together.
+
+Classic candidate generation hard-fails before scoring if any candidate or selected lineup violates roster size, uniqueness, position, salary-cap, or offense-versus-DST rules. Errors include the lineup index and exact violation codes.
+
+Architecture decisions and acceptance status are maintained in `docs/DECISIONS.md` and `docs/MODEL_REGISTRY.md`.
