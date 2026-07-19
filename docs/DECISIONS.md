@@ -2,6 +2,13 @@
 
 This log records decisions that affect reproducibility, production defaults, or historical-model acceptance. The operational backlog remains in `docs/TODO.md`.
 
+## 2026-07-19 — Keep weather/news shocks caller-authoritative and point-in-time
+
+- Decision: accept opt-in weather/news shocks with timezone-aware observed and scenario-cutoff timestamps, explicit team/position or stable player-ID targeting, and caller-supplied mean/volatility multipliers. Shocks compound in request order after baseline, residual, and role adjustments.
+- Evidence: `backend/app/tests/test_point_in_time_shocks.py` proves deterministic distribution transforms, exact team/position and source-ID targeting, missing-ID failure, timestamp cutoff enforcement, and persisted parameters. The production UI build exposes the default-off contract and per-player impact table.
+- Rationale: the platform can stress-test current information without pretending unavailable historical weather/news feeds exist or embedding unvalidated causal effect sizes. Stable identities and explicit multipliers keep every assumption reviewable.
+- Production impact: ordinary simulation is unchanged when `point_in_time_shocks` is empty. Requests and effective seed remain stored on `simulation_run`; responses expose the cutoff and sequential player impacts.
+
 ## 2026-07-19 — Make late-swap lock state explicit and identity-safe
 
 - Decision: late swap accepts the original nine source-native player IDs, a timezone-aware as-of timestamp, and caller-confirmed locked teams. Original players on those teams are required in every candidate and exempt from exposure caps; all other players on locked teams are excluded.

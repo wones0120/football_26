@@ -130,6 +130,26 @@ export type RoleShockImpact = {
   p90_points_delta: number;
 };
 
+export type PointInTimeShockImpact = {
+  shock_index: number;
+  shock_type: "weather" | "news";
+  label: string;
+  observed_at: string;
+  player_master_id?: string | null;
+  source_player_key?: string | null;
+  player_name: string;
+  team?: string | null;
+  position?: string | null;
+  mean_multiplier: number;
+  volatility_multiplier: number;
+  baseline_mean_points: number;
+  scenario_mean_points: number;
+  mean_points_delta: number;
+  baseline_p90_points: number;
+  scenario_p90_points: number;
+  p90_points_delta: number;
+};
+
 export type ResidualAdjustmentImpact = {
   player_master_id?: string | null;
   source_player_key?: string | null;
@@ -159,6 +179,8 @@ export type SimulateWeekResult = {
   completed_at?: string | null;
   top_rows: SimulatedPlayerOutcome[];
   role_shock_impacts: RoleShockImpact[];
+  scenario_as_of?: string | null;
+  point_in_time_shock_impacts: PointInTimeShockImpact[];
   residual_learning_applied: boolean;
   residual_snapshot_count: number;
   residual_adjustment_impacts: ResidualAdjustmentImpact[];
@@ -468,6 +490,18 @@ export function simulateWeek(payload: {
     retained_opportunity_share: number;
     reallocation_scope: "same_position" | "skill_players";
     max_recipient_multiplier?: number;
+  }>;
+  scenario_as_of?: string;
+  point_in_time_shocks?: Array<{
+    shock_type: "weather" | "news";
+    observed_at: string;
+    label: string;
+    teams?: string[];
+    positions?: Array<"QB" | "RB" | "WR" | "TE" | "K" | "DST">;
+    player_master_ids?: string[];
+    source_player_keys?: string[];
+    mean_multiplier: number;
+    volatility_multiplier: number;
   }>;
 }): Promise<SimulateWeekResult> {
   return postJson("/simulate/week", payload);

@@ -397,6 +397,7 @@ def collect_residual_observations(
                 player_id_to_masters,
                 tracked_player_ids,
                 _role_shock_impacts,
+                _point_in_time_shock_impacts,
                 _residual_adjustment_impacts,
                 _residual_snapshot_count,
                 scenario_warnings,

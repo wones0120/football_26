@@ -33,6 +33,8 @@ from ..schemas import (
     BacktestWeekABResponse,
     BacktestWeekRequest,
     BacktestWeekResponse,
+    PointInTimeShockImpactResponse,
+    PointInTimeShockRequest,
     PositionLearningRowResponse,
     ResidualAdjustmentImpactResponse,
     ResidualSnapshotBuildRequest,
@@ -177,6 +179,24 @@ def _role_shock_projection_multiplier(
     if "target" in shock_roles:
         return max(0.0, float(opportunity_multiplier))
     return max(0.0, 1.0 + (0.65 * (float(opportunity_multiplier) - 1.0)))
+
+
+def _apply_point_in_time_shock(
+    draws: np.ndarray,
+    *,
+    mean_multiplier: float,
+    volatility_multiplier: float,
+) -> np.ndarray:
+    if draws.size == 0:
+        return draws.copy()
+    baseline_mean = float(np.mean(draws))
+    shifted_mean = baseline_mean * float(mean_multiplier)
+    centered = draws - baseline_mean
+    return np.clip(
+        shifted_mean + (centered * float(volatility_multiplier)),
+        0.0,
+        None,
+    )
 
 
 def _current_code_version() -> str:
@@ -402,6 +422,7 @@ class SimulationService:
             player_id_to_masters,
             tracked_player_ids,
             _role_shock_impacts,
+            _point_in_time_shock_impacts,
             _residual_adjustment_impacts,
             _residual_snapshot_count,
             _scenario_warnings,
@@ -735,6 +756,103 @@ class SimulationService:
 
         return multipliers, dict(roles_by_master), warnings
 
+    def _point_in_time_shock_targets(
+        self,
+        *,
+        salary_rows: list[CuratedSalary],
+        shocks: list[PointInTimeShockRequest],
+    ) -> dict[str, list[tuple[int, PointInTimeShockRequest]]]:
+        unique_rows_by_master: dict[str, CuratedSalary] = {}
+        masters_by_source_key: dict[str, set[str]] = defaultdict(set)
+        for row in salary_rows:
+            if not row.player_master_id:
+                continue
+            master_id = str(row.player_master_id)
+            unique_rows_by_master.setdefault(master_id, row)
+            if row.source_player_key:
+                masters_by_source_key[str(row.source_player_key)].add(master_id)
+
+        shocks_by_master: dict[
+            str,
+            list[tuple[int, PointInTimeShockRequest]],
+        ] = defaultdict(list)
+        for index, shock in enumerate(shocks, start=1):
+            target_masters: set[str] = set()
+            master_ids = {
+                str(value).strip()
+                for value in shock.player_master_ids
+                if str(value).strip()
+            }
+            source_keys = {
+                str(value).strip()
+                for value in shock.source_player_keys
+                if str(value).strip()
+            }
+            if master_ids or source_keys:
+                missing_master_ids = sorted(
+                    master_ids - set(unique_rows_by_master)
+                )
+                if missing_master_ids:
+                    raise ValueError(
+                        f"point_in_time_shocks[{index}] canonical player IDs "
+                        "were not found in the selected salary slice: "
+                        f"{', '.join(missing_master_ids)}"
+                    )
+                target_masters.update(master_ids)
+                for source_key in sorted(source_keys):
+                    source_masters = masters_by_source_key.get(source_key, set())
+                    if not source_masters:
+                        raise ValueError(
+                            f"point_in_time_shocks[{index}] source-native player "
+                            "ID was not found in the selected salary slice: "
+                            f"{source_key}"
+                        )
+                    if len(source_masters) > 1:
+                        raise ValueError(
+                            f"point_in_time_shocks[{index}] source-native player "
+                            f"ID is ambiguous: {source_key}"
+                        )
+                    target_masters.update(source_masters)
+            else:
+                teams = {
+                    _team_key(team)
+                    for team in shock.teams
+                    if _team_key(team)
+                }
+                positions = {
+                    normalize_position(position)
+                    for position in shock.positions
+                    if normalize_position(position)
+                }
+                pool_teams = {
+                    _team_key(row.team)
+                    for row in unique_rows_by_master.values()
+                    if _team_key(row.team)
+                }
+                missing_teams = sorted(teams - pool_teams)
+                if missing_teams:
+                    raise ValueError(
+                        f"point_in_time_shocks[{index}] teams were not found in "
+                        "the selected mapped salary slice: "
+                        f"{', '.join(missing_teams)}"
+                    )
+                target_masters = {
+                    master_id
+                    for master_id, row in unique_rows_by_master.items()
+                    if _team_key(row.team) in teams
+                    and normalize_position(row.position) in positions
+                }
+                if not target_masters:
+                    raise ValueError(
+                        f"point_in_time_shocks[{index}] matched no mapped players "
+                        "for the selected teams and positions"
+                    )
+
+            for master_id in sorted(target_masters):
+                shocks_by_master[master_id].append((index, shock))
+
+        return dict(shocks_by_master)
+
     def _load_calibration_multipliers(
         self,
         *,
@@ -944,11 +1062,13 @@ class SimulationService:
         use_residual_learning: bool = False,
         low_hit_points: float | None = None,
         role_shocks: list[RoleShockRequest] | None = None,
+        point_in_time_shocks: list[PointInTimeShockRequest] | None = None,
     ) -> tuple[
         int,
         list[dict[str, Any]],
         dict[str, set[str]],
         list[str],
+        list[dict[str, Any]],
         list[dict[str, Any]],
         list[dict[str, Any]],
         int,
@@ -1072,6 +1192,10 @@ class SimulationService:
             opportunity_by_master=opportunity_by_master,
             role_shocks=list(role_shocks or []),
         )
+        point_in_time_shocks_by_master = self._point_in_time_shock_targets(
+            salary_rows=rows_with_master,
+            shocks=list(point_in_time_shocks or []),
+        )
 
         if use_calibration:
             (
@@ -1117,8 +1241,10 @@ class SimulationService:
         rng = np.random.default_rng(random_seed)
         simulated_rows: list[dict[str, Any]] = []
         role_shock_impacts: list[dict[str, Any]] = []
+        point_in_time_shock_impacts: list[dict[str, Any]] = []
         residual_adjustment_impacts: list[dict[str, Any]] = []
         impacted_masters_simulated: set[str] = set()
+        point_in_time_masters_simulated: set[str] = set()
 
         for salary_row in rows_with_master:
             if not salary_row.player_master_id:
@@ -1238,6 +1364,59 @@ class SimulationService:
                 shock_roles,
             )
             draws = np.clip(baseline_draws * projection_multiplier, 0.0, None)
+            point_in_time_shocks_for_player = (
+                point_in_time_shocks_by_master.get(
+                    str(salary_row.player_master_id),
+                    [],
+                )
+            )
+            for shock_index, point_in_time_shock in point_in_time_shocks_for_player:
+                point_in_time_masters_simulated.add(
+                    str(salary_row.player_master_id)
+                )
+                shock_baseline_draws = draws
+                shock_baseline_mean = float(np.mean(shock_baseline_draws))
+                shock_baseline_p90 = float(
+                    np.percentile(shock_baseline_draws, 90)
+                )
+                draws = _apply_point_in_time_shock(
+                    shock_baseline_draws,
+                    mean_multiplier=point_in_time_shock.mean_multiplier,
+                    volatility_multiplier=(
+                        point_in_time_shock.volatility_multiplier
+                    ),
+                )
+                shock_scenario_mean = float(np.mean(draws))
+                shock_scenario_p90 = float(np.percentile(draws, 90))
+                point_in_time_shock_impacts.append(
+                    {
+                        "shock_index": shock_index,
+                        "shock_type": point_in_time_shock.shock_type,
+                        "label": point_in_time_shock.label,
+                        "observed_at": point_in_time_shock.observed_at,
+                        "player_master_id": salary_row.player_master_id,
+                        "source_player_key": salary_row.source_player_key,
+                        "player_name": salary_row.player_name,
+                        "team": salary_row.team,
+                        "position": salary_row.position,
+                        "mean_multiplier": (
+                            point_in_time_shock.mean_multiplier
+                        ),
+                        "volatility_multiplier": (
+                            point_in_time_shock.volatility_multiplier
+                        ),
+                        "baseline_mean_points": shock_baseline_mean,
+                        "scenario_mean_points": shock_scenario_mean,
+                        "mean_points_delta": (
+                            shock_scenario_mean - shock_baseline_mean
+                        ),
+                        "baseline_p90_points": shock_baseline_p90,
+                        "scenario_p90_points": shock_scenario_p90,
+                        "p90_points_delta": (
+                            shock_scenario_p90 - shock_baseline_p90
+                        ),
+                    }
+                )
 
             hit_points = (
                 low_hit_points
@@ -1309,6 +1488,11 @@ class SimulationService:
                 scenario_warnings.append(
                     f"role shock player {master_id} had no simulated outcome"
                 )
+        for master_id in sorted(point_in_time_shocks_by_master):
+            if master_id not in point_in_time_masters_simulated:
+                scenario_warnings.append(
+                    f"point-in-time shock player {master_id} had no simulated outcome"
+                )
 
         return (
             players_considered,
@@ -1316,6 +1500,7 @@ class SimulationService:
             player_id_to_masters,
             tracked_player_ids,
             role_shock_impacts,
+            point_in_time_shock_impacts,
             residual_adjustment_impacts,
             residual_snapshot_count,
             scenario_warnings,
@@ -1367,6 +1552,9 @@ class SimulationService:
         players_simulated = 0
         top_rows: list[SimulatedPlayerOutcomeResponse] = []
         role_shock_impacts: list[RoleShockImpactResponse] = []
+        point_in_time_shock_impacts: list[
+            PointInTimeShockImpactResponse
+        ] = []
         residual_adjustment_impacts: list[
             ResidualAdjustmentImpactResponse
         ] = []
@@ -1379,6 +1567,7 @@ class SimulationService:
                 _player_map,
                 _tracked_ids,
                 role_shock_calc_rows,
+                point_in_time_shock_calc_rows,
                 residual_adjustment_calc_rows,
                 residual_snapshot_count,
                 scenario_warnings,
@@ -1395,10 +1584,15 @@ class SimulationService:
                 use_calibration=True,
                 use_residual_learning=request.use_residual_learning,
                 role_shocks=request.role_shocks,
+                point_in_time_shocks=request.point_in_time_shocks,
             )
             role_shock_impacts = [
                 RoleShockImpactResponse(**row)
                 for row in role_shock_calc_rows
+            ]
+            point_in_time_shock_impacts = [
+                PointInTimeShockImpactResponse(**row)
+                for row in point_in_time_shock_calc_rows
             ]
             residual_adjustment_impacts = [
                 ResidualAdjustmentImpactResponse(**row)
@@ -1474,6 +1668,8 @@ class SimulationService:
                 completed_at=run.completed_at,
                 top_rows=top_rows,
                 role_shock_impacts=role_shock_impacts,
+                scenario_as_of=request.scenario_as_of,
+                point_in_time_shock_impacts=point_in_time_shock_impacts,
                 residual_learning_applied=bool(
                     residual_adjustment_impacts
                 ),
@@ -1505,6 +1701,8 @@ class SimulationService:
                 completed_at=run.completed_at,
                 top_rows=[],
                 role_shock_impacts=[],
+                scenario_as_of=request.scenario_as_of,
+                point_in_time_shock_impacts=[],
                 residual_learning_applied=False,
                 residual_snapshot_count=0,
                 residual_adjustment_impacts=[],
@@ -1525,6 +1723,7 @@ class SimulationService:
             player_id_to_masters,
             tracked_player_ids,
             _role_shock_impacts,
+            _point_in_time_shock_impacts,
             _residual_adjustment_impacts,
             _residual_snapshot_count,
             _scenario_warnings,

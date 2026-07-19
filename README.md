@@ -558,6 +558,51 @@ python scripts/analyze_role_shock_fragility.py \
 
 In the stored Week 18 stress test, Gibbs exposure moved from `30%` to `0%`, Montgomery moved from `5%` to `25%`, top-lineup overlap was `70%`, and scenario reoptimization recovered `6.69` projected-blend points versus keeping the baseline portfolio. This is a hypothetical pre-lock stress test, not a claim that an injury or role change occurred historically. Evidence is in `docs/role_shock_fragility_2025_w18.{json,md}`.
 
+### Point-in-Time Weather and News Shocks
+
+Projection simulation also accepts manually entered weather or news shocks with
+an explicit information cutoff. Each shock records:
+
+- a timezone-aware `observed_at` timestamp and scenario-wide
+  `scenario_as_of` cutoff;
+- a descriptive label and `weather` or `news` type;
+- either one or two teams plus affected positions, or stable canonical/source
+  player IDs; and
+- caller-controlled mean and volatility multipliers.
+
+The service rejects naive timestamps, observations later than the cutoff,
+mixed targeting modes, missing or ambiguous player identities, and unknown
+teams. It never joins by a display name. Multiple shocks compound in request
+order, the same seed and request reproduce the same result, and the complete
+request is stored on `simulation_run.parameters_json`.
+
+Run a team weather scenario with:
+
+```bash
+python scripts/run_point_in_time_shock_simulation.py \
+  --season 2025 \
+  --week 18 \
+  --slate sunday_main \
+  --shock-type weather \
+  --scenario-as-of 2025-12-28T12:00:00-05:00 \
+  --observed-at 2025-12-28T11:30:00-05:00 \
+  --label "Strong crosswind" \
+  --teams BUF,MIA \
+  --positions QB,WR,TE,K \
+  --mean-multiplier 0.90 \
+  --volatility-multiplier 1.15 \
+  --random-seed 42
+```
+
+`POST /api/simulate/week` exposes the same `scenario_as_of` and
+`point_in_time_shocks` contract. The Projection Simulation UI provides a
+default-off weather/team-news control and reports each affected player’s mean
+and p90 movement. Use the existing identity-safe role shock for player news
+that should reallocate carries or targets.
+
+These are transparent pre-lock stress assumptions, not inferred live reports
+or fabricated historical weather/news observations.
+
 ## Online Weekly Residual Learning
 
 The DraftKings research workflow can now learn shrinkage-adjusted weekly projection residuals from QB/RB/WR/TE history without injury or ownership feeds. It combines only point-in-time-safe player identity, team-position, opponent-position, salary bucket, projected-value bucket, and total/spread regime signals. Every target week uses residuals from strictly earlier completed weeks, and the shrinkage strength is selected on an earlier validation window before evaluation on an untouched later test.

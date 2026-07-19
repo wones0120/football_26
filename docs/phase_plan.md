@@ -7,7 +7,7 @@ Last reviewed: 2026-07-19
 1. Phase 1 data foundation and deterministic identity workflows are demoable.
 2. Phase 2 control-plane ingestion, unresolved repair, freshness, model defaults, and benchmark visibility are demoable.
 3. Phase 3 historical feature, projection, uncertainty, calibration, walk-forward learning, default-off online residual scoring, and rejected game-regime specialist research are implemented and evidence-backed.
-4. Phase 4 historical replay, showdown/classic lineup intelligence, exposure controls, pre-lock popularity/duplication proxies, manual role-shock stress tests, 100k candidate research, and durable large-run resume are implemented.
+4. Phase 4 historical replay, showdown/classic lineup intelligence, exposure controls, pre-lock popularity/duplication proxies, manual role and point-in-time weather/news stress tests, contest objectives, deterministic late swap, 100k candidate research, and durable large-run resume are implemented.
 
 ## Execution Board
 
@@ -17,7 +17,8 @@ Last reviewed: 2026-07-19
 3. Preserve current production defaults until broader walk-forward acceptance gates beat them.
 
 ### Next
-1. Add point-in-time weather/news shock scenarios.
+1. Apply the completed scenario controls to upcoming slates and retain
+   baseline-versus-shock evidence in recurring research artifacts.
 
 ## Phase 1 (Now): Data Foundation
 1. Canonical identity tables (`player_master`, `player_alias`, `unresolved_player_queue`).

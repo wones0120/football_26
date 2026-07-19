@@ -1,6 +1,6 @@
 # Next Ideas Without Vendor Historical Data
 
-Last reviewed: 2026-07-18
+Last reviewed: 2026-07-19
 
 The platform will not depend on unavailable historical injury or ownership feeds. New signals must be derivable from salary snapshots, nflreadpy history, schedules, or our own simulation/lineup outputs.
 
@@ -72,6 +72,19 @@ Cluster slates into future-safe regimes such as:
 Train or weight projection/captain policies by regime and retain global fallback models for sparse cells.
 
 The first bounded candidate trained position-by-total/spread-regime regression-tree specialists, blended them toward the global tree by cell sample size, and used the global prediction exactly for sparse or unknown cells. Validation selected a 300-row minimum and prior strength `1000`. Across 17,342 rows, validation MAE worsened `0.27%`, untouched-test MAE worsened `0.04%`, and only two of five test slices improved. WR improved on test but regressed on validation, so it was not selectively enabled after the test was opened. The standalone specialist formulation is closed as rejected; continuous pregame total/spread inputs remain in the global model.
+
+## 6. Point-in-Time Weather / News Shocks — Implemented
+
+The simulation API, CLI, and control-plane UI accept manually entered weather
+or news shocks with an explicit scenario cutoff. Every shock carries a
+timezone-aware observation timestamp, label, stable player or team/position
+target, and separate mean/volatility multipliers.
+
+The service rejects information observed after the cutoff, naive timestamps,
+mixed target modes, and missing stable identities. Requests and seeds are
+persisted for reproducibility, and responses report sequential mean/p90 impact
+for every affected player. No live feed, historical observation, or causal
+multiplier is inferred.
 
 ## Acceptance Rules
 

@@ -154,6 +154,74 @@ class RoleShockRequest(BaseModel):
         return self
 
 
+class PointInTimeShockRequest(BaseModel):
+    shock_type: Literal["weather", "news"]
+    observed_at: datetime
+    label: str = Field(..., min_length=1, max_length=160)
+    teams: list[str] = Field(default_factory=list, max_length=2)
+    positions: list[Literal["QB", "RB", "WR", "TE", "K", "DST"]] = Field(
+        default_factory=lambda: ["QB", "RB", "WR", "TE", "K", "DST"],
+        min_length=1,
+        max_length=6,
+    )
+    player_master_ids: list[str] = Field(default_factory=list, max_length=25)
+    source_player_keys: list[str] = Field(default_factory=list, max_length=25)
+    mean_multiplier: float = Field(default=1.0, ge=0.0, le=2.0)
+    volatility_multiplier: float = Field(default=1.0, ge=0.25, le=3.0)
+
+    @model_validator(mode="after")
+    def validate_point_in_time_shock(self) -> PointInTimeShockRequest:
+        if self.observed_at.tzinfo is None or self.observed_at.utcoffset() is None:
+            raise ValueError(
+                "point-in-time shock observed_at must include a timezone offset"
+            )
+        if not self.label.strip():
+            raise ValueError("point-in-time shock label must not be blank")
+        normalized_teams = [
+            str(team).strip().upper()
+            for team in self.teams
+            if str(team).strip()
+        ]
+        normalized_master_ids = [
+            str(value).strip()
+            for value in self.player_master_ids
+            if str(value).strip()
+        ]
+        normalized_source_keys = [
+            str(value).strip()
+            for value in self.source_player_keys
+            if str(value).strip()
+        ]
+        has_team_target = bool(normalized_teams)
+        has_player_target = bool(normalized_master_ids or normalized_source_keys)
+        if has_team_target == has_player_target:
+            raise ValueError(
+                "point-in-time shock requires exactly one target mode: "
+                "teams or source/canonical player IDs"
+            )
+        if self.shock_type == "weather" and not has_team_target:
+            raise ValueError("weather shocks must target one or two teams")
+        for field_name, values in (
+            ("teams", normalized_teams),
+            ("player_master_ids", normalized_master_ids),
+            ("source_player_keys", normalized_source_keys),
+            ("positions", list(self.positions)),
+        ):
+            if len(set(values)) != len(values):
+                raise ValueError(
+                    f"point-in-time shock {field_name} values must be unique"
+                )
+        if (
+            abs(float(self.mean_multiplier) - 1.0) <= 1e-12
+            and abs(float(self.volatility_multiplier) - 1.0) <= 1e-12
+        ):
+            raise ValueError(
+                "point-in-time shock must change mean_multiplier or "
+                "volatility_multiplier"
+            )
+        return self
+
+
 class SimulateWeekRequest(BaseModel):
     source_system: Literal["draftkings", "fanduel"] = "draftkings"
     season: int = Field(..., ge=2000)
@@ -167,6 +235,32 @@ class SimulateWeekRequest(BaseModel):
     random_seed: int = 42
     use_residual_learning: bool = False
     role_shocks: list[RoleShockRequest] = Field(default_factory=list, max_length=1)
+    scenario_as_of: datetime | None = None
+    point_in_time_shocks: list[PointInTimeShockRequest] = Field(
+        default_factory=list,
+        max_length=8,
+    )
+
+    @model_validator(mode="after")
+    def validate_point_in_time_cutoff(self) -> SimulateWeekRequest:
+        if self.scenario_as_of is not None and (
+            self.scenario_as_of.tzinfo is None
+            or self.scenario_as_of.utcoffset() is None
+        ):
+            raise ValueError("scenario_as_of must include a timezone offset")
+        if not self.point_in_time_shocks:
+            return self
+        if self.scenario_as_of is None:
+            raise ValueError(
+                "scenario_as_of is required when point_in_time_shocks are supplied"
+            )
+        for index, shock in enumerate(self.point_in_time_shocks, start=1):
+            if shock.observed_at > self.scenario_as_of:
+                raise ValueError(
+                    f"point_in_time_shocks[{index}] observed_at is later than "
+                    "scenario_as_of"
+                )
+        return self
 
 
 class ResidualSnapshotBuildRequest(BaseModel):
@@ -335,6 +429,26 @@ class RoleShockImpactResponse(BaseModel):
     p90_points_delta: float
 
 
+class PointInTimeShockImpactResponse(BaseModel):
+    shock_index: int
+    shock_type: Literal["weather", "news"]
+    label: str
+    observed_at: datetime
+    player_master_id: str | None
+    source_player_key: str | None
+    player_name: str
+    team: str | None
+    position: str | None
+    mean_multiplier: float
+    volatility_multiplier: float
+    baseline_mean_points: float
+    scenario_mean_points: float
+    mean_points_delta: float
+    baseline_p90_points: float
+    scenario_p90_points: float
+    p90_points_delta: float
+
+
 class ResidualAdjustmentImpactResponse(BaseModel):
     player_master_id: str | None
     source_player_key: str | None
@@ -379,6 +493,10 @@ class SimulateWeekResponse(BaseModel):
     completed_at: datetime | None = None
     top_rows: list[SimulatedPlayerOutcomeResponse]
     role_shock_impacts: list[RoleShockImpactResponse] = Field(default_factory=list)
+    scenario_as_of: datetime | None = None
+    point_in_time_shock_impacts: list[PointInTimeShockImpactResponse] = Field(
+        default_factory=list
+    )
     residual_learning_applied: bool = False
     residual_snapshot_count: int = 0
     residual_adjustment_impacts: list[ResidualAdjustmentImpactResponse] = Field(

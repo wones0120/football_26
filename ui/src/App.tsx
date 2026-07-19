@@ -32,6 +32,7 @@ import {
   type IngestResult,
   type ModelDefaults,
   type OptimalVsPredictedBacktestResult,
+  type PointInTimeShockImpact,
   type ResidualAdjustmentImpact,
   type RoleShockImpact,
   type SeasonCoverageRow,
@@ -171,6 +172,18 @@ function App() {
   const [roleShockRetainedShare, setRoleShockRetainedShare] = useState(0);
   const [roleShockScope, setRoleShockScope] =
     useState<"same_position" | "skill_players">("same_position");
+  const [pointShockType, setPointShockType] =
+    useState<"" | "weather" | "news">("");
+  const [pointShockScenarioAsOf, setPointShockScenarioAsOf] = useState("");
+  const [pointShockObservedAt, setPointShockObservedAt] = useState("");
+  const [pointShockLabel, setPointShockLabel] = useState("");
+  const [pointShockTeams, setPointShockTeams] = useState("");
+  const [pointShockPositions, setPointShockPositions] =
+    useState("QB,RB,WR,TE,K,DST");
+  const [pointShockMeanMultiplier, setPointShockMeanMultiplier] =
+    useState(1);
+  const [pointShockVolatilityMultiplier, setPointShockVolatilityMultiplier] =
+    useState(1);
   const [backtestTopN, setBacktestTopN] = useState(25);
   const [backtestLowSalaryThreshold, setBacktestLowSalaryThreshold] = useState(4500);
   const [backtestLowSalaryHitPoints, setBacktestLowSalaryHitPoints] = useState(15);
@@ -201,6 +214,11 @@ function App() {
   const [simulationRows, setSimulationRows] = useState<SimulatedPlayerOutcome[]>([]);
   const [roleShockCandidates, setRoleShockCandidates] = useState<SimulatedPlayerOutcome[]>([]);
   const [roleShockImpacts, setRoleShockImpacts] = useState<RoleShockImpact[]>([]);
+  const [pointInTimeShockImpacts, setPointInTimeShockImpacts] = useState<
+    PointInTimeShockImpact[]
+  >([]);
+  const [simulationScenarioAsOf, setSimulationScenarioAsOf] =
+    useState<string | null>(null);
   const [residualAdjustmentImpacts, setResidualAdjustmentImpacts] = useState<
     ResidualAdjustmentImpact[]
   >([]);
@@ -661,10 +679,54 @@ function App() {
               reallocation_scope: roleShockScope,
             }
           : null;
+    const pointShockTeamsList = pointShockTeams
+      .split(",")
+      .map((value) => value.trim().toUpperCase())
+      .filter(Boolean);
+    const pointShockPositionsList = pointShockPositions
+      .split(",")
+      .map((value) => value.trim().toUpperCase())
+      .filter(Boolean) as Array<"QB" | "RB" | "WR" | "TE" | "K" | "DST">;
+    if (
+      pointShockType &&
+      (!pointShockScenarioAsOf.trim() ||
+        !pointShockObservedAt.trim() ||
+        !pointShockLabel.trim() ||
+        pointShockTeamsList.length === 0 ||
+        pointShockPositionsList.length === 0)
+    ) {
+      setError(
+        "Point-in-time shocks require ISO timestamps with offsets, a label, teams, and positions."
+      );
+      setStatus(null);
+      return;
+    }
+    if (
+      pointShockType &&
+      pointShockMeanMultiplier === 1 &&
+      pointShockVolatilityMultiplier === 1
+    ) {
+      setError("Point-in-time shocks must change the mean or volatility multiplier.");
+      setStatus(null);
+      return;
+    }
+    const pointShock = pointShockType
+      ? {
+          shock_type: pointShockType,
+          observed_at: pointShockObservedAt.trim(),
+          label: pointShockLabel.trim(),
+          teams: pointShockTeamsList,
+          positions: pointShockPositionsList,
+          mean_multiplier: pointShockMeanMultiplier,
+          volatility_multiplier: pointShockVolatilityMultiplier,
+        }
+      : null;
     setIsIngesting(true);
     setSimulationRows([]);
     setSimulationRunId(null);
     setRoleShockImpacts([]);
+    setPointInTimeShockImpacts([]);
+    setSimulationScenarioAsOf(null);
     setResidualAdjustmentImpacts([]);
     setResidualSnapshotCount(0);
     setResidualLearningApplied(false);
@@ -684,6 +746,8 @@ function App() {
         noise_scale: simulationNoiseScale,
         use_residual_learning: simulationUseResidualLearning,
         role_shocks: roleShock ? [roleShock] : [],
+        scenario_as_of: pointShock ? pointShockScenarioAsOf.trim() : undefined,
+        point_in_time_shocks: pointShock ? [pointShock] : [],
       });
       setSimulationRows(result.top_rows);
       if (!roleShock) {
@@ -697,12 +761,14 @@ function App() {
       }
       setSimulationRunId(result.simulation_run_id);
       setRoleShockImpacts(result.role_shock_impacts);
+      setPointInTimeShockImpacts(result.point_in_time_shock_impacts);
+      setSimulationScenarioAsOf(result.scenario_as_of ?? null);
       setResidualAdjustmentImpacts(result.residual_adjustment_impacts);
       setResidualSnapshotCount(result.residual_snapshot_count);
       setResidualLearningApplied(result.residual_learning_applied);
       setScenarioWarnings(result.scenario_warnings);
       setStatus(
-        `Simulation completed: players=${result.players_simulated}/${result.players_considered} iterations=${result.iterations} residual_impacts=${result.residual_adjustment_impacts.length} role_impacts=${result.role_shock_impacts.length}`
+        `Simulation completed: players=${result.players_simulated}/${result.players_considered} iterations=${result.iterations} residual_impacts=${result.residual_adjustment_impacts.length} role_impacts=${result.role_shock_impacts.length} point_in_time_impacts=${result.point_in_time_shock_impacts.length}`
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -1462,6 +1528,103 @@ function App() {
                 <option value="skill_players">All RB/WR/TE</option>
               </select>
             </label>
+            <label>
+              Point-in-Time Shock
+              <select
+                value={pointShockType}
+                onChange={(event) =>
+                  setPointShockType(
+                    event.target.value as "" | "weather" | "news"
+                  )
+                }
+              >
+                <option value="">Off (default)</option>
+                <option value="weather">Weather</option>
+                <option value="news">Team news</option>
+              </select>
+            </label>
+            {pointShockType && (
+              <>
+                <label>
+                  Scenario As-Of
+                  <input
+                    type="text"
+                    placeholder="2025-10-05T12:00:00-04:00"
+                    value={pointShockScenarioAsOf}
+                    onChange={(event) =>
+                      setPointShockScenarioAsOf(event.target.value)
+                    }
+                  />
+                </label>
+                <label>
+                  Shock Observed At
+                  <input
+                    type="text"
+                    placeholder="2025-10-05T11:30:00-04:00"
+                    value={pointShockObservedAt}
+                    onChange={(event) =>
+                      setPointShockObservedAt(event.target.value)
+                    }
+                  />
+                </label>
+                <label>
+                  Shock Label
+                  <input
+                    type="text"
+                    placeholder="Strong crosswind"
+                    value={pointShockLabel}
+                    onChange={(event) => setPointShockLabel(event.target.value)}
+                  />
+                </label>
+                <label>
+                  Teams
+                  <input
+                    type="text"
+                    placeholder="BUF,MIA"
+                    value={pointShockTeams}
+                    onChange={(event) => setPointShockTeams(event.target.value)}
+                  />
+                </label>
+                <label>
+                  Positions
+                  <input
+                    type="text"
+                    value={pointShockPositions}
+                    onChange={(event) =>
+                      setPointShockPositions(event.target.value)
+                    }
+                  />
+                </label>
+                <label>
+                  Mean Multiplier
+                  <input
+                    type="number"
+                    min={0}
+                    max={2}
+                    step={0.05}
+                    value={pointShockMeanMultiplier}
+                    onChange={(event) =>
+                      setPointShockMeanMultiplier(Number(event.target.value))
+                    }
+                  />
+                </label>
+                <label>
+                  Volatility Multiplier
+                  <input
+                    type="number"
+                    min={0.25}
+                    max={3}
+                    step={0.05}
+                    value={pointShockVolatilityMultiplier}
+                    onChange={(event) =>
+                      setPointShockVolatilityMultiplier(
+                        Number(event.target.value)
+                      )
+                    }
+                  />
+                </label>
+              </>
+            )}
           </div>
           <p className="hint">
             Online residual learning is DraftKings-only and default-off. When enabled, it uses immutable
@@ -1472,6 +1635,11 @@ function App() {
             Run an unshocked baseline first to populate eligible players. A role shock manually reduces the
             selected player&apos;s opportunity and reallocates it from the prior four team games; it does not
             claim historical injury knowledge. Increase Top Results if the player you need is not listed.
+          </p>
+          <p className="hint">
+            Weather/team-news shocks are manually entered stress tests. Use timezone-aware ISO timestamps;
+            the observed timestamp must be at or before the scenario cutoff. Team and position targeting is
+            explicit, and the service does not infer a live report or claim historical availability.
           </p>
           <div className="button-row">
             <button onClick={runSimulation} disabled={isIngesting}>
@@ -1486,6 +1654,8 @@ function App() {
                 setRoleShockCandidates([]);
                 setRoleShockPlayerIdentity("");
                 setRoleShockImpacts([]);
+                setPointInTimeShockImpacts([]);
+                setSimulationScenarioAsOf(null);
                 setResidualAdjustmentImpacts([]);
                 setResidualSnapshotCount(0);
                 setResidualLearningApplied(false);
@@ -1499,6 +1669,9 @@ function App() {
             </button>
           </div>
           {simulationRunId && <p className="hint">Run ID: {simulationRunId}</p>}
+          {simulationScenarioAsOf && (
+            <p className="hint">Point-in-time scenario cutoff: {simulationScenarioAsOf}</p>
+          )}
           {simulationUseResidualLearning && (
             <p className="hint">
               Residual learning: {residualLearningApplied ? "applied" : "not applied"} using{" "}
@@ -1629,6 +1802,58 @@ function App() {
                         <td>{row.shock_role.replaceAll("_", " ")}</td>
                         <td>{row.opportunity_multiplier.toFixed(2)}</td>
                         <td>{row.projection_multiplier.toFixed(2)}</td>
+                        <td>{row.baseline_mean_points.toFixed(2)}</td>
+                        <td>{row.scenario_mean_points.toFixed(2)}</td>
+                        <td>{row.mean_points_delta.toFixed(2)}</td>
+                        <td>{row.baseline_p90_points.toFixed(2)}</td>
+                        <td>{row.scenario_p90_points.toFixed(2)}</td>
+                        <td>{row.p90_points_delta.toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+          {pointInTimeShockImpacts.length > 0 && (
+            <div className="subsection">
+              <h3>Point-in-Time Weather / News Impact</h3>
+              <p className="hint">
+                Each row shows the deterministic effect of one manually entered,
+                timestamp-bounded shock. Multipliers are caller assumptions, not
+                inferred historical facts.
+              </p>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Shock</th>
+                      <th>Observed</th>
+                      <th>Player</th>
+                      <th>Mean ×</th>
+                      <th>Vol ×</th>
+                      <th>Mean Before</th>
+                      <th>Mean After</th>
+                      <th>Mean Δ</th>
+                      <th>P90 Before</th>
+                      <th>P90 After</th>
+                      <th>P90 Δ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pointInTimeShockImpacts.map((row) => (
+                      <tr
+                        key={`${row.shock_index}-${row.player_master_id ?? row.source_player_key ?? row.player_name}`}
+                      >
+                        <td>
+                          {row.shock_type}: {row.label}
+                        </td>
+                        <td>{row.observed_at}</td>
+                        <td>
+                          {row.player_name} ({row.team ?? "-"} {row.position ?? "-"})
+                        </td>
+                        <td>{row.mean_multiplier.toFixed(2)}</td>
+                        <td>{row.volatility_multiplier.toFixed(2)}</td>
                         <td>{row.baseline_mean_points.toFixed(2)}</td>
                         <td>{row.scenario_mean_points.toFixed(2)}</td>
                         <td>{row.mean_points_delta.toFixed(2)}</td>

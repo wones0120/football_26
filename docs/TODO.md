@@ -136,6 +136,8 @@ Last updated: 2026-07-19
 - [x] Popularity and duplication proxy (default penalty zero; `0.25` retained as an opt-in research setting).
 - [x] Role-shock opportunity reallocation simulations with UI controls and lineup-fragility reporting.
   - Evidence: `docs/role_shock_fragility_2025_w18.{json,md}`; Gibbs exposure `30%` to `0%`, 70% lineup overlap, `+6.69` reoptimization lift.
+- [x] Point-in-time weather/news shock simulation for pre-lock stress testing.
+  - Evidence: `backend/app/tests/test_point_in_time_shocks.py` proves timestamp cutoffs, deterministic mean/volatility transforms, stable-ID and team/position targeting, failure on missing IDs, and persisted scenario lineage; API/CLI/UI expose per-player mean/p90 impacts.
 - [x] Online weekly residual learning with validation-selected shrinkage and strict prior-week cutoffs.
   - Evidence: `docs/online_residual_learning_2024_2025.{json,md}`; untouched-test MAE `4.818` to `4.602` (`+4.48%`) across 1,205 observations.
   - Integration: immutable weekly snapshots and a DraftKings-only, default-off simulation gate. `docs/online_residual_snapshot_backfill_2024_2025.json` records 15 snapshots, 3,342 observations, and zero failures; a separate verification rerun reused all 15.
@@ -144,6 +146,6 @@ Last updated: 2026-07-19
 - Roadmap: `docs/NEXT_IDEAS.md`.
 
 ## Parking Lot
-- [ ] Add contest-specific objective functions (cash vs GPP) with separate optimization targets.
-- [ ] Add late-swap workflow support for slates with staggered start times.
-- [ ] Add weather/news shock scenario simulation for pre-lock stress testing.
+- [x] Add contest-specific objective functions (cash vs GPP) with separate optimization targets.
+- [x] Add late-swap workflow support for slates with staggered start times.
+- [x] Add weather/news shock scenario simulation for pre-lock stress testing.
