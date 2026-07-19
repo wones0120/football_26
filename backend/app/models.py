@@ -3,22 +3,28 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from sqlalchemy import (
-    JSON,
+    BigInteger,
     Boolean,
     DateTime,
     Float,
     ForeignKey,
     Index,
     Integer,
+    JSON,
     String,
     Text,
     UniqueConstraint,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
 class Base(DeclarativeBase):
     pass
+
+
+JSON_DOCUMENT = JSON().with_variant(JSONB(), "postgresql")
+BIGINT_ID = BigInteger().with_variant(Integer, "sqlite")
 
 
 def utcnow_naive() -> datetime:
@@ -72,7 +78,7 @@ class PlayerAlias(Base):
         ),
     )
 
-    alias_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    alias_id: Mapped[int] = mapped_column(BIGINT_ID, primary_key=True, autoincrement=True)
     player_master_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey("player_master.player_master_id", ondelete="CASCADE"),
@@ -96,7 +102,7 @@ class PlayerMappingRule(Base):
     rule_id: Mapped[str] = mapped_column(String(36), primary_key=True)
     source_system: Mapped[str] = mapped_column(String(32), nullable=False)
     rule_name: Mapped[str] = mapped_column(String(128), nullable=False)
-    match_pattern_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    match_pattern_json: Mapped[dict] = mapped_column(JSON_DOCUMENT, nullable=False)
     player_master_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey("player_master.player_master_id", ondelete="CASCADE"),
@@ -126,7 +132,7 @@ class UnresolvedPlayerQueue(Base):
     season: Mapped[int | None] = mapped_column(Integer)
     week: Mapped[int | None] = mapped_column(Integer)
     slate: Mapped[str | None] = mapped_column(String(64))
-    raw_row_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    raw_row_json: Mapped[dict] = mapped_column(JSON_DOCUMENT, nullable=False)
     normalized_name: Mapped[str] = mapped_column(String(128), nullable=False)
     team: Mapped[str | None] = mapped_column(String(16))
     position: Mapped[str | None] = mapped_column(String(16))
@@ -142,7 +148,7 @@ class UnresolvedPlayerQueue(Base):
 class RawSalaryRow(Base):
     __tablename__ = "raw_salary_row"
 
-    raw_salary_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    raw_salary_id: Mapped[int] = mapped_column(BIGINT_ID, primary_key=True, autoincrement=True)
     ingest_run_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey("ingest_run.ingest_run_id", ondelete="CASCADE"),
@@ -153,14 +159,14 @@ class RawSalaryRow(Base):
     week: Mapped[int] = mapped_column(Integer, nullable=False)
     slate: Mapped[str] = mapped_column(String(64), nullable=False)
     source_player_key: Mapped[str | None] = mapped_column(String(128))
-    raw_row_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    raw_row_json: Mapped[dict] = mapped_column(JSON_DOCUMENT, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow_naive)
 
 
 class RawInjuryRow(Base):
     __tablename__ = "raw_injury_row"
 
-    raw_injury_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    raw_injury_id: Mapped[int] = mapped_column(BIGINT_ID, primary_key=True, autoincrement=True)
     ingest_run_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey("ingest_run.ingest_run_id", ondelete="CASCADE"),
@@ -171,7 +177,7 @@ class RawInjuryRow(Base):
     week: Mapped[int] = mapped_column(Integer, nullable=False)
     slate: Mapped[str] = mapped_column(String(64), nullable=False)
     source_player_key: Mapped[str | None] = mapped_column(String(128))
-    raw_row_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    raw_row_json: Mapped[dict] = mapped_column(JSON_DOCUMENT, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow_naive)
 
 
@@ -189,7 +195,7 @@ class CuratedSalary(Base):
         Index("idx_curated_salary_player_master", "player_master_id", "season", "week"),
     )
 
-    curated_salary_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    curated_salary_id: Mapped[int] = mapped_column(BIGINT_ID, primary_key=True, autoincrement=True)
     ingest_run_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey("ingest_run.ingest_run_id", ondelete="CASCADE"),
@@ -226,7 +232,7 @@ class CuratedInjury(Base):
         Index("idx_curated_injury_player_master", "player_master_id", "season", "week"),
     )
 
-    curated_injury_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    curated_injury_id: Mapped[int] = mapped_column(BIGINT_ID, primary_key=True, autoincrement=True)
     ingest_run_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey("ingest_run.ingest_run_id", ondelete="CASCADE"),
@@ -254,7 +260,7 @@ class RawNflSchedule(Base):
         Index("idx_raw_nfl_schedule_game_id", "game_id"),
     )
 
-    raw_nfl_schedule_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    raw_nfl_schedule_id: Mapped[int] = mapped_column(BIGINT_ID, primary_key=True, autoincrement=True)
     ingest_run_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey("ingest_run.ingest_run_id", ondelete="CASCADE"),
@@ -270,7 +276,7 @@ class RawNflSchedule(Base):
     kickoff: Mapped[str | None] = mapped_column(String(128))
     status: Mapped[str | None] = mapped_column(String(64))
     stadium: Mapped[str | None] = mapped_column(String(128))
-    raw_row_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    raw_row_json: Mapped[dict] = mapped_column(JSON_DOCUMENT, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow_naive)
 
 
@@ -281,7 +287,7 @@ class RawNflWeeklyStat(Base):
         Index("idx_raw_nfl_weekly_stat_player_id", "player_id"),
     )
 
-    raw_nfl_weekly_stat_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    raw_nfl_weekly_stat_id: Mapped[int] = mapped_column(BIGINT_ID, primary_key=True, autoincrement=True)
     ingest_run_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey("ingest_run.ingest_run_id", ondelete="CASCADE"),
@@ -296,7 +302,7 @@ class RawNflWeeklyStat(Base):
     opponent: Mapped[str | None] = mapped_column(String(16))
     position: Mapped[str | None] = mapped_column(String(16))
     game_id: Mapped[str | None] = mapped_column(String(64))
-    raw_row_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    raw_row_json: Mapped[dict] = mapped_column(JSON_DOCUMENT, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow_naive)
 
 
@@ -317,7 +323,7 @@ class PlayerGameFeatureMatrix(Base):
         Index("idx_pgfm_team_pos", "source_system", "team", "opponent", "position", "season", "week"),
     )
 
-    player_game_feature_matrix_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    player_game_feature_matrix_id: Mapped[int] = mapped_column(BIGINT_ID, primary_key=True, autoincrement=True)
     source_system: Mapped[str] = mapped_column(String(32), nullable=False)
     season: Mapped[int] = mapped_column(Integer, nullable=False)
     week: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -362,7 +368,7 @@ class SimulationRun(Base):
     slate: Mapped[str] = mapped_column(String(64), nullable=False)
     iterations: Mapped[int] = mapped_column(Integer, nullable=False)
     random_seed: Mapped[int | None] = mapped_column(Integer)
-    parameters_json: Mapped[dict | None] = mapped_column(JSON)
+    parameters_json: Mapped[dict | None] = mapped_column(JSON_DOCUMENT)
     players_considered: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     players_simulated: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="running")
@@ -378,7 +384,7 @@ class SimulatedPlayerOutcome(Base):
         Index("idx_sim_outcome_run_p90", "simulation_run_id", "p90_points"),
     )
 
-    simulated_player_outcome_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    simulated_player_outcome_id: Mapped[int] = mapped_column(BIGINT_ID, primary_key=True, autoincrement=True)
     simulation_run_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey("simulation_run.simulation_run_id", ondelete="CASCADE"),
@@ -419,9 +425,16 @@ class SimulationCalibrationFactor(Base):
             "calibrated_season",
             "calibrated_week",
         ),
+        Index(
+            "idx_sim_calibration_low_salary",
+            "source_system",
+            "slate",
+            "low_salary_threshold",
+            "low_salary_hit_points",
+        ),
     )
 
-    simulation_calibration_factor_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    simulation_calibration_factor_id: Mapped[int] = mapped_column(BIGINT_ID, primary_key=True, autoincrement=True)
     source_system: Mapped[str] = mapped_column(String(32), nullable=False)
     slate: Mapped[str] = mapped_column(String(64), nullable=False)
     scope: Mapped[str] = mapped_column(String(24), nullable=False)  # position | salary_bucket
@@ -464,10 +477,10 @@ class ProjectionResidualSnapshot(Base):
     week: Mapped[int] = mapped_column(Integer, nullable=False)
     slate: Mapped[str] = mapped_column(String(64), nullable=False)
     parameters_hash: Mapped[str] = mapped_column(String(64), nullable=False)
-    parameters_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    parameters_json: Mapped[dict] = mapped_column(JSON_DOCUMENT, nullable=False)
     feature_set_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     code_version: Mapped[str] = mapped_column(String(64), nullable=False)
-    observations_json: Mapped[list[dict]] = mapped_column(JSON, nullable=False)
+    observations_json: Mapped[list[dict]] = mapped_column(JSON_DOCUMENT, nullable=False)
     observations_count: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[str] = mapped_column(
         String(24),
@@ -510,7 +523,7 @@ class ActualTopLineup(Base):
         ),
     )
 
-    actual_top_lineup_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    actual_top_lineup_id: Mapped[int] = mapped_column(BIGINT_ID, primary_key=True, autoincrement=True)
     source_system: Mapped[str] = mapped_column(String(32), nullable=False)
     season: Mapped[int] = mapped_column(Integer, nullable=False)
     week: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -537,9 +550,9 @@ class ActualTopLineupPlayer(Base):
         ),
     )
 
-    actual_top_lineup_player_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    actual_top_lineup_player_id: Mapped[int] = mapped_column(BIGINT_ID, primary_key=True, autoincrement=True)
     actual_top_lineup_id: Mapped[int] = mapped_column(
-        Integer,
+        BIGINT_ID,
         ForeignKey("actual_top_lineup.actual_top_lineup_id", ondelete="CASCADE"),
         nullable=False,
     )

@@ -108,7 +108,8 @@ Last updated: 2026-07-19
 
 ## P2 - Ops / Engineering
 - [ ] Add integration tests for ingestion->curation->backtest critical path.
-- [ ] Add migration smoke test and schema drift checker in CI.
+- [x] Add migration smoke test and schema drift checker in CI.
+  - Evidence: `.github/workflows/schema-smoke.yml` provisions PostgreSQL 16, applies all nine migrations to an empty database, verifies the ledger and a no-op second pass, and compares 18 migrated tables with ORM columns, types, constraints, foreign keys, and indexes.
 - [x] Add runbook for full environment bootstrap from empty database (`docs/BOOTSTRAP_RUNBOOK.md`).
 - [x] Add scheduled nightly benchmark automation and artifact retention policy.
   - Evidence: `.github/workflows/nightly-benchmarks.yml` schedules the canonical suite on the historical-data runner, uploads each run for 30 days, compares the prior successful run, and invokes marker-scoped local retention. `backend/app/tests/test_benchmark_retention.py` proves manual and symlinked directories are excluded.

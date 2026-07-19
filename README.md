@@ -96,7 +96,27 @@ Salary and injury CSVs are validated before any existing curated slice is cleare
 
 ## Migration Notes
 
-Migrations live in `/migrations`. The migration runner tracks applied files in `schema_migrations`.
+Migrations live in `/migrations`. The migration runner tracks applied files in
+`schema_migrations`.
+
+With `DATABASE_URL` pointed at an empty PostgreSQL database, run the same
+fresh-schema check used by CI:
+
+```bash
+python scripts/check_schema_drift.py \
+  --apply-migrations \
+  --require-empty \
+  --verify-idempotency
+```
+
+The check validates contiguous migration names, the exact migration ledger, a
+second no-op migration pass, and structural agreement between the 18 migrated
+tables and SQLAlchemy metadata (columns, PostgreSQL types, nullability, primary
+keys, unique constraints, foreign keys, and indexes). It does not use
+`AUTO_CREATE_TABLES`.
+
+`.github/workflows/schema-smoke.yml` runs this command against a fresh
+PostgreSQL 16 service whenever migration- or schema-related files change.
 
 ## Current Status
 

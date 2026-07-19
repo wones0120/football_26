@@ -17,8 +17,8 @@ Last reviewed: 2026-07-19
 3. Preserve current production defaults until broader walk-forward acceptance gates beat them.
 
 ### Next
-1. Add CI database/migration smoke coverage and schema-drift checks.
-2. Add ingestion-to-curation-to-backtest critical-path integration coverage.
+1. Add ingestion-to-curation-to-backtest critical-path integration coverage.
+2. Default-collapse the remaining heavy control-plane table sections.
 
 ### Later
 1. Add contest-specific cash/GPP objectives.

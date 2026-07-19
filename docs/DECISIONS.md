@@ -2,6 +2,13 @@
 
 This log records decisions that affect reproducibility, production defaults, or historical-model acceptance. The operational backlog remains in `docs/TODO.md`.
 
+## 2026-07-19 — Make migrations and ORM metadata agree in PostgreSQL CI
+
+- Decision: treat the ordered SQL migrations as the PostgreSQL deployment history and require SQLAlchemy metadata to describe the resulting schema exactly. Use dialect variants so production compiles identity columns as `BIGINT` and document payloads as `JSONB`, while fast SQLite tests retain `INTEGER` autoincrement and portable `JSON`.
+- Evidence: fresh-database validation applied all nine migrations and compared 18 application tables. It found and closed identity type, document type, and calibration-index drift; the second migration pass applied nothing and left the schema unchanged.
+- Rationale: migration success alone cannot detect runtime ORM disagreement, and metadata-only table creation can hide migration defects. Comparing both representations on a real PostgreSQL service catches either class of drift without weakening existing SQLite unit coverage.
+- Production impact: `.github/workflows/schema-smoke.yml` now gates schema-related changes using PostgreSQL 16 with `AUTO_CREATE_TABLES=false`. Runtime APIs and migration history are unchanged.
+
 ## 2026-07-19 — Use transactional SQLite artifacts for large candidate checkpoints
 
 - Decision: persist ultimate classic candidate progress in a caller-selected SQLite artifact, committing only at complete generation-attempt boundaries and storing lineup UIDs, adaptive-stage state, attempt count, and full NumPy RNG state.

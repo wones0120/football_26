@@ -1,0 +1,80 @@
+name: Schema Smoke
+
+on:
+  pull_request:
+    paths:
+      - "migrations/**"
+      - "backend/app/models.py"
+      - "scripts/apply_migrations.py"
+      - "scripts/check_schema_drift.py"
+      - "backend/app/tests/test_schema_drift.py"
+      - ".github/workflows/schema-smoke.yml"
+      - "requirements.txt"
+  push:
+    branches:
+      - main
+    paths:
+      - "migrations/**"
+      - "backend/app/models.py"
+      - "scripts/apply_migrations.py"
+      - "scripts/check_schema_drift.py"
+      - "backend/app/tests/test_schema_drift.py"
+      - ".github/workflows/schema-smoke.yml"
+      - "requirements.txt"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: schema-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fresh-postgresql-schema:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: football_26_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d football_26_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    env:
+      APP_ENV: test
+      AUTO_CREATE_TABLES: "false"
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/football_26_ci
+      PGCLIENTENCODING: UTF8
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Run schema validation unit tests
+        run: python -m pytest -q backend/app/tests/test_schema_drift.py
+
+      - name: Migrate empty database and verify drift
+        run: >-
+          python scripts/check_schema_drift.py
+          --apply-migrations
+          --require-empty
+          --verify-idempotency
