@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added a deterministic ingestion-to-backtest integration test that mocks only the external nflreadpy boundary while exercising canonical player bootstrap, weekly-stat ingest, DraftKings raw/curated salary persistence, cross-source identity resolution, prior-week simulation, and actual scoring in one database session.
 - Added a PostgreSQL 16 CI schema gate that migrates an empty database, validates the exact migration ledger and a no-op second pass, detects ORM/migration drift across 18 tables, and keeps SQLite test compatibility while aligning production metadata with BIGINT identities, JSONB payloads, and migrated indexes.
 - Added a daily/manual self-hosted benchmark workflow with previous-success comparison, 30-day uploaded artifacts, concurrency protection, and marker-scoped local retention of 14 successful plus 7 failed nightly runs.
 - Added transactional SQLite checkpoint/resume for 100k-500k ultimate classic candidate generation, including exact RNG/adaptive-stage restoration, request and player-pool compatibility checks, completed-checkpoint reuse, CLI/API observability, and deterministic interruption tests.

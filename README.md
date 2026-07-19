@@ -118,6 +118,21 @@ keys, unique constraints, foreign keys, and indexes). It does not use
 `.github/workflows/schema-smoke.yml` runs this command against a fresh
 PostgreSQL 16 service whenever migration- or schema-related files change.
 
+## Critical-Path Integration Test
+
+Run the deterministic ingestion-to-backtest check with:
+
+```bash
+PYTHONPATH=. python -m pytest -q \
+  backend/app/tests/test_critical_path_integration.py
+```
+
+The test mocks only the external `nflreadpy` boundary. It uses one real
+database session to bootstrap canonical players, ingest weekly stats, ingest a
+DraftKings salary CSV into raw and curated layers, resolve both source identity
+systems, and score a week-three backtest from week-one and week-two history.
+Historical injury and ownership data are not required.
+
 ## Current Status
 
 1. Phase 1 baseline is implemented.
