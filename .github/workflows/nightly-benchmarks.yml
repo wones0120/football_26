@@ -1,0 +1,111 @@
+name: Nightly Benchmarks
+
+on:
+  schedule:
+    - cron: "17 09 * * *"
+  workflow_dispatch:
+    inputs:
+      limit_slates:
+        description: "Optional benchmark slate limit; 0 runs full history"
+        required: false
+        default: "0"
+      analysis_limit_slates:
+        description: "Optional value-analysis slate limit; 0 runs full history"
+        required: false
+        default: "0"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-football-benchmarks
+  cancel-in-progress: false
+
+jobs:
+  benchmark:
+    runs-on:
+      - self-hosted
+      - football-26-data
+    timeout-minutes: 360
+    env:
+      AUTO_CREATE_TABLES: "false"
+      DATABASE_URL: ${{ secrets.NIGHTLY_DATABASE_URL }}
+      LIMIT_SLATES: ${{ github.event.inputs.limit_slates || '0' }}
+      ANALYSIS_LIMIT_SLATES: ${{ github.event.inputs.analysis_limit_slates || '0' }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          clean: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Validate benchmark database secret
+        shell: bash
+        run: |
+          if [[ -z "${DATABASE_URL}" ]]; then
+            echo "::error::NIGHTLY_DATABASE_URL is required for historical benchmarks."
+            exit 1
+          fi
+
+      - name: Allocate nightly run
+        id: allocate
+        shell: bash
+        run: |
+          run_name="$(date -u +%Y%m%d_%H%M%S)_nightly_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          run_directory="${GITHUB_WORKSPACE}/docs/benchmarks/${run_name}"
+          echo "run_name=${run_name}" >> "${GITHUB_OUTPUT}"
+          echo "run_directory=${run_directory}" >> "${GITHUB_OUTPUT}"
+          python scripts/manage_benchmark_retention.py register \
+            --run-name "${run_name}" \
+            --workflow-run-id "${GITHUB_RUN_ID}" \
+            --workflow-run-attempt "${GITHUB_RUN_ATTEMPT}"
+
+      - name: Run canonical benchmark suite
+        id: benchmark
+        shell: bash
+        run: |
+          python scripts/run_benchmark_suite.py \
+            --source-system draftkings \
+            --season-start 2024 \
+            --season-end 2025 \
+            --random-seed 42 \
+            --limit-slates "${LIMIT_SLATES}" \
+            --analysis-limit-slates "${ANALYSIS_LIMIT_SLATES}" \
+            --quiet-progress \
+            --output-dir "${{ steps.allocate.outputs.run_directory }}"
+
+      - name: Compare with previous successful run
+        if: ${{ success() }}
+        continue-on-error: true
+        run: >-
+          python scripts/compare_benchmark_runs.py
+          --current-run-dir "${{ steps.allocate.outputs.run_directory }}"
+
+      - name: Apply local nightly retention
+        if: ${{ always() && steps.allocate.outputs.run_name != '' }}
+        run: >-
+          python scripts/manage_benchmark_retention.py prune
+          --keep-successful 14
+          --keep-failed 7
+          --protect-run "${{ steps.allocate.outputs.run_name }}"
+          --apply
+
+      - name: Upload nightly benchmark artifacts
+        if: ${{ always() && steps.allocate.outputs.run_name != '' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: benchmark-${{ steps.allocate.outputs.run_name }}
+          path: ${{ steps.allocate.outputs.run_directory }}
+          if-no-files-found: warn
+          include-hidden-files: true
+          retention-days: 30

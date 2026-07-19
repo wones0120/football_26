@@ -118,6 +118,26 @@ Migrations live in `/migrations`. The migration runner tracks applied files in `
 - Benchmark run history defaults collapsed and can be filtered by source, status, overlapping season range, classic/showdown track, or any model-config value.
 - Benchmark execution currently runs synchronously through the API, so full-history suites can keep the request open for several minutes.
 
+### Nightly Benchmark Automation
+
+`.github/workflows/nightly-benchmarks.yml` runs the canonical DraftKings 2024-2025 suite every day at `09:17 UTC` and also supports manual dispatch with optional slate limits. It compares a successful run with the latest earlier successful manifest, uploads the complete run directory for 30 days, and applies local retention of 14 successful plus 7 failed nightly runs.
+
+The job intentionally targets a self-hosted runner because meaningful benchmarks require the populated historical database. Before enabling the schedule:
+
+1. Register a self-hosted Actions runner version `2.327.1` or newer with the `football-26-data` label.
+2. Add the repository secret `NIGHTLY_DATABASE_URL` with read access to the benchmark database.
+3. Keep the runner workspace persistent; checkout uses `clean: false` so prior nightly artifacts remain available for delta comparison and bounded cleanup.
+
+Local cleanup is restricted to directories with a valid `.nightly-benchmark.json` workflow marker and a strict nightly run name. Manual and tracked benchmark directories, malformed markers, and symlinks are never selected. Preview the policy without deleting anything:
+
+```bash
+python scripts/manage_benchmark_retention.py prune \
+  --keep-successful 14 \
+  --keep-failed 7
+```
+
+The workflow supplies `--apply`; local operator use remains dry-run by default.
+
 ## Backtest Scripts
 
 1. Classic slates:

@@ -110,7 +110,8 @@ Last updated: 2026-07-19
 - [ ] Add integration tests for ingestion->curation->backtest critical path.
 - [ ] Add migration smoke test and schema drift checker in CI.
 - [x] Add runbook for full environment bootstrap from empty database (`docs/BOOTSTRAP_RUNBOOK.md`).
-- [ ] Add scheduled nightly benchmark automation and artifact retention policy.
+- [x] Add scheduled nightly benchmark automation and artifact retention policy.
+  - Evidence: `.github/workflows/nightly-benchmarks.yml` schedules the canonical suite on the historical-data runner, uploads each run for 30 days, compares the prior successful run, and invokes marker-scoped local retention. `backend/app/tests/test_benchmark_retention.py` proves manual and symlinked directories are excluded.
 
 ## P2 - Documentation
 - [x] Keep `docs/phase_plan.md` as executive roadmap.

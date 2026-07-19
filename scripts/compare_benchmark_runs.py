@@ -76,6 +76,24 @@ def _resolve_runs(benchmarks_root: Path, baseline_arg: str, current_arg: str) ->
         baseline = Path(baseline_arg).expanduser().resolve()
         current = Path(current_arg).expanduser().resolve()
         return baseline, current
+    if current_arg:
+        current = Path(current_arg).expanduser().resolve()
+        candidates = sorted(
+            [
+                path
+                for path in benchmarks_root.iterdir()
+                if path.is_dir()
+                and path.resolve() != current
+                and path.name < current.name
+                and _load_json(path / "suite_manifest.json").get("status") == "ok"
+            ],
+            key=lambda path: path.name,
+        )
+        if not candidates:
+            raise ValueError(
+                "Need an earlier successful benchmark run for comparison."
+            )
+        return candidates[-1], current
 
     candidates = sorted(
         [path for path in benchmarks_root.iterdir() if path.is_dir() and (path / "suite_manifest.json").exists()],

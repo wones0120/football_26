@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added a daily/manual self-hosted benchmark workflow with previous-success comparison, 30-day uploaded artifacts, concurrency protection, and marker-scoped local retention of 14 successful plus 7 failed nightly runs.
 - Added transactional SQLite checkpoint/resume for 100k-500k ultimate classic candidate generation, including exact RNG/adaptive-stage restoration, request and player-pool compatibility checks, completed-checkpoint reuse, CLI/API observability, and deterministic interruption tests.
 - Added a no-new-dependency, strict whole-week game-regime projection ensemble comparison with position/regime specialists, sample-size blending, and exact global fallback for sparse or unknown cells.
 - Persisted 17,342-row validation/test evidence. The validation-selected candidate worsened MAE `0.27%` on validation and `0.04%` on untouched test, so it was rejected and production remains unchanged.
