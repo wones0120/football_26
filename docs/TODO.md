@@ -1,6 +1,6 @@
 # Football_26 TODO Backlog
 
-Last updated: 2026-07-18
+Last updated: 2026-07-19
 
 ## Completed Baseline (Reference)
 - [x] Showdown captain descriptive analysis completed for 2024-2025.
@@ -97,7 +97,8 @@ Last updated: 2026-07-18
   - Evidence: `docs/popularity_proxy_validation_2024_2025.{json,md}`; penalty `0.25` reduced risk `1.1%` for a `0.2%` projected-blend cost across 12 slates. Default remains zero.
 - [x] Add robust validity checks for every generated candidate and selected lineup with hard-fail violation details.
 - [x] Support 100k+ candidate experiments with deterministic seeds (request default `100000`, maximum `500000`).
-- [ ] Add interrupted-run checkpoint/resume support for 100k+ candidate experiments.
+- [x] Add interrupted-run checkpoint/resume support for 100k+ candidate experiments.
+  - Evidence: ultimate generation now writes incremental SQLite transactions with full RNG/adaptive-stage state, rejects incompatible resumes, and reuses completed candidate sets. `backend/app/tests/test_candidate_checkpoint.py` proves resumed UID order exactly matches an uninterrupted run.
 
 ## P2 - UI / Control Plane
 - [x] Add dedicated "Analysis" area for generated reports (showdown, main slate, combined).
@@ -120,7 +121,7 @@ Last updated: 2026-07-18
 ## External-Data / Runtime Blockers
 - [x] Historical injury snapshots are unavailable; superseded by usage-weighted roster continuity.
 - [x] Historical ownership is unavailable; superseded by the implemented popularity/duplication proxy.
-- [ ] Add durable checkpoint storage and interrupted-run resume for large candidate generation.
+- [x] Add durable checkpoint storage and interrupted-run resume for large candidate generation.
 
 ## New Ideas Without Vendor History
 - [x] Usage-weighted roster continuity for latent availability (rejected as a standalone captain feature set; retained for role-shock research).

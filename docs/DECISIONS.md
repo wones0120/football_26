@@ -2,6 +2,13 @@
 
 This log records decisions that affect reproducibility, production defaults, or historical-model acceptance. The operational backlog remains in `docs/TODO.md`.
 
+## 2026-07-19 — Use transactional SQLite artifacts for large candidate checkpoints
+
+- Decision: persist ultimate classic candidate progress in a caller-selected SQLite artifact, committing only at complete generation-attempt boundaries and storing lineup UIDs, adaptive-stage state, attempt count, and full NumPy RNG state.
+- Evidence: interruption tests resume with a different fresh RNG object and reproduce the uninterrupted candidate UID sequence exactly; the full 93-test backend suite passes.
+- Rationale: incremental SQLite transactions avoid repeatedly rewriting a potentially 500k-lineup JSON snapshot, recover cleanly from partial writes, and require no new dependency or application-database migration.
+- Production impact: checkpointing remains opt-in. Resume rejects a changed semantic request, player pool, sampling weights, generator version, or NumPy version; completed checkpoints skip regeneration. A mid-attempt interruption replays from the previous committed boundary instead of persisting a half-consumed RNG state.
+
 ## 2026-07-18 — Keep the global projection model over regime specialists
 
 - Decision: reject the standalone position-by-total/spread-regime specialist ensemble and retain the global regression-tree research baseline.

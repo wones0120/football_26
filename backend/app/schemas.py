@@ -756,6 +756,21 @@ class UltimateLineupRequest(BaseModel):
     matchup_prior_gate_model_path: str | None = None
     duplication_risk_penalty: float = Field(default=0.0, ge=0.0, le=1.0)
     random_seed: int | None = None
+    checkpoint_path: str | None = None
+    resume_from_checkpoint: bool = False
+    checkpoint_interval_attempts: int = Field(
+        default=10000,
+        ge=100,
+        le=1000000,
+    )
+
+    @model_validator(mode="after")
+    def validate_checkpoint_controls(self) -> UltimateLineupRequest:
+        if self.resume_from_checkpoint and not self.checkpoint_path:
+            raise ValueError(
+                "checkpoint_path is required when resume_from_checkpoint is true"
+            )
+        return self
 
 
 class UltimateLineupPlayerRowResponse(BaseModel):
@@ -809,6 +824,10 @@ class UltimateLineupResponse(BaseModel):
     matchup_outcome_prior_strength: float = 0.0
     matchup_prior_gate_model_path: str | None = None
     duplication_risk_penalty: float = 0.0
+    candidate_checkpoint_path: str | None = None
+    candidate_checkpoint_resumed: bool = False
+    candidate_checkpoint_status: str | None = None
+    candidate_checkpoint_writes: int = 0
     discovered_patterns: list[str]
     rows: list[UltimateLineupRowResponse]
     exposures: list[UltimateLineupExposureRowResponse]

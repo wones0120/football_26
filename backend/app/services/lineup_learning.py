@@ -51,11 +51,23 @@ from ..schemas import (
     UltimateLineupResponse,
     UltimateLineupRowResponse,
 )
+from .candidate_checkpoint import (
+    CANDIDATE_GENERATOR_VERSION,
+    CandidateCheckpointSnapshot,
+    CandidateCheckpointStore,
+    candidate_checkpoint_fingerprint,
+)
 from .matching import normalize_position
 from .simulation import calculate_dk_points
 
 
 DK_SALARY_CAP = 50000
+
+
+class CandidateGenerationInsufficientError(ValueError):
+    pass
+
+
 CLASSIC_VALUE_DRIVER_FEATURE_NAMES = [
     "lineup_projected_value",
     "high_total_offense_share",
@@ -5579,6 +5591,13 @@ class LineupLearningService:
         min_required_lineups: int | None = None,
         max_attempts_multiplier: int = 6,
         player_sampling_multipliers: dict[str, float] | None = None,
+        checkpoint_store: CandidateCheckpointStore | None = None,
+        checkpoint_run_fingerprint: str | None = None,
+        checkpoint_stage_index: int = 0,
+        checkpoint_interval_attempts: int = 10000,
+        initial_lineups: list[list[PlayerPoolRow]] | None = None,
+        initial_attempts: int = 0,
+        checkpoint_progress_callback: Callable[[int, int], None] | None = None,
     ) -> list[list[PlayerPoolRow]]:
         by_pos: dict[str, list[PlayerPoolRow]] = defaultdict(list)
         for player in players:
@@ -5590,7 +5609,9 @@ class LineupLearningService:
             or len(by_pos["TE"]) < 1
             or len(by_pos["DST"]) < 1
         ):
-            raise ValueError("Insufficient player pool for lineup construction.")
+            raise CandidateGenerationInsufficientError(
+                "Insufficient player pool for lineup construction."
+            )
 
         def weighted_pick(rows: list[PlayerPoolRow], count: int, selected: set[str]) -> list[PlayerPoolRow] | None:
             eligible = [row for row in rows if row.uid not in selected]
@@ -5615,59 +5636,122 @@ class LineupLearningService:
             idx = rng.choice(len(eligible), size=count, replace=False, p=weights)
             return [eligible[int(i)] for i in idx]
 
-        lineups: list[list[PlayerPoolRow]] = []
-        seen_keys: set[tuple[str, ...]] = set()
-        attempts = 0
+        lineups = list(initial_lineups or [])
+        seen_keys = {
+            tuple(sorted(row.uid for row in lineup))
+            for lineup in lineups
+        }
+        if len(seen_keys) != len(lineups):
+            raise ValueError("Candidate checkpoint contains duplicate lineups.")
+        for lineup_index, lineup in enumerate(lineups):
+            salary = int(sum(row.salary for row in lineup))
+            if salary < min_salary_floor or salary > DK_SALARY_CAP:
+                raise ValueError(
+                    "Candidate checkpoint lineup salary is invalid for the current "
+                    f"strategy at lineup {lineup_index}: {salary}."
+                )
+        attempts = max(0, int(initial_attempts))
         max_attempts = max(candidate_lineups * max_attempts_multiplier, 12000)
-        while len(lineups) < candidate_lineups and attempts < max_attempts:
-            attempts += 1
+        if attempts > max_attempts:
+            raise ValueError(
+                "Candidate checkpoint attempts exceed the current strategy limit."
+            )
+        if len(lineups) > candidate_lineups:
+            raise ValueError(
+                "Candidate checkpoint contains more lineups than the current strategy target."
+            )
+        checkpoint_interval = max(1, int(checkpoint_interval_attempts))
+        persisted_count = len(lineups)
+        last_checkpoint_attempt = attempts
+
+        def persist_checkpoint(status: str, *, notify: bool = False) -> None:
+            nonlocal last_checkpoint_attempt, persisted_count
+            if checkpoint_store is None:
+                return
+            if checkpoint_run_fingerprint is None:
+                raise ValueError("Candidate checkpoint run fingerprint is missing.")
+            checkpoint_store.save_progress(
+                expected_run_fingerprint=checkpoint_run_fingerprint,
+                stage_index=checkpoint_stage_index,
+                attempts=attempts,
+                max_attempts=max_attempts,
+                rng_state=rng.bit_generator.state,
+                lineups=lineups,
+                persisted_count=persisted_count,
+                status=status,
+            )
+            persisted_count = len(lineups)
+            last_checkpoint_attempt = attempts
+            if notify and checkpoint_progress_callback is not None:
+                checkpoint_progress_callback(attempts, len(lineups))
+
+        def sample_lineup() -> list[PlayerPoolRow] | None:
             selected: set[str] = set()
             qb = weighted_pick(by_pos["QB"], 1, selected)
             if qb is None:
-                continue
+                return None
             selected.update(row.uid for row in qb)
             rb = weighted_pick(by_pos["RB"], 2, selected)
             if rb is None:
-                continue
+                return None
             selected.update(row.uid for row in rb)
             wr = weighted_pick(by_pos["WR"], 3, selected)
             if wr is None:
-                continue
+                return None
             selected.update(row.uid for row in wr)
             te = weighted_pick(by_pos["TE"], 1, selected)
             if te is None:
-                continue
+                return None
             selected.update(row.uid for row in te)
             flex_pool = by_pos["RB"] + by_pos["WR"] + by_pos["TE"]
             flex = weighted_pick(flex_pool, 1, selected)
             if flex is None:
-                continue
+                return None
             selected.update(row.uid for row in flex)
             dst = weighted_pick(by_pos["DST"], 1, selected)
             if dst is None:
-                continue
+                return None
+            return qb + rb + wr + te + flex + dst
 
-            lineup = qb + rb + wr + te + flex + dst
-            if not _lineup_satisfies_roster_rules(lineup):
-                continue
-            salary = int(sum(row.salary for row in lineup))
-            if salary > DK_SALARY_CAP or salary < min_salary_floor:
-                continue
-            key = tuple(sorted(row.uid for row in lineup))
-            if key in seen_keys:
-                continue
-            seen_keys.add(key)
-            lineups.append(lineup)
+        try:
+            while len(lineups) < candidate_lineups and attempts < max_attempts:
+                attempts += 1
+                lineup = sample_lineup()
+                if lineup is not None and _lineup_satisfies_roster_rules(lineup):
+                    salary = int(sum(row.salary for row in lineup))
+                    key = tuple(sorted(row.uid for row in lineup))
+                    if (
+                        min_salary_floor <= salary <= DK_SALARY_CAP
+                        and key not in seen_keys
+                    ):
+                        seen_keys.add(key)
+                        lineups.append(lineup)
+
+                if attempts - last_checkpoint_attempt >= checkpoint_interval:
+                    persist_checkpoint("in_progress", notify=True)
+        except BaseException:  # noqa: BLE001
+            # Only mark an interruption when the exception happened at an
+            # already-persisted attempt boundary. A mid-attempt RNG state is
+            # intentionally discarded so resume replays from the last exact
+            # durable boundary.
+            if (
+                attempts == last_checkpoint_attempt
+                and len(lineups) == persisted_count
+            ):
+                persist_checkpoint("interrupted")
+            raise
 
         min_required = min_required_lineups
         if min_required is None:
             min_required = min(candidate_lineups, max(200, candidate_lineups // 30))
         min_required = max(1, int(min_required))
         if len(lineups) < min_required:
-            raise ValueError(
+            persist_checkpoint("exhausted")
+            raise CandidateGenerationInsufficientError(
                 f"Could not generate enough valid candidate lineups ({len(lineups)}). "
                 "Try lower min_salary_floor or a larger player pool."
             )
+        persist_checkpoint("completed")
         return lineups
 
     def _enumerate_candidate_lineups_small_pool(
@@ -5758,6 +5842,67 @@ class LineupLearningService:
                                     return lineups
         return lineups
 
+    @staticmethod
+    def _candidate_checkpoint_run_config(
+        *,
+        players: list[PlayerPoolRow],
+        requested_lineups: int,
+        min_salary_floor: int,
+        player_sampling_multipliers: dict[str, float] | None,
+        checkpoint_context: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        return {
+            "generator_version": CANDIDATE_GENERATOR_VERSION,
+            "numpy_version": np.__version__,
+            "request": checkpoint_context or {},
+            "requested_lineups": int(requested_lineups),
+            "min_salary_floor": int(min_salary_floor),
+            "players": [
+                {
+                    "uid": player.uid,
+                    "team": player.team,
+                    "opponent": player.opponent,
+                    "position": player.position,
+                    "salary": int(player.salary),
+                    "projected_mean_points": float(player.projected_mean_points),
+                    "projected_p90_points": float(player.projected_p90_points),
+                }
+                for player in players
+            ],
+            "player_sampling_multipliers": sorted(
+                (
+                    str(uid),
+                    float(multiplier),
+                )
+                for uid, multiplier in (player_sampling_multipliers or {}).items()
+            ),
+        }
+
+    @staticmethod
+    def _restore_checkpoint_lineups(
+        *,
+        snapshot: CandidateCheckpointSnapshot,
+        players: list[PlayerPoolRow],
+    ) -> list[list[PlayerPoolRow]]:
+        player_by_uid = {player.uid: player for player in players}
+        if len(player_by_uid) != len(players):
+            raise ValueError("Current player pool contains duplicate player UIDs.")
+        restored: list[list[PlayerPoolRow]] = []
+        for lineup_index, player_uids in enumerate(snapshot.candidate_uids):
+            missing = [uid for uid in player_uids if uid not in player_by_uid]
+            if missing:
+                raise ValueError(
+                    "Candidate checkpoint references players absent from the current pool "
+                    f"at lineup {lineup_index}: {', '.join(sorted(missing))}."
+                )
+            restored.append([player_by_uid[uid] for uid in player_uids])
+        if restored:
+            _validate_classic_lineup_batch(
+                restored,
+                context=f"checkpoint {snapshot.path}",
+            )
+        return restored
+
     def _generate_candidate_lineups_adaptive(
         self,
         *,
@@ -5766,6 +5911,11 @@ class LineupLearningService:
         min_salary_floor: int,
         rng: np.random.Generator,
         player_sampling_multipliers: dict[str, float] | None = None,
+        checkpoint_path: str | Path | None = None,
+        resume_from_checkpoint: bool = False,
+        checkpoint_interval_attempts: int = 10000,
+        checkpoint_context: dict[str, Any] | None = None,
+        checkpoint_progress_callback: Callable[[int, int], None] | None = None,
     ) -> list[list[PlayerPoolRow]]:
         target = max(100, int(requested_lineups))
         base_floor = max(0, int(min_salary_floor))
@@ -5791,8 +5941,116 @@ class LineupLearningService:
                 seen_plan.add(normalized)
                 plan.append(normalized)
 
+        checkpoint_store: CandidateCheckpointStore | None = None
+        checkpoint_snapshot: CandidateCheckpointSnapshot | None = None
+        checkpoint_run_config: dict[str, Any] | None = None
+        checkpoint_run_fingerprint: str | None = None
+        if checkpoint_path is not None:
+            checkpoint_store = CandidateCheckpointStore(checkpoint_path)
+            checkpoint_run_config = self._candidate_checkpoint_run_config(
+                players=players,
+                requested_lineups=requested_lineups,
+                min_salary_floor=min_salary_floor,
+                player_sampling_multipliers=player_sampling_multipliers,
+                checkpoint_context=checkpoint_context,
+            )
+            checkpoint_run_fingerprint = candidate_checkpoint_fingerprint(
+                checkpoint_run_config
+            )
+            if resume_from_checkpoint:
+                checkpoint_snapshot = checkpoint_store.load()
+                if checkpoint_snapshot is None:
+                    raise ValueError(
+                        f"No candidate checkpoint exists at {checkpoint_store.path}."
+                    )
+                if (
+                    checkpoint_snapshot.run_fingerprint
+                    != checkpoint_run_fingerprint
+                ):
+                    raise ValueError(
+                        "Candidate checkpoint does not match the current generation "
+                        "request or player pool."
+                    )
+                if checkpoint_snapshot.status == "completed":
+                    return self._restore_checkpoint_lineups(
+                        snapshot=checkpoint_snapshot,
+                        players=players,
+                    )
+                if checkpoint_snapshot.status not in {
+                    "in_progress",
+                    "interrupted",
+                    "exhausted",
+                }:
+                    raise ValueError(
+                        "Candidate checkpoint has unsupported status "
+                        f"{checkpoint_snapshot.status!r}."
+                    )
+
         last_error: Exception | None = None
-        for candidate_count, floor_value, min_required, attempts_multiplier in plan:
+        checkpoint_initialized = checkpoint_snapshot is not None
+        resume_stage_index = (
+            checkpoint_snapshot.stage_index
+            if checkpoint_snapshot is not None
+            else 0
+        )
+        for stage_index, (
+            candidate_count,
+            floor_value,
+            min_required,
+            attempts_multiplier,
+        ) in enumerate(plan):
+            if checkpoint_snapshot is not None and stage_index < resume_stage_index:
+                continue
+            stage_config = {
+                "method": "weighted_random",
+                "candidate_count": candidate_count,
+                "min_salary_floor": floor_value,
+                "min_required_lineups": min_required,
+                "max_attempts_multiplier": attempts_multiplier,
+            }
+            max_attempts = max(candidate_count * attempts_multiplier, 12000)
+            initial_lineups: list[list[PlayerPoolRow]] | None = None
+            initial_attempts = 0
+            if (
+                checkpoint_snapshot is not None
+                and stage_index == resume_stage_index
+            ):
+                if checkpoint_snapshot.stage_config != stage_config:
+                    raise ValueError(
+                        "Candidate checkpoint strategy does not match the current "
+                        "adaptive generation plan."
+                    )
+                if checkpoint_snapshot.max_attempts != max_attempts:
+                    raise ValueError(
+                        "Candidate checkpoint attempt limit does not match the current "
+                        "adaptive generation plan."
+                    )
+                initial_lineups = self._restore_checkpoint_lineups(
+                    snapshot=checkpoint_snapshot,
+                    players=players,
+                )
+                initial_attempts = checkpoint_snapshot.attempts
+                rng.bit_generator.state = checkpoint_snapshot.rng_state
+            elif checkpoint_store is not None:
+                if checkpoint_run_config is None or checkpoint_run_fingerprint is None:
+                    raise ValueError("Candidate checkpoint configuration is missing.")
+                if not checkpoint_initialized:
+                    checkpoint_store.start_run(
+                        run_config=checkpoint_run_config,
+                        stage_index=stage_index,
+                        stage_config=stage_config,
+                        max_attempts=max_attempts,
+                        rng_state=rng.bit_generator.state,
+                    )
+                    checkpoint_initialized = True
+                else:
+                    checkpoint_store.advance_stage(
+                        expected_run_fingerprint=checkpoint_run_fingerprint,
+                        stage_index=stage_index,
+                        stage_config=stage_config,
+                        max_attempts=max_attempts,
+                        rng_state=rng.bit_generator.state,
+                    )
             try:
                 return self._generate_candidate_lineups(
                     players=players,
@@ -5802,9 +6060,17 @@ class LineupLearningService:
                     min_required_lineups=min_required,
                     max_attempts_multiplier=attempts_multiplier,
                     player_sampling_multipliers=player_sampling_multipliers,
+                    checkpoint_store=checkpoint_store,
+                    checkpoint_run_fingerprint=checkpoint_run_fingerprint,
+                    checkpoint_stage_index=stage_index,
+                    checkpoint_interval_attempts=checkpoint_interval_attempts,
+                    initial_lineups=initial_lineups,
+                    initial_attempts=initial_attempts,
+                    checkpoint_progress_callback=checkpoint_progress_callback,
                 )
-            except ValueError as exc:
+            except CandidateGenerationInsufficientError as exc:
                 last_error = exc
+                checkpoint_snapshot = None
                 continue
 
         enum_target = max(120, min(requested_lineups, 600))
@@ -5814,6 +6080,30 @@ class LineupLearningService:
             min_salary_floor=0,
         )
         if len(enumerated) >= 20:
+            if checkpoint_store is not None:
+                if checkpoint_run_fingerprint is None:
+                    raise ValueError("Candidate checkpoint run fingerprint is missing.")
+                fallback_stage_index = len(plan)
+                checkpoint_store.advance_stage(
+                    expected_run_fingerprint=checkpoint_run_fingerprint,
+                    stage_index=fallback_stage_index,
+                    stage_config={
+                        "method": "small_pool_enumeration",
+                        "candidate_count": enum_target,
+                    },
+                    max_attempts=0,
+                    rng_state=rng.bit_generator.state,
+                )
+                checkpoint_store.save_progress(
+                    expected_run_fingerprint=checkpoint_run_fingerprint,
+                    stage_index=fallback_stage_index,
+                    attempts=0,
+                    max_attempts=0,
+                    rng_state=rng.bit_generator.state,
+                    lineups=enumerated,
+                    persisted_count=0,
+                    status="completed",
+                )
             return enumerated
 
         solver_target = max(120, min(requested_lineups, 200))
@@ -5824,6 +6114,32 @@ class LineupLearningService:
         if projected_candidates:
             projected_lineups = [lineup for lineup, _obj, _salary in projected_candidates]
             if len(projected_lineups) >= 20:
+                if checkpoint_store is not None:
+                    if checkpoint_run_fingerprint is None:
+                        raise ValueError(
+                            "Candidate checkpoint run fingerprint is missing."
+                        )
+                    fallback_stage_index = len(plan) + 1
+                    checkpoint_store.advance_stage(
+                        expected_run_fingerprint=checkpoint_run_fingerprint,
+                        stage_index=fallback_stage_index,
+                        stage_config={
+                            "method": "projected_milp",
+                            "candidate_count": solver_target,
+                        },
+                        max_attempts=0,
+                        rng_state=rng.bit_generator.state,
+                    )
+                    checkpoint_store.save_progress(
+                        expected_run_fingerprint=checkpoint_run_fingerprint,
+                        stage_index=fallback_stage_index,
+                        attempts=0,
+                        max_attempts=0,
+                        rng_state=rng.bit_generator.state,
+                        lineups=projected_lineups,
+                        persisted_count=0,
+                        status="completed",
+                    )
                 return projected_lineups
             last_error = ValueError(
                 "Projected MILP fallback produced too few candidate lineups "
@@ -6972,15 +7288,32 @@ class LineupLearningService:
             raw_map=matchup_raw_map,
             strength=effective_matchup_prior_strength,
         )
+        merged_sampling_multipliers = self._merge_sampling_multipliers(
+            classic_sampling_multipliers,
+            matchup_sampling_multipliers,
+        )
         candidate_lineups = self._generate_candidate_lineups_adaptive(
             players=target_pool,
             requested_lineups=request.candidate_lineups,
             min_salary_floor=request.min_salary_floor,
             rng=rng,
-            player_sampling_multipliers=self._merge_sampling_multipliers(
-                classic_sampling_multipliers,
-                matchup_sampling_multipliers,
+            player_sampling_multipliers=merged_sampling_multipliers,
+            checkpoint_path=request.checkpoint_path,
+            resume_from_checkpoint=request.resume_from_checkpoint,
+            checkpoint_interval_attempts=request.checkpoint_interval_attempts,
+            checkpoint_context=request.model_dump(
+                mode="json",
+                exclude={
+                    "checkpoint_path",
+                    "resume_from_checkpoint",
+                    "checkpoint_interval_attempts",
+                },
             ),
+        )
+        candidate_checkpoint_snapshot = (
+            CandidateCheckpointStore(request.checkpoint_path).load()
+            if request.checkpoint_path is not None
+            else None
         )
         _validate_classic_lineup_batch(
             candidate_lineups,
@@ -7340,6 +7673,14 @@ class LineupLearningService:
             discovered_patterns.append(
                 f"Top lineup projection mean/p90 = {rows[0].projected_mean_points:.2f}/{rows[0].projected_p90_points:.2f}."
             )
+        if candidate_checkpoint_snapshot is not None:
+            discovered_patterns.append(
+                "Candidate checkpoint: "
+                f"path={candidate_checkpoint_snapshot.path}, "
+                f"status={candidate_checkpoint_snapshot.status}, "
+                f"writes={candidate_checkpoint_snapshot.write_count}, "
+                f"resumed={request.resume_from_checkpoint}."
+            )
 
         return UltimateLineupResponse(
             source_system=request.source_system,
@@ -7358,6 +7699,22 @@ class LineupLearningService:
             matchup_outcome_prior_strength=matchup_outcome_prior_strength,
             matchup_prior_gate_model_path=matchup_prior_gate_model_path,
             duplication_risk_penalty=float(request.duplication_risk_penalty),
+            candidate_checkpoint_path=(
+                candidate_checkpoint_snapshot.path
+                if candidate_checkpoint_snapshot is not None
+                else None
+            ),
+            candidate_checkpoint_resumed=bool(request.resume_from_checkpoint),
+            candidate_checkpoint_status=(
+                candidate_checkpoint_snapshot.status
+                if candidate_checkpoint_snapshot is not None
+                else None
+            ),
+            candidate_checkpoint_writes=(
+                candidate_checkpoint_snapshot.write_count
+                if candidate_checkpoint_snapshot is not None
+                else 0
+            ),
             discovered_patterns=discovered_patterns,
             rows=rows,
             exposures=exposures,

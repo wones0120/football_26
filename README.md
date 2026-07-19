@@ -328,6 +328,42 @@ The current 15-slate, 2,856-player report observed P75/P90/P95 coverage of `76.4
 
 Classic candidate generation hard-fails before scoring if any candidate or selected lineup violates roster size, uniqueness, position, salary-cap, or offense-versus-DST rules. Errors include the lineup index and exact violation codes.
 
+## Durable Ultimate Candidate Checkpoints
+
+Large ultimate-lineup runs can persist candidate progress to a transactional SQLite artifact. The checkpoint stores player UIDs, lineup order, adaptive-strategy state, attempt count, and the exact NumPy RNG state; it does not store player display names or observed outcomes.
+
+Start a checkpointed 100k-candidate run with:
+
+```bash
+source .venv/bin/activate
+python scripts/run_ultimate_lineups.py \
+  --season 2025 \
+  --week 18 \
+  --slate sunday_main \
+  --candidate-lineups 100000 \
+  --allow-heuristics \
+  --random-seed 42 \
+  --checkpoint-path artifacts/checkpoints/2025-w18-ultimate.sqlite3
+```
+
+If the process is interrupted, repeat the same semantic arguments and add `--resume`:
+
+```bash
+python scripts/run_ultimate_lineups.py \
+  --season 2025 \
+  --week 18 \
+  --slate sunday_main \
+  --candidate-lineups 100000 \
+  --allow-heuristics \
+  --random-seed 42 \
+  --checkpoint-path artifacts/checkpoints/2025-w18-ultimate.sqlite3 \
+  --resume
+```
+
+Progress commits every `10000` generation attempts by default; override that with `--checkpoint-interval-attempts`. A signal between commits replays from the last committed attempt boundary, preserving the exact deterministic candidate sequence. Resume rejects changed request settings, generator or NumPy versions, sampling multipliers, or player-pool inputs. A completed checkpoint is reusable and skips candidate regeneration. Supplying an existing path without `--resume` starts a new run and replaces its prior checkpoint contents.
+
+The `POST /api/lineups/ultimate` request exposes the same `checkpoint_path`, `resume_from_checkpoint`, and `checkpoint_interval_attempts` controls. Its response reports the normalized checkpoint path, resume flag, final status, and transaction write count.
+
 ## Popularity and Duplication Proxy
 
 Ultimate classic lineup output now reports a `popularity_proxy` for each player and a `duplication_risk_score` for each lineup. These are explicitly not observed ownership. They use only pre-lock salary, projection, value, implied-total ranks, generated-candidate exposure, pair concentration, and salary usage.

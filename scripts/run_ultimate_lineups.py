@@ -41,6 +41,25 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--matchup-prior-gate-model-path", type=str, default=None)
     parser.add_argument("--duplication-risk-penalty", type=float, default=0.0)
     parser.add_argument("--random-seed", type=int, default=42)
+    parser.add_argument(
+        "--checkpoint-path",
+        type=str,
+        default=None,
+        help="SQLite checkpoint artifact for durable candidate-generation progress.",
+    )
+    parser.add_argument(
+        "--resume-from-checkpoint",
+        "--resume",
+        dest="resume_from_checkpoint",
+        action="store_true",
+        help="Resume the exact candidate sequence from --checkpoint-path.",
+    )
+    parser.add_argument(
+        "--checkpoint-interval-attempts",
+        type=int,
+        default=10000,
+        help="Persist candidate progress after this many generation attempts.",
+    )
     parser.add_argument("--show-lineups", type=int, default=20)
     parser.add_argument("--show-exposures", type=int, default=35)
     return parser.parse_args()
@@ -72,6 +91,9 @@ def main() -> None:
         matchup_prior_gate_model_path=args.matchup_prior_gate_model_path,
         duplication_risk_penalty=args.duplication_risk_penalty,
         random_seed=args.random_seed,
+        checkpoint_path=args.checkpoint_path,
+        resume_from_checkpoint=args.resume_from_checkpoint,
+        checkpoint_interval_attempts=args.checkpoint_interval_attempts,
     )
     with SessionLocal() as session:
         service = LineupLearningService(session)
@@ -94,6 +116,10 @@ def main() -> None:
         "matchup_outcome_prior_strength": result.matchup_outcome_prior_strength,
         "matchup_prior_gate_model_path": result.matchup_prior_gate_model_path,
         "duplication_risk_penalty": result.duplication_risk_penalty,
+        "candidate_checkpoint_path": result.candidate_checkpoint_path,
+        "candidate_checkpoint_resumed": result.candidate_checkpoint_resumed,
+        "candidate_checkpoint_status": result.candidate_checkpoint_status,
+        "candidate_checkpoint_writes": result.candidate_checkpoint_writes,
         "discovered_patterns": result.discovered_patterns,
     }
     print(json.dumps(summary, indent=2))

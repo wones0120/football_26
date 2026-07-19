@@ -5,4 +5,4 @@ __pycache__/
 .pytest_cache/
 node_modules/
 ui/dist/
-
+artifacts/checkpoints/
