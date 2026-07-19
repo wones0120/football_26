@@ -103,7 +103,8 @@ Last updated: 2026-07-19
 ## P2 - UI / Control Plane
 - [x] Add dedicated "Analysis" area for generated reports (showdown, main slate, combined).
 - [x] Add run history explorer with filters (source, season range, slate type, model config).
-- [ ] Add expandable/collapsible sections for all heavy tables by default (ingest queues, coverage, recent runs, and benchmark history default collapsed; simulation/backtest result tables remain).
+- [x] Add expandable/collapsible sections for all heavy tables by default (ingest queues, coverage, recent runs, and benchmark history default collapsed; simulation/backtest result tables remain).
+  - Evidence: `ui/src/App.tsx` initializes unresolved repair, curated salary slices, season coverage, recent ingest runs, and benchmark history collapsed. Production build plus rendered 390px/1440px checks confirmed expand/collapse behavior, no page-level horizontal overflow, and scroll-contained result tables.
 - [x] Add export bundle action (JSON + MD report + config snapshot).
 
 ## P2 - Ops / Engineering

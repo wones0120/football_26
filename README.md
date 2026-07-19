@@ -151,6 +151,7 @@ Historical injury and ownership data are not required.
 - `Run Benchmark Suite` runs the canonical classic/showdown stack and writes a unique folder under `docs/benchmarks`.
 - `Analysis & Reports` opens the latest JSON/Markdown outputs and downloads a ZIP containing all available benchmark artifacts plus `suite_manifest.json` as the exact config snapshot.
 - Benchmark run history defaults collapsed and can be filtered by source, status, overlapping season range, classic/showdown track, or any model-config value.
+- Heavy operational tables default collapsed with compact summaries: unresolved triage/repair, curated salary slices, season coverage, recent ingest runs, and benchmark history. Simulation and backtest result tables remain directly available in horizontally scrollable containers.
 - Benchmark execution currently runs synchronously through the API, so full-history suites can keep the request open for several minutes.
 
 ### Nightly Benchmark Automation

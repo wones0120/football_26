@@ -17,12 +17,11 @@ Last reviewed: 2026-07-19
 3. Preserve current production defaults until broader walk-forward acceptance gates beat them.
 
 ### Next
-1. Default-collapse the remaining heavy control-plane table sections.
-2. Add contest-specific cash/GPP objectives.
+1. Add contest-specific cash/GPP objectives.
+2. Add late swap for staggered lock times.
 
 ### Later
-1. Add late swap for staggered lock times.
-2. Add point-in-time weather/news shock scenarios.
+1. Add point-in-time weather/news shock scenarios.
 
 ## Phase 1 (Now): Data Foundation
 1. Canonical identity tables (`player_master`, `player_alias`, `unresolved_player_queue`).
