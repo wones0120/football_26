@@ -20,6 +20,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--season", type=int, required=True)
     parser.add_argument("--week", type=int, required=True)
     parser.add_argument("--slate", type=str, default="sunday_main")
+    parser.add_argument(
+        "--contest-objective",
+        choices=["balanced", "cash", "gpp"],
+        default="balanced",
+    )
     parser.add_argument("--candidate-lineups", type=int, default=100000)
     parser.add_argument("--output-lineups", type=int, default=150)
     parser.add_argument("--min-salary-floor", type=int, default=43000)
@@ -72,6 +77,7 @@ def main() -> None:
         season=args.season,
         week=args.week,
         slate=args.slate,
+        contest_objective=args.contest_objective,
         candidate_lineups=args.candidate_lineups,
         output_lineups=args.output_lineups,
         min_salary_floor=args.min_salary_floor,
@@ -104,6 +110,8 @@ def main() -> None:
         "season": result.season,
         "week": result.week,
         "slate": result.slate,
+        "contest_objective": result.contest_objective,
+        "contest_objective_weights": result.contest_objective_weights,
         "candidate_lineups_requested": result.candidate_lineups_requested,
         "generated_candidate_lineups": result.generated_candidate_lineups,
         "output_lineups": result.output_lineups,
@@ -133,7 +141,8 @@ def main() -> None:
         print(
             f"  #{row.rank:03d} salary={row.salary_used} left={row.salary_left} "
             f"mean={row.projected_mean_points:.2f} p90={row.projected_p90_points:.2f} "
-            f"policy={row.policy_score:.4f} score={row.composite_score:.4f} "
+            f"policy={row.policy_score:.4f} base={row.base_composite_score:.4f} "
+            f"score={row.composite_score:.4f} "
             f"dup_proxy={row.duplication_risk_score:.3f}"
         )
         print(f"    {names}")

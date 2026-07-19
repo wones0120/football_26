@@ -2,6 +2,13 @@
 
 This log records decisions that affect reproducibility, production defaults, or historical-model acceptance. The operational backlog remains in `docs/TODO.md`.
 
+## 2026-07-19 — Keep contest objectives explicit and balanced by default
+
+- Decision: expose caller-selected `balanced`, `cash`, and `gpp` ultimate-lineup profiles with fixed response-visible weights. Cash combines base score `0.25`, projected mean `0.45`, and learned quality / one-minus-bust probability `0.30`. GPP combines base `0.25`, top-tail policy `0.20`, ceiling probability `0.25`, and projected p90 `0.30`, then subtracts `0.15` of standardized pre-lock duplication-proxy risk.
+- Evidence: targeted tests prove balanced returns the prior composite bit-for-bit, cash ranks stable mean/quality above a volatile ceiling-only candidate, GPP ranks equal-ceiling candidates by lower proxy duplication risk, and malformed shapes/profile names fail explicitly.
+- Rationale: cash and GPP require different risk preferences, but unavailable historical ownership, field results, cash lines, and payout structures do not justify opaque fitted contest claims. Fixed weights make the current research assumptions reproducible and easy to replace when better data arrives.
+- Production impact: `balanced` remains the default and preserves prior ranking. API/CLI callers may opt into `cash` or `gpp`; output records the profile, exact weights, pre-objective score, and final score. The separate duplication penalty remains default-off and is applied afterward.
+
 ## 2026-07-19 — Make migrations and ORM metadata agree in PostgreSQL CI
 
 - Decision: treat the ordered SQL migrations as the PostgreSQL deployment history and require SQLAlchemy metadata to describe the resulting schema exactly. Use dialect variants so production compiles identity columns as `BIGINT` and document payloads as `JSONB`, while fast SQLite tests retain `INTEGER` autoincrement and portable `JSON`.

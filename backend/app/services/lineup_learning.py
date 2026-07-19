@@ -62,6 +62,35 @@ from .simulation import calculate_dk_points
 
 
 DK_SALARY_CAP = 50000
+CONTEST_OBJECTIVE_WEIGHTS: dict[str, dict[str, float]] = {
+    "balanced": {
+        "base": 1.0,
+        "projected_mean": 0.0,
+        "quality": 0.0,
+        "policy": 0.0,
+        "ceiling": 0.0,
+        "projected_p90": 0.0,
+        "duplication_risk": 0.0,
+    },
+    "cash": {
+        "base": 0.25,
+        "projected_mean": 0.45,
+        "quality": 0.30,
+        "policy": 0.0,
+        "ceiling": 0.0,
+        "projected_p90": 0.0,
+        "duplication_risk": 0.0,
+    },
+    "gpp": {
+        "base": 0.25,
+        "projected_mean": 0.0,
+        "quality": 0.0,
+        "policy": 0.20,
+        "ceiling": 0.25,
+        "projected_p90": 0.30,
+        "duplication_risk": 0.15,
+    },
+}
 
 
 class CandidateGenerationInsufficientError(ValueError):
@@ -2747,6 +2776,71 @@ class LineupLearningService:
         if composite_std < 1e-9:
             return composite.copy()
         return composite - (strength * composite_std * _zscore(risks))
+
+    def _apply_contest_objective(
+        self,
+        *,
+        contest_objective: str,
+        base_composite_scores: np.ndarray,
+        projected_mean_points: np.ndarray,
+        projected_p90_points: np.ndarray,
+        policy_scores: np.ndarray,
+        ceiling_scores: np.ndarray,
+        quality_scores: np.ndarray,
+        duplication_risk_scores: np.ndarray,
+    ) -> np.ndarray:
+        weights = CONTEST_OBJECTIVE_WEIGHTS.get(contest_objective)
+        if weights is None:
+            raise ValueError(f"Unsupported contest objective: {contest_objective}")
+
+        base = np.asarray(base_composite_scores, dtype=float)
+        components = {
+            "projected_mean": np.asarray(projected_mean_points, dtype=float),
+            "quality": np.asarray(quality_scores, dtype=float),
+            "policy": np.asarray(policy_scores, dtype=float),
+            "ceiling": np.asarray(ceiling_scores, dtype=float),
+            "projected_p90": np.asarray(projected_p90_points, dtype=float),
+            "duplication_risk": np.asarray(
+                duplication_risk_scores,
+                dtype=float,
+            ),
+        }
+        if base.ndim != 1 or not np.isfinite(base).all():
+            raise ValueError("Contest objective requires finite one-dimensional scores.")
+        for component_name, component in components.items():
+            if (
+                component.shape != base.shape
+                or component.ndim != 1
+                or not np.isfinite(component).all()
+            ):
+                raise ValueError(
+                    "Contest objective score shape mismatch for "
+                    f"{component_name}: expected {base.shape}, got "
+                    f"{component.shape}."
+                )
+
+        if contest_objective == "balanced":
+            return base.copy()
+
+        objective_scores = weights["base"] * _zscore(base)
+        for component_name in (
+            "projected_mean",
+            "quality",
+            "policy",
+            "ceiling",
+            "projected_p90",
+        ):
+            weight = weights[component_name]
+            if weight > 0.0:
+                objective_scores = objective_scores + (
+                    weight * _zscore(components[component_name])
+                )
+        duplication_weight = weights["duplication_risk"]
+        if duplication_weight > 0.0:
+            objective_scores = objective_scores - (
+                duplication_weight * _zscore(components["duplication_risk"])
+            )
+        return objective_scores
 
     def _lineup_features(self, lineup: list[PlayerPoolRow]) -> np.ndarray:
         qb = next(row for row in lineup if row.position == "QB")
@@ -7415,6 +7509,20 @@ class LineupLearningService:
                 prior_strength=effective_matchup_prior_strength,
             )
 
+        base_composite = np.asarray(composite, dtype=float).copy()
+        contest_objective_weights = dict(
+            CONTEST_OBJECTIVE_WEIGHTS[request.contest_objective]
+        )
+        composite = self._apply_contest_objective(
+            contest_objective=request.contest_objective,
+            base_composite_scores=base_composite,
+            projected_mean_points=mean_points,
+            projected_p90_points=p90_points,
+            policy_scores=policy_scores,
+            ceiling_scores=ceiling_scores,
+            quality_scores=1.0 - bust_scores,
+            duplication_risk_scores=duplication_risk_scores,
+        )
         composite = self._apply_duplication_risk_penalty(
             composite_scores=composite,
             duplication_risk_scores=duplication_risk_scores,
@@ -7550,6 +7658,7 @@ class LineupLearningService:
                     projected_mean_points=float(mean_points[idx]),
                     projected_p90_points=float(p90_points[idx]),
                     policy_score=float(policy_scores[idx]),
+                    base_composite_score=float(base_composite[idx]),
                     composite_score=float(composite[idx]),
                     duplication_risk_score=float(duplication_risk_scores[idx]),
                     players=lineup_players,
@@ -7593,6 +7702,11 @@ class LineupLearningService:
             if keep > 0
             else 0.0
         )
+        objective_weight_text = ", ".join(
+            f"{name}={weight:.2f}"
+            for name, weight in contest_objective_weights.items()
+            if weight > 0.0
+        )
         discovered_patterns = [
             f"Models trained on {training_slates_used} slates and {training_rows_used} historical lineups.",
             (
@@ -7607,6 +7721,15 @@ class LineupLearningService:
                     "learned blended score (policy + ceiling + quality)."
                     if has_learned_signal
                     else "heuristic fallback (no learned signal)."
+                )
+            ),
+            (
+                f"Contest objective: {request.contest_objective} "
+                f"({objective_weight_text}); duplication_risk is subtracted."
+                if contest_objective_weights["duplication_risk"] > 0.0
+                else (
+                    f"Contest objective: {request.contest_objective} "
+                    f"({objective_weight_text})."
                 )
             ),
             (
@@ -7687,6 +7810,8 @@ class LineupLearningService:
             season=request.season,
             week=request.week,
             slate=request.slate,
+            contest_objective=request.contest_objective,
+            contest_objective_weights=contest_objective_weights,
             candidate_lineups_requested=request.candidate_lineups,
             generated_candidate_lineups=len(candidate_lineups),
             output_lineups=keep,

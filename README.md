@@ -420,6 +420,36 @@ Progress commits every `10000` generation attempts by default; override that wit
 
 The `POST /api/lineups/ultimate` request exposes the same `checkpoint_path`, `resume_from_checkpoint`, and `checkpoint_interval_attempts` controls. Its response reports the normalized checkpoint path, resume flag, final status, and transaction write count.
 
+## Contest-Specific Lineup Objectives
+
+Ultimate classic lineup generation supports three transparent ranking profiles:
+
+- `balanced` preserves the existing learned/heuristic composite exactly and remains the default.
+- `cash` blends the base score (`0.25`), projected mean (`0.45`), and learned quality / one-minus-bust probability (`0.30`).
+- `gpp` blends the base score (`0.25`), learned top-tail policy (`0.20`), learned ceiling probability (`0.25`), and projected p90 (`0.30`), then subtracts `0.15` of standardized pre-lock duplication-proxy risk.
+
+Select a profile with:
+
+```bash
+source .venv/bin/activate
+python scripts/run_ultimate_lineups.py \
+  --season 2025 \
+  --week 18 \
+  --slate sunday_main \
+  --contest-objective gpp \
+  --candidate-lineups 2500 \
+  --allow-heuristics
+```
+
+`POST /api/lineups/ultimate` accepts the same `contest_objective` value. API and
+CLI output report the selected profile, exact fixed weights, pre-objective base
+score, and final ranking score. An explicit `duplication_risk_penalty` is
+applied after the profile; it remains zero by default.
+
+These are pre-lock research profiles, not claims about historical cash lines,
+field ownership, or payout structure. Until contest-level outcomes are
+available, `balanced` remains the production default.
+
 ## Popularity and Duplication Proxy
 
 Ultimate classic lineup output now reports a `popularity_proxy` for each player and a `duplication_risk_score` for each lineup. These are explicitly not observed ownership. They use only pre-lock salary, projection, value, implied-total ranks, generated-candidate exposure, pair concentration, and salary usage.

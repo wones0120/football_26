@@ -737,6 +737,7 @@ class UltimateLineupRequest(BaseModel):
     season: int = Field(..., ge=2000)
     week: int = Field(..., ge=1, le=25)
     slate: str = Field(default="sunday_main", min_length=1)
+    contest_objective: Literal["balanced", "cash", "gpp"] = "balanced"
     candidate_lineups: int = Field(default=100000, ge=1000, le=500000)
     output_lineups: int = Field(default=150, ge=10, le=1000)
     min_salary_floor: int = Field(default=43000, ge=30000, le=50000)
@@ -791,6 +792,7 @@ class UltimateLineupRowResponse(BaseModel):
     projected_mean_points: float
     projected_p90_points: float
     policy_score: float
+    base_composite_score: float
     composite_score: float
     duplication_risk_score: float
     players: list[UltimateLineupPlayerRowResponse]
@@ -812,6 +814,8 @@ class UltimateLineupResponse(BaseModel):
     season: int
     week: int
     slate: str
+    contest_objective: Literal["balanced", "cash", "gpp"]
+    contest_objective_weights: dict[str, float]
     candidate_lineups_requested: int
     generated_candidate_lineups: int
     output_lineups: int
