@@ -65,6 +65,24 @@ def parse_args() -> argparse.Namespace:
         default=10000,
         help="Persist candidate progress after this many generation attempts.",
     )
+    parser.add_argument(
+        "--late-swap-as-of",
+        type=str,
+        default=None,
+        help="Timezone-aware ISO timestamp for the caller's lock assessment.",
+    )
+    parser.add_argument(
+        "--late-swap-original-source-player-keys",
+        type=str,
+        default="",
+        help="Comma-separated source-native IDs for the original nine-player lineup.",
+    )
+    parser.add_argument(
+        "--late-swap-locked-teams",
+        type=str,
+        default="",
+        help="Comma-separated teams whose games have started as of --late-swap-as-of.",
+    )
     parser.add_argument("--show-lineups", type=int, default=20)
     parser.add_argument("--show-exposures", type=int, default=35)
     return parser.parse_args()
@@ -100,6 +118,17 @@ def main() -> None:
         checkpoint_path=args.checkpoint_path,
         resume_from_checkpoint=args.resume_from_checkpoint,
         checkpoint_interval_attempts=args.checkpoint_interval_attempts,
+        late_swap_as_of=args.late_swap_as_of,
+        late_swap_original_source_player_keys=[
+            value.strip()
+            for value in args.late_swap_original_source_player_keys.split(",")
+            if value.strip()
+        ],
+        late_swap_locked_teams=[
+            value.strip()
+            for value in args.late_swap_locked_teams.split(",")
+            if value.strip()
+        ],
     )
     with SessionLocal() as session:
         service = LineupLearningService(session)
@@ -112,6 +141,16 @@ def main() -> None:
         "slate": result.slate,
         "contest_objective": result.contest_objective,
         "contest_objective_weights": result.contest_objective_weights,
+        "late_swap_applied": result.late_swap_applied,
+        "late_swap_as_of": (
+            result.late_swap_as_of.isoformat()
+            if result.late_swap_as_of is not None
+            else None
+        ),
+        "late_swap_locked_teams": result.late_swap_locked_teams,
+        "late_swap_locked_source_player_keys": (
+            result.late_swap_locked_source_player_keys
+        ),
         "candidate_lineups_requested": result.candidate_lineups_requested,
         "generated_candidate_lineups": result.generated_candidate_lineups,
         "output_lineups": result.output_lineups,
@@ -135,7 +174,8 @@ def main() -> None:
     print(f"\nTop {min(args.show_lineups, len(result.rows))} lineups:")
     for row in result.rows[: args.show_lineups]:
         names = " | ".join(
-            f"{p.position}:{p.player_name}({p.team or '-'},{p.salary})"
+            f"{p.position}:{p.player_name}({p.team or '-'},{p.salary}"
+            f"{',LOCKED' if p.is_locked else ''})"
             for p in row.players
         )
         print(

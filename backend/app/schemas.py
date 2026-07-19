@@ -759,6 +759,15 @@ class UltimateLineupRequest(BaseModel):
     random_seed: int | None = None
     checkpoint_path: str | None = None
     resume_from_checkpoint: bool = False
+    late_swap_as_of: datetime | None = None
+    late_swap_original_source_player_keys: list[str] = Field(
+        default_factory=list,
+        max_length=9,
+    )
+    late_swap_locked_teams: list[str] = Field(
+        default_factory=list,
+        max_length=32,
+    )
     checkpoint_interval_attempts: int = Field(
         default=10000,
         ge=100,
@@ -771,10 +780,44 @@ class UltimateLineupRequest(BaseModel):
             raise ValueError(
                 "checkpoint_path is required when resume_from_checkpoint is true"
             )
+        late_swap_requested = bool(
+            self.late_swap_as_of
+            or self.late_swap_original_source_player_keys
+            or self.late_swap_locked_teams
+        )
+        if late_swap_requested:
+            if self.late_swap_as_of is None:
+                raise ValueError(
+                    "late_swap_as_of is required for late swap"
+                )
+            if (
+                self.late_swap_as_of.tzinfo is None
+                or self.late_swap_as_of.utcoffset() is None
+            ):
+                raise ValueError(
+                    "late_swap_as_of must include a timezone offset"
+                )
+            if len(self.late_swap_original_source_player_keys) != 9:
+                raise ValueError(
+                    "late_swap_original_source_player_keys must contain "
+                    "exactly nine source-native player IDs"
+                )
+            if (
+                len(set(self.late_swap_original_source_player_keys))
+                != len(self.late_swap_original_source_player_keys)
+            ):
+                raise ValueError(
+                    "late_swap_original_source_player_keys must be unique"
+                )
+            if not self.late_swap_locked_teams:
+                raise ValueError(
+                    "late_swap_locked_teams must contain at least one team"
+                )
         return self
 
 
 class UltimateLineupPlayerRowResponse(BaseModel):
+    source_player_key: str | None = None
     player_name: str
     team: str | None
     position: str
@@ -783,6 +826,7 @@ class UltimateLineupPlayerRowResponse(BaseModel):
     projected_p90_points: float
     popularity_proxy: float
     candidate_exposure_rate: float
+    is_locked: bool = False
 
 
 class UltimateLineupRowResponse(BaseModel):
@@ -816,6 +860,10 @@ class UltimateLineupResponse(BaseModel):
     slate: str
     contest_objective: Literal["balanced", "cash", "gpp"]
     contest_objective_weights: dict[str, float]
+    late_swap_applied: bool = False
+    late_swap_as_of: datetime | None = None
+    late_swap_locked_teams: list[str] = Field(default_factory=list)
+    late_swap_locked_source_player_keys: list[str] = Field(default_factory=list)
     candidate_lineups_requested: int
     generated_candidate_lineups: int
     output_lineups: int

@@ -101,6 +101,8 @@ Last updated: 2026-07-19
   - Evidence: ultimate generation now writes incremental SQLite transactions with full RNG/adaptive-stage state, rejects incompatible resumes, and reuses completed candidate sets. `backend/app/tests/test_candidate_checkpoint.py` proves resumed UID order exactly matches an uninterrupted run.
 - [x] Add contest-specific cash/GPP objective profiles without observed ownership.
   - Evidence: `backend/app/tests/test_contest_objectives.py` proves balanced preserves the existing score exactly, cash rewards mean plus bust avoidance, GPP rewards ceiling/tail signals plus lower proxy duplication risk, and invalid profiles/shapes fail explicitly.
+- [x] Add deterministic late swap for staggered lock times using source-native identities.
+  - Evidence: `backend/app/tests/test_late_swap.py` proves locked originals are required, other players from started teams are excluded, identical seeds reproduce the exact lineup sequence, invalid source IDs/original rosters fail, and lock-assessment timestamps must be timezone-aware.
 
 ## P2 - UI / Control Plane
 - [x] Add dedicated "Analysis" area for generated reports (showdown, main slate, combined).

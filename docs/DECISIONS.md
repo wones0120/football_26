@@ -2,6 +2,13 @@
 
 This log records decisions that affect reproducibility, production defaults, or historical-model acceptance. The operational backlog remains in `docs/TODO.md`.
 
+## 2026-07-19 — Make late-swap lock state explicit and identity-safe
+
+- Decision: late swap accepts the original nine source-native player IDs, a timezone-aware as-of timestamp, and caller-confirmed locked teams. Original players on those teams are required in every candidate and exempt from exposure caps; all other players on locked teams are excluded.
+- Evidence: constrained-generation tests preserve every locked player, exclude every started-game alternative, reproduce the exact candidate sequence for the same seed, reject missing source IDs and invalid original rosters, and reject naive timestamps. Candidate checkpoint fingerprints include required and excluded player IDs.
+- Rationale: source-native IDs honor deterministic identity rules, while explicit locked teams avoid guessing live lock state from incomplete or date-only historical schedule strings. Reapplying the same request is deterministic and auditable.
+- Production impact: late swap is opt-in through `POST /api/lineups/ultimate` or `scripts/run_ultimate_lineups.py`. Default generation is unchanged. Responses report the lock timestamp, normalized teams, locked source IDs, and per-player lock flags.
+
 ## 2026-07-19 — Keep contest objectives explicit and balanced by default
 
 - Decision: expose caller-selected `balanced`, `cash`, and `gpp` ultimate-lineup profiles with fixed response-visible weights. Cash combines base score `0.25`, projected mean `0.45`, and learned quality / one-minus-bust probability `0.30`. GPP combines base `0.25`, top-tail policy `0.20`, ceiling probability `0.25`, and projected p90 `0.30`, then subtracts `0.15` of standardized pre-lock duplication-proxy risk.

@@ -450,6 +450,45 @@ These are pre-lock research profiles, not claims about historical cash lines,
 field ownership, or payout structure. Until contest-level outcomes are
 available, `balanced` remains the production default.
 
+## Late Swap
+
+Ultimate classic generation can preserve already-locked players while
+re-optimizing the remaining slots. The caller supplies:
+
+- a timezone-aware lock-assessment timestamp;
+- the original lineup's nine source-native player IDs; and
+- the teams whose games have started at that timestamp.
+
+Example:
+
+```bash
+python scripts/run_ultimate_lineups.py \
+  --season 2025 \
+  --week 18 \
+  --slate sunday_main \
+  --contest-objective gpp \
+  --candidate-lineups 100000 \
+  --late-swap-as-of 2025-12-28T18:30:00-05:00 \
+  --late-swap-original-source-player-keys \
+dk-qb,dk-rb1,dk-rb2,dk-wr1,dk-wr2,dk-wr3,dk-te,dk-flex,dk-dst \
+  --late-swap-locked-teams BUF,MIA
+```
+
+Players from the original lineup whose teams are locked are required in every
+candidate and exempt from exposure caps. Every other player from a locked team
+is excluded, so a late swap cannot add a player whose game already started.
+All normal uniqueness, position, salary-cap, and offense-versus-DST checks
+still hard-fail. Repeating the same request and seed is deterministic, and
+checkpoint fingerprints include the lock constraints.
+
+`POST /api/lineups/ultimate` accepts matching `late_swap_as_of`,
+`late_swap_original_source_player_keys`, and `late_swap_locked_teams` fields.
+The response records the normalized teams, locked source IDs, timestamp, and
+an `is_locked` flag per player.
+
+Lock state is deliberately caller-authoritative. The service does not infer a
+live contest lock from historical schedule strings or display names.
+
 ## Popularity and Duplication Proxy
 
 Ultimate classic lineup output now reports a `popularity_proxy` for each player and a `duplication_risk_score` for each lineup. These are explicitly not observed ownership. They use only pre-lock salary, projection, value, implied-total ranks, generated-candidate exposure, pair concentration, and salary usage.

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added deterministic ultimate-lineup late swap using a timezone-aware as-of timestamp, the original nine source-native player IDs, and explicit locked teams. Locked originals remain in every lineup and bypass exposure caps; other players from started teams are excluded; constraints are checkpoint-fingerprinted and response-visible.
 - Added caller-selected `balanced`, `cash`, and `gpp` ultimate-lineup objectives with fixed observable weights: balanced preserves existing ranking, cash emphasizes mean plus bust avoidance, and GPP emphasizes top-tail/ceiling/p90 signals plus pre-lock proxy uniqueness. Balanced remains the default.
 - Validated and documented default-collapsed unresolved repair, curated salary, season coverage, recent ingest, and benchmark-history tables, while keeping simulation/backtest results visible and horizontally scrollable across desktop and 390px mobile layouts.
 - Added a deterministic ingestion-to-backtest integration test that mocks only the external nflreadpy boundary while exercising canonical player bootstrap, weekly-stat ingest, DraftKings raw/curated salary persistence, cross-source identity resolution, prior-week simulation, and actual scoring in one database session.

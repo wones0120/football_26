@@ -4857,6 +4857,8 @@ class LineupLearningService:
         *,
         players: list[PlayerPoolRow],
         top_k: int,
+        required_player_uids: set[str] | None = None,
+        excluded_player_uids: set[str] | None = None,
     ) -> list[tuple[list[PlayerPoolRow], float, int]]:
         if top_k <= 0 or not players:
             return []
@@ -4873,6 +4875,8 @@ class LineupLearningService:
             objective_scores=objective_scores,
             top_k=top_k,
             solver_name="top_projected_lineups",
+            required_player_uids=required_player_uids,
+            excluded_player_uids=excluded_player_uids,
         )
 
     def _optimize_top_lineups_by_linear_scores(
@@ -4882,6 +4886,8 @@ class LineupLearningService:
         objective_scores: np.ndarray,
         top_k: int,
         solver_name: str,
+        required_player_uids: set[str] | None = None,
+        excluded_player_uids: set[str] | None = None,
     ) -> list[tuple[list[PlayerPoolRow], float, int]]:
         if not HAS_PULP:
             return []
@@ -4914,6 +4920,13 @@ class LineupLearningService:
         model += lpSum(variables[idx] for idx in skill_idx) == 7
         model += lpSum(variables[idx] for idx in range(len(players))) == 9
         model += lpSum(int(players[idx].salary) * variables[idx] for idx in range(len(players))) <= DK_SALARY_CAP
+        required_uids = set(required_player_uids or set())
+        excluded_uids = set(excluded_player_uids or set())
+        for idx, player in enumerate(players):
+            if player.uid in required_uids:
+                model += variables[idx] == 1
+            elif player.uid in excluded_uids:
+                model += variables[idx] == 0
 
         for offense_i in offense_idx:
             offense_player = players[offense_i]
@@ -5675,6 +5688,102 @@ class LineupLearningService:
         weights, bias, mean, std = self._fit_logistic(x_train, y_train)
         return weights, bias, mean, std, slates_used, total_rows, float(np.mean(y_train))
 
+    def _late_swap_constraints(
+        self,
+        *,
+        players: list[PlayerPoolRow],
+        original_source_player_keys: list[str],
+        locked_teams: list[str],
+    ) -> tuple[set[str], set[str], list[str], list[str]]:
+        if not original_source_player_keys and not locked_teams:
+            return set(), set(), [], []
+
+        player_by_source_key: dict[str, PlayerPoolRow] = {}
+        duplicate_source_keys: set[str] = set()
+        for player in players:
+            source_key = str(player.source_player_key or "").strip()
+            if not source_key:
+                continue
+            if source_key in player_by_source_key:
+                duplicate_source_keys.add(source_key)
+                continue
+            player_by_source_key[source_key] = player
+        if duplicate_source_keys:
+            raise ValueError(
+                "Late swap source-native player IDs are ambiguous in the "
+                f"selected salary slice: {', '.join(sorted(duplicate_source_keys))}."
+            )
+
+        normalized_original_keys = [
+            str(source_key).strip()
+            for source_key in original_source_player_keys
+            if str(source_key).strip()
+        ]
+        missing_source_keys = sorted(
+            set(normalized_original_keys) - set(player_by_source_key)
+        )
+        if missing_source_keys:
+            raise ValueError(
+                "Late swap original lineup references source-native player IDs "
+                "absent from the selected salary slice: "
+                f"{', '.join(missing_source_keys)}."
+            )
+        original_lineup = [
+            player_by_source_key[source_key]
+            for source_key in normalized_original_keys
+        ]
+        violations = _classic_lineup_rule_violations(original_lineup)
+        if violations:
+            raise ValueError(
+                "Late swap original lineup is invalid: "
+                + ", ".join(violations)
+            )
+
+        normalized_locked_teams = sorted(
+            {
+                normalized
+                for team in locked_teams
+                if (normalized := _canonical_team(team))
+            }
+        )
+        pool_teams = {
+            team
+            for player in players
+            if (team := _canonical_team(player.team))
+        }
+        unknown_locked_teams = sorted(
+            set(normalized_locked_teams) - pool_teams
+        )
+        if unknown_locked_teams:
+            raise ValueError(
+                "Late swap locked teams are absent from the selected salary "
+                f"slice: {', '.join(unknown_locked_teams)}."
+            )
+
+        original_uids = {player.uid for player in original_lineup}
+        required_uids = {
+            player.uid
+            for player in original_lineup
+            if _canonical_team(player.team) in normalized_locked_teams
+        }
+        excluded_uids = {
+            player.uid
+            for player in players
+            if _canonical_team(player.team) in normalized_locked_teams
+            and player.uid not in original_uids
+        }
+        locked_source_keys = sorted(
+            str(player.source_player_key)
+            for player in original_lineup
+            if player.uid in required_uids and player.source_player_key
+        )
+        return (
+            required_uids,
+            excluded_uids,
+            normalized_locked_teams,
+            locked_source_keys,
+        )
+
     def _generate_candidate_lineups(
         self,
         *,
@@ -5692,9 +5801,53 @@ class LineupLearningService:
         initial_lineups: list[list[PlayerPoolRow]] | None = None,
         initial_attempts: int = 0,
         checkpoint_progress_callback: Callable[[int, int], None] | None = None,
+        required_player_uids: set[str] | None = None,
+        excluded_player_uids: set[str] | None = None,
     ) -> list[list[PlayerPoolRow]]:
+        required_uids = set(required_player_uids or set())
+        excluded_uids = set(excluded_player_uids or set())
+        if required_uids & excluded_uids:
+            raise ValueError(
+                "Required and excluded candidate player IDs must not overlap."
+            )
+        player_by_uid = {player.uid: player for player in players}
+        missing_required = sorted(required_uids - set(player_by_uid))
+        if missing_required:
+            raise ValueError(
+                "Required candidate players are absent from the player pool: "
+                f"{', '.join(missing_required)}."
+            )
+        required_rows = [player_by_uid[uid] for uid in sorted(required_uids)]
+        required_position_counts = Counter(
+            player.position for player in required_rows
+        )
+        required_skill_count = sum(
+            required_position_counts[position]
+            for position in ("RB", "WR", "TE")
+        )
+        minimum_skill_count = (
+            max(2, required_position_counts["RB"])
+            + max(3, required_position_counts["WR"])
+            + max(1, required_position_counts["TE"])
+        )
+        if (
+            required_position_counts["QB"] > 1
+            or required_position_counts["DST"] > 1
+            or required_skill_count > 7
+            or minimum_skill_count > 7
+            or any(
+                position not in {"QB", "RB", "WR", "TE", "DST"}
+                for position in required_position_counts
+            )
+        ):
+            raise CandidateGenerationInsufficientError(
+                "Required candidate players cannot form a valid classic lineup."
+            )
+
         by_pos: dict[str, list[PlayerPoolRow]] = defaultdict(list)
         for player in players:
+            if player.uid in excluded_uids:
+                continue
             by_pos[player.position].append(player)
         if (
             len(by_pos["QB"]) < 1
@@ -5708,6 +5861,8 @@ class LineupLearningService:
             )
 
         def weighted_pick(rows: list[PlayerPoolRow], count: int, selected: set[str]) -> list[PlayerPoolRow] | None:
+            if count <= 0:
+                return []
             eligible = [row for row in rows if row.uid not in selected]
             if len(eligible) < count:
                 return None
@@ -5739,6 +5894,15 @@ class LineupLearningService:
             raise ValueError("Candidate checkpoint contains duplicate lineups.")
         for lineup_index, lineup in enumerate(lineups):
             salary = int(sum(row.salary for row in lineup))
+            lineup_uids = {row.uid for row in lineup}
+            if (
+                not required_uids.issubset(lineup_uids)
+                or lineup_uids & excluded_uids
+            ):
+                raise ValueError(
+                    "Candidate checkpoint lineup violates required/excluded "
+                    f"player constraints at lineup {lineup_index}."
+                )
             if salary < min_salary_floor or salary > DK_SALARY_CAP:
                 raise ValueError(
                     "Candidate checkpoint lineup salary is invalid for the current "
@@ -5780,32 +5944,57 @@ class LineupLearningService:
                 checkpoint_progress_callback(attempts, len(lineups))
 
         def sample_lineup() -> list[PlayerPoolRow] | None:
-            selected: set[str] = set()
-            qb = weighted_pick(by_pos["QB"], 1, selected)
+            lineup = list(required_rows)
+            selected = {row.uid for row in lineup}
+
+            qb_needed = 1 - required_position_counts["QB"]
+            qb = weighted_pick(by_pos["QB"], qb_needed, selected)
             if qb is None:
                 return None
+            lineup.extend(qb)
             selected.update(row.uid for row in qb)
-            rb = weighted_pick(by_pos["RB"], 2, selected)
+
+            rb_needed = max(0, 2 - required_position_counts["RB"])
+            rb = weighted_pick(by_pos["RB"], rb_needed, selected)
             if rb is None:
                 return None
+            lineup.extend(rb)
             selected.update(row.uid for row in rb)
-            wr = weighted_pick(by_pos["WR"], 3, selected)
+
+            wr_needed = max(0, 3 - required_position_counts["WR"])
+            wr = weighted_pick(by_pos["WR"], wr_needed, selected)
             if wr is None:
                 return None
+            lineup.extend(wr)
             selected.update(row.uid for row in wr)
-            te = weighted_pick(by_pos["TE"], 1, selected)
+
+            te_needed = max(0, 1 - required_position_counts["TE"])
+            te = weighted_pick(by_pos["TE"], te_needed, selected)
             if te is None:
                 return None
+            lineup.extend(te)
             selected.update(row.uid for row in te)
+
             flex_pool = by_pos["RB"] + by_pos["WR"] + by_pos["TE"]
-            flex = weighted_pick(flex_pool, 1, selected)
+            current_skill_count = sum(
+                1 for row in lineup if row.position in {"RB", "WR", "TE"}
+            )
+            flex = weighted_pick(
+                flex_pool,
+                7 - current_skill_count,
+                selected,
+            )
             if flex is None:
                 return None
+            lineup.extend(flex)
             selected.update(row.uid for row in flex)
-            dst = weighted_pick(by_pos["DST"], 1, selected)
+
+            dst_needed = 1 - required_position_counts["DST"]
+            dst = weighted_pick(by_pos["DST"], dst_needed, selected)
             if dst is None:
                 return None
-            return qb + rb + wr + te + flex + dst
+            lineup.extend(dst)
+            return lineup
 
         try:
             while len(lineups) < candidate_lineups and attempts < max_attempts:
@@ -5854,9 +6043,15 @@ class LineupLearningService:
         players: list[PlayerPoolRow],
         limit: int,
         min_salary_floor: int,
+        required_player_uids: set[str] | None = None,
+        excluded_player_uids: set[str] | None = None,
     ) -> list[list[PlayerPoolRow]]:
+        required_uids = set(required_player_uids or set())
+        excluded_uids = set(excluded_player_uids or set())
         by_pos: dict[str, list[PlayerPoolRow]] = defaultdict(list)
         for player in players:
+            if player.uid in excluded_uids:
+                continue
             by_pos[player.position].append(player)
         if (
             len(by_pos["QB"]) < 1
@@ -5924,6 +6119,9 @@ class LineupLearningService:
                                 lineup = [qb, *list(rb_pair), *list(wr_triplet), te, flex, dst]
                                 if not _lineup_satisfies_roster_rules(lineup):
                                     continue
+                                lineup_uids = {row.uid for row in lineup}
+                                if not required_uids.issubset(lineup_uids):
+                                    continue
                                 salary = int(sum(row.salary for row in lineup))
                                 if salary > DK_SALARY_CAP or salary < salary_floor:
                                     continue
@@ -5944,6 +6142,8 @@ class LineupLearningService:
         min_salary_floor: int,
         player_sampling_multipliers: dict[str, float] | None,
         checkpoint_context: dict[str, Any] | None,
+        required_player_uids: set[str] | None = None,
+        excluded_player_uids: set[str] | None = None,
     ) -> dict[str, Any]:
         return {
             "generator_version": CANDIDATE_GENERATOR_VERSION,
@@ -5951,6 +6151,8 @@ class LineupLearningService:
             "request": checkpoint_context or {},
             "requested_lineups": int(requested_lineups),
             "min_salary_floor": int(min_salary_floor),
+            "required_player_uids": sorted(required_player_uids or set()),
+            "excluded_player_uids": sorted(excluded_player_uids or set()),
             "players": [
                 {
                     "uid": player.uid,
@@ -6010,6 +6212,8 @@ class LineupLearningService:
         checkpoint_interval_attempts: int = 10000,
         checkpoint_context: dict[str, Any] | None = None,
         checkpoint_progress_callback: Callable[[int, int], None] | None = None,
+        required_player_uids: set[str] | None = None,
+        excluded_player_uids: set[str] | None = None,
     ) -> list[list[PlayerPoolRow]]:
         target = max(100, int(requested_lineups))
         base_floor = max(0, int(min_salary_floor))
@@ -6047,6 +6251,8 @@ class LineupLearningService:
                 min_salary_floor=min_salary_floor,
                 player_sampling_multipliers=player_sampling_multipliers,
                 checkpoint_context=checkpoint_context,
+                required_player_uids=required_player_uids,
+                excluded_player_uids=excluded_player_uids,
             )
             checkpoint_run_fingerprint = candidate_checkpoint_fingerprint(
                 checkpoint_run_config
@@ -6161,6 +6367,8 @@ class LineupLearningService:
                     initial_lineups=initial_lineups,
                     initial_attempts=initial_attempts,
                     checkpoint_progress_callback=checkpoint_progress_callback,
+                    required_player_uids=required_player_uids,
+                    excluded_player_uids=excluded_player_uids,
                 )
             except CandidateGenerationInsufficientError as exc:
                 last_error = exc
@@ -6172,6 +6380,8 @@ class LineupLearningService:
             players=players,
             limit=enum_target,
             min_salary_floor=0,
+            required_player_uids=required_player_uids,
+            excluded_player_uids=excluded_player_uids,
         )
         if len(enumerated) >= 20:
             if checkpoint_store is not None:
@@ -6204,6 +6414,8 @@ class LineupLearningService:
         projected_candidates = self._optimize_top_projected_lineups(
             players=players,
             top_k=solver_target,
+            required_player_uids=required_player_uids,
+            excluded_player_uids=excluded_player_uids,
         )
         if projected_candidates:
             projected_lineups = [lineup for lineup, _obj, _salary in projected_candidates]
@@ -7359,6 +7571,22 @@ class LineupLearningService:
                 player.projected_mean_points = global_mean
                 player.projected_p90_points = global_p90
 
+        late_swap_applied = bool(
+            request.late_swap_original_source_player_keys
+        )
+        (
+            required_player_uids,
+            excluded_player_uids,
+            late_swap_locked_teams,
+            late_swap_locked_source_player_keys,
+        ) = self._late_swap_constraints(
+            players=target_pool,
+            original_source_player_keys=(
+                request.late_swap_original_source_player_keys
+            ),
+            locked_teams=request.late_swap_locked_teams,
+        )
+
         classic_sampling_multipliers = self._classic_player_sampling_multipliers(
             players=target_pool,
             model=classic_value_model,
@@ -7403,6 +7631,8 @@ class LineupLearningService:
                     "checkpoint_interval_attempts",
                 },
             ),
+            required_player_uids=required_player_uids,
+            excluded_player_uids=excluded_player_uids,
         )
         candidate_checkpoint_snapshot = (
             CandidateCheckpointStore(request.checkpoint_path).load()
@@ -7560,7 +7790,10 @@ class LineupLearningService:
                 qb_uid: str | None = None
                 dst_uid: str | None = None
                 for player in lineup:
-                    if player_counts[player.uid] >= player_cap:
+                    if (
+                        player.uid not in required_player_uids
+                        and player_counts[player.uid] >= player_cap
+                    ):
                         blocked = True
                         break
                     if player.position == "QB":
@@ -7569,9 +7802,17 @@ class LineupLearningService:
                         dst_uid = player.uid
                 if blocked:
                     continue
-                if qb_uid is not None and qb_counts[qb_uid] >= qb_cap:
+                if (
+                    qb_uid is not None
+                    and qb_uid not in required_player_uids
+                    and qb_counts[qb_uid] >= qb_cap
+                ):
                     continue
-                if dst_uid is not None and dst_counts[dst_uid] >= dst_cap:
+                if (
+                    dst_uid is not None
+                    and dst_uid not in required_player_uids
+                    and dst_counts[dst_uid] >= dst_cap
+                ):
                     continue
 
                 selected.append(idx)
@@ -7635,6 +7876,7 @@ class LineupLearningService:
             for player in lineup:
                 lineup_players.append(
                     UltimateLineupPlayerRowResponse(
+                        source_player_key=player.source_player_key,
                         player_name=player.name,
                         team=player.team,
                         position=player.position,
@@ -7643,6 +7885,7 @@ class LineupLearningService:
                         projected_p90_points=float(player.projected_p90_points),
                         popularity_proxy=float(player.popularity_proxy),
                         candidate_exposure_rate=float(player.candidate_exposure_rate),
+                        is_locked=player.uid in required_player_uids,
                     )
                 )
                 existing = exposure_counts.get(player.uid)
@@ -7756,6 +7999,19 @@ class LineupLearningService:
             discovered_patterns.append(
                 f"Exposure caps auto-relaxed by x{cap_multiplier_used:.2f} to fill {keep} lineups."
             )
+        if late_swap_applied:
+            discovered_patterns.append(
+                "Late swap applied: "
+                f"as_of={request.late_swap_as_of.isoformat() if request.late_swap_as_of else 'unknown'}, "
+                f"locked_teams={','.join(late_swap_locked_teams)}, "
+                f"locked_players={len(late_swap_locked_source_player_keys)}, "
+                f"excluded_started_players={len(excluded_player_uids)}."
+            )
+            if required_player_uids:
+                discovered_patterns.append(
+                    "Locked players are required in every output lineup and "
+                    "exempt from exposure caps."
+                )
         if has_learned_signal:
             discovered_patterns.append(
                 "Learned blend weights: "
@@ -7812,6 +8068,12 @@ class LineupLearningService:
             slate=request.slate,
             contest_objective=request.contest_objective,
             contest_objective_weights=contest_objective_weights,
+            late_swap_applied=late_swap_applied,
+            late_swap_as_of=request.late_swap_as_of,
+            late_swap_locked_teams=late_swap_locked_teams,
+            late_swap_locked_source_player_keys=(
+                late_swap_locked_source_player_keys
+            ),
             candidate_lineups_requested=request.candidate_lineups,
             generated_candidate_lineups=len(candidate_lineups),
             output_lineups=keep,
