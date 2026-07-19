@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added a no-new-dependency, strict whole-week game-regime projection ensemble comparison with position/regime specialists, sample-size blending, and exact global fallback for sparse or unknown cells.
+- Persisted 17,342-row validation/test evidence. The validation-selected candidate worsened MAE `0.27%` on validation and `0.04%` on untouched test, so it was rejected and production remains unchanged.
 - Added immutable weekly projection-residual snapshots with source/slice uniqueness, feature and parameter hashes, code-version lineage, canonical observations, idempotent reuse, and a deterministic 2024-2025 DraftKings backfill CLI.
 - Integrated the accepted online residual learner into weekly simulation behind a DraftKings-only `Online Residual Gate` that defaults off, reads strictly prior compatible snapshots, requires four historical snapshots, and exposes adjustment/fallback observability in the API and UI.
 - Persisted a successful 15-slate residual snapshot backfill containing 3,342 observations with zero failures; an idempotency rerun reused all 15 snapshots.

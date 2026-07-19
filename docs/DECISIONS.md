@@ -2,6 +2,13 @@
 
 This log records decisions that affect reproducibility, production defaults, or historical-model acceptance. The operational backlog remains in `docs/TODO.md`.
 
+## 2026-07-18 — Keep the global projection model over regime specialists
+
+- Decision: reject the standalone position-by-total/spread-regime specialist ensemble and retain the global regression-tree research baseline.
+- Evidence: across 17,342 feature-matrix rows and 28 whole-week slices, validation selected a 300-row cell minimum and prior strength `1000`. MAE worsened `0.27%` on validation and `0.04%` on the untouched test (`2.573` to `2.574`); only two of five test slices improved.
+- Rationale: the global tree already consumes continuous total and spread features. The specialist layer added partition variance without stable incremental signal. WR improved `0.73%` on test but regressed `0.41%` on validation, so selecting WR after opening the test window would be leakage.
+- Production impact: none. Unknown and sparse cells demonstrably fall back to the global prediction, and the rejected candidate is retained only as reproducible evidence.
+
 ## 2026-07-18 — Integrate residual learning behind a default-off gate
 
 - Decision: retain prior strength `5.0` as the validation-selected online residual-learning candidate, using a 12-slice rolling window, sample-size shrinkage, and a six-point adjustment cap.

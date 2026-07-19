@@ -59,7 +59,7 @@ The deterministic walk-forward implementation combines canonical player, team-po
 
 The learner is integrated into DraftKings weekly simulation behind a default-off gate. Immutable snapshots preserve observations and model lineage, scoring reads only strictly prior compatible snapshots, and insufficient history visibly falls back to baseline. The initial backfill created 15 snapshots with 3,342 observations and zero failures; a repeat run reused all 15.
 
-## 5. Game-Regime Ensemble
+## 5. Game-Regime Ensemble — Implemented, Rejected Standalone
 
 Cluster slates into future-safe regimes such as:
 
@@ -70,6 +70,8 @@ Cluster slates into future-safe regimes such as:
 - volatile low-salary pool.
 
 Train or weight projection/captain policies by regime and retain global fallback models for sparse cells.
+
+The first bounded candidate trained position-by-total/spread-regime regression-tree specialists, blended them toward the global tree by cell sample size, and used the global prediction exactly for sparse or unknown cells. Validation selected a 300-row minimum and prior strength `1000`. Across 17,342 rows, validation MAE worsened `0.27%`, untouched-test MAE worsened `0.04%`, and only two of five test slices improved. WR improved on test but regressed on validation, so it was not selectively enabled after the test was opened. The standalone specialist formulation is closed as rejected; continuous pregame total/spread inputs remain in the global model.
 
 ## Acceptance Rules
 

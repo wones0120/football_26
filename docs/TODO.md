@@ -130,7 +130,8 @@ Last updated: 2026-07-18
 - [x] Online weekly residual learning with validation-selected shrinkage and strict prior-week cutoffs.
   - Evidence: `docs/online_residual_learning_2024_2025.{json,md}`; untouched-test MAE `4.818` to `4.602` (`+4.48%`) across 1,205 observations.
   - Integration: immutable weekly snapshots and a DraftKings-only, default-off simulation gate. `docs/online_residual_snapshot_backfill_2024_2025.json` records 15 snapshots, 3,342 observations, and zero failures; a separate verification rerun reused all 15.
-- [ ] Future-safe game-regime ensemble.
+- [x] Future-safe game-regime ensemble with global fallback evaluated.
+  - Evidence: `docs/game_regime_ensemble_2024_2025.{json,md}`; validation MAE `-0.27%`, untouched-test MAE `-0.04%`, and 2/5 test slices improved. Rejected standalone; production unchanged.
 - Roadmap: `docs/NEXT_IDEAS.md`.
 
 ## Parking Lot

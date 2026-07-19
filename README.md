@@ -420,5 +420,16 @@ python scripts/build_online_residual_snapshots.py
 
 The 2024-2025 backfill persisted 15 completed snapshots containing 3,342 canonical QB/RB/WR/TE observations with zero failures; a second run reused all 15 snapshots. In the UI, keep `Online Residual Gate` off for baseline behavior or explicitly enable it for a DraftKings simulation. Scoring uses only strictly earlier compatible snapshots, requires at least four, and reports a visible fallback warning instead of changing projections when history is insufficient. Backfill lineage is in `docs/online_residual_snapshot_backfill_2024_2025.json`.
 
+## Game-Regime Ensemble Research
+
+The future-safe regime workflow compares the current global regression-tree research baseline with position-by-total/spread-regime specialists. Specialists use only pregame schedule context, are blended toward the global model by prior sample size, and fall back to the global prediction exactly for unknown or sparse cells.
+
+```bash
+source .venv/bin/activate
+python scripts/analyze_game_regime_ensemble.py
+```
+
+Across 17,342 feature-matrix rows and 28 whole-week slices, canonical identity coverage was `79.7%` and pregame regime coverage was `100%`; identity is reported but is not a model feature or join in this comparison. Validation selected a 300-row minimum and prior strength `1000`. The candidate did not pass: validation MAE worsened `0.27%`, untouched-test MAE worsened `0.04%` (`2.573` to `2.574`), and only two of five test slices improved. WR improved on test but not validation, so enabling it would use test leakage. Production remains unchanged; evidence is in `docs/game_regime_ensemble_2024_2025.{json,md}`.
+
 Architecture decisions and acceptance status are maintained in `docs/DECISIONS.md` and `docs/MODEL_REGISTRY.md`.
 An empty-database environment can be reproduced using `docs/BOOTSTRAP_RUNBOOK.md`.
