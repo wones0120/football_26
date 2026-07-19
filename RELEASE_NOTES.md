@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Validated point-in-time shocks on DraftKings 2025 Weeks 16-18 and corrected a zero-floor edge case that could raise low-player means during volatility widening. Corrected runs preserve requested post-floor means to floating-point precision, target only requested teams/positions, produce no warnings, and reproduce exactly for the same request and seed.
 - Added deterministic point-in-time weather/news projection shocks with timezone-aware observation and scenario cutoffs, explicit team/position or stable-player-ID targeting, caller-controlled mean/volatility assumptions, persisted lineage, API/CLI/UI controls, and per-player impact reporting. The service never infers or claims unavailable historical reports.
 - Added deterministic ultimate-lineup late swap using a timezone-aware as-of timestamp, the original nine source-native player IDs, and explicit locked teams. Locked originals remain in every lineup and bypass exposure caps; other players from started teams are excluded; constraints are checkpoint-fingerprinted and response-visible.
 - Added caller-selected `balanced`, `cash`, and `gpp` ultimate-lineup objectives with fixed observable weights: balanced preserves existing ranking, cash emphasizes mean plus bust avoidance, and GPP emphasizes top-tail/ceiling/p90 signals plus pre-lock proxy uniqueness. Balanced remains the default.

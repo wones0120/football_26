@@ -190,13 +190,28 @@ def _apply_point_in_time_shock(
     if draws.size == 0:
         return draws.copy()
     baseline_mean = float(np.mean(draws))
-    shifted_mean = baseline_mean * float(mean_multiplier)
+    target_mean = baseline_mean * float(mean_multiplier)
+    if target_mean <= 0.0:
+        return np.zeros_like(draws, dtype=float)
     centered = draws - baseline_mean
-    return np.clip(
-        shifted_mean + (centered * float(volatility_multiplier)),
-        0.0,
-        None,
-    )
+    scaled_deviations = centered * float(volatility_multiplier)
+
+    # Solve for the pre-floor location that preserves the caller's requested
+    # post-floor mean. A direct shift followed by clipping can otherwise raise
+    # the realized mean for volatile, low-projection players.
+    span = max(1.0, float(np.max(np.abs(scaled_deviations))))
+    low = -span - target_mean
+    high = span + target_mean
+    for _ in range(60):
+        midpoint = (low + high) / 2.0
+        candidate_mean = float(
+            np.mean(np.clip(midpoint + scaled_deviations, 0.0, None))
+        )
+        if candidate_mean < target_mean:
+            low = midpoint
+        else:
+            high = midpoint
+    return np.clip(high + scaled_deviations, 0.0, None)
 
 
 def _current_code_version() -> str:

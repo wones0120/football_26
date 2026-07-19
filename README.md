@@ -603,6 +603,16 @@ that should reallocate carries or targets.
 These are transparent pre-lock stress assumptions, not inferred live reports
 or fabricated historical weather/news observations.
 
+Late-2025 replay validation found and corrected a zero-floor edge case so the
+realized post-floor mean now matches `mean_multiplier` exactly even when
+volatility widens. Week 16, 17, and 18 replays completed without warnings,
+target leakage, or negative outcomes; the Week 17 same-seed repeat was
+byte-identical after run metadata was excluded. Evidence is in
+`docs/point_in_time_shock_validation_2025_late_season.{json,md}`.
+
+This acceptance covers projection stress behavior only. Ultimate lineup
+generation does not yet consume a selected scenario simulation run.
+
 ## Online Weekly Residual Learning
 
 The DraftKings research workflow can now learn shrinkage-adjusted weekly projection residuals from QB/RB/WR/TE history without injury or ownership feeds. It combines only point-in-time-safe player identity, team-position, opponent-position, salary bucket, projected-value bucket, and total/spread regime signals. Every target week uses residuals from strictly earlier completed weeks, and the shrinkage strength is selected on an earlier validation window before evaluation on an untouched later test.

@@ -17,8 +17,9 @@ Last reviewed: 2026-07-19
 3. Preserve current production defaults until broader walk-forward acceptance gates beat them.
 
 ### Next
-1. Apply the completed scenario controls to upcoming slates and retain
-   baseline-versus-shock evidence in recurring research artifacts.
+1. Add an explicit, slice-validated `simulation_run_id` projection override to
+   lineup generation and measure matched baseline-versus-shock portfolio
+   sensitivity.
 
 ## Phase 1 (Now): Data Foundation
 1. Canonical identity tables (`player_master`, `player_alias`, `unresolved_player_queue`).

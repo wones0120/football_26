@@ -1,0 +1,215 @@
+{
+  "generated_at": "2026-07-19T14:31:57.963587Z",
+  "validation_scope": "projection_distribution_stress_behavior",
+  "scenario_claim": "synthetic_point_in_time_stress_tests_not_historical_causal_weather_or_news_estimates",
+  "code_context": {
+    "base_commit": "9f032ba5790a5534cdb40b58eb8b072ea2ea2268",
+    "transform_version": "post_floor_mean_preserving_v2",
+    "random_seed": 42,
+    "iterations": 5000,
+    "residual_learning": false
+  },
+  "coverage": [
+    {
+      "season": 2025,
+      "week": 16,
+      "slate": "monday_night",
+      "salary_rows": 112,
+      "mapped_rows": 108,
+      "mapping_rate": 0.9642857142857143
+    },
+    {
+      "season": 2025,
+      "week": 17,
+      "slate": "sunday_main",
+      "salary_rows": 470,
+      "mapped_rows": 459,
+      "mapping_rate": 0.9765957446808511
+    },
+    {
+      "season": 2025,
+      "week": 18,
+      "slate": "sunday_main",
+      "salary_rows": 677,
+      "mapped_rows": 663,
+      "mapping_rate": 0.9793205317577548
+    }
+  ],
+  "accepted_runs": [
+    {
+      "simulation_run_id": "9e5d9fbc-a602-41d6-9409-0caa640104df",
+      "season": 2025,
+      "week": 16,
+      "slate": "monday_night",
+      "game_context": {
+        "game_id": "2025_16_SF_IND",
+        "away_team": "SF",
+        "home_team": "IND",
+        "roof": "closed"
+      },
+      "shock": {
+        "type": "news",
+        "label": "Synthetic SF offensive-line downgrade",
+        "scenario_as_of": "2025-12-22T19:30:00-05:00",
+        "observed_at": "2025-12-22T19:00:00-05:00",
+        "teams": [
+          "SF"
+        ],
+        "positions": [
+          "QB",
+          "RB",
+          "WR",
+          "TE"
+        ],
+        "mean_multiplier": 0.92,
+        "volatility_multiplier": 1.1
+      },
+      "players_considered": 112,
+      "players_simulated": 108,
+      "affected_salary_rows": 50,
+      "affected_unique_players": 25,
+      "unexpected_targets": 0,
+      "positive_mean_deltas": 0,
+      "realized_aggregate_mean_multiplier": 0.9200000000000003,
+      "aggregate_mean_points_delta": -30.915060622914826,
+      "positive_p90_deltas": 34,
+      "max_player_mean_multiplier_error": 2.220446049250313e-16,
+      "minimum_scenario_mean_points": 2.32237214982863,
+      "scenario_warnings": []
+    },
+    {
+      "simulation_run_id": "6de45d0b-9ff6-4825-af3e-af7e0f0a85ab",
+      "season": 2025,
+      "week": 17,
+      "slate": "sunday_main",
+      "game_context": {
+        "game_id": "2025_17_PIT_CLE",
+        "away_team": "PIT",
+        "home_team": "CLE",
+        "stored_temperature_f": 45.0,
+        "stored_wind_mph": 14.0,
+        "context_is_not_point_in_time_verified": true
+      },
+      "shock": {
+        "type": "weather",
+        "label": "Synthetic PIT-CLE wind stress",
+        "scenario_as_of": "2025-12-28T12:00:00-05:00",
+        "observed_at": "2025-12-28T11:30:00-05:00",
+        "teams": [
+          "PIT",
+          "CLE"
+        ],
+        "positions": [
+          "QB",
+          "WR",
+          "TE",
+          "K"
+        ],
+        "mean_multiplier": 0.92,
+        "volatility_multiplier": 1.1
+      },
+      "players_considered": 470,
+      "players_simulated": 459,
+      "affected_salary_rows": 37,
+      "affected_unique_players": 37,
+      "unexpected_targets": 0,
+      "positive_mean_deltas": 0,
+      "realized_aggregate_mean_multiplier": 0.92,
+      "aggregate_mean_points_delta": -19.40694127259515,
+      "positive_p90_deltas": 30,
+      "max_player_mean_multiplier_error": 2.220446049250313e-16,
+      "minimum_scenario_mean_points": 1.99744621493659,
+      "scenario_warnings": []
+    },
+    {
+      "simulation_run_id": "1b07d76d-fc20-4bf3-96c5-d1ade7d80346",
+      "season": 2025,
+      "week": 18,
+      "slate": "sunday_main",
+      "game_context": {
+        "game_id": "2025_18_NYJ_BUF",
+        "away_team": "NYJ",
+        "home_team": "BUF",
+        "stored_temperature_f": 27.0,
+        "stored_wind_mph": 13.0,
+        "context_is_not_point_in_time_verified": true
+      },
+      "shock": {
+        "type": "weather",
+        "label": "Synthetic NYJ-BUF cold-wind stress",
+        "scenario_as_of": "2026-01-04T12:00:00-05:00",
+        "observed_at": "2026-01-04T11:30:00-05:00",
+        "teams": [
+          "NYJ",
+          "BUF"
+        ],
+        "positions": [
+          "QB",
+          "WR",
+          "TE",
+          "K"
+        ],
+        "mean_multiplier": 0.9,
+        "volatility_multiplier": 1.15
+      },
+      "players_considered": 677,
+      "players_simulated": 663,
+      "affected_salary_rows": 34,
+      "affected_unique_players": 34,
+      "unexpected_targets": 0,
+      "positive_mean_deltas": 0,
+      "realized_aggregate_mean_multiplier": 0.9000000000000002,
+      "aggregate_mean_points_delta": -23.994978222261164,
+      "positive_p90_deltas": 27,
+      "max_player_mean_multiplier_error": 2.220446049250313e-16,
+      "minimum_scenario_mean_points": 2.700270001584148,
+      "scenario_warnings": []
+    }
+  ],
+  "reproducibility_check": {
+    "original_run_id": "6de45d0b-9ff6-4825-af3e-af7e0f0a85ab",
+    "repeat_run_id": "632fa1c8-a9b5-4299-9e72-56670d33a542",
+    "comparison": "all response fields except simulation_run_id, started_at, and completed_at",
+    "sha256": "e6f8400b44ba4e62b686d7cbb301d099e26626fc604ff633b34c72692698ce92",
+    "exact_match": true
+  },
+  "superseded_runs": [
+    {
+      "simulation_run_id": "75a75650-be14-4265-9e2e-8449353ec098",
+      "reason": "pre-fix zero-floor clipping allowed four positive mean deltas"
+    },
+    {
+      "simulation_run_id": "bc9b8189-4d87-476b-88f1-981e11cb5639",
+      "reason": "pre-fix zero-floor clipping allowed one positive mean delta"
+    },
+    {
+      "simulation_run_id": "a24c4614-546c-448c-9107-999ada867d63",
+      "reason": "pre-fix zero-floor clipping allowed two positive mean deltas"
+    }
+  ],
+  "invariants": {
+    "all_runs_completed": true,
+    "all_runs_warning_free": true,
+    "all_targets_match_requested_teams_and_positions": true,
+    "all_scenario_means_nonnegative": true,
+    "all_realized_means_match_requested_multiplier": true,
+    "same_seed_request_is_exactly_reproducible": true
+  },
+  "acceptance": {
+    "status": "accepted_for_projection_scenario_research",
+    "accepted": [
+      "point-in-time cutoff validation",
+      "team and position targeting",
+      "nonnegative distribution transform",
+      "post-floor mean preservation",
+      "tail-volatility stress behavior",
+      "same-seed reproducibility"
+    ],
+    "not_claimed": [
+      "historical causal weather effect accuracy",
+      "historical news availability",
+      "lineup portfolio reoptimization impact"
+    ],
+    "recommended_next_step": "Add an explicit simulation_run_id projection override to lineup generation before claiming scenario portfolio sensitivity."
+  }
+}

@@ -86,6 +86,13 @@ persisted for reproducibility, and responses report sequential mean/p90 impact
 for every affected player. No live feed, historical observation, or causal
 multiplier is inferred.
 
+Late-2025 W16-W18 replay evidence is stored in
+`docs/point_in_time_shock_validation_2025_late_season.{json,md}`. The validation
+corrected a zero-floor mean-preservation edge case, produced three warning-free
+accepted runs, and exactly reproduced the W17 response for the same seed.
+Lineup generation still uses its own projection path; explicit scenario-run
+selection is the next integration step.
+
 ## Acceptance Rules
 
 1. Every feature must be available before the target slate locks.

@@ -5,9 +5,9 @@ This log records decisions that affect reproducibility, production defaults, or 
 ## 2026-07-19 — Keep weather/news shocks caller-authoritative and point-in-time
 
 - Decision: accept opt-in weather/news shocks with timezone-aware observed and scenario-cutoff timestamps, explicit team/position or stable player-ID targeting, and caller-supplied mean/volatility multipliers. Shocks compound in request order after baseline, residual, and role adjustments.
-- Evidence: `backend/app/tests/test_point_in_time_shocks.py` proves deterministic distribution transforms, exact team/position and source-ID targeting, missing-ID failure, timestamp cutoff enforcement, and persisted parameters. The production UI build exposes the default-off contract and per-player impact table.
+- Evidence: `backend/app/tests/test_point_in_time_shocks.py` proves deterministic distribution transforms, exact team/position and source-ID targeting, missing-ID failure, timestamp cutoff enforcement, post-floor mean preservation, and persisted parameters. `docs/point_in_time_shock_validation_2025_late_season.{json,md}` records warning-free W16-W18 replays, zero unexpected targets, exact requested aggregate mean multipliers, and an exact same-seed repeat.
 - Rationale: the platform can stress-test current information without pretending unavailable historical weather/news feeds exist or embedding unvalidated causal effect sizes. Stable identities and explicit multipliers keep every assumption reviewable.
-- Production impact: ordinary simulation is unchanged when `point_in_time_shocks` is empty. Requests and effective seed remain stored on `simulation_run`; responses expose the cutoff and sequential player impacts.
+- Production impact: ordinary simulation is unchanged when `point_in_time_shocks` is empty. Requests and effective seed remain stored on `simulation_run`; responses expose the cutoff and sequential player impacts. Shock means are guaranteed after the nonnegative floor; lineup generation does not yet consume scenario runs.
 
 ## 2026-07-19 — Make late-swap lock state explicit and identity-safe
 

@@ -58,6 +58,29 @@ def test_projection_shock_changes_mean_and_volatility_deterministically() -> Non
     ).tolist() == pytest.approx(adjusted.tolist())
 
 
+def test_projection_shock_preserves_requested_mean_after_zero_floor() -> None:
+    draws = np.asarray([0.0, 0.0, 0.0, 1.0, 4.0, 12.0], dtype=float)
+    target_mean = float(np.mean(draws)) * 0.9
+
+    adjusted = _apply_point_in_time_shock(
+        draws,
+        mean_multiplier=0.9,
+        volatility_multiplier=1.5,
+    )
+
+    assert np.all(adjusted >= 0.0)
+    assert float(np.mean(adjusted)) == pytest.approx(
+        target_mean,
+        abs=1e-12,
+    )
+    assert float(np.mean(adjusted)) < float(np.mean(draws))
+    assert _apply_point_in_time_shock(
+        np.zeros(6, dtype=float),
+        mean_multiplier=0.9,
+        volatility_multiplier=1.5,
+    ).tolist() == [0.0] * 6
+
+
 def test_point_in_time_shocks_target_teams_positions_or_stable_player_ids() -> None:
     service = SimulationService(session=None)  # type: ignore[arg-type]
     salary_rows = [
