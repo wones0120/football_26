@@ -16,7 +16,7 @@ class Settings(BaseSettings):
 
     pghost: str = "localhost"
     pgport: int = 5432
-    pgdatabase: str = "football_opt"
+    pgdatabase: str = "football_26_dev"
     pguser: str = "postgres"
     pgpassword: str = "postgres"
 

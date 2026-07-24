@@ -1,6 +1,6 @@
 # Next Ideas Without Vendor Historical Data
 
-Last reviewed: 2026-07-19
+Last reviewed: 2026-07-20
 
 The platform will not depend on unavailable historical injury or ownership feeds. New signals must be derivable from salary snapshots, nflreadpy history, schedules, or our own simulation/lineup outputs.
 
@@ -90,8 +90,11 @@ Late-2025 W16-W18 replay evidence is stored in
 `docs/point_in_time_shock_validation_2025_late_season.{json,md}`. The validation
 corrected a zero-floor mean-preservation edge case, produced three warning-free
 accepted runs, and exactly reproduced the W17 response for the same seed.
-Lineup generation still uses its own projection path; explicit scenario-run
-selection is the next integration step.
+Ultimate lineup generation now accepts an explicit completed scenario run.
+It can either compare that run with the lineup-default projection path or pair
+it with a compatible, unshocked `baseline_simulation_run_id`. Paired mode
+requires identical reproducibility settings, generates candidates from the
+baseline simulation, and rescores that exact shared pool under the shock.
 
 ## Acceptance Rules
 

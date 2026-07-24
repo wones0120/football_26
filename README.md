@@ -1,12 +1,14 @@
-# football_26
+# football_26 Decision OS
 
-Phase 1 foundation for a DFS data platform:
+Canonical repository for the DFS data, modeling, simulation, Digital Twin, and contest-delivery platform:
 
 1. Multi-source ingestion (DraftKings/FanDuel CSVs + nflreadpy bootstrap).
 2. Canonical player identity using `player_master_id`.
 3. Deterministic matching + unresolved queue for manual repair.
-4. Postgres-first schema with SQL migrations.
-5. API layer to trigger loads and resolve issues.
+4. Postgres-first `public` and `target` schemas with numbered SQL migrations.
+5. Leakage-safe projections, ownership, simulations, optimizers, and replay contracts.
+6. Digital Twin, War Room, Model Workbench, Operations, Contest Delivery, and Research Lab workspaces.
+7. Persistent portfolio assignment, DraftKings validation/export, and guarded human-belief learning.
 
 ## Quick Start
 
@@ -50,6 +52,15 @@ npm install
 npm run dev
 ```
 
+The control plane keeps a sticky `Workspace` jump bar above the panels. Use it to reach `Ingestion`,
+`Simulation`, `Portfolio Comparison`, `Analysis`, `Lineup Backtests`, `Unresolved Queue`, `Salary Slices`,
+`Coverage`, or `Recent Runs` without scrolling through the long simulation form and result tables.
+
+The primary application opens in `Digital Twin`. Use the product rail for `Models`, `War Room`, `Research Lab`,
+`Delivery`, `Intelligence`, and `Operations`. `Research Lab` hosts the prior Data Ops control plane in an isolated
+style boundary, preserving role/news/weather shocks, historical backtests, simulation-run selection, asynchronous
+ultimate-lineup progress, and baseline-versus-shock portfolio comparison without leaking its CSS into the product shell.
+
 ## CSV Validation Gates
 
 Salary and injury CSVs are validated before any existing curated slice is cleared or new raw/curated rows are written.
@@ -74,25 +85,17 @@ Salary and injury CSVs are validated before any existing curated slice is cleare
 - Thresholds are 24 hours for salaries, 12 hours for injuries, and 168 hours for schedules and weekly stats.
 - The UI section `Data Freshness` refreshes when the selected slice changes and after ingest actions.
 
-## API Endpoints (Initial)
+## API Families
 
-1. `POST /api/ingest/salaries`
-2. `POST /api/ingest/injuries`
-3. `POST /api/ingest/nflreadpy/bootstrap`
-4. `POST /api/ingest/nflreadpy/schedules`
-5. `POST /api/ingest/nflreadpy/weekly-stats`
-6. `GET /api/ingest/runs`
-7. `GET /api/coverage/season`
-8. `GET /api/unresolved`
-9. `POST /api/unresolved/{unresolved_id}/resolve`
-10. `POST /api/player-master/upsert`
-11. `GET /api/health`
-12. `GET /api/model/defaults`
-13. `GET /api/benchmarks/runs`
-14. `POST /api/benchmarks/run-suite`
-15. `GET /api/benchmarks/runs/{run_name}/artifacts/{artifact_name}`
-16. `GET /api/unresolved/triage`
-17. `GET /api/coverage/freshness`
+The single FastAPI application exposes 103 non-conflicting route contracts. Primary families are:
+
+- `/api/ingest`, `/api/coverage`, `/api/unresolved`, and `/api/player-master` for the canonical data foundation.
+- `/api/predict`, `/api/features`, `/api/ownership`, `/api/simulate`, and `/api/simulations` for model and scenario runs.
+- `/api/lineups`, `/api/optimizer`, `/api/portfolios`, and `/api/exports` for lineup generation and contest delivery.
+- `/api/slate/readiness` and `/api/data/quality` for point-in-time operational gates and durable quality history.
+- `/api/digital-twin` for beliefs, thought capture, guarded impact previews, and immutable model/human variants.
+- `/api/news-monitor` and `/api/agent` for live intelligence, feedback, symbolic rules, and learning evaluation.
+- `/api/benchmarks` for reproducible classic/showdown model evaluation and artifact access.
 
 ## Migration Notes
 
@@ -104,16 +107,19 @@ fresh-schema check used by CI:
 
 ```bash
 python scripts/check_schema_drift.py \
+  --schema target \
   --apply-migrations \
   --require-empty \
   --verify-idempotency
+python scripts/check_schema_drift.py
 ```
 
-The check validates contiguous migration names, the exact migration ledger, a
-second no-op migration pass, and structural agreement between the 18 migrated
-tables and SQLAlchemy metadata (columns, PostgreSQL types, nullability, primary
-keys, unique constraints, foreign keys, and indexes). It does not use
-`AUTO_CREATE_TABLES`.
+The checks validate contiguous migration names, the exact migration ledger, a
+second no-op migration pass, the migration-recorded table/column/constraint
+contract for all 55 `target` tables, and structural agreement between the 19
+migrated `public` tables and SQLAlchemy metadata. Product services only validate
+the recorded `target` contract; they never create or alter those tables at
+runtime. Neither check uses `AUTO_CREATE_TABLES`.
 
 `.github/workflows/schema-smoke.yml` runs this command against a fresh
 PostgreSQL 16 service whenever migration- or schema-related files change.
@@ -135,12 +141,21 @@ Historical injury and ownership data are not required.
 
 ## Current Status
 
-1. Phase 1 baseline is implemented.
-2. Model defaults are exposed from the backend and consumed by the UI lineup backtest controls.
-3. The UI now includes a Current Model Card plus benchmark-suite execution and recent benchmark artifact visibility.
-4. Selected-slice data freshness is available through the API and ingestion control plane.
-5. Classic walk-forward scoring learns from value-driver and game-environment lineup features.
-6. See `/Users/wones/git/football_26/docs/phase_plan.md` for the build sequence.
+1. `football_26` is the canonical combined repository; `football_opt` is a read-only reference until parity gates pass.
+2. The Digital Twin product shell and the full Data Ops/Simulation Research Lab run from one Vite application.
+3. The backend exposes both product and research API families through one FastAPI process without route collisions.
+4. All 55 product `target` tables are migration-owned through `0014`; runtime services fail on incompatible table, column, type, or constraint drift instead of repairing schema.
+5. Baseline-versus-shock portfolio generation runs asynchronously with persisted status, idempotency, progress polling, and checkpoint retry.
+6. See `docs/CONSOLIDATION.md` for the ownership contract, parity gates, and archival policy.
+
+Detailed product architecture and the imported Digital Twin roadmap are retained under `docs/product/`.
+
+## Planning And Status
+
+- `docs/TODO.md` is the single authoritative backlog for active work, including priority, status, dependencies, and acceptance checks.
+- `docs/phase_plan.md` is the compact executive roadmap and points into the canonical backlog by task ID.
+- `RELEASE_NOTES.md` records completed implementation history; `docs/DECISIONS.md` and `docs/MODEL_REGISTRY.md` preserve durable architecture and model decisions.
+- Documents under `docs/product/` are imported design references and do not override the canonical backlog.
 
 ## Benchmark Control Plane
 
@@ -420,6 +435,17 @@ Progress commits every `10000` generation attempts by default; override that wit
 
 The `POST /api/lineups/ultimate` request exposes the same `checkpoint_path`, `resume_from_checkpoint`, and `checkpoint_interval_attempts` controls. Its response reports the normalized checkpoint path, resume flag, final status, and transaction write count.
 
+## Persistent Async Ultimate-Lineup Runs
+
+The Projection Simulation UI uses persistent asynchronous runs instead of keeping a long HTTP request open:
+
+- `POST /api/lineups/ultimate-runs` accepts an `idempotency_key` plus the existing ultimate-lineup request and immediately returns a queued run.
+- Reusing the same key with the exact same request returns the existing run; reusing it with different inputs returns `409 Conflict`.
+- `GET /api/lineups/ultimate-runs/{id}` exposes queued/running/completed/failed status, training/candidate/portfolio stage progress, attempt count, checkpoint location, error text, and the final response.
+- `POST /api/lineups/ultimate-runs/{id}/retry` retries failed runs. Server-managed checkpoints under `artifacts/checkpoints/ultimate-runs/` are reused when compatible, so candidate generation resumes deterministically rather than starting over.
+
+The UI polls the run, renders stage-local progress, reuses completed idempotent results, and offers `Retry From Checkpoint` after failure. Run metadata and results are stored in the application database; candidate state remains in the transactional SQLite checkpoint artifact. Execution is currently dispatched by the API process, so a multi-instance deployment should move dispatch to a dedicated worker queue while retaining this database contract.
+
 ## Contest-Specific Lineup Objectives
 
 Ultimate classic lineup generation supports three transparent ranking profiles:
@@ -610,8 +636,68 @@ target leakage, or negative outcomes; the Week 17 same-seed repeat was
 byte-identical after run metadata was excluded. Evidence is in
 `docs/point_in_time_shock_validation_2025_late_season.{json,md}`.
 
-This acceptance covers projection stress behavior only. Ultimate lineup
-generation does not yet consume a selected scenario simulation run.
+Ultimate lineup generation can consume any completed simulation for the same
+source, season, week, and slate. The run's persisted mean and p90 outcomes
+override only players matched by `player_master_id` or `source_player_key`;
+display names are never used. Candidate generation stays on the baseline
+projection pool, then the same candidate set is rescored and exposure-capped
+under baseline and scenario projections so the comparison isolates
+reoptimization instead of candidate-sampling drift.
+
+```bash
+python scripts/run_ultimate_lineups.py \
+  --season 2025 \
+  --week 18 \
+  --slate sunday_main \
+  --simulation-run-id <completed-simulation-run-id> \
+  --baseline-simulation-run-id <compatible-unshocked-run-id> \
+  --candidate-lineups 2500 \
+  --output-lineups 20 \
+  --allow-heuristics \
+  --random-seed 42
+```
+
+`POST /api/lineups/ultimate` accepts the same optional `simulation_run_id`
+and `baseline_simulation_run_id`. A paired baseline must be completed,
+unshocked, slice-matched, and compatible with the scenario's iterations,
+seed, history, prior, noise, and residual-learning settings. The scenario
+must contain a role or point-in-time shock. The response records loaded and
+matched outcome counts plus a
+`portfolio_comparison` with lineup overlap, the baseline portfolio scored
+under baseline and scenario projections, scenario reoptimization lift,
+objective-score lift, and identity-safe exposure deltas. Missing, incomplete,
+empty, or mismatched runs fail explicitly. Legacy runs that omit the
+then-default-false residual flag are normalized to `false`. Omitting
+`baseline_simulation_run_id` retains the lineup-default-versus-scenario
+comparison; omitting `simulation_run_id` preserves prior lineup behavior and
+returns no portfolio comparison.
+
+The Projection Simulation UI exposes this workflow under `Baseline vs Shock
+Portfolio`. `Shock Simulation Run` lists completed shocked runs for the active
+source/season/week/slate, and `Compatible Baseline Run` lists only completed,
+unshocked runs that pass the same server-side reproducibility checks used by
+lineup generation. The newest compatible baseline is selected automatically;
+`Lineup-default projection (unpaired)` remains available when no persisted pair
+exists. `Compare Baseline vs Shock` displays stable-ID override counts, shared
+candidate count, lineup overlap, the held baseline before and under the shock,
+reoptimized projected-blend and objective lift, and per-player exposure deltas.
+
+A bounded end-to-end replay used completed Week 18 role-shock run
+`821c7b46-aad1-458d-a63d-055ea775c92b`: all `663` outcomes matched by stable
+ID, `944` shared candidates produced two 20-lineup portfolios with `25%`
+overlap, and reoptimization improved the scenario projected blend from
+`136.33` to `146.52` (`+10.18`) while improving the scenario objective score
+by `+0.886`. The shocked target's exposure moved from `15%` to `0%`. This is a
+hypothetical pre-lock sensitivity result, not a claim that the role change
+occurred historically.
+
+The stricter paired replay used unshocked run
+`50307558-da9d-490a-9e2c-7265e56bd3b4` against the same role-shock run. Both
+runs matched all `663` players. From `332` shared candidates, the two
+20-lineup portfolios overlapped `80%`; the shock reduced the retained
+baseline portfolio from `142.34` baseline projected-blend points to `138.10`
+under the scenario, and reoptimization recovered it to `141.38` (`+3.28`).
+The shocked target's exposure moved from `20%` to `0%`.
 
 ## Online Weekly Residual Learning
 

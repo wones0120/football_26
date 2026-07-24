@@ -30,6 +30,8 @@ from ..models import (
     PlayerGameFeatureMatrix,
     RawNflSchedule,
     RawNflWeeklyStat,
+    SimulatedPlayerOutcome,
+    SimulationRun,
 )
 from ..schemas import (
     ActualTopLineupBuildRequest,
@@ -45,7 +47,11 @@ from ..schemas import (
     OptimalVsPredictedBacktestRequest,
     OptimalVsPredictedBacktestResponse,
     OptimalVsPredictedBacktestRowResponse,
+    SimulationRunListResponse,
+    SimulationRunOptionResponse,
     UltimateLineupExposureRowResponse,
+    UltimateLineupPortfolioComparisonResponse,
+    UltimateLineupPortfolioExposureDeltaResponse,
     UltimateLineupPlayerRowResponse,
     UltimateLineupRequest,
     UltimateLineupResponse,
@@ -4548,6 +4554,7 @@ class LineupLearningService:
         matchup_outcome_model: MatchupOutcomeIntelligenceModel | None = None,
         matchup_outcome_prior_strength: float = 0.0,
         matchup_prior_gate_model: MatchupPriorGateModel | None = None,
+        progress_callback: Callable[[int, int], None] | None = None,
     ) -> tuple[list[np.ndarray], list[np.ndarray], int, int]:
         target_ord = _slice_ordinal(season, week)
         slices = self._fetch_available_slate_slices(
@@ -4618,6 +4625,8 @@ class LineupLearningService:
             x_chunks_recent.append(x_slate)
             points_chunks_recent.append(points_slate)
             slates_used += 1
+            if progress_callback is not None:
+                progress_callback(slates_used, training_window_slates)
             if slates_used >= training_window_slates:
                 break
 
@@ -5924,21 +5933,22 @@ class LineupLearningService:
 
         def persist_checkpoint(status: str, *, notify: bool = False) -> None:
             nonlocal last_checkpoint_attempt, persisted_count
-            if checkpoint_store is None:
-                return
-            if checkpoint_run_fingerprint is None:
-                raise ValueError("Candidate checkpoint run fingerprint is missing.")
-            checkpoint_store.save_progress(
-                expected_run_fingerprint=checkpoint_run_fingerprint,
-                stage_index=checkpoint_stage_index,
-                attempts=attempts,
-                max_attempts=max_attempts,
-                rng_state=rng.bit_generator.state,
-                lineups=lineups,
-                persisted_count=persisted_count,
-                status=status,
-            )
-            persisted_count = len(lineups)
+            if checkpoint_store is not None:
+                if checkpoint_run_fingerprint is None:
+                    raise ValueError(
+                        "Candidate checkpoint run fingerprint is missing."
+                    )
+                checkpoint_store.save_progress(
+                    expected_run_fingerprint=checkpoint_run_fingerprint,
+                    stage_index=checkpoint_stage_index,
+                    attempts=attempts,
+                    max_attempts=max_attempts,
+                    rng_state=rng.bit_generator.state,
+                    lineups=lineups,
+                    persisted_count=persisted_count,
+                    status=status,
+                )
+                persisted_count = len(lineups)
             last_checkpoint_attempt = attempts
             if notify and checkpoint_progress_callback is not None:
                 checkpoint_progress_callback(attempts, len(lineups))
@@ -6034,7 +6044,7 @@ class LineupLearningService:
                 f"Could not generate enough valid candidate lineups ({len(lineups)}). "
                 "Try lower min_salary_floor or a larger player pool."
             )
-        persist_checkpoint("completed")
+        persist_checkpoint("completed", notify=True)
         return lineups
 
     def _enumerate_candidate_lineups_small_pool(
@@ -7440,8 +7450,521 @@ class LineupLearningService:
             rows=rows,
         )
 
-    def build_ultimate_lineups(self, request: UltimateLineupRequest) -> UltimateLineupResponse:
+    def _load_simulation_projection_overrides(
+        self,
+        *,
+        simulation_run_id: str,
+        source_system: str,
+        season: int,
+        week: int,
+        slate: str,
+    ) -> tuple[
+        dict[str, tuple[float, float]],
+        int,
+        SimulationRun,
+    ]:
+        run = self.session.get(SimulationRun, simulation_run_id)
+        if run is None:
+            raise ValueError(
+                f"Simulation run not found: {simulation_run_id}"
+            )
+        if run.status != "completed":
+            raise ValueError(
+                f"Simulation run {simulation_run_id} is not completed "
+                f"(status={run.status})."
+            )
+        expected_slice = (source_system, season, week, slate)
+        actual_slice = (run.source_system, run.season, run.week, run.slate)
+        if actual_slice != expected_slice:
+            raise ValueError(
+                f"Simulation run {simulation_run_id} targets "
+                f"{run.source_system} {run.season}-W{run.week:02d} "
+                f"slate={run.slate}, not {source_system} {season}-W{week:02d} "
+                f"slate={slate}."
+            )
+
+        outcomes = self.session.execute(
+            select(SimulatedPlayerOutcome).where(
+                SimulatedPlayerOutcome.simulation_run_id == simulation_run_id
+            )
+        ).scalars().all()
+        if not outcomes:
+            raise ValueError(
+                f"Simulation run {simulation_run_id} has no persisted player outcomes."
+            )
+        if len(outcomes) != int(run.players_simulated):
+            raise ValueError(
+                f"Simulation run {simulation_run_id} is incomplete: "
+                f"metadata reports {run.players_simulated} simulated players "
+                f"but {len(outcomes)} outcomes are persisted."
+            )
+
+        projection_lookup: dict[str, tuple[float, float]] = {}
+        for outcome in outcomes:
+            projection = (
+                float(outcome.mean_points),
+                float(outcome.p90_points),
+            )
+            if (
+                not math.isfinite(projection[0])
+                or not math.isfinite(projection[1])
+                or projection[0] < 0.0
+                or projection[1] < 0.0
+            ):
+                raise ValueError(
+                    f"Simulation run {simulation_run_id} contains an invalid "
+                    f"projection for outcome {outcome.simulated_player_outcome_id}."
+                )
+            for stable_id in (
+                outcome.player_master_id,
+                outcome.source_player_key,
+            ):
+                if not stable_id:
+                    continue
+                existing = projection_lookup.get(stable_id)
+                if existing is not None and existing != projection:
+                    raise ValueError(
+                        f"Simulation run {simulation_run_id} contains conflicting "
+                        f"projections for stable player ID {stable_id}."
+                    )
+                projection_lookup[stable_id] = projection
+        if not projection_lookup:
+            raise ValueError(
+                f"Simulation run {simulation_run_id} has no stable player IDs "
+                "available for lineup projection overrides."
+            )
+        return projection_lookup, len(outcomes), run
+
+    def list_completed_simulation_runs(
+        self,
+        *,
+        source_system: str,
+        season: int,
+        week: int,
+        slate: str,
+        scenario_run_id: str | None = None,
+        limit: int = 100,
+    ) -> SimulationRunListResponse:
+        runs = self.session.execute(
+            select(SimulationRun)
+            .where(
+                SimulationRun.source_system == source_system,
+                SimulationRun.season == season,
+                SimulationRun.week == week,
+                SimulationRun.slate == slate,
+                SimulationRun.status == "completed",
+            )
+            .order_by(
+                SimulationRun.completed_at.desc().nullslast(),
+                SimulationRun.started_at.desc(),
+            )
+            .limit(limit)
+        ).scalars().all()
+
+        selected_scenario: SimulationRun | None = None
+        if scenario_run_id is not None:
+            selected_scenario = self.session.get(
+                SimulationRun,
+                scenario_run_id,
+            )
+            if selected_scenario is None:
+                raise ValueError(
+                    f"Simulation run not found: {scenario_run_id}"
+                )
+            if selected_scenario.status != "completed":
+                raise ValueError(
+                    f"Simulation run {scenario_run_id} is not completed "
+                    f"(status={selected_scenario.status})."
+                )
+            expected_slice = (source_system, season, week, slate)
+            actual_slice = (
+                selected_scenario.source_system,
+                selected_scenario.season,
+                selected_scenario.week,
+                selected_scenario.slate,
+            )
+            if actual_slice != expected_slice:
+                raise ValueError(
+                    f"Simulation run {scenario_run_id} targets "
+                    f"{selected_scenario.source_system} "
+                    f"{selected_scenario.season}-W"
+                    f"{selected_scenario.week:02d} "
+                    f"slate={selected_scenario.slate}, not "
+                    f"{source_system} {season}-W{week:02d} slate={slate}."
+                )
+
+        compatible_baseline_run_ids: list[str] = []
+        if selected_scenario is not None:
+            for run in runs:
+                if run.simulation_run_id == scenario_run_id:
+                    continue
+                try:
+                    self._validate_paired_simulation_runs(
+                        baseline_run=run,
+                        scenario_run=selected_scenario,
+                    )
+                except ValueError:
+                    continue
+                compatible_baseline_run_ids.append(run.simulation_run_id)
+
+        rows: list[SimulationRunOptionResponse] = []
+        for run in runs:
+            parameters = (
+                run.parameters_json
+                if isinstance(run.parameters_json, dict)
+                else {}
+            )
+            rows.append(
+                SimulationRunOptionResponse(
+                    simulation_run_id=run.simulation_run_id,
+                    source_system=run.source_system,
+                    season=run.season,
+                    week=run.week,
+                    slate=run.slate,
+                    iterations=run.iterations,
+                    random_seed=run.random_seed,
+                    players_simulated=run.players_simulated,
+                    status=run.status,
+                    has_role_shocks=bool(
+                        parameters.get("role_shocks")
+                    ),
+                    has_point_in_time_shocks=bool(
+                        parameters.get("point_in_time_shocks")
+                    ),
+                    started_at=run.started_at,
+                    completed_at=run.completed_at,
+                )
+            )
+        return SimulationRunListResponse(
+            rows=rows,
+            compatible_baseline_run_ids=compatible_baseline_run_ids,
+        )
+
+    def _validate_paired_simulation_runs(
+        self,
+        *,
+        baseline_run: SimulationRun,
+        scenario_run: SimulationRun,
+    ) -> None:
+        baseline_parameters = baseline_run.parameters_json
+        scenario_parameters = scenario_run.parameters_json
+        if not isinstance(baseline_parameters, dict):
+            raise ValueError(
+                f"Baseline simulation run {baseline_run.simulation_run_id} "
+                "does not contain reproducible request parameters."
+            )
+        if not isinstance(scenario_parameters, dict):
+            raise ValueError(
+                f"Scenario simulation run {scenario_run.simulation_run_id} "
+                "does not contain reproducible request parameters."
+            )
+
+        baseline_shocks = list(
+            baseline_parameters.get("role_shocks") or []
+        ) + list(
+            baseline_parameters.get("point_in_time_shocks") or []
+        )
+        if baseline_shocks:
+            raise ValueError(
+                f"Baseline simulation run {baseline_run.simulation_run_id} "
+                "must not contain role or point-in-time shocks."
+            )
+        scenario_shocks = list(
+            scenario_parameters.get("role_shocks") or []
+        ) + list(
+            scenario_parameters.get("point_in_time_shocks") or []
+        )
+        if not scenario_shocks:
+            raise ValueError(
+                f"Scenario simulation run {scenario_run.simulation_run_id} "
+                "must contain at least one role or point-in-time shock."
+            )
+
+        incompatible_fields: list[str] = []
+        if baseline_run.iterations != scenario_run.iterations:
+            incompatible_fields.append("iterations")
+        if (
+            baseline_run.random_seed is None
+            or scenario_run.random_seed is None
+            or baseline_run.random_seed != scenario_run.random_seed
+        ):
+            incompatible_fields.append("random_seed")
+
+        for field_name in (
+            "min_history_games",
+            "prior_weight",
+            "noise_scale",
+            "use_residual_learning",
+        ):
+            if field_name == "use_residual_learning":
+                baseline_value = baseline_parameters.get(
+                    field_name,
+                    False,
+                )
+                scenario_value = scenario_parameters.get(
+                    field_name,
+                    False,
+                )
+            elif (
+                field_name not in baseline_parameters
+                or field_name not in scenario_parameters
+            ):
+                incompatible_fields.append(field_name)
+                continue
+            else:
+                baseline_value = baseline_parameters[field_name]
+                scenario_value = scenario_parameters[field_name]
+            if field_name in {"prior_weight", "noise_scale"}:
+                try:
+                    values_match = math.isclose(
+                        float(baseline_value),
+                        float(scenario_value),
+                        rel_tol=0.0,
+                        abs_tol=1e-12,
+                    )
+                except (TypeError, ValueError):
+                    values_match = False
+            else:
+                values_match = baseline_value == scenario_value
+            if not values_match:
+                incompatible_fields.append(field_name)
+
+        if incompatible_fields:
+            field_text = ", ".join(sorted(set(incompatible_fields)))
+            raise ValueError(
+                "Paired simulation runs must use identical reproducibility "
+                f"parameters; mismatched fields: {field_text}."
+            )
+
+    def _apply_simulation_projection_overrides(
+        self,
+        *,
+        players: list[PlayerPoolRow],
+        projection_lookup: dict[str, tuple[float, float]],
+    ) -> int:
+        matched_players = 0
+        for player in players:
+            projection: tuple[float, float] | None = None
+            for stable_id in (
+                player.player_master_id,
+                player.source_player_key,
+            ):
+                if stable_id and stable_id in projection_lookup:
+                    projection = projection_lookup[stable_id]
+                    break
+            if projection is None:
+                continue
+            player.projected_mean_points = float(projection[0])
+            player.projected_p90_points = float(projection[1])
+            matched_players += 1
+        return matched_players
+
+    def _build_simulation_portfolio_comparison(
+        self,
+        *,
+        simulation_run_id: str,
+        baseline_simulation_run_id: str | None,
+        candidate_lineups: list[list[PlayerPoolRow]],
+        baseline_selected_idx: list[int],
+        scenario_selected_idx: list[int],
+        baseline_mean_points: np.ndarray,
+        baseline_p90_points: np.ndarray,
+        scenario_mean_points: np.ndarray,
+        scenario_p90_points: np.ndarray,
+        scenario_objective_scores: np.ndarray,
+    ) -> UltimateLineupPortfolioComparisonResponse:
+        baseline_signatures = {
+            self._lineup_key(candidate_lineups[idx])
+            for idx in baseline_selected_idx
+        }
+        scenario_signatures = {
+            self._lineup_key(candidate_lineups[idx])
+            for idx in scenario_selected_idx
+        }
+        overlap_count = len(baseline_signatures & scenario_signatures)
+        overlap_denominator = max(
+            1,
+            min(len(baseline_signatures), len(scenario_signatures)),
+        )
+
+        baseline_blend_scores = (
+            (0.65 * baseline_mean_points)
+            + (0.35 * baseline_p90_points)
+        )
+        scenario_blend_scores = (
+            (0.65 * scenario_mean_points)
+            + (0.35 * scenario_p90_points)
+        )
+
+        def mean_for_indices(values: np.ndarray, indices: list[int]) -> float:
+            if not indices:
+                return 0.0
+            return float(np.mean(values[np.asarray(indices, dtype=int)]))
+
+        def exposure_counts(indices: list[int]) -> Counter[str]:
+            return Counter(
+                player.uid
+                for idx in indices
+                for player in candidate_lineups[idx]
+            )
+
+        baseline_counts = exposure_counts(baseline_selected_idx)
+        scenario_counts = exposure_counts(scenario_selected_idx)
+        player_by_uid = {
+            player.uid: player
+            for lineup in candidate_lineups
+            for player in lineup
+        }
+        exposure_changes: list[
+            UltimateLineupPortfolioExposureDeltaResponse
+        ] = []
+        baseline_total = max(1, len(baseline_selected_idx))
+        scenario_total = max(1, len(scenario_selected_idx))
+        for uid in set(baseline_counts) | set(scenario_counts):
+            player = player_by_uid[uid]
+            baseline_count = int(baseline_counts.get(uid, 0))
+            scenario_count = int(scenario_counts.get(uid, 0))
+            if baseline_count == scenario_count:
+                continue
+            baseline_rate = float(baseline_count / baseline_total)
+            scenario_rate = float(scenario_count / scenario_total)
+            exposure_changes.append(
+                UltimateLineupPortfolioExposureDeltaResponse(
+                    player_master_id=player.player_master_id,
+                    source_player_key=player.source_player_key,
+                    player_name=player.name,
+                    team=player.team,
+                    position=player.position,
+                    salary=int(player.salary),
+                    baseline_exposure_count=baseline_count,
+                    baseline_exposure_rate=baseline_rate,
+                    scenario_exposure_count=scenario_count,
+                    scenario_exposure_rate=scenario_rate,
+                    exposure_rate_delta=scenario_rate - baseline_rate,
+                )
+            )
+        exposure_changes.sort(
+            key=lambda row: (
+                -abs(row.exposure_rate_delta),
+                row.player_name,
+                row.source_player_key or "",
+            )
+        )
+
+        baseline_portfolio_scenario_blend = mean_for_indices(
+            scenario_blend_scores,
+            baseline_selected_idx,
+        )
+        scenario_portfolio_scenario_blend = mean_for_indices(
+            scenario_blend_scores,
+            scenario_selected_idx,
+        )
+        baseline_portfolio_scenario_objective = mean_for_indices(
+            scenario_objective_scores,
+            baseline_selected_idx,
+        )
+        scenario_portfolio_scenario_objective = mean_for_indices(
+            scenario_objective_scores,
+            scenario_selected_idx,
+        )
+        return UltimateLineupPortfolioComparisonResponse(
+            simulation_run_id=simulation_run_id,
+            baseline_simulation_run_id=baseline_simulation_run_id,
+            shared_candidate_lineups=len(candidate_lineups),
+            baseline_output_lineups=len(baseline_selected_idx),
+            scenario_output_lineups=len(scenario_selected_idx),
+            lineup_overlap_count=overlap_count,
+            lineup_overlap_rate=float(overlap_count / overlap_denominator),
+            baseline_portfolio_baseline_projected_blend=mean_for_indices(
+                baseline_blend_scores,
+                baseline_selected_idx,
+            ),
+            baseline_portfolio_scenario_projected_blend=(
+                baseline_portfolio_scenario_blend
+            ),
+            scenario_portfolio_scenario_projected_blend=(
+                scenario_portfolio_scenario_blend
+            ),
+            projected_blend_reoptimization_lift=(
+                scenario_portfolio_scenario_blend
+                - baseline_portfolio_scenario_blend
+            ),
+            baseline_portfolio_scenario_objective_score=(
+                baseline_portfolio_scenario_objective
+            ),
+            scenario_portfolio_scenario_objective_score=(
+                scenario_portfolio_scenario_objective
+            ),
+            objective_reoptimization_lift=(
+                scenario_portfolio_scenario_objective
+                - baseline_portfolio_scenario_objective
+            ),
+            exposure_changes=exposure_changes,
+        )
+
+    def build_ultimate_lineups(
+        self,
+        request: UltimateLineupRequest,
+        progress_hook: Callable[[str, int, int, str], None] | None = None,
+    ) -> UltimateLineupResponse:
+        def report_progress(
+            stage: str,
+            current: int,
+            total: int,
+            message: str,
+        ) -> None:
+            if progress_hook is not None:
+                progress_hook(stage, current, total, message)
+
         rng = np.random.default_rng(request.random_seed)
+        report_progress(
+            "training",
+            0,
+            request.training_window_slates,
+            "Building the historical training pool.",
+        )
+        simulation_projection_lookup: dict[str, tuple[float, float]] = {}
+        simulation_outcomes_loaded = 0
+        simulation_run: SimulationRun | None = None
+        if request.simulation_run_id is not None:
+            (
+                simulation_projection_lookup,
+                simulation_outcomes_loaded,
+                simulation_run,
+            ) = self._load_simulation_projection_overrides(
+                simulation_run_id=request.simulation_run_id,
+                source_system=request.source_system,
+                season=request.season,
+                week=request.week,
+                slate=request.slate,
+            )
+        baseline_simulation_projection_lookup: dict[
+            str,
+            tuple[float, float],
+        ] = {}
+        baseline_simulation_outcomes_loaded = 0
+        baseline_simulation_run: SimulationRun | None = None
+        if request.baseline_simulation_run_id is not None:
+            (
+                baseline_simulation_projection_lookup,
+                baseline_simulation_outcomes_loaded,
+                baseline_simulation_run,
+            ) = self._load_simulation_projection_overrides(
+                simulation_run_id=request.baseline_simulation_run_id,
+                source_system=request.source_system,
+                season=request.season,
+                week=request.week,
+                slate=request.slate,
+            )
+            if simulation_run is None:
+                raise ValueError(
+                    "simulation_run_id is required when "
+                    "baseline_simulation_run_id is supplied"
+                )
+            self._validate_paired_simulation_runs(
+                baseline_run=baseline_simulation_run,
+                scenario_run=simulation_run,
+            )
         classic_value_prior_strength = float(
             getattr(request, "classic_value_driver_prior_strength", 0.0) or 0.0
         )
@@ -7473,6 +7996,25 @@ class LineupLearningService:
             matchup_outcome_model=matchup_outcome_model,
             matchup_outcome_prior_strength=matchup_outcome_prior_strength,
             matchup_prior_gate_model=matchup_prior_gate_model,
+            progress_callback=lambda current, total: report_progress(
+                "training",
+                current,
+                total,
+                (
+                    "Building the historical training pool: "
+                    f"{current}/{total} usable slates."
+                ),
+            ),
+        )
+        report_progress(
+            "training",
+            training_slates_used,
+            max(1, training_slates_used),
+            (
+                "Training pool ready: "
+                f"{training_slates_used} slates, "
+                f"{training_rows_used:,} lineups."
+            ),
         )
         history_ready = (
             training_slates_used >= request.min_training_slates
@@ -7571,6 +8113,24 @@ class LineupLearningService:
                 player.projected_mean_points = global_mean
                 player.projected_p90_points = global_p90
 
+        baseline_simulation_projection_overrides = 0
+        if request.baseline_simulation_run_id is not None:
+            baseline_simulation_projection_overrides = (
+                self._apply_simulation_projection_overrides(
+                    players=target_pool,
+                    projection_lookup=(
+                        baseline_simulation_projection_lookup
+                    ),
+                )
+            )
+            if baseline_simulation_projection_overrides == 0:
+                raise ValueError(
+                    "Baseline simulation run "
+                    f"{request.baseline_simulation_run_id} did not match any "
+                    "salary-pool player by player_master_id or "
+                    "source_player_key."
+                )
+
         late_swap_applied = bool(
             request.late_swap_original_source_player_keys
         )
@@ -7614,6 +8174,12 @@ class LineupLearningService:
             classic_sampling_multipliers,
             matchup_sampling_multipliers,
         )
+        report_progress(
+            "candidate_generation",
+            0,
+            request.candidate_lineups,
+            "Generating the shared candidate-lineup pool.",
+        )
         candidate_lineups = self._generate_candidate_lineups_adaptive(
             players=target_pool,
             requested_lineups=request.candidate_lineups,
@@ -7631,8 +8197,23 @@ class LineupLearningService:
                     "checkpoint_interval_attempts",
                 },
             ),
+            checkpoint_progress_callback=lambda attempts, count: report_progress(
+                "candidate_generation",
+                min(count, request.candidate_lineups),
+                request.candidate_lineups,
+                (
+                    f"Generated {count:,} candidates after "
+                    f"{attempts:,} attempts."
+                ),
+            ),
             required_player_uids=required_player_uids,
             excluded_player_uids=excluded_player_uids,
+        )
+        report_progress(
+            "candidate_generation",
+            len(candidate_lineups),
+            max(1, len(candidate_lineups)),
+            f"Shared candidate pool ready: {len(candidate_lineups):,} lineups.",
         )
         candidate_checkpoint_snapshot = (
             CandidateCheckpointStore(request.checkpoint_path).load()
@@ -7659,16 +8240,6 @@ class LineupLearningService:
             lineups=candidate_lineups,
             popularity_by_uid=popularity_by_uid,
         )
-        x_candidates = np.vstack([self._lineup_features(lineup) for lineup in candidate_lineups])
-        mean_points = np.asarray(
-            [sum(player.projected_mean_points for player in lineup) for lineup in candidate_lineups],
-            dtype=float,
-        )
-        p90_points = np.asarray(
-            [sum(player.projected_p90_points for player in lineup) for lineup in candidate_lineups],
-            dtype=float,
-        )
-
         has_learned_signal = history_ready and (policy_model.has_signal or ceiling_model.has_signal or bust_model.has_signal)
         learned_only = bool(getattr(request, "learned_only", True))
         if not has_learned_signal and learned_only:
@@ -7676,185 +8247,333 @@ class LineupLearningService:
                 "No learnable signal found for this target slate. "
                 "Widen training window or lower minimum training thresholds."
             )
-
-        if has_learned_signal:
-            policy_scores = self._predict_target_model(policy_model, x_candidates)
-            ceiling_scores = self._predict_target_model(ceiling_model, x_candidates)
-            bust_scores = self._predict_target_model(bust_model, x_candidates)
-            quality_scores = 1.0 - bust_scores
-            composite = (
-                blend_intercept
-                + (blend_weights[0] * policy_scores)
-                + (blend_weights[1] * ceiling_scores)
-                + (blend_weights[2] * quality_scores)
-            )
-            classic_prior_scores = self._classic_lineup_prior_scores(
-                lineups=candidate_lineups,
-                model=classic_value_model,
-            )
-            composite = self._apply_classic_prior_to_composite(
-                composite_scores=composite,
-                prior_scores=classic_prior_scores,
-                prior_strength=classic_value_prior_strength,
-            )
-            matchup_prior_scores = self._matchup_outcome_lineup_prior_scores(
-                lineups=candidate_lineups,
-                raw_map=matchup_raw_map,
-            )
-            composite = self._apply_matchup_outcome_prior_to_composite(
-                composite_scores=composite,
-                prior_scores=matchup_prior_scores,
-                prior_strength=effective_matchup_prior_strength,
-            )
-        else:
-            # Optional heuristic fallback is only used when learned_only=False.
-            policy_scores = np.full(len(candidate_lineups), 0.5, dtype=float)
-            ceiling_scores = np.full(len(candidate_lineups), 0.5, dtype=float)
-            bust_scores = np.full(len(candidate_lineups), 0.5, dtype=float)
-            mean_std = float(np.std(mean_points))
-            p90_std = float(np.std(p90_points))
-            mean_norm = (
-                (mean_points - float(np.mean(mean_points))) / (mean_std if mean_std > 1e-9 else 1.0)
-            )
-            p90_norm = (
-                (p90_points - float(np.mean(p90_points))) / (p90_std if p90_std > 1e-9 else 1.0)
-            )
-            composite = (0.6 * mean_norm) + (0.4 * p90_norm)
-            classic_prior_scores = self._classic_lineup_prior_scores(
-                lineups=candidate_lineups,
-                model=classic_value_model,
-            )
-            composite = self._apply_classic_prior_to_composite(
-                composite_scores=composite,
-                prior_scores=classic_prior_scores,
-                prior_strength=classic_value_prior_strength,
-            )
-            matchup_prior_scores = self._matchup_outcome_lineup_prior_scores(
-                lineups=candidate_lineups,
-                raw_map=matchup_raw_map,
-            )
-            composite = self._apply_matchup_outcome_prior_to_composite(
-                composite_scores=composite,
-                prior_scores=matchup_prior_scores,
-                prior_strength=effective_matchup_prior_strength,
-            )
-
-        base_composite = np.asarray(composite, dtype=float).copy()
         contest_objective_weights = dict(
             CONTEST_OBJECTIVE_WEIGHTS[request.contest_objective]
         )
-        composite = self._apply_contest_objective(
-            contest_objective=request.contest_objective,
-            base_composite_scores=base_composite,
-            projected_mean_points=mean_points,
-            projected_p90_points=p90_points,
-            policy_scores=policy_scores,
-            ceiling_scores=ceiling_scores,
-            quality_scores=1.0 - bust_scores,
-            duplication_risk_scores=duplication_risk_scores,
+
+        def score_candidate_lineups() -> tuple[
+            np.ndarray,
+            np.ndarray,
+            np.ndarray,
+            np.ndarray,
+            np.ndarray,
+            np.ndarray,
+            np.ndarray,
+        ]:
+            x_candidates = np.vstack(
+                [self._lineup_features(lineup) for lineup in candidate_lineups]
+            )
+            candidate_mean_points = np.asarray(
+                [
+                    sum(player.projected_mean_points for player in lineup)
+                    for lineup in candidate_lineups
+                ],
+                dtype=float,
+            )
+            candidate_p90_points = np.asarray(
+                [
+                    sum(player.projected_p90_points for player in lineup)
+                    for lineup in candidate_lineups
+                ],
+                dtype=float,
+            )
+
+            if has_learned_signal:
+                candidate_policy_scores = self._predict_target_model(
+                    policy_model,
+                    x_candidates,
+                )
+                candidate_ceiling_scores = self._predict_target_model(
+                    ceiling_model,
+                    x_candidates,
+                )
+                candidate_bust_scores = self._predict_target_model(
+                    bust_model,
+                    x_candidates,
+                )
+                quality_scores = 1.0 - candidate_bust_scores
+                candidate_composite = (
+                    blend_intercept
+                    + (blend_weights[0] * candidate_policy_scores)
+                    + (blend_weights[1] * candidate_ceiling_scores)
+                    + (blend_weights[2] * quality_scores)
+                )
+            else:
+                # Optional heuristic fallback is only used when learned_only=False.
+                candidate_policy_scores = np.full(
+                    len(candidate_lineups),
+                    0.5,
+                    dtype=float,
+                )
+                candidate_ceiling_scores = np.full(
+                    len(candidate_lineups),
+                    0.5,
+                    dtype=float,
+                )
+                candidate_bust_scores = np.full(
+                    len(candidate_lineups),
+                    0.5,
+                    dtype=float,
+                )
+                mean_std = float(np.std(candidate_mean_points))
+                p90_std = float(np.std(candidate_p90_points))
+                mean_norm = (
+                    (
+                        candidate_mean_points
+                        - float(np.mean(candidate_mean_points))
+                    )
+                    / (mean_std if mean_std > 1e-9 else 1.0)
+                )
+                p90_norm = (
+                    (
+                        candidate_p90_points
+                        - float(np.mean(candidate_p90_points))
+                    )
+                    / (p90_std if p90_std > 1e-9 else 1.0)
+                )
+                candidate_composite = (0.6 * mean_norm) + (0.4 * p90_norm)
+
+            classic_prior_scores = self._classic_lineup_prior_scores(
+                lineups=candidate_lineups,
+                model=classic_value_model,
+            )
+            candidate_composite = self._apply_classic_prior_to_composite(
+                composite_scores=candidate_composite,
+                prior_scores=classic_prior_scores,
+                prior_strength=classic_value_prior_strength,
+            )
+            matchup_prior_scores = self._matchup_outcome_lineup_prior_scores(
+                lineups=candidate_lineups,
+                raw_map=matchup_raw_map,
+            )
+            candidate_composite = self._apply_matchup_outcome_prior_to_composite(
+                composite_scores=candidate_composite,
+                prior_scores=matchup_prior_scores,
+                prior_strength=effective_matchup_prior_strength,
+            )
+            candidate_base_composite = np.asarray(
+                candidate_composite,
+                dtype=float,
+            ).copy()
+            candidate_composite = self._apply_contest_objective(
+                contest_objective=request.contest_objective,
+                base_composite_scores=candidate_base_composite,
+                projected_mean_points=candidate_mean_points,
+                projected_p90_points=candidate_p90_points,
+                policy_scores=candidate_policy_scores,
+                ceiling_scores=candidate_ceiling_scores,
+                quality_scores=1.0 - candidate_bust_scores,
+                duplication_risk_scores=duplication_risk_scores,
+            )
+            candidate_composite = self._apply_duplication_risk_penalty(
+                composite_scores=candidate_composite,
+                duplication_risk_scores=duplication_risk_scores,
+                penalty_strength=request.duplication_risk_penalty,
+            )
+            return (
+                candidate_mean_points,
+                candidate_p90_points,
+                candidate_policy_scores,
+                candidate_ceiling_scores,
+                candidate_bust_scores,
+                candidate_base_composite,
+                candidate_composite,
+            )
+
+        report_progress(
+            "portfolio_selection",
+            0,
+            3,
+            "Scoring the shared candidate pool under baseline projections.",
         )
-        composite = self._apply_duplication_risk_penalty(
-            composite_scores=composite,
-            duplication_risk_scores=duplication_risk_scores,
-            penalty_strength=request.duplication_risk_penalty,
+        baseline_scores = score_candidate_lineups()
+        simulation_projection_overrides = 0
+        if request.simulation_run_id is not None:
+            simulation_projection_overrides = (
+                self._apply_simulation_projection_overrides(
+                    players=target_pool,
+                    projection_lookup=simulation_projection_lookup,
+                )
+            )
+            if simulation_projection_overrides == 0:
+                raise ValueError(
+                    f"Simulation run {request.simulation_run_id} did not match "
+                    "any salary-pool player by player_master_id or "
+                    "source_player_key."
+                )
+            active_scores = score_candidate_lineups()
+        else:
+            active_scores = baseline_scores
+        report_progress(
+            "portfolio_selection",
+            1,
+            3,
+            "Candidate scoring complete; applying portfolio exposure controls.",
         )
+        (
+            mean_points,
+            p90_points,
+            policy_scores,
+            ceiling_scores,
+            bust_scores,
+            base_composite,
+            composite,
+        ) = active_scores
+
         matchup_stack_rules = self._summarize_matchup_stack_rules(
             candidate_lineups=candidate_lineups,
             ranking_scores=composite,
         )
 
-        ranked_idx = np.argsort(-composite)
-        keep = min(request.output_lineups, len(ranked_idx))
+        keep = min(request.output_lineups, len(candidate_lineups))
+        base_player_cap = min(
+            keep,
+            max(1, int(math.floor(keep * request.max_player_exposure))),
+        )
+        base_qb_cap = min(
+            keep,
+            max(1, int(math.floor(keep * request.max_qb_exposure))),
+        )
+        base_dst_cap = min(
+            keep,
+            max(1, int(math.floor(keep * request.max_dst_exposure))),
+        )
 
-        base_player_cap = min(keep, max(1, int(math.floor(keep * request.max_player_exposure))))
-        base_qb_cap = min(keep, max(1, int(math.floor(keep * request.max_qb_exposure))))
-        base_dst_cap = min(keep, max(1, int(math.floor(keep * request.max_dst_exposure))))
+        def select_portfolio(
+            ranking_scores: np.ndarray,
+        ) -> tuple[list[int], int, int, int, float]:
+            ranked_idx = np.argsort(-ranking_scores)
 
-        def select_with_caps(multiplier: float) -> tuple[list[int], int, int, int]:
-            player_cap = min(keep, max(1, int(math.floor(base_player_cap * multiplier))))
-            qb_cap = min(keep, max(1, int(math.floor(base_qb_cap * multiplier))))
-            dst_cap = min(keep, max(1, int(math.floor(base_dst_cap * multiplier))))
+            def select_with_caps(
+                multiplier: float,
+            ) -> tuple[list[int], int, int, int]:
+                player_cap = min(
+                    keep,
+                    max(1, int(math.floor(base_player_cap * multiplier))),
+                )
+                qb_cap = min(
+                    keep,
+                    max(1, int(math.floor(base_qb_cap * multiplier))),
+                )
+                dst_cap = min(
+                    keep,
+                    max(1, int(math.floor(base_dst_cap * multiplier))),
+                )
 
-            selected: list[int] = []
-            player_counts: dict[str, int] = defaultdict(int)
-            qb_counts: dict[str, int] = defaultdict(int)
-            dst_counts: dict[str, int] = defaultdict(int)
+                selected: list[int] = []
+                player_counts: dict[str, int] = defaultdict(int)
+                qb_counts: dict[str, int] = defaultdict(int)
+                dst_counts: dict[str, int] = defaultdict(int)
 
-            for raw_idx in ranked_idx:
-                idx = int(raw_idx)
-                lineup = candidate_lineups[idx]
-                if not _lineup_satisfies_roster_rules(lineup):
-                    continue
+                for raw_idx in ranked_idx:
+                    idx = int(raw_idx)
+                    lineup = candidate_lineups[idx]
+                    if not _lineup_satisfies_roster_rules(lineup):
+                        continue
 
-                blocked = False
-                qb_uid: str | None = None
-                dst_uid: str | None = None
-                for player in lineup:
+                    blocked = False
+                    qb_uid: str | None = None
+                    dst_uid: str | None = None
+                    for player in lineup:
+                        if (
+                            player.uid not in required_player_uids
+                            and player_counts[player.uid] >= player_cap
+                        ):
+                            blocked = True
+                            break
+                        if player.position == "QB":
+                            qb_uid = player.uid
+                        elif player.position == "DST":
+                            dst_uid = player.uid
+                    if blocked:
+                        continue
                     if (
-                        player.uid not in required_player_uids
-                        and player_counts[player.uid] >= player_cap
+                        qb_uid is not None
+                        and qb_uid not in required_player_uids
+                        and qb_counts[qb_uid] >= qb_cap
                     ):
-                        blocked = True
+                        continue
+                    if (
+                        dst_uid is not None
+                        and dst_uid not in required_player_uids
+                        and dst_counts[dst_uid] >= dst_cap
+                    ):
+                        continue
+
+                    selected.append(idx)
+                    for player in lineup:
+                        player_counts[player.uid] += 1
+                    if qb_uid is not None:
+                        qb_counts[qb_uid] += 1
+                    if dst_uid is not None:
+                        dst_counts[dst_uid] += 1
+                    if len(selected) >= keep:
                         break
-                    if player.position == "QB":
-                        qb_uid = player.uid
-                    elif player.position == "DST":
-                        dst_uid = player.uid
-                if blocked:
-                    continue
-                if (
-                    qb_uid is not None
-                    and qb_uid not in required_player_uids
-                    and qb_counts[qb_uid] >= qb_cap
-                ):
-                    continue
-                if (
-                    dst_uid is not None
-                    and dst_uid not in required_player_uids
-                    and dst_counts[dst_uid] >= dst_cap
-                ):
-                    continue
 
-                selected.append(idx)
-                for player in lineup:
-                    player_counts[player.uid] += 1
-                if qb_uid is not None:
-                    qb_counts[qb_uid] += 1
-                if dst_uid is not None:
-                    dst_counts[dst_uid] += 1
-                if len(selected) >= keep:
-                    break
+                return selected, player_cap, qb_cap, dst_cap
 
-            return selected, player_cap, qb_cap, dst_cap
-
-        selected_idx: list[int] = []
-        effective_player_cap = base_player_cap
-        effective_qb_cap = base_qb_cap
-        effective_dst_cap = base_dst_cap
-        cap_multiplier_used = 1.0
-        for multiplier in (1.0, 1.25, 1.5, 2.0, 3.0, 6.0):
-            chosen, player_cap, qb_cap, dst_cap = select_with_caps(multiplier)
-            selected_idx = chosen
-            effective_player_cap = player_cap
-            effective_qb_cap = qb_cap
-            effective_dst_cap = dst_cap
-            cap_multiplier_used = multiplier
-            if len(selected_idx) >= keep:
-                break
-
-        # Guaranteed fill for output volume if caps are still too strict for this slate.
-        if len(selected_idx) < keep:
-            selected_set = set(selected_idx)
-            for raw_idx in ranked_idx:
-                idx = int(raw_idx)
-                if idx in selected_set:
-                    continue
-                if not _lineup_satisfies_roster_rules(candidate_lineups[idx]):
-                    continue
-                selected_idx.append(idx)
-                selected_set.add(idx)
+            selected_idx: list[int] = []
+            effective_player_cap = base_player_cap
+            effective_qb_cap = base_qb_cap
+            effective_dst_cap = base_dst_cap
+            cap_multiplier_used = 1.0
+            for multiplier in (1.0, 1.25, 1.5, 2.0, 3.0, 6.0):
+                chosen, player_cap, qb_cap, dst_cap = select_with_caps(
+                    multiplier
+                )
+                selected_idx = chosen
+                effective_player_cap = player_cap
+                effective_qb_cap = qb_cap
+                effective_dst_cap = dst_cap
+                cap_multiplier_used = multiplier
                 if len(selected_idx) >= keep:
                     break
+
+            # Guaranteed fill if caps are still too strict for this slate.
+            if len(selected_idx) < keep:
+                selected_set = set(selected_idx)
+                for raw_idx in ranked_idx:
+                    idx = int(raw_idx)
+                    if idx in selected_set:
+                        continue
+                    if not _lineup_satisfies_roster_rules(
+                        candidate_lineups[idx]
+                    ):
+                        continue
+                    selected_idx.append(idx)
+                    selected_set.add(idx)
+                    if len(selected_idx) >= keep:
+                        break
+            return (
+                selected_idx[:keep],
+                effective_player_cap,
+                effective_qb_cap,
+                effective_dst_cap,
+                cap_multiplier_used,
+            )
+
+        (
+            selected_idx,
+            effective_player_cap,
+            effective_qb_cap,
+            effective_dst_cap,
+            cap_multiplier_used,
+        ) = select_portfolio(composite)
+        baseline_selected_idx = selected_idx
+        if request.simulation_run_id is not None:
+            (
+                baseline_selected_idx,
+                _baseline_player_cap,
+                _baseline_qb_cap,
+                _baseline_dst_cap,
+                _baseline_cap_multiplier,
+            ) = select_portfolio(baseline_scores[6])
+        report_progress(
+            "portfolio_selection",
+            2,
+            3,
+            "Baseline and shock portfolios selected; assembling comparison output.",
+        )
 
         top_idx = np.asarray(selected_idx[:keep], dtype=int)
         keep = int(len(top_idx))
@@ -7865,6 +8584,26 @@ class LineupLearningService:
                 f"slate={request.slate} selected"
             ),
         )
+        portfolio_comparison: (
+            UltimateLineupPortfolioComparisonResponse | None
+        ) = None
+        if request.simulation_run_id is not None:
+            portfolio_comparison = (
+                self._build_simulation_portfolio_comparison(
+                    simulation_run_id=request.simulation_run_id,
+                    baseline_simulation_run_id=(
+                        request.baseline_simulation_run_id
+                    ),
+                    candidate_lineups=candidate_lineups,
+                    baseline_selected_idx=baseline_selected_idx,
+                    scenario_selected_idx=selected_idx,
+                    baseline_mean_points=baseline_scores[0],
+                    baseline_p90_points=baseline_scores[1],
+                    scenario_mean_points=mean_points,
+                    scenario_p90_points=p90_points,
+                    scenario_objective_scores=composite,
+                )
+            )
 
         rows: list[UltimateLineupRowResponse] = []
         exposure_counts: dict[str, tuple[PlayerPoolRow, int]] = {}
@@ -7999,6 +8738,17 @@ class LineupLearningService:
             discovered_patterns.append(
                 f"Exposure caps auto-relaxed by x{cap_multiplier_used:.2f} to fill {keep} lineups."
             )
+        if portfolio_comparison is not None:
+            discovered_patterns.append(
+                "Simulation projection override applied: "
+                f"run={portfolio_comparison.simulation_run_id}, "
+                "baseline_run="
+                f"{portfolio_comparison.baseline_simulation_run_id or 'lineup_default'}, "
+                f"matched_players={simulation_projection_overrides}, "
+                f"lineup_overlap={portfolio_comparison.lineup_overlap_rate:.1%}, "
+                "scenario_projected_blend_lift="
+                f"{portfolio_comparison.projected_blend_reoptimization_lift:+.2f}."
+            )
         if late_swap_applied:
             discovered_patterns.append(
                 "Late swap applied: "
@@ -8061,11 +8811,32 @@ class LineupLearningService:
                 f"resumed={request.resume_from_checkpoint}."
             )
 
+        report_progress(
+            "portfolio_selection",
+            3,
+            3,
+            "Portfolio comparison output assembled.",
+        )
         return UltimateLineupResponse(
             source_system=request.source_system,
             season=request.season,
             week=request.week,
             slate=request.slate,
+            simulation_run_id=request.simulation_run_id,
+            simulation_outcomes_loaded=simulation_outcomes_loaded,
+            simulation_projection_overrides=(
+                simulation_projection_overrides
+            ),
+            baseline_simulation_run_id=(
+                request.baseline_simulation_run_id
+            ),
+            baseline_simulation_outcomes_loaded=(
+                baseline_simulation_outcomes_loaded
+            ),
+            baseline_simulation_projection_overrides=(
+                baseline_simulation_projection_overrides
+            ),
+            portfolio_comparison=portfolio_comparison,
             contest_objective=request.contest_objective,
             contest_objective_weights=contest_objective_weights,
             late_swap_applied=late_swap_applied,

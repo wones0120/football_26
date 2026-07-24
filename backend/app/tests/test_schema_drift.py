@@ -5,6 +5,7 @@ from pathlib import Path
 from sqlalchemy import create_engine
 
 from backend.app.models import Base
+from backend.app.product_services.target_schema import compare_target_schema_contracts
 from scripts.check_schema_drift import (
     compare_schema_signatures,
     metadata_schema_signature,
@@ -71,6 +72,25 @@ def test_compare_schema_signatures_reports_structural_drift() -> None:
     assert any("example.id: expected" in issue for issue in issues)
 
 
+def test_compare_target_schema_contracts_reports_precise_drift() -> None:
+    expected = {
+        ("table", "lineup", "lineup"): "table",
+        ("column", "lineup", "lineup_id"): "text|not_null=true|identity=|generated=",
+        ("constraint", "lineup", "lineup_pkey"): "p|PRIMARY KEY (lineup_id)",
+    }
+    actual = {
+        ("table", "lineup", "lineup"): "table",
+        ("column", "lineup", "lineup_id"): "uuid|not_null=true|identity=|generated=",
+        ("column", "lineup", "rogue_column"): "text|not_null=false|identity=|generated=",
+    }
+
+    issues = compare_target_schema_contracts(expected, actual)
+
+    assert "missing target.lineup.lineup_pkey constraint" in issues
+    assert "unexpected target.lineup.rogue_column column" in issues
+    assert any("target.lineup.lineup_id column: expected" in issue for issue in issues)
+
+
 def test_orm_metadata_matches_migrated_postgresql_type_contract() -> None:
     engine = create_engine("postgresql+psycopg://")
     try:
@@ -96,4 +116,12 @@ def test_orm_metadata_matches_migrated_postgresql_type_contract() -> None:
             False,
         )
         in signature["simulation_calibration_factor"]["indexes"]
+    )
+    assert (
+        signature["ultimate_lineup_run"]["columns"]["request_json"]["type"]
+        == "JSONB"
+    )
+    assert (
+        signature["ultimate_lineup_run"]["columns"]["result_json"]["type"]
+        == "JSONB"
     )

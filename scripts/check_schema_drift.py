@@ -18,6 +18,11 @@ if str(REPO_ROOT) not in sys.path:
 
 from backend.app.config import get_settings
 from backend.app.models import Base
+from backend.app.product_services.target_schema import (
+    actual_target_schema_contract,
+    compare_target_schema_contracts,
+    expected_target_schema_contract,
+)
 from scripts.apply_migrations import (
     MIGRATION_DIR,
     apply_migrations_to_engine,
@@ -27,7 +32,7 @@ from scripts.apply_migrations import (
 
 
 MIGRATION_NAME_PATTERN = re.compile(r"^(?P<number>\d{4})_[a-z0-9_]+\.sql$")
-IGNORED_DATABASE_TABLES = {"schema_migrations"}
+IGNORED_DATABASE_TABLES = {"schema_migrations", "target_schema_contract"}
 
 
 def _canonical_type(sql_type: Any, engine: Engine) -> str:
@@ -294,12 +299,37 @@ def run_schema_validation(
         engine,
         migration_dir=migration_dir,
     )
-    expected_signature = metadata_schema_signature(Base.metadata, engine)
-    actual_signature = database_schema_signature(engine, schema=schema)
-    drift_issues = compare_schema_signatures(
-        expected_signature,
-        actual_signature,
-    )
+    if schema == "target":
+        expected_contract = expected_target_schema_contract(engine)
+        actual_contract = actual_target_schema_contract(engine)
+        actual_signature: dict[Any, Any] = actual_contract
+        drift_issues = compare_target_schema_contracts(
+            expected_contract,
+            actual_contract,
+        )
+        expected_table_count = len(
+            {
+                table_name
+                for object_type, table_name, _ in expected_contract
+                if object_type == "table"
+            }
+        )
+        actual_table_count = len(
+            {
+                table_name
+                for object_type, table_name, _ in actual_contract
+                if object_type == "table"
+            }
+        )
+    else:
+        expected_signature = metadata_schema_signature(Base.metadata, engine)
+        actual_signature = database_schema_signature(engine, schema=schema)
+        drift_issues = compare_schema_signatures(
+            expected_signature,
+            actual_signature,
+        )
+        expected_table_count = len(expected_signature)
+        actual_table_count = len(actual_signature)
 
     idempotency_issues: list[str] = []
     second_pass_applied: list[str] = []
@@ -309,7 +339,11 @@ def run_schema_validation(
             engine,
             migration_dir=migration_dir,
         )
-        after_second_pass = database_schema_signature(engine, schema=schema)
+        after_second_pass = (
+            actual_target_schema_contract(engine)
+            if schema == "target"
+            else database_schema_signature(engine, schema=schema)
+        )
         if second_pass_applied:
             idempotency_issues.append(
                 "second migration pass unexpectedly applied "
@@ -335,8 +369,9 @@ def run_schema_validation(
         ],
         "newly_applied": newly_applied,
         "second_pass_applied": second_pass_applied,
-        "orm_tables": len(expected_signature),
-        "database_tables": len(actual_signature),
+        "expected_tables": expected_table_count,
+        "orm_tables": expected_table_count,
+        "database_tables": actual_table_count,
         "issues": issues,
     }
 

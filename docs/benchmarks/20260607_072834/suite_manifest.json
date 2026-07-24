@@ -1,0 +1,8 @@
+{
+  "suite_started_at": "2026-06-07T07:28:34",
+  "suite_finished_at": "2026-06-07T07:28:34",
+  "status": "failed",
+  "error": "Step failed (classic_backtest) with exit code 1",
+  "run_dir": "/Users/wones/git/football_26/docs/benchmarks/20260607_072834",
+  "steps": []
+}

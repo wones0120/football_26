@@ -1,0 +1,3696 @@
+import { useEffect, useMemo, useState } from "react";
+import {
+  autoDiscoverInjuryFiles,
+  autoDiscoverSalaryFiles,
+  backtestWeek,
+  benchmarkArtifactUrl,
+  benchmarkBundleUrl,
+  bootstrapNflreadpy,
+  createUltimateLineupRun,
+  fetchBenchmarkRuns,
+  fetchCuratedSalarySlices,
+  fetchDataFreshness,
+  fetchModelDefaults,
+  fetchSeasonCoverage,
+  fetchSimulationRuns,
+  fetchUltimateLineupRun,
+  fetchRuns,
+  fetchUnresolved,
+  fetchUnresolvedTriage,
+  ingestNflreadpySchedules,
+  ingestNflreadpyWeeklyStats,
+  ingestInjuries,
+  ingestSalaries,
+  runBenchmarkSuite,
+  runOptimalVsPredictedBacktest,
+  retryUltimateLineupRun,
+  resolveUnresolved,
+  simulateWeek,
+  upsertPlayerMaster,
+  type BenchmarkRun,
+  type BacktestWeekResult,
+  type BootstrapMetricInterval,
+  type CuratedSalarySliceRow,
+  type DataFreshnessResult,
+  type DataFreshnessRow,
+  type IngestResult,
+  type ModelDefaults,
+  type OptimalVsPredictedBacktestResult,
+  type PointInTimeShockImpact,
+  type ResidualAdjustmentImpact,
+  type RoleShockImpact,
+  type SeasonCoverageRow,
+  type SimulatedPlayerOutcome,
+  type SimulationRunOption,
+  type UltimateLineupRun,
+  type UltimateLineupResult,
+  type UnresolvedRow,
+  type UnresolvedTriageResult,
+} from "./api";
+
+type ShowdownCaptainABRow = {
+  season: number;
+  week: number;
+  slate: string;
+  baseline_gap_points: number;
+  captain_informed_gap_points: number;
+  gap_lift_points: number;
+  baseline_predicted_actual_points: number;
+  captain_informed_predicted_actual_points: number;
+  optimal_actual_points: number;
+};
+
+type ShowdownCaptainABSummary = {
+  source_system: "draftkings" | "fanduel";
+  season_start: number;
+  season_end: number;
+  lineups_per_slate: number;
+  training_window_slates: number;
+  learned_only: boolean;
+  showdown_captain_model_path: string;
+  showdown_captain_prior_strength: number;
+  paired_slates: number;
+  mean_gap_lift_points?: number | null;
+  median_gap_lift_points?: number | null;
+  captain_informed_win_rate?: number | null;
+  baseline_gap_stddev?: number | null;
+  captain_informed_gap_stddev?: number | null;
+  stability_lift_stddev_reduction?: number | null;
+  baseline_near_optimal_rate_90pct?: number | null;
+  captain_informed_near_optimal_rate_90pct?: number | null;
+  near_optimal_rate_lift_90pct?: number | null;
+  baseline_mean_gap_points?: number | null;
+  captain_informed_mean_gap_points?: number | null;
+};
+
+type ShowdownCaptainABResult = {
+  generated_at: string;
+  summary: ShowdownCaptainABSummary;
+  baseline: OptimalVsPredictedBacktestResult;
+  captain_informed: OptimalVsPredictedBacktestResult;
+  paired_rows: ShowdownCaptainABRow[];
+};
+
+const FALLBACK_MODEL_DEFAULTS: ModelDefaults = {
+  showdown_captain_model_path: "docs/showdown_captain_model_2024_2025.json",
+  showdown_captain_prior_strength: 0.35,
+  classic_value_driver_model_path: "docs/main_slate_value_driver_analysis_2024_2025.json",
+  classic_value_driver_prior_strength: 0.45,
+  matchup_outcome_model_path: "docs/matchup_outcome_intelligence_2024_2025.json",
+  matchup_outcome_prior_strength: 0.15,
+  matchup_prior_gate_model_path: "docs/matchup_prior_gate_20slates_5000.json",
+};
+
+const FRESHNESS_LABELS: Record<DataFreshnessRow["dataset"], string> = {
+  salaries: "Salaries",
+  injuries: "Injuries",
+  schedules: "Schedules",
+  weekly_stats: "Weekly Stats",
+};
+
+function formatMetric(value?: number | null, digits = 2): string {
+  if (value == null || !Number.isFinite(value)) return "-";
+  return value.toFixed(digits);
+}
+
+function formatRate(value?: number | null): string {
+  if (value == null || !Number.isFinite(value)) return "-";
+  return `${(value * 100).toFixed(1)}%`;
+}
+
+function formatBootstrapInterval(
+  interval?: BootstrapMetricInterval | null,
+  asRate = false
+): string | null {
+  if (!interval) return null;
+  const level = `${(interval.confidence_level * 100).toFixed(0)}% CI`;
+  const lower = asRate ? formatRate(interval.lower) : formatMetric(interval.lower);
+  const upper = asRate ? formatRate(interval.upper) : formatMetric(interval.upper);
+  return `${level} ${lower}–${upper} · SE ${formatMetric(interval.standard_error)}`;
+}
+
+function formatDateTime(value: string): string {
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
+}
+
+function findArtifact(run: BenchmarkRun | null, name: string) {
+  return run?.artifacts.find((artifact) => artifact.name === name) ?? null;
+}
+
+function runLabel(path: string): string {
+  const parts = path.split("/");
+  return parts[parts.length - 1] || path;
+}
+
+function simulationRunLabel(run: SimulationRunOption): string {
+  const scenarioKind = run.has_role_shocks && run.has_point_in_time_shocks
+    ? "role + point-in-time shock"
+    : run.has_role_shocks
+      ? "role shock"
+      : run.has_point_in_time_shocks
+        ? "point-in-time shock"
+        : "baseline";
+  const runId = run.simulation_run_id.slice(0, 8);
+  return `${scenarioKind} · ${run.iterations.toLocaleString()} draws · seed ${run.random_seed ?? "-"} · ${runId}`;
+}
+
+function hasBenchmarkMetrics(run: BenchmarkRun): boolean {
+  return (
+    run.status === "ok" &&
+    [
+      run.metrics.classic_mean_gap_points,
+      run.metrics.showdown_mean_gap_points,
+      run.metrics.captain_informed_win_rate,
+    ].every((value) => value != null && Number.isFinite(value))
+  );
+}
+
+function App() {
+  const slateOptions = ["sunday_main", "sunday_night", "monday_night", "thursday_night"] as const;
+  const [sourceSystem, setSourceSystem] = useState<"draftkings" | "fanduel">("draftkings");
+  const [season, setSeason] = useState(2025);
+  const [week, setWeek] = useState(1);
+  const [slate, setSlate] = useState<string>(slateOptions[0]);
+  const [historyStartSeason, setHistoryStartSeason] = useState(2018);
+  const [historyEndSeason, setHistoryEndSeason] = useState(2025);
+  const [salaryPath, setSalaryPath] = useState("~/Downloads/DKSalaries.csv");
+  const [injuryPath, setInjuryPath] = useState("~/Downloads/DKInjuries.csv");
+  const [discoverDirectory, setDiscoverDirectory] = useState("~/Downloads");
+  const [status, setStatus] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isIngesting, setIsIngesting] = useState(false);
+  const [simulationIterations, setSimulationIterations] = useState(5000);
+  const [simulationTopN, setSimulationTopN] = useState(40);
+  const [simulationMinHistoryGames, setSimulationMinHistoryGames] = useState(4);
+  const [simulationPriorWeight, setSimulationPriorWeight] = useState(12);
+  const [simulationNoiseScale, setSimulationNoiseScale] = useState(0.12);
+  const [simulationUseResidualLearning, setSimulationUseResidualLearning] =
+    useState(false);
+  const [roleShockPlayerIdentity, setRoleShockPlayerIdentity] = useState("");
+  const [roleShockRetainedShare, setRoleShockRetainedShare] = useState(0);
+  const [roleShockScope, setRoleShockScope] =
+    useState<"same_position" | "skill_players">("same_position");
+  const [pointShockType, setPointShockType] =
+    useState<"" | "weather" | "news">("");
+  const [pointShockScenarioAsOf, setPointShockScenarioAsOf] = useState("");
+  const [pointShockObservedAt, setPointShockObservedAt] = useState("");
+  const [pointShockLabel, setPointShockLabel] = useState("");
+  const [pointShockTeams, setPointShockTeams] = useState("");
+  const [pointShockPositions, setPointShockPositions] =
+    useState("QB,RB,WR,TE,K,DST");
+  const [pointShockMeanMultiplier, setPointShockMeanMultiplier] =
+    useState(1);
+  const [pointShockVolatilityMultiplier, setPointShockVolatilityMultiplier] =
+    useState(1);
+  const [backtestTopN, setBacktestTopN] = useState(25);
+  const [backtestLowSalaryThreshold, setBacktestLowSalaryThreshold] = useState(4500);
+  const [backtestLowSalaryHitPoints, setBacktestLowSalaryHitPoints] = useState(15);
+  const [lineupBacktestMode, setLineupBacktestMode] = useState<"classic" | "showdown">("classic");
+  const [lineupBacktestLineupsPerSlate, setLineupBacktestLineupsPerSlate] = useState(600);
+  const [lineupBacktestTrainingWindowSlates, setLineupBacktestTrainingWindowSlates] = useState(24);
+  const [lineupBacktestMinTrainingSlates, setLineupBacktestMinTrainingSlates] = useState(2);
+  const [lineupBacktestMinTrainingRows, setLineupBacktestMinTrainingRows] = useState(500);
+  const [lineupBacktestLimitSlates, setLineupBacktestLimitSlates] = useState(0);
+  const [lineupBacktestShowdownCaptainModelPath, setLineupBacktestShowdownCaptainModelPath] = useState(
+    FALLBACK_MODEL_DEFAULTS.showdown_captain_model_path
+  );
+  const [lineupBacktestShowdownCaptainPriorStrength, setLineupBacktestShowdownCaptainPriorStrength] =
+    useState(FALLBACK_MODEL_DEFAULTS.showdown_captain_prior_strength);
+  const [lineupBacktestClassicValueModelPath, setLineupBacktestClassicValueModelPath] = useState(
+    FALLBACK_MODEL_DEFAULTS.classic_value_driver_model_path
+  );
+  const [lineupBacktestClassicValuePriorStrength, setLineupBacktestClassicValuePriorStrength] = useState(
+    FALLBACK_MODEL_DEFAULTS.classic_value_driver_prior_strength
+  );
+  const [lineupBacktestMatchupOutcomeModelPath, setLineupBacktestMatchupOutcomeModelPath] = useState(
+    FALLBACK_MODEL_DEFAULTS.matchup_outcome_model_path
+  );
+  const [lineupBacktestMatchupOutcomePriorStrength, setLineupBacktestMatchupOutcomePriorStrength] =
+    useState(FALLBACK_MODEL_DEFAULTS.matchup_outcome_prior_strength);
+  const [lineupBacktestMatchupPriorGateModelPath, setLineupBacktestMatchupPriorGateModelPath] =
+    useState(FALLBACK_MODEL_DEFAULTS.matchup_prior_gate_model_path);
+  const [simulationRows, setSimulationRows] = useState<SimulatedPlayerOutcome[]>([]);
+  const [roleShockCandidates, setRoleShockCandidates] = useState<SimulatedPlayerOutcome[]>([]);
+  const [roleShockImpacts, setRoleShockImpacts] = useState<RoleShockImpact[]>([]);
+  const [pointInTimeShockImpacts, setPointInTimeShockImpacts] = useState<
+    PointInTimeShockImpact[]
+  >([]);
+  const [simulationScenarioAsOf, setSimulationScenarioAsOf] =
+    useState<string | null>(null);
+  const [residualAdjustmentImpacts, setResidualAdjustmentImpacts] = useState<
+    ResidualAdjustmentImpact[]
+  >([]);
+  const [residualSnapshotCount, setResidualSnapshotCount] = useState(0);
+  const [residualLearningApplied, setResidualLearningApplied] = useState(false);
+  const [scenarioWarnings, setScenarioWarnings] = useState<string[]>([]);
+  const [simulationRunId, setSimulationRunId] = useState<string | null>(null);
+  const [simulationRunOptions, setSimulationRunOptions] = useState<SimulationRunOption[]>([]);
+  const [compatibleBaselineRunIds, setCompatibleBaselineRunIds] = useState<string[]>([]);
+  const [selectedLineupSimulationRunId, setSelectedLineupSimulationRunId] = useState("");
+  const [selectedBaselineSimulationRunId, setSelectedBaselineSimulationRunId] = useState("");
+  const [simulationRunsLoading, setSimulationRunsLoading] = useState(false);
+  const [portfolioContestObjective, setPortfolioContestObjective] =
+    useState<"balanced" | "cash" | "gpp">("balanced");
+  const [portfolioCandidateLineups, setPortfolioCandidateLineups] = useState(2500);
+  const [portfolioOutputLineups, setPortfolioOutputLineups] = useState(20);
+  const [ultimateLineupRun, setUltimateLineupRun] =
+    useState<UltimateLineupRun | null>(null);
+  const [ultimateLineupResult, setUltimateLineupResult] =
+    useState<UltimateLineupResult | null>(null);
+  const [backtestResult, setBacktestResult] = useState<BacktestWeekResult | null>(null);
+  const [lineupBacktestClassicResult, setLineupBacktestClassicResult] =
+    useState<OptimalVsPredictedBacktestResult | null>(null);
+  const [lineupBacktestShowdownResult, setLineupBacktestShowdownResult] =
+    useState<OptimalVsPredictedBacktestResult | null>(null);
+  const [lineupBacktestShowdownABResult, setLineupBacktestShowdownABResult] =
+    useState<ShowdownCaptainABResult | null>(null);
+  const [runs, setRuns] = useState<IngestResult[]>([]);
+  const [coverage, setCoverage] = useState<SeasonCoverageRow[]>([]);
+  const [salarySlices, setSalarySlices] = useState<CuratedSalarySliceRow[]>([]);
+  const [dataFreshness, setDataFreshness] = useState<DataFreshnessResult | null>(null);
+  const [salarySliceSeasonFilter, setSalarySliceSeasonFilter] = useState("");
+  const [showUnresolvedQueue, setShowUnresolvedQueue] = useState(false);
+  const [showSeasonCoverage, setShowSeasonCoverage] = useState(false);
+  const [showCuratedSalarySlices, setShowCuratedSalarySlices] = useState(false);
+  const [showRecentRuns, setShowRecentRuns] = useState(false);
+  const [unresolved, setUnresolved] = useState<UnresolvedRow[]>([]);
+  const [unresolvedTriage, setUnresolvedTriage] = useState<UnresolvedTriageResult | null>(null);
+  const [resolutions, setResolutions] = useState<Record<string, string>>({});
+  const [modelDefaults, setModelDefaults] = useState<ModelDefaults>(FALLBACK_MODEL_DEFAULTS);
+  const [benchmarkRuns, setBenchmarkRuns] = useState<BenchmarkRun[]>([]);
+  const [showBenchmarkRuns, setShowBenchmarkRuns] = useState(false);
+  const [benchmarkSourceFilter, setBenchmarkSourceFilter] = useState("all");
+  const [benchmarkStatusFilter, setBenchmarkStatusFilter] = useState("all");
+  const [benchmarkSlateFilter, setBenchmarkSlateFilter] = useState("all");
+  const [benchmarkSeasonStartFilter, setBenchmarkSeasonStartFilter] = useState("");
+  const [benchmarkSeasonEndFilter, setBenchmarkSeasonEndFilter] = useState("");
+  const [benchmarkConfigFilter, setBenchmarkConfigFilter] = useState("");
+  const [benchmarkLimitSlates, setBenchmarkLimitSlates] = useState(0);
+  const [benchmarkClassicLineupsPerSlate, setBenchmarkClassicLineupsPerSlate] = useState(1000);
+  const [benchmarkShowdownLineupsPerSlate, setBenchmarkShowdownLineupsPerSlate] = useState(1000);
+  const [benchmarkShowdownAbLineupsPerSlate, setBenchmarkShowdownAbLineupsPerSlate] = useState(2500);
+  const [benchmarkLastRun, setBenchmarkLastRun] = useState<BenchmarkRun | null>(null);
+
+  const unresolvedCount = unresolvedTriage?.open_total ?? unresolved.length;
+  const newUnresolvedCount = unresolvedTriage?.new_total ?? 0;
+  const completionPct = useMemo(() => {
+    const total = runs.reduce((acc, row) => acc + row.rows_curated, 0);
+    const unresolvedRows = runs.reduce((acc, row) => acc + row.rows_unresolved, 0);
+    if (total === 0) return 0;
+    return Math.max(0, Math.round(((total - unresolvedRows) / total) * 100));
+  }, [runs]);
+  const lineupBacktestPanels = [
+    { mode: "classic" as const, result: lineupBacktestClassicResult },
+    { mode: "showdown" as const, result: lineupBacktestShowdownResult },
+  ];
+  const shockedSimulationRunOptions = simulationRunOptions.filter(
+    (run) => run.has_role_shocks || run.has_point_in_time_shocks
+  );
+  const compatibleBaselineRunOptions = simulationRunOptions.filter((run) =>
+    compatibleBaselineRunIds.includes(run.simulation_run_id)
+  );
+  const portfolioRunActive =
+    ultimateLineupRun?.status === "queued" || ultimateLineupRun?.status === "running";
+  const portfolioComparison = ultimateLineupResult?.portfolio_comparison ?? null;
+  const latestBenchmarkRun = benchmarkLastRun ?? benchmarkRuns[0] ?? null;
+  const filteredBenchmarkRuns = useMemo(
+    () =>
+      benchmarkRuns.filter((run) => {
+        const source = String(run.config.source_system ?? "");
+        if (benchmarkSourceFilter !== "all" && source !== benchmarkSourceFilter) return false;
+        if (benchmarkStatusFilter !== "all" && run.status !== benchmarkStatusFilter) return false;
+        const runSeasonStart = Number(run.config.season_start);
+        const runSeasonEnd = Number(run.config.season_end);
+        const filterSeasonStart = Number(benchmarkSeasonStartFilter);
+        const filterSeasonEnd = Number(benchmarkSeasonEndFilter);
+        if (
+          benchmarkSeasonStartFilter &&
+          Number.isFinite(runSeasonEnd) &&
+          runSeasonEnd < filterSeasonStart
+        ) {
+          return false;
+        }
+        if (
+          benchmarkSeasonEndFilter &&
+          Number.isFinite(runSeasonStart) &&
+          runSeasonStart > filterSeasonEnd
+        ) {
+          return false;
+        }
+        if (
+          benchmarkSlateFilter === "classic" &&
+          !run.artifacts.some((artifact) => artifact.name === "classic_backtest.json" && artifact.exists)
+        ) {
+          return false;
+        }
+        if (
+          benchmarkSlateFilter === "showdown" &&
+          !run.artifacts.some(
+            (artifact) => artifact.name === "showdown_backtest_baseline.json" && artifact.exists
+          )
+        ) {
+          return false;
+        }
+        const configQuery = benchmarkConfigFilter.trim().toLowerCase();
+        return !configQuery || JSON.stringify(run.config).toLowerCase().includes(configQuery);
+      }),
+    [
+      benchmarkConfigFilter,
+      benchmarkRuns,
+      benchmarkSeasonEndFilter,
+      benchmarkSeasonStartFilter,
+      benchmarkSlateFilter,
+      benchmarkSourceFilter,
+      benchmarkStatusFilter,
+    ]
+  );
+  const classicGapInterval = formatBootstrapInterval(
+    latestBenchmarkRun?.metrics.classic_mean_gap_interval
+  );
+  const showdownGapInterval = formatBootstrapInterval(
+    latestBenchmarkRun?.metrics.showdown_mean_gap_interval
+  );
+  const captainWinRateInterval = formatBootstrapInterval(
+    latestBenchmarkRun?.metrics.captain_win_rate_interval,
+    true
+  );
+
+  const applyModelDefaults = (defaults: ModelDefaults) => {
+    setLineupBacktestShowdownCaptainModelPath(defaults.showdown_captain_model_path);
+    setLineupBacktestShowdownCaptainPriorStrength(defaults.showdown_captain_prior_strength);
+    setLineupBacktestClassicValueModelPath(defaults.classic_value_driver_model_path);
+    setLineupBacktestClassicValuePriorStrength(defaults.classic_value_driver_prior_strength);
+    setLineupBacktestMatchupOutcomeModelPath(defaults.matchup_outcome_model_path);
+    setLineupBacktestMatchupOutcomePriorStrength(defaults.matchup_outcome_prior_strength);
+    setLineupBacktestMatchupPriorGateModelPath(defaults.matchup_prior_gate_model_path);
+  };
+
+  const refreshOperationalData = async () => {
+    const [runsResp, unresolvedResp, triageResp, coverageResp] = await Promise.all([
+      fetchRuns(),
+      fetchUnresolved(),
+      fetchUnresolvedTriage(24),
+      fetchSeasonCoverage(),
+    ]);
+    setRuns(runsResp.rows);
+    setUnresolved(unresolvedResp.rows);
+    setUnresolvedTriage(triageResp);
+    setCoverage(coverageResp.rows);
+  };
+
+  const refreshDataFreshness = async () => {
+    const response = await fetchDataFreshness({
+      source_system: sourceSystem,
+      season,
+      week,
+      slate,
+    });
+    setDataFreshness(response);
+  };
+
+  const refresh = async () => {
+    await Promise.all([refreshOperationalData(), refreshDataFreshness()]);
+  };
+
+  const refreshBenchmarkRuns = async () => {
+    const response = await fetchBenchmarkRuns(10);
+    setBenchmarkRuns(response.rows);
+    setBenchmarkLastRun(
+      (current) =>
+        (current && hasBenchmarkMetrics(current) ? current : null) ??
+        response.rows.find(hasBenchmarkMetrics) ??
+        response.rows.find((run) => run.status === "ok") ??
+        response.rows[0] ??
+        null
+    );
+  };
+
+  const refreshModelDefaults = async () => {
+    const defaults = await fetchModelDefaults();
+    setModelDefaults(defaults);
+    applyModelDefaults(defaults);
+  };
+
+  const refreshCuratedSalarySlices = async () => {
+    const seasonText = salarySliceSeasonFilter.trim();
+    if (seasonText.length > 0) {
+      const parsed = Number(seasonText);
+      if (!Number.isFinite(parsed) || parsed < 2000) {
+        throw new Error("Season filter must be a year like 2024");
+      }
+      const response = await fetchCuratedSalarySlices({
+        season: parsed,
+        source_system: sourceSystem,
+        limit: 5000,
+      });
+      setSalarySlices(response.rows);
+      return;
+    }
+    const response = await fetchCuratedSalarySlices({
+      source_system: sourceSystem,
+      limit: 5000,
+    });
+    setSalarySlices(response.rows);
+  };
+
+  const refreshSimulationRunOptions = async () => {
+    setSimulationRunsLoading(true);
+    try {
+      const response = await fetchSimulationRuns({
+        source_system: sourceSystem,
+        season,
+        week,
+        slate,
+        scenario_run_id: selectedLineupSimulationRunId || undefined,
+      });
+      setSimulationRunOptions(response.rows);
+      setCompatibleBaselineRunIds(response.compatible_baseline_run_ids);
+      setSelectedBaselineSimulationRunId((current) =>
+        response.compatible_baseline_run_ids.includes(current)
+          ? current
+          : response.compatible_baseline_run_ids[0] ?? ""
+      );
+    } finally {
+      setSimulationRunsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    Promise.all([refreshOperationalData(), refreshModelDefaults(), refreshBenchmarkRuns()]).catch(
+      (err) =>
+        setError(err instanceof Error ? err.message : String(err))
+    );
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setDataFreshness(null);
+    fetchDataFreshness({
+      source_system: sourceSystem,
+      season,
+      week,
+      slate,
+    })
+      .then((response) => {
+        if (!cancelled) setDataFreshness(response);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sourceSystem, season, week, slate]);
+
+  useEffect(() => {
+    setRoleShockCandidates([]);
+    setRoleShockPlayerIdentity("");
+    setRoleShockImpacts([]);
+    setSimulationUseResidualLearning(false);
+    setResidualAdjustmentImpacts([]);
+    setResidualSnapshotCount(0);
+    setResidualLearningApplied(false);
+    setScenarioWarnings([]);
+  }, [sourceSystem, season, week, slate]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setSimulationRunOptions([]);
+    setCompatibleBaselineRunIds([]);
+    setSelectedLineupSimulationRunId("");
+    setSelectedBaselineSimulationRunId("");
+    setUltimateLineupRun(null);
+    setUltimateLineupResult(null);
+    setSimulationRunsLoading(true);
+    fetchSimulationRuns({
+      source_system: sourceSystem,
+      season,
+      week,
+      slate,
+    })
+      .then((response) => {
+        if (cancelled) return;
+        setSimulationRunOptions(response.rows);
+        setCompatibleBaselineRunIds([]);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (!cancelled) setSimulationRunsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sourceSystem, season, week, slate]);
+
+  useEffect(() => {
+    if (!selectedLineupSimulationRunId) {
+      setCompatibleBaselineRunIds([]);
+      setSelectedBaselineSimulationRunId("");
+      return;
+    }
+    let cancelled = false;
+    setSimulationRunsLoading(true);
+    fetchSimulationRuns({
+      source_system: sourceSystem,
+      season,
+      week,
+      slate,
+      scenario_run_id: selectedLineupSimulationRunId,
+    })
+      .then((response) => {
+        if (cancelled) return;
+        setSimulationRunOptions(response.rows);
+        setCompatibleBaselineRunIds(response.compatible_baseline_run_ids);
+        setSelectedBaselineSimulationRunId((current) =>
+          response.compatible_baseline_run_ids.includes(current)
+            ? current
+            : response.compatible_baseline_run_ids[0] ?? ""
+        );
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (!cancelled) setSimulationRunsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedLineupSimulationRunId]);
+
+  useEffect(() => {
+    setUltimateLineupRun(null);
+    setUltimateLineupResult(null);
+  }, [
+    selectedLineupSimulationRunId,
+    selectedBaselineSimulationRunId,
+    portfolioContestObjective,
+    portfolioCandidateLineups,
+    portfolioOutputLineups,
+  ]);
+
+  useEffect(() => {
+    if (!ultimateLineupRun) return;
+    if (ultimateLineupRun.status === "completed") {
+      if (!ultimateLineupRun.result?.portfolio_comparison) {
+        setUltimateLineupResult(null);
+        setError("Lineup generation completed without a portfolio comparison.");
+        setStatus(null);
+        return;
+      }
+      setUltimateLineupResult(ultimateLineupRun.result);
+      setError(null);
+      setStatus(
+        `Portfolio comparison completed: overlap=${(
+          ultimateLineupRun.result.portfolio_comparison.lineup_overlap_rate * 100
+        ).toFixed(1)}% projected_blend_lift=${ultimateLineupRun.result.portfolio_comparison.projected_blend_reoptimization_lift.toFixed(2)}`
+      );
+      return;
+    }
+    if (ultimateLineupRun.status === "failed") {
+      setUltimateLineupResult(null);
+      setError(ultimateLineupRun.error_message ?? "Ultimate-lineup generation failed.");
+      setStatus(null);
+      return;
+    }
+
+    let cancelled = false;
+    let timer: number | undefined;
+    const poll = async () => {
+      try {
+        const current = await fetchUltimateLineupRun(
+          ultimateLineupRun.ultimate_lineup_run_id
+        );
+        if (cancelled) return;
+        setUltimateLineupRun(current);
+        if (current.status === "queued" || current.status === "running") {
+          timer = window.setTimeout(poll, 1000);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : String(err));
+        timer = window.setTimeout(poll, 2000);
+      }
+    };
+    timer = window.setTimeout(poll, 400);
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [
+    ultimateLineupRun?.ultimate_lineup_run_id,
+    ultimateLineupRun?.status,
+  ]);
+
+  useEffect(() => {
+    if (!showCuratedSalarySlices) return;
+    refreshCuratedSalarySlices().catch((err) =>
+      setError(err instanceof Error ? err.message : String(err))
+    );
+  }, [sourceSystem, showCuratedSalarySlices]);
+
+  const runSalaries = async () => {
+    setIsIngesting(true);
+    setStatus("Ingesting salaries...");
+    setError(null);
+    try {
+      const result = await ingestSalaries({
+        source_system: sourceSystem,
+        season,
+        week,
+        slate,
+        path: salaryPath,
+      });
+      setStatus(
+        `Salaries loaded: curated=${result.rows_curated} unresolved=${result.rows_unresolved}`
+      );
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setStatus(null);
+    } finally {
+      setIsIngesting(false);
+    }
+  };
+
+  const runInjuries = async () => {
+    setIsIngesting(true);
+    setStatus("Ingesting injuries...");
+    setError(null);
+    try {
+      const result = await ingestInjuries({
+        source_system: sourceSystem,
+        season,
+        week,
+        slate,
+        path: injuryPath,
+      });
+      setStatus(
+        `Injuries loaded: curated=${result.rows_curated} unresolved=${result.rows_unresolved}`
+      );
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setStatus(null);
+    } finally {
+      setIsIngesting(false);
+    }
+  };
+
+  const runAutoDiscoverSalaries = async () => {
+    setIsIngesting(true);
+    setStatus(`Discovering ${sourceSystem} salary files in ${discoverDirectory}...`);
+    setError(null);
+    try {
+      const result = await autoDiscoverSalaryFiles({
+        source_system: sourceSystem,
+        directory: discoverDirectory,
+      });
+      setStatus(
+        `Salary auto-import: completed=${result.files_completed}/${result.files_attempted} failed=${result.files_failed} curated=${result.rows_curated} unresolved=${result.rows_unresolved}`
+      );
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setStatus(null);
+    } finally {
+      setIsIngesting(false);
+    }
+  };
+
+  const runAutoDiscoverInjuries = async () => {
+    setIsIngesting(true);
+    setStatus(`Discovering ${sourceSystem} injury files in ${discoverDirectory}...`);
+    setError(null);
+    try {
+      const result = await autoDiscoverInjuryFiles({
+        source_system: sourceSystem,
+        directory: discoverDirectory,
+      });
+      setStatus(
+        `Injury auto-import: completed=${result.files_completed}/${result.files_attempted} failed=${result.files_failed} curated=${result.rows_curated} unresolved=${result.rows_unresolved}`
+      );
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setStatus(null);
+    } finally {
+      setIsIngesting(false);
+    }
+  };
+
+  const runBootstrap = async () => {
+    setIsIngesting(true);
+    setStatus("Bootstrapping player master from nflreadpy...");
+    setError(null);
+    try {
+      const result = await bootstrapNflreadpy({ season });
+      setStatus(
+        `nflreadpy bootstrap completed: curated=${result.rows_curated} unresolved=${result.rows_unresolved}`
+      );
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setStatus(null);
+    } finally {
+      setIsIngesting(false);
+    }
+  };
+
+  const runNflSchedules = async () => {
+    setIsIngesting(true);
+    setStatus(`Loading nflreadpy schedules for ${season}...`);
+    setError(null);
+    try {
+      const result = await ingestNflreadpySchedules({ season });
+      setStatus(`Schedules loaded: rows=${result.rows_curated}`);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setStatus(null);
+    } finally {
+      setIsIngesting(false);
+    }
+  };
+
+  const runNflWeeklyStats = async () => {
+    setIsIngesting(true);
+    setStatus(`Loading nflreadpy weekly stats for ${season}...`);
+    setError(null);
+    try {
+      const result = await ingestNflreadpyWeeklyStats({ season });
+      setStatus(`Weekly stats loaded: rows=${result.rows_curated} unresolved=${result.rows_unresolved}`);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setStatus(null);
+    } finally {
+      setIsIngesting(false);
+    }
+  };
+
+  const runHistoricalBootstrap = async () => {
+    const start = Math.min(historyStartSeason, historyEndSeason);
+    const end = Math.max(historyStartSeason, historyEndSeason);
+    let activeSeason = start;
+    let totalRaw = 0;
+    let totalCurated = 0;
+    let totalUnresolved = 0;
+    setIsIngesting(true);
+    setStatus(`Bootstrapping nflreadpy seasons ${start}-${end}...`);
+    setError(null);
+    try {
+      for (let value = start; value <= end; value += 1) {
+        activeSeason = value;
+        setStatus(`Bootstrapping nflreadpy season ${value} (${value - start + 1}/${end - start + 1})...`);
+        const result = await bootstrapNflreadpy({ season: value });
+        totalRaw += result.rows_raw;
+        totalCurated += result.rows_curated;
+        totalUnresolved += result.rows_unresolved;
+      }
+      setStatus(
+        `Historical bootstrap completed (${start}-${end}): raw=${totalRaw} curated=${totalCurated} unresolved=${totalUnresolved}`
+      );
+      await refresh();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(`Season ${activeSeason} failed: ${message}`);
+      setStatus(null);
+    } finally {
+      setIsIngesting(false);
+    }
+  };
+
+  const runHistoricalGameData = async () => {
+    const start = Math.min(historyStartSeason, historyEndSeason);
+    const end = Math.max(historyStartSeason, historyEndSeason);
+    const totalSeasons = end - start + 1;
+    let activeSeason = start;
+    let totalScheduleRows = 0;
+    let totalWeeklyStatRows = 0;
+    setIsIngesting(true);
+    setStatus(`Loading nflreadpy schedules + weekly stats for ${start}-${end}...`);
+    setError(null);
+    try {
+      for (let value = start; value <= end; value += 1) {
+        activeSeason = value;
+        setStatus(`Season ${value} (${value - start + 1}/${totalSeasons}): loading schedules...`);
+        const scheduleResult = await ingestNflreadpySchedules({ season: value });
+        totalScheduleRows += scheduleResult.rows_curated;
+
+        setStatus(`Season ${value} (${value - start + 1}/${totalSeasons}): loading weekly stats...`);
+        const weeklyResult = await ingestNflreadpyWeeklyStats({ season: value });
+        totalWeeklyStatRows += weeklyResult.rows_curated;
+      }
+      setStatus(
+        `Historical game data completed (${start}-${end}): schedule_rows=${totalScheduleRows} weekly_stat_rows=${totalWeeklyStatRows}`
+      );
+      await refresh();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(`Season ${activeSeason} failed: ${message}`);
+      setStatus(null);
+    } finally {
+      setIsIngesting(false);
+    }
+  };
+
+  const runSimulation = async () => {
+    const roleShock =
+      roleShockPlayerIdentity.startsWith("master:")
+        ? {
+            player_master_id: roleShockPlayerIdentity.slice("master:".length),
+            retained_opportunity_share: roleShockRetainedShare,
+            reallocation_scope: roleShockScope,
+          }
+        : roleShockPlayerIdentity.startsWith("source:")
+          ? {
+              source_player_key: roleShockPlayerIdentity.slice("source:".length),
+              retained_opportunity_share: roleShockRetainedShare,
+              reallocation_scope: roleShockScope,
+            }
+          : null;
+    const pointShockTeamsList = pointShockTeams
+      .split(",")
+      .map((value) => value.trim().toUpperCase())
+      .filter(Boolean);
+    const pointShockPositionsList = pointShockPositions
+      .split(",")
+      .map((value) => value.trim().toUpperCase())
+      .filter(Boolean) as Array<"QB" | "RB" | "WR" | "TE" | "K" | "DST">;
+    if (
+      pointShockType &&
+      (!pointShockScenarioAsOf.trim() ||
+        !pointShockObservedAt.trim() ||
+        !pointShockLabel.trim() ||
+        pointShockTeamsList.length === 0 ||
+        pointShockPositionsList.length === 0)
+    ) {
+      setError(
+        "Point-in-time shocks require ISO timestamps with offsets, a label, teams, and positions."
+      );
+      setStatus(null);
+      return;
+    }
+    if (
+      pointShockType &&
+      pointShockMeanMultiplier === 1 &&
+      pointShockVolatilityMultiplier === 1
+    ) {
+      setError("Point-in-time shocks must change the mean or volatility multiplier.");
+      setStatus(null);
+      return;
+    }
+    const pointShock = pointShockType
+      ? {
+          shock_type: pointShockType,
+          observed_at: pointShockObservedAt.trim(),
+          label: pointShockLabel.trim(),
+          teams: pointShockTeamsList,
+          positions: pointShockPositionsList,
+          mean_multiplier: pointShockMeanMultiplier,
+          volatility_multiplier: pointShockVolatilityMultiplier,
+        }
+      : null;
+    setIsIngesting(true);
+    setSimulationRows([]);
+    setSimulationRunId(null);
+    setRoleShockImpacts([]);
+    setPointInTimeShockImpacts([]);
+    setSimulationScenarioAsOf(null);
+    setResidualAdjustmentImpacts([]);
+    setResidualSnapshotCount(0);
+    setResidualLearningApplied(false);
+    setScenarioWarnings([]);
+    setUltimateLineupRun(null);
+    setUltimateLineupResult(null);
+    setStatus(`Simulating ${sourceSystem} season ${season} week ${week} (${slate})...`);
+    setError(null);
+    try {
+      const result = await simulateWeek({
+        source_system: sourceSystem,
+        season,
+        week,
+        slate,
+        iterations: simulationIterations,
+        top_n: simulationTopN,
+        min_history_games: simulationMinHistoryGames,
+        prior_weight: simulationPriorWeight,
+        noise_scale: simulationNoiseScale,
+        use_residual_learning: simulationUseResidualLearning,
+        role_shocks: roleShock ? [roleShock] : [],
+        scenario_as_of: pointShock ? pointShockScenarioAsOf.trim() : undefined,
+        point_in_time_shocks: pointShock ? [pointShock] : [],
+      });
+      setSimulationRows(result.top_rows);
+      if (!roleShock) {
+        setRoleShockCandidates(
+          result.top_rows.filter(
+            (row) =>
+              ["RB", "WR", "TE"].includes(row.position ?? "") &&
+              Boolean(row.player_master_id || row.source_player_key)
+          )
+        );
+      }
+      setSimulationRunId(result.simulation_run_id);
+      setRoleShockImpacts(result.role_shock_impacts);
+      setPointInTimeShockImpacts(result.point_in_time_shock_impacts);
+      setSimulationScenarioAsOf(result.scenario_as_of ?? null);
+      setResidualAdjustmentImpacts(result.residual_adjustment_impacts);
+      setResidualSnapshotCount(result.residual_snapshot_count);
+      setResidualLearningApplied(result.residual_learning_applied);
+      setScenarioWarnings(result.scenario_warnings);
+      if (roleShock || pointShock) {
+        setSelectedLineupSimulationRunId(result.simulation_run_id);
+      } else {
+        await refreshSimulationRunOptions();
+      }
+      setStatus(
+        `Simulation completed: players=${result.players_simulated}/${result.players_considered} iterations=${result.iterations} residual_impacts=${result.residual_adjustment_impacts.length} role_impacts=${result.role_shock_impacts.length} point_in_time_impacts=${result.point_in_time_shock_impacts.length}`
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setStatus(null);
+    } finally {
+      setIsIngesting(false);
+    }
+  };
+
+  const runPortfolioComparison = async () => {
+    if (!selectedLineupSimulationRunId) {
+      setError("Select a completed shock simulation run before comparing portfolios.");
+      setStatus(null);
+      return;
+    }
+    setIsIngesting(true);
+    setUltimateLineupRun(null);
+    setUltimateLineupResult(null);
+    setError(null);
+    setStatus(
+      `Queueing matched baseline-versus-shock portfolios for ${sourceSystem} ${season} W${week} ${slate}...`
+    );
+    try {
+      const request = {
+        source_system: sourceSystem,
+        season,
+        week,
+        slate,
+        simulation_run_id: selectedLineupSimulationRunId,
+        baseline_simulation_run_id: selectedBaselineSimulationRunId || undefined,
+        contest_objective: portfolioContestObjective,
+        candidate_lineups: portfolioCandidateLineups,
+        output_lineups: portfolioOutputLineups,
+        learned_only: false,
+        random_seed: 42,
+      };
+      const idempotencyKey = [
+        "portfolio",
+        sourceSystem,
+        season,
+        week,
+        slate,
+        selectedLineupSimulationRunId,
+        selectedBaselineSimulationRunId || "lineup-default",
+        portfolioContestObjective,
+        portfolioCandidateLineups,
+        portfolioOutputLineups,
+        "heuristic",
+        42,
+      ].join(":");
+      const response = await createUltimateLineupRun({
+        idempotency_key: idempotencyKey,
+        request,
+      });
+      setUltimateLineupRun(response.run);
+      setStatus(
+        response.created
+          ? `Portfolio run queued: ${response.run.ultimate_lineup_run_id.slice(0, 8)}.`
+          : `Reusing portfolio run ${response.run.ultimate_lineup_run_id.slice(0, 8)} (${response.run.status}).`
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setStatus(null);
+    } finally {
+      setIsIngesting(false);
+    }
+  };
+
+  const retryPortfolioComparison = async () => {
+    if (!ultimateLineupRun || ultimateLineupRun.status !== "failed") return;
+    setIsIngesting(true);
+    setError(null);
+    setStatus(`Retrying portfolio run ${ultimateLineupRun.ultimate_lineup_run_id.slice(0, 8)}...`);
+    try {
+      const retried = await retryUltimateLineupRun(
+        ultimateLineupRun.ultimate_lineup_run_id
+      );
+      setUltimateLineupRun(retried);
+      setStatus(
+        `Portfolio retry queued: ${retried.ultimate_lineup_run_id.slice(0, 8)}.`
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setStatus(null);
+    } finally {
+      setIsIngesting(false);
+    }
+  };
+
+  const runBacktest = async () => {
+    setIsIngesting(true);
+    setBacktestResult(null);
+    setStatus(`Backtesting ${sourceSystem} season ${season} week ${week} (${slate})...`);
+    setError(null);
+    try {
+      const result = await backtestWeek({
+        source_system: sourceSystem,
+        season,
+        week,
+        slate,
+        iterations: simulationIterations,
+        min_history_games: simulationMinHistoryGames,
+        prior_weight: simulationPriorWeight,
+        noise_scale: simulationNoiseScale,
+        evaluation_top_n: backtestTopN,
+        low_salary_threshold: backtestLowSalaryThreshold,
+        low_salary_hit_points: backtestLowSalaryHitPoints,
+      });
+      setBacktestResult(result);
+      setStatus(
+        `Backtest completed: matched=${result.players_with_actuals}/${result.players_simulated} mae=${result.mae.toFixed(2)} rmse=${result.rmse.toFixed(2)}`
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setStatus(null);
+    } finally {
+      setIsIngesting(false);
+    }
+  };
+
+  const runLineupBacktest = async () => {
+    const seasonStart = Math.min(historyStartSeason, historyEndSeason);
+    const seasonEnd = Math.max(historyStartSeason, historyEndSeason);
+    setIsIngesting(true);
+    setStatus(
+      `Running ${lineupBacktestMode} lineup backtest for ${sourceSystem} seasons ${seasonStart}-${seasonEnd}...`
+    );
+    setError(null);
+    try {
+      const shouldUseCaptainPrior =
+        lineupBacktestMode === "showdown" &&
+        lineupBacktestShowdownCaptainPriorStrength > 0 &&
+        lineupBacktestShowdownCaptainModelPath.trim().length > 0;
+      const shouldUseClassicPrior =
+        lineupBacktestMode === "classic" &&
+        lineupBacktestClassicValuePriorStrength > 0 &&
+        lineupBacktestClassicValueModelPath.trim().length > 0;
+      const shouldUseMatchupPrior =
+        lineupBacktestMode === "classic" &&
+        lineupBacktestMatchupOutcomePriorStrength > 0 &&
+        lineupBacktestMatchupOutcomeModelPath.trim().length > 0;
+      const shouldUseMatchupGate =
+        shouldUseMatchupPrior && lineupBacktestMatchupPriorGateModelPath.trim().length > 0;
+      const result = await runOptimalVsPredictedBacktest({
+        source_system: sourceSystem,
+        season_start: seasonStart,
+        season_end: seasonEnd,
+        slate_type: lineupBacktestMode,
+        lineups_per_slate: lineupBacktestLineupsPerSlate,
+        training_window_slates: lineupBacktestTrainingWindowSlates,
+        min_training_slates: lineupBacktestMinTrainingSlates,
+        min_training_rows: lineupBacktestMinTrainingRows,
+        learned_only: true,
+        limit_slates: lineupBacktestLimitSlates,
+        showdown_captain_model_path: shouldUseCaptainPrior
+          ? lineupBacktestShowdownCaptainModelPath.trim()
+          : null,
+        showdown_captain_prior_strength: shouldUseCaptainPrior
+          ? lineupBacktestShowdownCaptainPriorStrength
+          : 0,
+        classic_value_driver_model_path: shouldUseClassicPrior
+          ? lineupBacktestClassicValueModelPath.trim()
+          : null,
+        classic_value_driver_prior_strength: shouldUseClassicPrior
+          ? lineupBacktestClassicValuePriorStrength
+          : 0,
+        matchup_outcome_model_path: shouldUseMatchupPrior
+          ? lineupBacktestMatchupOutcomeModelPath.trim()
+          : null,
+        matchup_outcome_prior_strength: shouldUseMatchupPrior
+          ? lineupBacktestMatchupOutcomePriorStrength
+          : 0,
+        matchup_prior_gate_model_path: shouldUseMatchupGate
+          ? lineupBacktestMatchupPriorGateModelPath.trim()
+          : null,
+      });
+      if (lineupBacktestMode === "classic") {
+        setLineupBacktestClassicResult(result);
+      } else {
+        setLineupBacktestShowdownResult(result);
+      }
+      const meanGap = result.mean_gap_points == null ? "n/a" : result.mean_gap_points.toFixed(2);
+      setStatus(
+        `${lineupBacktestMode} lineup backtest completed: slates=${result.slates_completed}/${result.slates_total} mean_gap=${meanGap}`
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setStatus(null);
+    } finally {
+      setIsIngesting(false);
+    }
+  };
+
+  const runShowdownCaptainAB = async () => {
+    const seasonStart = Math.min(historyStartSeason, historyEndSeason);
+    const seasonEnd = Math.max(historyStartSeason, historyEndSeason);
+    const modelPath = lineupBacktestShowdownCaptainModelPath.trim();
+    const priorStrength = Math.min(1, Math.max(0, lineupBacktestShowdownCaptainPriorStrength));
+    if (modelPath.length === 0) {
+      setError("Showdown captain model path is required for A/B runs");
+      return;
+    }
+    setIsIngesting(true);
+    setError(null);
+    setStatus(
+      `Running showdown captain A/B for ${sourceSystem} seasons ${seasonStart}-${seasonEnd}...`
+    );
+    try {
+      const baseline = await runOptimalVsPredictedBacktest({
+        source_system: sourceSystem,
+        season_start: seasonStart,
+        season_end: seasonEnd,
+        slate_type: "showdown",
+        lineups_per_slate: lineupBacktestLineupsPerSlate,
+        training_window_slates: lineupBacktestTrainingWindowSlates,
+        min_training_slates: lineupBacktestMinTrainingSlates,
+        min_training_rows: lineupBacktestMinTrainingRows,
+        learned_only: true,
+        limit_slates: lineupBacktestLimitSlates,
+        showdown_captain_model_path: null,
+        showdown_captain_prior_strength: 0,
+      });
+      const captainInformed = await runOptimalVsPredictedBacktest({
+        source_system: sourceSystem,
+        season_start: seasonStart,
+        season_end: seasonEnd,
+        slate_type: "showdown",
+        lineups_per_slate: lineupBacktestLineupsPerSlate,
+        training_window_slates: lineupBacktestTrainingWindowSlates,
+        min_training_slates: lineupBacktestMinTrainingSlates,
+        min_training_rows: lineupBacktestMinTrainingRows,
+        learned_only: true,
+        limit_slates: lineupBacktestLimitSlates,
+        showdown_captain_model_path: modelPath,
+        showdown_captain_prior_strength: priorStrength,
+      });
+
+      const baselineByKey = new Map(
+        baseline.rows
+          .filter((row) => row.status === "ok" && row.gap_points != null)
+          .map((row) => [`${row.season}-${row.week}-${row.slate}`, row] as const)
+      );
+      const captainByKey = new Map(
+        captainInformed.rows
+          .filter((row) => row.status === "ok" && row.gap_points != null)
+          .map((row) => [`${row.season}-${row.week}-${row.slate}`, row] as const)
+      );
+
+      const pairedRows: ShowdownCaptainABRow[] = [];
+      for (const [key, baselineRow] of baselineByKey.entries()) {
+        const informedRow = captainByKey.get(key);
+        if (!informedRow) continue;
+        pairedRows.push({
+          season: baselineRow.season,
+          week: baselineRow.week,
+          slate: baselineRow.slate,
+          baseline_gap_points: Number(baselineRow.gap_points ?? 0),
+          captain_informed_gap_points: Number(informedRow.gap_points ?? 0),
+          gap_lift_points: Number(baselineRow.gap_points ?? 0) - Number(informedRow.gap_points ?? 0),
+          baseline_predicted_actual_points: Number(baselineRow.predicted_actual_points ?? 0),
+          captain_informed_predicted_actual_points: Number(informedRow.predicted_actual_points ?? 0),
+          optimal_actual_points: Number(baselineRow.optimal_actual_points ?? 0),
+        });
+      }
+
+      const gapLifts = pairedRows.map((row) => row.gap_lift_points);
+      const mean = (values: number[]) =>
+        values.length === 0 ? null : values.reduce((acc, value) => acc + value, 0) / values.length;
+      const median = (values: number[]) => {
+        if (values.length === 0) return null;
+        const sorted = [...values].sort((a, b) => a - b);
+        const middle = Math.floor(sorted.length / 2);
+        return sorted.length % 2 === 0
+          ? (sorted[middle - 1] + sorted[middle]) / 2
+          : sorted[middle];
+      };
+      const stddev = (values: number[]) => {
+        if (values.length === 0) return null;
+        const mu = mean(values);
+        if (mu == null) return null;
+        const variance = values.reduce((acc, value) => acc + (value - mu) ** 2, 0) / values.length;
+        return Math.sqrt(variance);
+      };
+      const nearOptimalRate = (
+        rows: OptimalVsPredictedBacktestResult["rows"],
+        thresholdRatio: number
+      ) => {
+        const okRows = rows.filter((row) => row.status === "ok");
+        if (okRows.length === 0) return null;
+        const hits = okRows.filter((row) => {
+          const optimal = Number(row.optimal_actual_points ?? 0);
+          const predicted = Number(row.predicted_actual_points ?? 0);
+          if (optimal <= 0) return false;
+          return predicted / optimal >= thresholdRatio;
+        }).length;
+        return hits / okRows.length;
+      };
+
+      const baselineGaps = baseline.rows
+        .filter((row) => row.status === "ok" && row.gap_points != null)
+        .map((row) => Number(row.gap_points));
+      const informedGaps = captainInformed.rows
+        .filter((row) => row.status === "ok" && row.gap_points != null)
+        .map((row) => Number(row.gap_points));
+      const baselineStd = stddev(baselineGaps);
+      const informedStd = stddev(informedGaps);
+      const baselineNearOptimal = nearOptimalRate(baseline.rows, 0.9);
+      const informedNearOptimal = nearOptimalRate(captainInformed.rows, 0.9);
+      const summary: ShowdownCaptainABSummary = {
+        source_system: sourceSystem,
+        season_start: seasonStart,
+        season_end: seasonEnd,
+        lineups_per_slate: lineupBacktestLineupsPerSlate,
+        training_window_slates: lineupBacktestTrainingWindowSlates,
+        learned_only: true,
+        showdown_captain_model_path: modelPath,
+        showdown_captain_prior_strength: priorStrength,
+        paired_slates: pairedRows.length,
+        mean_gap_lift_points: mean(gapLifts),
+        median_gap_lift_points: median(gapLifts),
+        captain_informed_win_rate:
+          pairedRows.length === 0
+            ? null
+            : pairedRows.filter((row) => row.gap_lift_points > 0).length / pairedRows.length,
+        baseline_gap_stddev: baselineStd,
+        captain_informed_gap_stddev: informedStd,
+        stability_lift_stddev_reduction:
+          baselineStd == null || informedStd == null ? null : baselineStd - informedStd,
+        baseline_near_optimal_rate_90pct: baselineNearOptimal,
+        captain_informed_near_optimal_rate_90pct: informedNearOptimal,
+        near_optimal_rate_lift_90pct:
+          baselineNearOptimal == null || informedNearOptimal == null
+            ? null
+            : informedNearOptimal - baselineNearOptimal,
+        baseline_mean_gap_points: baseline.mean_gap_points,
+        captain_informed_mean_gap_points: captainInformed.mean_gap_points,
+      };
+      setLineupBacktestShowdownResult(captainInformed);
+      setLineupBacktestShowdownABResult({
+        generated_at: new Date().toISOString(),
+        summary,
+        baseline,
+        captain_informed: captainInformed,
+        paired_rows: pairedRows,
+      });
+      const meanLiftText =
+        summary.mean_gap_lift_points == null ? "n/a" : summary.mean_gap_lift_points.toFixed(2);
+      setStatus(
+        `Showdown captain A/B completed: paired_slates=${summary.paired_slates} mean_gap_lift=${meanLiftText}`
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setStatus(null);
+    } finally {
+      setIsIngesting(false);
+    }
+  };
+
+  const runBenchmarkSuiteFromUi = async () => {
+    const seasonStart = Math.min(historyStartSeason, historyEndSeason);
+    const seasonEnd = Math.max(historyStartSeason, historyEndSeason);
+    const captainModelPath =
+      lineupBacktestShowdownCaptainModelPath.trim() || modelDefaults.showdown_captain_model_path;
+    setIsIngesting(true);
+    setError(null);
+    setStatus(`Running benchmark suite for ${sourceSystem} seasons ${seasonStart}-${seasonEnd}...`);
+    try {
+      const result = await runBenchmarkSuite({
+        source_system: sourceSystem,
+        season_start: seasonStart,
+        season_end: seasonEnd,
+        lineups_per_slate_classic: benchmarkClassicLineupsPerSlate,
+        lineups_per_slate_showdown: benchmarkShowdownLineupsPerSlate,
+        lineups_per_slate_showdown_ab: benchmarkShowdownAbLineupsPerSlate,
+        limit_slates: benchmarkLimitSlates,
+        analysis_limit_slates: benchmarkLimitSlates,
+        quiet_progress: true,
+        showdown_captain_model_path: captainModelPath,
+        showdown_captain_prior_strength: lineupBacktestShowdownCaptainPriorStrength,
+      });
+      if (result.status !== "ok" || !result.run) {
+        throw new Error(result.error_message || "Benchmark suite failed");
+      }
+      setBenchmarkLastRun(result.run);
+      await refreshBenchmarkRuns();
+      setStatus(`Benchmark suite completed: ${result.run.run_directory}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setStatus(null);
+    } finally {
+      setIsIngesting(false);
+    }
+  };
+
+  const downloadLineupBacktestResult = (
+    mode: "classic" | "showdown",
+    result: OptimalVsPredictedBacktestResult
+  ) => {
+    const payload = {
+      exported_at: new Date().toISOString(),
+      mode,
+      source_system: result.source_system,
+      summary: {
+        season_start: result.season_start,
+        season_end: result.season_end,
+        slate_filter: result.slate_filter,
+        slate_type: result.slate_type,
+        lineups_per_slate: result.lineups_per_slate,
+        training_window_slates: result.training_window_slates,
+        learned_only: result.learned_only,
+        showdown_captain_model_path: result.showdown_captain_model_path ?? null,
+        showdown_captain_prior_strength: result.showdown_captain_prior_strength ?? 0,
+        classic_value_driver_model_path: result.classic_value_driver_model_path ?? null,
+        classic_value_driver_prior_strength: result.classic_value_driver_prior_strength ?? 0,
+        matchup_outcome_model_path: result.matchup_outcome_model_path ?? null,
+        matchup_outcome_prior_strength: result.matchup_outcome_prior_strength ?? 0,
+        matchup_prior_gate_model_path: result.matchup_prior_gate_model_path ?? null,
+        slates_total: result.slates_total,
+        slates_completed: result.slates_completed,
+        slates_failed_or_skipped: result.slates_failed_or_skipped,
+        mean_gap_points: result.mean_gap_points,
+        median_gap_points: result.median_gap_points,
+        best_case_gap_points: result.best_case_gap_points,
+        worst_case_gap_points: result.worst_case_gap_points,
+      },
+      rows: result.rows,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+    a.href = url;
+    a.download = `lineup_backtest_${mode}_${result.season_start}_${result.season_end}_${stamp}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadShowdownCaptainABResult = (result: ShowdownCaptainABResult) => {
+    const blob = new Blob([JSON.stringify(result, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+    a.href = url;
+    a.download = `showdown_captain_ab_${result.summary.season_start}_${result.summary.season_end}_${stamp}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const createAndResolve = async (row: UnresolvedRow) => {
+    setStatus(`Resolving ${row.normalized_name}...`);
+    setError(null);
+    try {
+      const player = await upsertPlayerMaster({
+        full_name: row.normalized_name
+          .split(" ")
+          .map((part) => (part ? part[0].toUpperCase() + part.slice(1) : part))
+          .join(" "),
+        team: row.team ?? undefined,
+        position: row.position ?? undefined,
+      });
+      await resolveUnresolved(row.unresolved_id, {
+        player_master_id: player.player_master_id,
+        resolved_by: "ui_auto",
+        create_alias: true,
+      });
+      setStatus(`Resolved ${row.normalized_name} -> ${player.player_master_id}`);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setStatus(null);
+    }
+  };
+
+  const manualResolve = async (row: UnresolvedRow) => {
+    const playerMasterId = resolutions[row.unresolved_id];
+    if (!playerMasterId) {
+      setError("player_master_id is required for manual resolve");
+      return;
+    }
+    setStatus(`Applying manual resolve for ${row.normalized_name}...`);
+    setError(null);
+    try {
+      await resolveUnresolved(row.unresolved_id, {
+        player_master_id: playerMasterId,
+        resolved_by: "ui_manual",
+        create_alias: true,
+      });
+      setStatus(`Resolved ${row.normalized_name}`);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setStatus(null);
+    }
+  };
+
+  const toggleCuratedSalarySlices = async () => {
+    const next = !showCuratedSalarySlices;
+    setShowCuratedSalarySlices(next);
+    if (!next) return;
+    try {
+      await refreshCuratedSalarySlices();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  return (
+    <div className="page">
+      <header className="hero">
+        <div>
+          <p className="eyebrow">football_26</p>
+          <h1>Data Ops Control Plane</h1>
+          <p className="subtitle">
+            Deterministic identity mapping, ingestion lineage, and unresolved-player triage.
+          </p>
+        </div>
+        <div className="stats">
+          <div className="stat-card">
+            <span>Resolution</span>
+            <strong>{completionPct}%</strong>
+          </div>
+          <div className="stat-card">
+            <span>Open Unresolved</span>
+            <strong>{unresolvedCount}</strong>
+          </div>
+          <div className="stat-card">
+            <span>New Unresolved (24h)</span>
+            <strong>{newUnresolvedCount}</strong>
+          </div>
+        </div>
+      </header>
+
+      <nav className="workspace-nav" aria-label="Control plane sections">
+        <span className="workspace-nav-label">Workspace</span>
+        <div className="workspace-nav-links">
+          <a href="#ingestion">Ingestion</a>
+          <a href="#projection-simulation">Simulation</a>
+          <a href="#portfolio-comparison">Portfolio Comparison</a>
+          <a href="#analysis-reports">Analysis</a>
+          <a href="#lineup-backtests">Lineup Backtests</a>
+          <a href="#unresolved-queue">Unresolved Queue</a>
+          <a href="#curated-salary-slices">Salary Slices</a>
+          <a href="#season-coverage">Coverage</a>
+          <a href="#recent-runs">Recent Runs</a>
+        </div>
+      </nav>
+
+      <main className="layout">
+        <section className="panel" id="ingestion">
+          <h2>Ingestion</h2>
+          <div className="grid">
+            <label>
+              Source
+              <select
+                value={sourceSystem}
+                onChange={(event) => setSourceSystem(event.target.value as "draftkings" | "fanduel")}
+              >
+                <option value="draftkings">DraftKings</option>
+                <option value="fanduel">FanDuel</option>
+              </select>
+            </label>
+            <label>
+              Season
+              <input
+                type="number"
+                value={season}
+                onChange={(event) => setSeason(Number(event.target.value))}
+              />
+            </label>
+            <label>
+              Week
+              <input
+                type="number"
+                value={week}
+                onChange={(event) => setWeek(Number(event.target.value))}
+              />
+            </label>
+            <label>
+              Slate
+              <select value={slate} onChange={(event) => setSlate(event.target.value)}>
+                {slateOptions.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="form-stack">
+            <label>
+              Salary CSV Path
+              <input
+                className="wide"
+                type="text"
+                value={salaryPath}
+                onChange={(event) => setSalaryPath(event.target.value)}
+              />
+            </label>
+            <label>
+              Injury CSV Path
+              <input
+                className="wide"
+                type="text"
+                value={injuryPath}
+                onChange={(event) => setInjuryPath(event.target.value)}
+              />
+            </label>
+          </div>
+          <div className="button-row">
+            <button onClick={runSalaries} disabled={isIngesting}>
+              Load Salaries
+            </button>
+            <button onClick={runInjuries} disabled={isIngesting}>
+              Load Injuries
+            </button>
+            <button onClick={runBootstrap} disabled={isIngesting}>
+              Bootstrap nflreadpy
+            </button>
+            <button onClick={runNflSchedules} disabled={isIngesting}>
+              Load Schedules
+            </button>
+            <button onClick={runNflWeeklyStats} disabled={isIngesting}>
+              Load Weekly Stats
+            </button>
+            <button onClick={() => refresh()} disabled={isIngesting}>
+              Refresh
+            </button>
+          </div>
+
+          <div className="subsection freshness-section">
+            <div className="section-header">
+              <h3>Data Freshness</h3>
+              {dataFreshness && (
+                <span className="freshness-context">
+                  {dataFreshness.season} W{dataFreshness.week} · {dataFreshness.slate}
+                </span>
+              )}
+            </div>
+            <p className="hint">
+              Exact selected slice. Schedule and weekly-stat checks use nflreadpy season/week data.
+            </p>
+            {dataFreshness ? (
+              <div className="freshness-grid">
+                {dataFreshness.rows.map((row) => (
+                  <article
+                    className={`freshness-card freshness-card-${row.status}`}
+                    key={row.dataset}
+                  >
+                    <div className="freshness-card-header">
+                      <strong>{FRESHNESS_LABELS[row.dataset]}</strong>
+                      <span className={`freshness-status freshness-status-${row.status}`}>
+                        {row.status}
+                      </span>
+                    </div>
+                    <span className="freshness-source">{row.source_system}</span>
+                    <div className="freshness-count">
+                      <strong>{row.rows.toLocaleString()}</strong>
+                      <span>rows</span>
+                    </div>
+                    <p>
+                      {row.latest_loaded_at && row.age_hours != null
+                        ? `${row.age_hours.toFixed(1)}h old · ${formatDateTime(row.latest_loaded_at)}`
+                        : "No rows loaded for this slice"}
+                    </p>
+                    <small>Stale after {row.stale_after_hours}h</small>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="hint">Checking selected slice...</p>
+            )}
+          </div>
+
+          <div className="subsection">
+            <h3>Auto-Discover Local CSVs</h3>
+            <p className="hint">Bulk import files by filename pattern from one directory.</p>
+            <label>
+              Discovery Directory
+              <input
+                className="wide"
+                type="text"
+                value={discoverDirectory}
+                onChange={(event) => setDiscoverDirectory(event.target.value)}
+              />
+            </label>
+            <div className="button-row">
+              <button onClick={runAutoDiscoverSalaries} disabled={isIngesting}>
+                Auto Import Salaries
+              </button>
+              <button onClick={runAutoDiscoverInjuries} disabled={isIngesting}>
+                Auto Import Injuries
+              </button>
+            </div>
+          </div>
+
+          <div className="subsection">
+            <h3>Historical nflreadpy Loads</h3>
+            <p className="hint">Run season-range identity bootstrap and game-data backfills from one panel.</p>
+            <div className="range-grid">
+              <label>
+                Start Season
+                <input
+                  type="number"
+                  value={historyStartSeason}
+                  onChange={(event) => setHistoryStartSeason(Number(event.target.value))}
+                />
+              </label>
+              <label>
+                End Season
+                <input
+                  type="number"
+                  value={historyEndSeason}
+                  onChange={(event) => setHistoryEndSeason(Number(event.target.value))}
+                />
+              </label>
+            </div>
+            <div className="button-row">
+              <button onClick={runHistoricalBootstrap} disabled={isIngesting}>
+                Bootstrap Season Range
+              </button>
+              <button onClick={runHistoricalGameData} disabled={isIngesting}>
+                Load Historical Game Data
+              </button>
+            </div>
+          </div>
+          {status && <p className="status">{status}</p>}
+          {error && <p className="error">{error}</p>}
+        </section>
+
+        <section className="panel" id="projection-simulation">
+          <h2>Projection Simulation</h2>
+          <p className="hint">
+            Monte Carlo outcomes from historical nflreadpy player-game distributions, joined to the selected
+            salary slate.
+          </p>
+          <div className="simulation-grid">
+            <label>
+              Iterations
+              <input
+                type="number"
+                min={500}
+                max={50000}
+                step={500}
+                value={simulationIterations}
+                onChange={(event) => setSimulationIterations(Number(event.target.value))}
+              />
+            </label>
+            <label>
+              Top Results
+              <input
+                type="number"
+                min={5}
+                max={300}
+                step={5}
+                value={simulationTopN}
+                onChange={(event) => setSimulationTopN(Number(event.target.value))}
+              />
+            </label>
+            <label>
+              Min History Games
+              <input
+                type="number"
+                min={1}
+                max={30}
+                value={simulationMinHistoryGames}
+                onChange={(event) => setSimulationMinHistoryGames(Number(event.target.value))}
+              />
+            </label>
+            <label>
+              Prior Weight
+              <input
+                type="number"
+                min={0}
+                max={100}
+                step={0.5}
+                value={simulationPriorWeight}
+                onChange={(event) => setSimulationPriorWeight(Number(event.target.value))}
+              />
+            </label>
+            <label>
+              Noise Scale
+              <input
+                type="number"
+                min={0}
+                max={1}
+                step={0.01}
+                value={simulationNoiseScale}
+                onChange={(event) => setSimulationNoiseScale(Number(event.target.value))}
+              />
+            </label>
+            <label>
+              Online Residual Gate
+              <select
+                value={simulationUseResidualLearning ? "enabled" : "off"}
+                onChange={(event) =>
+                  setSimulationUseResidualLearning(event.target.value === "enabled")
+                }
+                disabled={sourceSystem !== "draftkings"}
+              >
+                <option value="off">Off (default)</option>
+                <option value="enabled">Enabled</option>
+              </select>
+            </label>
+            <label>
+              Role Shock Player
+              <select
+                value={roleShockPlayerIdentity}
+                onChange={(event) => setRoleShockPlayerIdentity(event.target.value)}
+                disabled={roleShockCandidates.length === 0}
+              >
+                <option value="">
+                  {roleShockCandidates.length === 0 ? "Run baseline first" : "No role shock"}
+                </option>
+                {roleShockCandidates.map((row) => {
+                  const identity = row.player_master_id
+                    ? `master:${row.player_master_id}`
+                    : `source:${row.source_player_key}`;
+                  return (
+                    <option key={identity} value={identity}>
+                      {row.player_name} ({row.team ?? "-"} {row.position ?? "-"})
+                    </option>
+                  );
+                })}
+              </select>
+            </label>
+            <label>
+              Retained Opportunity
+              <input
+                type="number"
+                min={0}
+                max={1}
+                step={0.05}
+                value={roleShockRetainedShare}
+                onChange={(event) => setRoleShockRetainedShare(Number(event.target.value))}
+                disabled={!roleShockPlayerIdentity}
+              />
+            </label>
+            <label>
+              Reallocation Scope
+              <select
+                value={roleShockScope}
+                onChange={(event) =>
+                  setRoleShockScope(event.target.value as "same_position" | "skill_players")
+                }
+                disabled={!roleShockPlayerIdentity}
+              >
+                <option value="same_position">Same position</option>
+                <option value="skill_players">All RB/WR/TE</option>
+              </select>
+            </label>
+            <label>
+              Point-in-Time Shock
+              <select
+                value={pointShockType}
+                onChange={(event) =>
+                  setPointShockType(
+                    event.target.value as "" | "weather" | "news"
+                  )
+                }
+              >
+                <option value="">Off (default)</option>
+                <option value="weather">Weather</option>
+                <option value="news">Team news</option>
+              </select>
+            </label>
+            {pointShockType && (
+              <>
+                <label>
+                  Scenario As-Of
+                  <input
+                    type="text"
+                    placeholder="2025-10-05T12:00:00-04:00"
+                    value={pointShockScenarioAsOf}
+                    onChange={(event) =>
+                      setPointShockScenarioAsOf(event.target.value)
+                    }
+                  />
+                </label>
+                <label>
+                  Shock Observed At
+                  <input
+                    type="text"
+                    placeholder="2025-10-05T11:30:00-04:00"
+                    value={pointShockObservedAt}
+                    onChange={(event) =>
+                      setPointShockObservedAt(event.target.value)
+                    }
+                  />
+                </label>
+                <label>
+                  Shock Label
+                  <input
+                    type="text"
+                    placeholder="Strong crosswind"
+                    value={pointShockLabel}
+                    onChange={(event) => setPointShockLabel(event.target.value)}
+                  />
+                </label>
+                <label>
+                  Teams
+                  <input
+                    type="text"
+                    placeholder="BUF,MIA"
+                    value={pointShockTeams}
+                    onChange={(event) => setPointShockTeams(event.target.value)}
+                  />
+                </label>
+                <label>
+                  Positions
+                  <input
+                    type="text"
+                    value={pointShockPositions}
+                    onChange={(event) =>
+                      setPointShockPositions(event.target.value)
+                    }
+                  />
+                </label>
+                <label>
+                  Mean Multiplier
+                  <input
+                    type="number"
+                    min={0}
+                    max={2}
+                    step={0.05}
+                    value={pointShockMeanMultiplier}
+                    onChange={(event) =>
+                      setPointShockMeanMultiplier(Number(event.target.value))
+                    }
+                  />
+                </label>
+                <label>
+                  Volatility Multiplier
+                  <input
+                    type="number"
+                    min={0.25}
+                    max={3}
+                    step={0.05}
+                    value={pointShockVolatilityMultiplier}
+                    onChange={(event) =>
+                      setPointShockVolatilityMultiplier(
+                        Number(event.target.value)
+                      )
+                    }
+                  />
+                </label>
+              </>
+            )}
+          </div>
+          <p className="hint">
+            Online residual learning is DraftKings-only and default-off. When enabled, it uses immutable
+            snapshots from strictly earlier completed weeks and visibly falls back to baseline when fewer
+            than four snapshots exist.
+          </p>
+          <p className="hint">
+            Run an unshocked baseline first to populate eligible players. A role shock manually reduces the
+            selected player&apos;s opportunity and reallocates it from the prior four team games; it does not
+            claim historical injury knowledge. Increase Top Results if the player you need is not listed.
+          </p>
+          <p className="hint">
+            Weather/team-news shocks are manually entered stress tests. Use timezone-aware ISO timestamps;
+            the observed timestamp must be at or before the scenario cutoff. Team and position targeting is
+            explicit, and the service does not infer a live report or claim historical availability.
+          </p>
+          <div className="button-row">
+            <button onClick={runSimulation} disabled={isIngesting || portfolioRunActive}>
+              Run Simulation
+            </button>
+            <button onClick={runBacktest} disabled={isIngesting || portfolioRunActive}>
+              Run Historical Backtest
+            </button>
+            <button
+              onClick={() => {
+                setSimulationRows([]);
+                setRoleShockCandidates([]);
+                setRoleShockPlayerIdentity("");
+                setRoleShockImpacts([]);
+                setPointInTimeShockImpacts([]);
+                setSimulationScenarioAsOf(null);
+                setResidualAdjustmentImpacts([]);
+                setResidualSnapshotCount(0);
+                setResidualLearningApplied(false);
+                setScenarioWarnings([]);
+                setSimulationRunId(null);
+                setUltimateLineupRun(null);
+                setUltimateLineupResult(null);
+                setBacktestResult(null);
+              }}
+              disabled={
+                isIngesting ||
+                portfolioRunActive ||
+                (simulationRows.length === 0 &&
+                  backtestResult == null &&
+                  ultimateLineupRun == null &&
+                  ultimateLineupResult == null)
+              }
+            >
+              Clear Results
+            </button>
+          </div>
+          {simulationRunId && <p className="hint">Run ID: {simulationRunId}</p>}
+          {simulationScenarioAsOf && (
+            <p className="hint">Point-in-time scenario cutoff: {simulationScenarioAsOf}</p>
+          )}
+          {simulationUseResidualLearning && (
+            <p className="hint">
+              Residual learning: {residualLearningApplied ? "applied" : "not applied"} using{" "}
+              {residualSnapshotCount} prior snapshot{residualSnapshotCount === 1 ? "" : "s"}.
+            </p>
+          )}
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Player</th>
+                  <th>Team</th>
+                  <th>Pos</th>
+                  <th>Salary</th>
+                  <th>Hist</th>
+                  <th>Mean</th>
+                  <th>P75</th>
+                  <th>P90</th>
+                  <th>P95</th>
+                  <th>P(20+)</th>
+                  <th>P(25+)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {simulationRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={12} className="empty-row">
+                      Run a simulation to populate projected player outcomes.
+                    </td>
+                  </tr>
+                ) : (
+                  simulationRows.map((row, index) => (
+                    <tr key={`${row.player_master_id ?? row.source_player_key ?? row.player_name}-${index}`}>
+                      <td>{index + 1}</td>
+                      <td>{row.player_name}</td>
+                      <td>{row.team ?? "-"}</td>
+                      <td>{row.position ?? "-"}</td>
+                      <td>{row.salary != null ? `$${row.salary.toLocaleString()}` : "-"}</td>
+                      <td>{row.history_games}</td>
+                      <td>{row.mean_points.toFixed(2)}</td>
+                      <td>{row.p75_points.toFixed(2)}</td>
+                      <td>{row.p90_points.toFixed(2)}</td>
+                      <td>{row.p95_points.toFixed(2)}</td>
+                      <td>{(row.ceiling_prob_20 * 100).toFixed(1)}%</td>
+                      <td>{(row.ceiling_prob_25 * 100).toFixed(1)}%</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+          {scenarioWarnings.length > 0 && (
+            <div className="scenario-warnings" role="status">
+              {scenarioWarnings.map((warning) => (
+                <p key={warning}>{warning}</p>
+              ))}
+            </div>
+          )}
+          {residualAdjustmentImpacts.length > 0 && (
+            <div className="subsection">
+              <h3>Online Residual Adjustments</h3>
+              <p className="hint">
+                Additive adjustments are learned only from prior immutable snapshots. Production baseline
+                behavior is unchanged while the gate is off.
+              </p>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Player</th>
+                      <th>Adjustment</th>
+                      <th>Scopes</th>
+                      <th>Mean Before</th>
+                      <th>Mean After</th>
+                      <th>P90 Before</th>
+                      <th>P90 After</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {residualAdjustmentImpacts.map((row) => (
+                      <tr key={`${row.player_master_id ?? row.source_player_key ?? row.player_name}-residual`}>
+                        <td>
+                          {row.player_name} ({row.team ?? "-"} {row.position ?? "-"})
+                        </td>
+                        <td>{row.adjustment_points.toFixed(2)}</td>
+                        <td>{row.scopes_used}</td>
+                        <td>{row.baseline_mean_points.toFixed(2)}</td>
+                        <td>{row.adjusted_mean_points.toFixed(2)}</td>
+                        <td>{row.baseline_p90_points.toFixed(2)}</td>
+                        <td>{row.adjusted_p90_points.toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+          {roleShockImpacts.length > 0 && (
+            <div className="subsection">
+              <h3>Role Shock Impact</h3>
+              <p className="hint">
+                Opportunity and projection multipliers are shown separately because fantasy points respond
+                less than one-for-one to added carries and targets.
+              </p>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Player</th>
+                      <th>Role</th>
+                      <th>Opp ×</th>
+                      <th>Proj ×</th>
+                      <th>Mean Before</th>
+                      <th>Mean After</th>
+                      <th>Mean Δ</th>
+                      <th>P90 Before</th>
+                      <th>P90 After</th>
+                      <th>P90 Δ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {roleShockImpacts.map((row) => (
+                      <tr key={`${row.player_master_id ?? row.source_player_key ?? row.player_name}-${row.shock_role}`}>
+                        <td>
+                          {row.player_name} ({row.team ?? "-"} {row.position ?? "-"})
+                        </td>
+                        <td>{row.shock_role.replaceAll("_", " ")}</td>
+                        <td>{row.opportunity_multiplier.toFixed(2)}</td>
+                        <td>{row.projection_multiplier.toFixed(2)}</td>
+                        <td>{row.baseline_mean_points.toFixed(2)}</td>
+                        <td>{row.scenario_mean_points.toFixed(2)}</td>
+                        <td>{row.mean_points_delta.toFixed(2)}</td>
+                        <td>{row.baseline_p90_points.toFixed(2)}</td>
+                        <td>{row.scenario_p90_points.toFixed(2)}</td>
+                        <td>{row.p90_points_delta.toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+          {pointInTimeShockImpacts.length > 0 && (
+            <div className="subsection">
+              <h3>Point-in-Time Weather / News Impact</h3>
+              <p className="hint">
+                Each row shows the deterministic effect of one manually entered,
+                timestamp-bounded shock. Multipliers are caller assumptions, not
+                inferred historical facts.
+              </p>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Shock</th>
+                      <th>Observed</th>
+                      <th>Player</th>
+                      <th>Mean ×</th>
+                      <th>Vol ×</th>
+                      <th>Mean Before</th>
+                      <th>Mean After</th>
+                      <th>Mean Δ</th>
+                      <th>P90 Before</th>
+                      <th>P90 After</th>
+                      <th>P90 Δ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pointInTimeShockImpacts.map((row) => (
+                      <tr
+                        key={`${row.shock_index}-${row.player_master_id ?? row.source_player_key ?? row.player_name}`}
+                      >
+                        <td>
+                          {row.shock_type}: {row.label}
+                        </td>
+                        <td>{row.observed_at}</td>
+                        <td>
+                          {row.player_name} ({row.team ?? "-"} {row.position ?? "-"})
+                        </td>
+                        <td>{row.mean_multiplier.toFixed(2)}</td>
+                        <td>{row.volatility_multiplier.toFixed(2)}</td>
+                        <td>{row.baseline_mean_points.toFixed(2)}</td>
+                        <td>{row.scenario_mean_points.toFixed(2)}</td>
+                        <td>{row.mean_points_delta.toFixed(2)}</td>
+                        <td>{row.baseline_p90_points.toFixed(2)}</td>
+                        <td>{row.scenario_p90_points.toFixed(2)}</td>
+                        <td>{row.p90_points_delta.toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          <div className="subsection" id="portfolio-comparison">
+            <h3>Baseline vs Shock Portfolio</h3>
+            <p className="hint">
+              Select a completed shock run and, when available, its server-validated unshocked baseline.
+              Ultimate generation builds one shared candidate set, then compares the held baseline portfolio
+              with a portfolio reoptimized under the shock.
+            </p>
+            <div className="backtest-grid">
+              <label className="portfolio-run-selector">
+                Shock Simulation Run
+                <select
+                  value={selectedLineupSimulationRunId}
+                  onChange={(event) => {
+                    setSelectedLineupSimulationRunId(event.target.value);
+                    setSelectedBaselineSimulationRunId("");
+                  }}
+                  disabled={
+                    simulationRunsLoading ||
+                    portfolioRunActive ||
+                    shockedSimulationRunOptions.length === 0
+                  }
+                >
+                  <option value="">
+                    {simulationRunsLoading
+                      ? "Loading completed runs..."
+                      : shockedSimulationRunOptions.length === 0
+                        ? "No completed shock runs"
+                        : "Select a shock run"}
+                  </option>
+                  {shockedSimulationRunOptions.map((run) => (
+                    <option key={run.simulation_run_id} value={run.simulation_run_id}>
+                      {simulationRunLabel(run)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="portfolio-run-selector">
+                Compatible Baseline Run
+                <select
+                  value={selectedBaselineSimulationRunId}
+                  onChange={(event) => setSelectedBaselineSimulationRunId(event.target.value)}
+                  disabled={
+                    !selectedLineupSimulationRunId ||
+                    simulationRunsLoading ||
+                    portfolioRunActive
+                  }
+                >
+                  <option value="">Lineup-default projection (unpaired)</option>
+                  {compatibleBaselineRunOptions.map((run) => (
+                    <option key={run.simulation_run_id} value={run.simulation_run_id}>
+                      {simulationRunLabel(run)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Contest Objective
+                <select
+                  value={portfolioContestObjective}
+                  disabled={portfolioRunActive}
+                  onChange={(event) =>
+                    setPortfolioContestObjective(
+                      event.target.value as "balanced" | "cash" | "gpp"
+                    )
+                  }
+                >
+                  <option value="balanced">Balanced</option>
+                  <option value="cash">Cash</option>
+                  <option value="gpp">GPP</option>
+                </select>
+              </label>
+              <label>
+                Shared Candidate Lineups
+                <input
+                  type="number"
+                  min={1000}
+                  max={500000}
+                  step={500}
+                  value={portfolioCandidateLineups}
+                  disabled={portfolioRunActive}
+                  onChange={(event) => setPortfolioCandidateLineups(Number(event.target.value))}
+                />
+              </label>
+              <label>
+                Portfolio Lineups
+                <input
+                  type="number"
+                  min={10}
+                  max={1000}
+                  step={10}
+                  value={portfolioOutputLineups}
+                  disabled={portfolioRunActive}
+                  onChange={(event) => setPortfolioOutputLineups(Number(event.target.value))}
+                />
+              </label>
+            </div>
+            {selectedLineupSimulationRunId &&
+              !simulationRunsLoading &&
+              compatibleBaselineRunOptions.length === 0 && (
+                <p className="hint">
+                  No compatible persisted baseline was found. The comparison can still use the lineup
+                  generator&apos;s default projections as an unpaired baseline.
+                </p>
+              )}
+            <div className="button-row">
+              <button
+                onClick={runPortfolioComparison}
+                disabled={
+                  isIngesting ||
+                  portfolioRunActive ||
+                  simulationRunsLoading ||
+                  !selectedLineupSimulationRunId
+                }
+              >
+                {portfolioRunActive ? "Comparison Running..." : "Compare Baseline vs Shock"}
+              </button>
+              <button
+                onClick={() =>
+                  refreshSimulationRunOptions().catch((err) =>
+                    setError(err instanceof Error ? err.message : String(err))
+                  )
+                }
+                disabled={isIngesting || portfolioRunActive || simulationRunsLoading}
+              >
+                Refresh Simulation Runs
+              </button>
+            </div>
+            {ultimateLineupRun && (
+              <div className={`run-progress run-progress-${ultimateLineupRun.status}`} role="status">
+                <div className="run-progress-heading">
+                  <div>
+                    <span>Ultimate-lineup run</span>
+                    <strong>
+                      {ultimateLineupRun.stage === ultimateLineupRun.status
+                        ? ultimateLineupRun.status
+                        : `${ultimateLineupRun.stage.replaceAll("_", " ")} · ${ultimateLineupRun.status}`}
+                    </strong>
+                  </div>
+                  <strong>{ultimateLineupRun.progress_percent.toFixed(0)}%</strong>
+                </div>
+                <progress
+                  max={100}
+                  value={ultimateLineupRun.progress_percent}
+                  aria-label="Ultimate-lineup run progress"
+                />
+                <p>{ultimateLineupRun.progress_message ?? "Waiting for progress..."}</p>
+                <small>
+                  Run {ultimateLineupRun.ultimate_lineup_run_id.slice(0, 8)} · attempt {ultimateLineupRun.attempt_count}
+                  {ultimateLineupRun.checkpoint_path ? " · checkpoint enabled" : ""}
+                </small>
+                {ultimateLineupRun.status === "failed" && (
+                  <div className="button-row">
+                    <button onClick={retryPortfolioComparison} disabled={isIngesting}>
+                      Retry From Checkpoint
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+            {portfolioComparison && ultimateLineupResult && (
+              <>
+                <div className="metric-grid">
+                  <div className="mini-card">
+                    <span>Run Pairing</span>
+                    <strong>
+                      {portfolioComparison.baseline_simulation_run_id ? "Paired" : "Unpaired"}
+                    </strong>
+                    <small>
+                      {portfolioComparison.baseline_simulation_run_id?.slice(0, 8) ?? "lineup default"}
+                      {" → "}
+                      {portfolioComparison.simulation_run_id.slice(0, 8)}
+                    </small>
+                  </div>
+                  <div className="mini-card">
+                    <span>Stable-ID Overrides</span>
+                    <strong>
+                      {ultimateLineupResult.baseline_simulation_projection_overrides} / {ultimateLineupResult.simulation_projection_overrides}
+                    </strong>
+                    <small>baseline / shock players</small>
+                  </div>
+                  <div className="mini-card">
+                    <span>Shared Candidates</span>
+                    <strong>{portfolioComparison.shared_candidate_lineups.toLocaleString()}</strong>
+                    <small>identical pool for both rankings</small>
+                  </div>
+                  <div className="mini-card">
+                    <span>Lineup Overlap</span>
+                    <strong>{formatRate(portfolioComparison.lineup_overlap_rate)}</strong>
+                    <small>
+                      {portfolioComparison.lineup_overlap_count} of {portfolioComparison.baseline_output_lineups}
+                    </small>
+                  </div>
+                  <div className="mini-card">
+                    <span>Baseline Before Shock</span>
+                    <strong>
+                      {formatMetric(portfolioComparison.baseline_portfolio_baseline_projected_blend)}
+                    </strong>
+                    <small>projected blend</small>
+                  </div>
+                  <div className="mini-card">
+                    <span>Held Under Shock</span>
+                    <strong>
+                      {formatMetric(portfolioComparison.baseline_portfolio_scenario_projected_blend)}
+                    </strong>
+                    <small>baseline portfolio, shock scoring</small>
+                  </div>
+                  <div className="mini-card">
+                    <span>Reoptimized Under Shock</span>
+                    <strong>
+                      {formatMetric(portfolioComparison.scenario_portfolio_scenario_projected_blend)}
+                    </strong>
+                    <small>shock portfolio, shock scoring</small>
+                  </div>
+                  <div className="mini-card">
+                    <span>Reoptimization Lift</span>
+                    <strong>
+                      {formatMetric(portfolioComparison.projected_blend_reoptimization_lift)}
+                    </strong>
+                    <small>
+                      objective Δ {formatMetric(portfolioComparison.objective_reoptimization_lift)}
+                    </small>
+                  </div>
+                </div>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Player</th>
+                        <th>Team</th>
+                        <th>Pos</th>
+                        <th>Salary</th>
+                        <th>Baseline</th>
+                        <th>Shock</th>
+                        <th>Exposure Δ</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {portfolioComparison.exposure_changes.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="empty-row">
+                            No player exposure changed between the selected portfolios.
+                          </td>
+                        </tr>
+                      ) : (
+                        portfolioComparison.exposure_changes.map((row) => (
+                          <tr
+                            key={
+                              row.player_master_id ??
+                              row.source_player_key ??
+                              `${row.player_name}-${row.team ?? "-"}-${row.position}`
+                            }
+                          >
+                            <td>{row.player_name}</td>
+                            <td>{row.team ?? "-"}</td>
+                            <td>{row.position}</td>
+                            <td>${row.salary.toLocaleString()}</td>
+                            <td>
+                              {formatRate(row.baseline_exposure_rate)} ({row.baseline_exposure_count})
+                            </td>
+                            <td>
+                              {formatRate(row.scenario_exposure_rate)} ({row.scenario_exposure_count})
+                            </td>
+                            <td>
+                              {row.exposure_rate_delta > 0 ? "+" : ""}
+                              {(row.exposure_rate_delta * 100).toFixed(1)} pp
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="subsection">
+            <h3>Backtest Learning Controls</h3>
+            <p className="hint">
+              Runs the same simulation settings for a historical week, compares to actual DK points, and reports
+              learnings for future projection adjustments.
+            </p>
+            <div className="backtest-grid">
+              <label>
+                Evaluation Top N
+                <input
+                  type="number"
+                  min={5}
+                  max={300}
+                  step={5}
+                  value={backtestTopN}
+                  onChange={(event) => setBacktestTopN(Number(event.target.value))}
+                />
+              </label>
+              <label>
+                Low Salary Threshold
+                <input
+                  type="number"
+                  min={500}
+                  max={20000}
+                  step={100}
+                  value={backtestLowSalaryThreshold}
+                  onChange={(event) => setBacktestLowSalaryThreshold(Number(event.target.value))}
+                />
+              </label>
+              <label>
+                Low Salary Hit Points
+                <input
+                  type="number"
+                  min={1}
+                  max={80}
+                  step={0.5}
+                  value={backtestLowSalaryHitPoints}
+                  onChange={(event) => setBacktestLowSalaryHitPoints(Number(event.target.value))}
+                />
+              </label>
+            </div>
+          </div>
+
+          {backtestResult && (
+            <div className="subsection">
+              <h3>Backtest Results</h3>
+              <div className="metric-grid">
+                <div className="mini-card">
+                  <span>Players w/Actuals</span>
+                  <strong>
+                    {backtestResult.players_with_actuals}/{backtestResult.players_simulated}
+                  </strong>
+                </div>
+                <div className="mini-card">
+                  <span>MAE / RMSE</span>
+                  <strong>
+                    {backtestResult.mae.toFixed(2)} / {backtestResult.rmse.toFixed(2)}
+                  </strong>
+                </div>
+                <div className="mini-card">
+                  <span>Top-N Hits (20+)</span>
+                  <strong>
+                    {backtestResult.top_n_hits}/{backtestResult.evaluation_top_n}
+                  </strong>
+                </div>
+                <div className="mini-card">
+                  <span>Low Salary Hit Rate</span>
+                  <strong>{(backtestResult.low_salary_hit_rate * 100).toFixed(1)}%</strong>
+                </div>
+                <div className="mini-card">
+                  <span>Bias (Mean Error)</span>
+                  <strong>{backtestResult.mean_error.toFixed(2)}</strong>
+                </div>
+                <div className="mini-card">
+                  <span>Correlation</span>
+                  <strong>
+                    {backtestResult.correlation == null ? "-" : backtestResult.correlation.toFixed(3)}
+                  </strong>
+                </div>
+              </div>
+
+              <ul className="learning-list">
+                {backtestResult.learning_notes.map((note, index) => (
+                  <li key={`${note}-${index}`}>{note}</li>
+                ))}
+              </ul>
+
+              <div className="dual-tables">
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Position</th>
+                        <th>Players</th>
+                        <th>Pred</th>
+                        <th>Actual</th>
+                        <th>Error</th>
+                        <th>Adj Mult</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {backtestResult.position_learning.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="empty-row">
+                            No position learnings.
+                          </td>
+                        </tr>
+                      ) : (
+                        backtestResult.position_learning.map((row) => (
+                          <tr key={row.position}>
+                            <td>{row.position}</td>
+                            <td>{row.players}</td>
+                            <td>{row.mean_prediction.toFixed(2)}</td>
+                            <td>{row.mean_actual.toFixed(2)}</td>
+                            <td>{row.mean_error.toFixed(2)}</td>
+                            <td>{row.adjustment_multiplier.toFixed(3)}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Salary Bucket</th>
+                        <th>Players</th>
+                        <th>Pred</th>
+                        <th>Actual</th>
+                        <th>Error</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {backtestResult.salary_bucket_learning.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="empty-row">
+                            No salary bucket learnings.
+                          </td>
+                        </tr>
+                      ) : (
+                        backtestResult.salary_bucket_learning.map((row) => (
+                          <tr key={row.bucket}>
+                            <td>{row.bucket}</td>
+                            <td>{row.players}</td>
+                            <td>{row.mean_prediction.toFixed(2)}</td>
+                            <td>{row.mean_actual.toFixed(2)}</td>
+                            <td>{row.mean_error.toFixed(2)}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Player</th>
+                      <th>Pos</th>
+                      <th>Salary</th>
+                      <th>Pred Mean</th>
+                      <th>Pred P75</th>
+                      <th>Pred P90</th>
+                      <th>Pred P95</th>
+                      <th>Actual</th>
+                      <th>Error</th>
+                      <th>Value</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {backtestResult.rows.map((row, index) => (
+                      <tr key={`${row.player_master_id ?? row.source_player_key ?? row.player_name}-${index}`}>
+                        <td>{index + 1}</td>
+                        <td>{row.player_name}</td>
+                        <td>{row.position ?? "-"}</td>
+                        <td>{row.salary != null ? `$${row.salary.toLocaleString()}` : "-"}</td>
+                        <td>{row.predicted_mean_points.toFixed(2)}</td>
+                        <td>{row.predicted_p75_points.toFixed(2)}</td>
+                        <td>{row.predicted_p90_points.toFixed(2)}</td>
+                        <td>{row.predicted_p95_points.toFixed(2)}</td>
+                        <td>{row.actual_points.toFixed(2)}</td>
+                        <td>{row.error.toFixed(2)}</td>
+                        <td>{row.salary_value_actual == null ? "-" : `${row.salary_value_actual.toFixed(2)}x`}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </section>
+
+        <section className="panel wide-panel" id="analysis-reports">
+          <div className="section-header">
+            <h2>Analysis &amp; Reports</h2>
+            <span className="section-badge">
+              {latestBenchmarkRun ? runLabel(latestBenchmarkRun.run_directory) : "no runs"}
+            </span>
+          </div>
+          <p className="hint">
+            Open current showdown, classic, combined, and comparison artifacts or export the complete
+            reproducible run bundle.
+          </p>
+          {latestBenchmarkRun ? (
+            <>
+              <div className="artifact-list">
+                {latestBenchmarkRun.artifacts
+                  .filter(
+                    (artifact) =>
+                      artifact.exists &&
+                      artifact.download_url &&
+                      (artifact.name.endsWith(".json") || artifact.name.endsWith(".md"))
+                  )
+                  .map((artifact) => (
+                    <div className="artifact-pill" key={`analysis-${artifact.name}`}>
+                      <span>{artifact.name}</span>
+                      <a
+                        href={benchmarkArtifactUrl(artifact.download_url!)}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <code>{artifact.path}</code>
+                      </a>
+                    </div>
+                  ))}
+                <div className="artifact-pill">
+                  <span>JSON + Markdown + config snapshot</span>
+                  <a href={benchmarkBundleUrl(latestBenchmarkRun.run_directory)}>
+                    <code>Download complete analysis bundle (.zip)</code>
+                  </a>
+                </div>
+              </div>
+            </>
+          ) : (
+            <p className="hint">Run the benchmark suite to populate analysis artifacts.</p>
+          )}
+        </section>
+
+        <section className="panel wide-panel" id="lineup-backtests">
+          <h2>Lineup Backtests (Optimal vs Predicted)</h2>
+          <p className="hint">
+            Runs walk-forward lineup backtests against actual-optimal lineups. Classic and showdown are tracked
+            separately.
+          </p>
+          <div className="subsection">
+            <div className="section-header">
+              <h3>Current Model Card</h3>
+              <button
+                className="toggle-button"
+                onClick={() => applyModelDefaults(modelDefaults)}
+                disabled={isIngesting}
+              >
+                Reset To Defaults
+              </button>
+            </div>
+            <div className="metric-grid model-card-grid">
+              <div className="mini-card">
+                <span>Source / Range</span>
+                <strong>
+                  {sourceSystem} {Math.min(historyStartSeason, historyEndSeason)}-{Math.max(historyStartSeason, historyEndSeason)}
+                </strong>
+              </div>
+              <div className="mini-card">
+                <span>Classic Mean / Median Gap</span>
+                <strong>
+                  {formatMetric(latestBenchmarkRun?.metrics.classic_mean_gap_points)} /{" "}
+                  {formatMetric(latestBenchmarkRun?.metrics.classic_median_gap_points)}
+                </strong>
+                {classicGapInterval && <small>{classicGapInterval}</small>}
+              </div>
+              <div className="mini-card">
+                <span>Showdown Mean / Median Gap</span>
+                <strong>
+                  {formatMetric(latestBenchmarkRun?.metrics.showdown_mean_gap_points)} /{" "}
+                  {formatMetric(latestBenchmarkRun?.metrics.showdown_median_gap_points)}
+                </strong>
+                {showdownGapInterval && <small>{showdownGapInterval}</small>}
+              </div>
+              <div className="mini-card">
+                <span>Captain Win Rate / Lift</span>
+                <strong>
+                  {formatRate(latestBenchmarkRun?.metrics.captain_informed_win_rate)} /{" "}
+                  {formatMetric(latestBenchmarkRun?.metrics.captain_mean_gap_lift_points)}
+                </strong>
+                {captainWinRateInterval && <small>{captainWinRateInterval}</small>}
+              </div>
+            </div>
+            <div className="info-grid">
+              <div className="info-card">
+                <span>Showdown Captain Default</span>
+                <code>{lineupBacktestShowdownCaptainModelPath || "-"}</code>
+                <strong>strength={lineupBacktestShowdownCaptainPriorStrength.toFixed(2)}</strong>
+              </div>
+              <div className="info-card">
+                <span>Classic Value Default</span>
+                <code>{lineupBacktestClassicValueModelPath || "-"}</code>
+                <strong>strength={lineupBacktestClassicValuePriorStrength.toFixed(2)}</strong>
+              </div>
+              <div className="info-card">
+                <span>Matchup Default</span>
+                <code>{lineupBacktestMatchupOutcomeModelPath || "-"}</code>
+                <strong>strength={lineupBacktestMatchupOutcomePriorStrength.toFixed(2)}</strong>
+              </div>
+              <div className="info-card">
+                <span>Matchup Gate Default</span>
+                <code>{lineupBacktestMatchupPriorGateModelPath || "-"}</code>
+                <strong>{latestBenchmarkRun?.status ?? "no benchmark run"}</strong>
+              </div>
+            </div>
+            <p className="hint">
+              Latest successful benchmark with metrics: {latestBenchmarkRun?.run_directory ?? "none"}
+            </p>
+            <div className="artifact-list">
+              {[findArtifact(latestBenchmarkRun, "summary.md"), findArtifact(latestBenchmarkRun, "delta_vs_previous.md"), findArtifact(latestBenchmarkRun, "run.log")]
+                .flatMap((artifact) => (artifact ? [artifact] : []))
+                .map((artifact) => (
+                  <div className="artifact-pill" key={artifact.name}>
+                    <span>{artifact.name}</span>
+                    {artifact.exists && artifact.download_url ? (
+                      <a
+                        href={benchmarkArtifactUrl(artifact.download_url)}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <code>{artifact.path}</code>
+                      </a>
+                    ) : (
+                      <code>{`${artifact.path} (missing)`}</code>
+                    )}
+                  </div>
+                ))}
+            </div>
+          </div>
+
+          <div className="subsection">
+            <div className="section-header">
+              <h3>Benchmark Suite</h3>
+              <button
+                className="toggle-button"
+                onClick={() => setShowBenchmarkRuns((prev) => !prev)}
+                disabled={isIngesting}
+              >
+                {showBenchmarkRuns ? "Collapse Runs" : "Expand Runs"}
+              </button>
+            </div>
+            <p className="hint">
+              Runs the canonical benchmark stack and records artifacts under `docs/benchmarks`.
+            </p>
+            <div className="backtest-grid">
+              <label>
+                Limit Slates (0 = all)
+                <input
+                  type="number"
+                  min={0}
+                  max={2000}
+                  value={benchmarkLimitSlates}
+                  onChange={(event) => setBenchmarkLimitSlates(Number(event.target.value))}
+                />
+              </label>
+              <label>
+                Classic Lineups / Slate
+                <input
+                  type="number"
+                  min={100}
+                  max={20000}
+                  step={100}
+                  value={benchmarkClassicLineupsPerSlate}
+                  onChange={(event) => setBenchmarkClassicLineupsPerSlate(Number(event.target.value))}
+                />
+              </label>
+              <label>
+                Showdown Lineups / Slate
+                <input
+                  type="number"
+                  min={100}
+                  max={20000}
+                  step={100}
+                  value={benchmarkShowdownLineupsPerSlate}
+                  onChange={(event) => setBenchmarkShowdownLineupsPerSlate(Number(event.target.value))}
+                />
+              </label>
+              <label>
+                Showdown A/B Lineups / Slate
+                <input
+                  type="number"
+                  min={100}
+                  max={20000}
+                  step={100}
+                  value={benchmarkShowdownAbLineupsPerSlate}
+                  onChange={(event) => setBenchmarkShowdownAbLineupsPerSlate(Number(event.target.value))}
+                />
+              </label>
+            </div>
+            <div className="button-row">
+              <button onClick={runBenchmarkSuiteFromUi} disabled={isIngesting}>
+                Run Benchmark Suite
+              </button>
+              <button
+                onClick={() =>
+                  refreshBenchmarkRuns().catch((err) =>
+                    setError(err instanceof Error ? err.message : String(err))
+                  )
+                }
+                disabled={isIngesting}
+              >
+                Refresh Benchmark Runs
+              </button>
+            </div>
+
+            {showBenchmarkRuns && (
+              <>
+                <div className="backtest-grid">
+                  <label>
+                    Source Filter
+                    <select
+                      value={benchmarkSourceFilter}
+                      onChange={(event) => setBenchmarkSourceFilter(event.target.value)}
+                    >
+                      <option value="all">all</option>
+                      <option value="draftkings">draftkings</option>
+                      <option value="fanduel">fanduel</option>
+                    </select>
+                  </label>
+                  <label>
+                    Status Filter
+                    <select
+                      value={benchmarkStatusFilter}
+                      onChange={(event) => setBenchmarkStatusFilter(event.target.value)}
+                    >
+                      <option value="all">all</option>
+                      <option value="ok">ok</option>
+                      <option value="failed">failed</option>
+                      <option value="running">running</option>
+                    </select>
+                  </label>
+                  <label>
+                    Slate Track
+                    <select
+                      value={benchmarkSlateFilter}
+                      onChange={(event) => setBenchmarkSlateFilter(event.target.value)}
+                    >
+                      <option value="all">all</option>
+                      <option value="classic">classic</option>
+                      <option value="showdown">showdown</option>
+                    </select>
+                  </label>
+                  <label>
+                    Season From
+                    <input
+                      type="number"
+                      min={2000}
+                      value={benchmarkSeasonStartFilter}
+                      onChange={(event) => setBenchmarkSeasonStartFilter(event.target.value)}
+                      placeholder="any"
+                    />
+                  </label>
+                  <label>
+                    Season Through
+                    <input
+                      type="number"
+                      min={2000}
+                      value={benchmarkSeasonEndFilter}
+                      onChange={(event) => setBenchmarkSeasonEndFilter(event.target.value)}
+                      placeholder="any"
+                    />
+                  </label>
+                  <label>
+                    Model Config Search
+                    <input
+                      value={benchmarkConfigFilter}
+                      onChange={(event) => setBenchmarkConfigFilter(event.target.value)}
+                      placeholder="path, strength, season..."
+                    />
+                  </label>
+                </div>
+                <p className="hint">
+                  Showing {filteredBenchmarkRuns.length} of {benchmarkRuns.length} recorded runs.
+                </p>
+                <div className="table-wrap benchmark-table">
+                  <table>
+                  <thead>
+                    <tr>
+                      <th>Run</th>
+                      <th>Status</th>
+                      <th>Classic Mean</th>
+                      <th>Showdown Mean</th>
+                      <th>Captain Win Rate</th>
+                      <th>Artifacts</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredBenchmarkRuns.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="empty-row">
+                          No benchmark runs match the current filters.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredBenchmarkRuns.map((run) => (
+                        <tr key={run.run_directory}>
+                          <td>
+                            <div className="run-cell">
+                              <strong>{runLabel(run.run_directory)}</strong>
+                              <code>{run.run_directory}</code>
+                            </div>
+                          </td>
+                          <td>{run.status}</td>
+                          <td>{formatMetric(run.metrics.classic_mean_gap_points)}</td>
+                          <td>{formatMetric(run.metrics.showdown_mean_gap_points)}</td>
+                          <td>{formatRate(run.metrics.captain_informed_win_rate)}</td>
+                          <td>
+                            <div className="artifact-links">
+                              {run.artifacts
+                                .filter((artifact) =>
+                                  ["summary.md", "delta_vs_previous.md", "run.log"].includes(artifact.name)
+                                )
+                                .map((artifact) => (
+                                  artifact.exists && artifact.download_url ? (
+                                    <a
+                                      href={benchmarkArtifactUrl(artifact.download_url)}
+                                      key={`${run.run_directory}-${artifact.name}`}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                    >
+                                      <code>{artifact.name}</code>
+                                    </a>
+                                  ) : (
+                                    <code key={`${run.run_directory}-${artifact.name}`}>
+                                      {artifact.name} missing
+                                    </code>
+                                  )
+                                ))}
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="backtest-grid">
+            <label>
+              Mode
+              <select
+                value={lineupBacktestMode}
+                onChange={(event) => setLineupBacktestMode(event.target.value as "classic" | "showdown")}
+              >
+                <option value="classic">classic</option>
+                <option value="showdown">showdown</option>
+              </select>
+            </label>
+            <label>
+              Candidate Lineups / Slate
+              <input
+                type="number"
+                min={100}
+                max={20000}
+                step={100}
+                value={lineupBacktestLineupsPerSlate}
+                onChange={(event) => setLineupBacktestLineupsPerSlate(Number(event.target.value))}
+              />
+            </label>
+            <label>
+              Training Window (Slates)
+              <input
+                type="number"
+                min={2}
+                max={120}
+                value={lineupBacktestTrainingWindowSlates}
+                onChange={(event) => setLineupBacktestTrainingWindowSlates(Number(event.target.value))}
+              />
+            </label>
+            <label>
+              Min Training Slates
+              <input
+                type="number"
+                min={1}
+                max={80}
+                value={lineupBacktestMinTrainingSlates}
+                onChange={(event) => setLineupBacktestMinTrainingSlates(Number(event.target.value))}
+              />
+            </label>
+            <label>
+              Min Training Rows
+              <input
+                type="number"
+                min={100}
+                max={2000000}
+                step={100}
+                value={lineupBacktestMinTrainingRows}
+                onChange={(event) => setLineupBacktestMinTrainingRows(Number(event.target.value))}
+              />
+            </label>
+            <label>
+              Limit Slates (0 = all)
+              <input
+                type="number"
+                min={0}
+                max={2000}
+                value={lineupBacktestLimitSlates}
+                onChange={(event) => setLineupBacktestLimitSlates(Number(event.target.value))}
+              />
+            </label>
+            {lineupBacktestMode === "showdown" && (
+              <>
+                <label>
+                  Captain Model Path
+                  <input
+                    type="text"
+                    value={lineupBacktestShowdownCaptainModelPath}
+                    onChange={(event) => setLineupBacktestShowdownCaptainModelPath(event.target.value)}
+                  />
+                </label>
+                <label>
+                  Captain Prior Strength
+                  <input
+                    type="number"
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    value={lineupBacktestShowdownCaptainPriorStrength}
+                    onChange={(event) =>
+                      setLineupBacktestShowdownCaptainPriorStrength(Number(event.target.value))
+                    }
+                  />
+                </label>
+              </>
+            )}
+            {lineupBacktestMode === "classic" && (
+              <>
+                <label>
+                  Classic Value Model Path
+                  <input
+                    type="text"
+                    value={lineupBacktestClassicValueModelPath}
+                    onChange={(event) => setLineupBacktestClassicValueModelPath(event.target.value)}
+                  />
+                </label>
+                <label>
+                  Classic Prior Strength
+                  <input
+                    type="number"
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    value={lineupBacktestClassicValuePriorStrength}
+                    onChange={(event) =>
+                      setLineupBacktestClassicValuePriorStrength(Number(event.target.value))
+                    }
+                  />
+                </label>
+                <label>
+                  Matchup Outcome Model Path
+                  <input
+                    type="text"
+                    value={lineupBacktestMatchupOutcomeModelPath}
+                    onChange={(event) => setLineupBacktestMatchupOutcomeModelPath(event.target.value)}
+                  />
+                </label>
+                <label>
+                  Matchup Prior Strength
+                  <input
+                    type="number"
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    value={lineupBacktestMatchupOutcomePriorStrength}
+                    onChange={(event) =>
+                      setLineupBacktestMatchupOutcomePriorStrength(Number(event.target.value))
+                    }
+                  />
+                </label>
+                <label>
+                  Matchup Gate Model Path
+                  <input
+                    type="text"
+                    value={lineupBacktestMatchupPriorGateModelPath}
+                    onChange={(event) => setLineupBacktestMatchupPriorGateModelPath(event.target.value)}
+                  />
+                </label>
+              </>
+            )}
+          </div>
+          <div className="button-row">
+            <button onClick={runLineupBacktest} disabled={isIngesting}>
+              Run {lineupBacktestMode} Lineup Backtest
+            </button>
+            <button onClick={runShowdownCaptainAB} disabled={isIngesting || lineupBacktestMode !== "showdown"}>
+              Run Showdown Captain A/B
+            </button>
+            <button
+              onClick={() => {
+                setLineupBacktestClassicResult(null);
+                setLineupBacktestShowdownResult(null);
+                setLineupBacktestShowdownABResult(null);
+              }}
+              disabled={
+                isIngesting ||
+                (!lineupBacktestClassicResult &&
+                  !lineupBacktestShowdownResult &&
+                  !lineupBacktestShowdownABResult)
+              }
+            >
+              Clear Lineup Backtest Results
+            </button>
+          </div>
+
+          {lineupBacktestShowdownABResult && (
+            <div className="subsection">
+              <h3>Showdown Captain A/B Metrics</h3>
+              <div className="button-row">
+                <button onClick={() => downloadShowdownCaptainABResult(lineupBacktestShowdownABResult)} disabled={isIngesting}>
+                  Download showdown A/B JSON
+                </button>
+              </div>
+              <div className="metric-grid">
+                <div className="mini-card">
+                  <span>Paired Slates</span>
+                  <strong>{lineupBacktestShowdownABResult.summary.paired_slates}</strong>
+                </div>
+                <div className="mini-card">
+                  <span>Mean Gap Lift</span>
+                  <strong>
+                    {lineupBacktestShowdownABResult.summary.mean_gap_lift_points == null
+                      ? "-"
+                      : lineupBacktestShowdownABResult.summary.mean_gap_lift_points.toFixed(2)}
+                  </strong>
+                </div>
+                <div className="mini-card">
+                  <span>Median Gap Lift</span>
+                  <strong>
+                    {lineupBacktestShowdownABResult.summary.median_gap_lift_points == null
+                      ? "-"
+                      : lineupBacktestShowdownABResult.summary.median_gap_lift_points.toFixed(2)}
+                  </strong>
+                </div>
+                <div className="mini-card">
+                  <span>Captain Win Rate</span>
+                  <strong>
+                    {lineupBacktestShowdownABResult.summary.captain_informed_win_rate == null
+                      ? "-"
+                      : `${(lineupBacktestShowdownABResult.summary.captain_informed_win_rate * 100).toFixed(1)}%`}
+                  </strong>
+                </div>
+                <div className="mini-card">
+                  <span>Baseline Mean Gap</span>
+                  <strong>
+                    {lineupBacktestShowdownABResult.summary.baseline_mean_gap_points == null
+                      ? "-"
+                      : lineupBacktestShowdownABResult.summary.baseline_mean_gap_points.toFixed(2)}
+                  </strong>
+                </div>
+                <div className="mini-card">
+                  <span>Captain Mean Gap</span>
+                  <strong>
+                    {lineupBacktestShowdownABResult.summary.captain_informed_mean_gap_points == null
+                      ? "-"
+                      : lineupBacktestShowdownABResult.summary.captain_informed_mean_gap_points.toFixed(2)}
+                  </strong>
+                </div>
+              </div>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Season</th>
+                      <th>Week</th>
+                      <th>Slate</th>
+                      <th>Gap Lift</th>
+                      <th>Baseline Gap</th>
+                      <th>Captain Gap</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lineupBacktestShowdownABResult.paired_rows.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="empty-row">
+                          No paired showdown rows yet.
+                        </td>
+                      </tr>
+                    ) : (
+                      [...lineupBacktestShowdownABResult.paired_rows]
+                        .sort((a, b) => b.gap_lift_points - a.gap_lift_points)
+                        .slice(0, 12)
+                        .map((row) => (
+                          <tr key={`ab-${row.season}-${row.week}-${row.slate}`}>
+                            <td>{row.season}</td>
+                            <td>{row.week}</td>
+                            <td>{row.slate}</td>
+                            <td>{row.gap_lift_points.toFixed(2)}</td>
+                            <td>{row.baseline_gap_points.toFixed(2)}</td>
+                            <td>{row.captain_informed_gap_points.toFixed(2)}</td>
+                          </tr>
+                        ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {lineupBacktestPanels.map(({ mode, result }) => {
+            if (!result) return null;
+            const topGaps = result.rows
+              .filter((row) => row.status === "ok" && row.gap_points != null)
+              .sort((a, b) => (b.gap_points ?? -999999) - (a.gap_points ?? -999999))
+              .slice(0, 12);
+            const issues = result.rows.filter((row) => row.status !== "ok");
+            return (
+              <div className="subsection" key={mode}>
+                <h3>{mode === "classic" ? "Classic Metrics" : "Showdown Metrics"}</h3>
+                <div className="button-row">
+                  <button onClick={() => downloadLineupBacktestResult(mode, result)} disabled={isIngesting}>
+                    Download {mode} JSON
+                  </button>
+                </div>
+                <div className="metric-grid">
+                  <div className="mini-card">
+                    <span>Slates Completed</span>
+                    <strong>
+                      {result.slates_completed}/{result.slates_total}
+                    </strong>
+                  </div>
+                  <div className="mini-card">
+                    <span>Mean Gap</span>
+                    <strong>{result.mean_gap_points == null ? "-" : result.mean_gap_points.toFixed(2)}</strong>
+                  </div>
+                  <div className="mini-card">
+                    <span>Median Gap</span>
+                    <strong>{result.median_gap_points == null ? "-" : result.median_gap_points.toFixed(2)}</strong>
+                  </div>
+                  <div className="mini-card">
+                    <span>Best Gap</span>
+                    <strong>{result.best_case_gap_points == null ? "-" : result.best_case_gap_points.toFixed(2)}</strong>
+                  </div>
+                  <div className="mini-card">
+                    <span>Worst Gap</span>
+                    <strong>{result.worst_case_gap_points == null ? "-" : result.worst_case_gap_points.toFixed(2)}</strong>
+                  </div>
+                  <div className="mini-card">
+                    <span>Failed/Skipped</span>
+                    <strong>{result.slates_failed_or_skipped}</strong>
+                  </div>
+                </div>
+
+                <div className="dual-tables">
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Season</th>
+                          <th>Week</th>
+                          <th>Slate</th>
+                          <th>Gap</th>
+                          <th>Optimal</th>
+                          <th>Predicted</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {topGaps.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="empty-row">
+                              No completed rows yet.
+                            </td>
+                          </tr>
+                        ) : (
+                          topGaps.map((row) => (
+                            <tr key={`${mode}-${row.season}-${row.week}-${row.slate}`}>
+                              <td>{row.season}</td>
+                              <td>{row.week}</td>
+                              <td>{row.slate}</td>
+                              <td>{row.gap_points == null ? "-" : row.gap_points.toFixed(2)}</td>
+                              <td>
+                                {row.optimal_actual_points == null ? "-" : row.optimal_actual_points.toFixed(2)}
+                              </td>
+                              <td>
+                                {row.predicted_actual_points == null ? "-" : row.predicted_actual_points.toFixed(2)}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Season</th>
+                          <th>Week</th>
+                          <th>Slate</th>
+                          <th>Status</th>
+                          <th>Error</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {issues.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="empty-row">
+                              No failed or warmup rows.
+                            </td>
+                          </tr>
+                        ) : (
+                          issues.map((row) => (
+                            <tr key={`${mode}-issue-${row.season}-${row.week}-${row.slate}`}>
+                              <td>{row.season}</td>
+                              <td>{row.week}</td>
+                              <td>{row.slate}</td>
+                              <td>{row.status}</td>
+                              <td>{row.error_message ?? "-"}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </section>
+
+        <section className="panel wide-panel" id="unresolved-queue">
+          <div className="section-header">
+            <h2>
+              Unresolved Queue <span className="section-badge">{unresolvedCount}</span>
+            </h2>
+            <button
+              className="toggle-button"
+              onClick={() => setShowUnresolvedQueue((prev) => !prev)}
+              disabled={isIngesting}
+            >
+              {showUnresolvedQueue ? "Collapse" : "Expand"}
+            </button>
+          </div>
+          {!showUnresolvedQueue ? (
+            <p className="hint">
+              Collapsed. {newUnresolvedCount} new in the last 24 hours across{" "}
+              {unresolvedTriage?.groups_returned ?? 0} source/week/slate groups.
+            </p>
+          ) : (
+            <>
+              <div className="metric-grid">
+                <div className="mini-card">
+                  <span>Open Total</span>
+                  <strong>{unresolvedCount}</strong>
+                </div>
+                <div className="mini-card">
+                  <span>New in 24h</span>
+                  <strong>{newUnresolvedCount}</strong>
+                </div>
+                <div className="mini-card">
+                  <span>Groups Shown</span>
+                  <strong>{unresolvedTriage?.groups_returned ?? 0}</strong>
+                </div>
+              </div>
+
+              <div className="subsection">
+                <h3>Automated Triage by Source / Week / Slate</h3>
+                <p className="hint">
+                  Open identity failures are grouped automatically; newest and highest-volume groups appear first.
+                </p>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Source</th>
+                        <th>Table</th>
+                        <th>Season</th>
+                        <th>Week</th>
+                        <th>Slate</th>
+                        <th>New 24h</th>
+                        <th>Open</th>
+                        <th>Newest</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {!unresolvedTriage || unresolvedTriage.rows.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="empty-row">
+                            No open unresolved groups.
+                          </td>
+                        </tr>
+                      ) : (
+                        unresolvedTriage.rows.map((row) => (
+                          <tr
+                            key={[
+                              row.source_system,
+                              row.source_table,
+                              row.season ?? "none",
+                              row.week ?? "none",
+                              row.slate ?? "none",
+                            ].join("-")}
+                          >
+                            <td>{row.source_system}</td>
+                            <td>{row.source_table}</td>
+                            <td>{row.season ?? "-"}</td>
+                            <td>{row.week ?? "-"}</td>
+                            <td>{row.slate ?? "-"}</td>
+                            <td>{row.new_count}</td>
+                            <td>{row.open_count}</td>
+                            <td>{formatDateTime(row.newest_created_at)}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="subsection">
+                <h3>Detailed Repair Queue</h3>
+                <p className="hint">
+                  Showing the newest {unresolved.length} open records for create-or-link resolution.
+                </p>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Team</th>
+                        <th>Pos</th>
+                        <th>Source Key</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {unresolved.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="empty-row">
+                            Queue is clean.
+                          </td>
+                        </tr>
+                      ) : (
+                        unresolved.map((row) => (
+                          <tr key={row.unresolved_id}>
+                            <td>{row.normalized_name}</td>
+                            <td>{row.team ?? "-"}</td>
+                            <td>{row.position ?? "-"}</td>
+                            <td>{row.source_player_key ?? "-"}</td>
+                            <td>
+                              <div className="action-row">
+                                <button onClick={() => createAndResolve(row)}>Create + Resolve</button>
+                                <input
+                                  type="text"
+                                  placeholder="existing player_master_id"
+                                  value={resolutions[row.unresolved_id] ?? ""}
+                                  onChange={(event) =>
+                                    setResolutions((prev) => ({
+                                      ...prev,
+                                      [row.unresolved_id]: event.target.value,
+                                    }))
+                                  }
+                                />
+                                <button onClick={() => manualResolve(row)}>Manual Resolve</button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
+        </section>
+
+        <section className="panel wide-panel" id="curated-salary-slices">
+          <div className="section-header">
+            <h2>
+              Curated Salary Slices <span className="section-badge">{salarySlices.length}</span>
+            </h2>
+            <button className="toggle-button" onClick={toggleCuratedSalarySlices} disabled={isIngesting}>
+              {showCuratedSalarySlices ? "Collapse" : "Expand"}
+            </button>
+          </div>
+          {!showCuratedSalarySlices ? (
+            <p className="hint">Collapsed. Expand to inspect season/week/slate coverage for curated salaries.</p>
+          ) : (
+            <>
+              <div className="inline-controls">
+                <label>
+                  Season Filter (Optional)
+                  <input
+                    type="number"
+                    placeholder="e.g. 2025"
+                    value={salarySliceSeasonFilter}
+                    onChange={(event) => setSalarySliceSeasonFilter(event.target.value)}
+                  />
+                </label>
+                <button
+                  onClick={() =>
+                    refreshCuratedSalarySlices().catch((err) =>
+                      setError(err instanceof Error ? err.message : String(err))
+                    )
+                  }
+                  disabled={isIngesting}
+                >
+                  Refresh Slices
+                </button>
+              </div>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Source</th>
+                      <th>Season</th>
+                      <th>Week</th>
+                      <th>Slate</th>
+                      <th>Rows</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {salarySlices.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="empty-row">
+                          No curated salary slices found for this filter/source.
+                        </td>
+                      </tr>
+                    ) : (
+                      salarySlices.map((row) => (
+                        <tr key={`${row.source_system}-${row.season}-${row.week}-${row.slate}`}>
+                          <td>{row.source_system}</td>
+                          <td>{row.season}</td>
+                          <td>{row.week}</td>
+                          <td>{row.slate}</td>
+                          <td>{row.rows.toLocaleString()}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </section>
+
+        <section className="panel wide-panel" id="season-coverage">
+          <div className="section-header">
+            <h2>Season Coverage</h2>
+            <button
+              className="toggle-button"
+              onClick={() => setShowSeasonCoverage((prev) => !prev)}
+              disabled={isIngesting}
+            >
+              {showSeasonCoverage ? "Collapse" : "Expand"}
+            </button>
+          </div>
+          {!showSeasonCoverage ? (
+            <p className="hint">Collapsed. Expand for dataset-level season row counts.</p>
+          ) : (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Dataset</th>
+                    <th>Season</th>
+                    <th>Rows</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {coverage.length === 0 ? (
+                    <tr>
+                      <td colSpan={3} className="empty-row">
+                        No season-level data loaded yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    coverage.map((row) => (
+                      <tr key={`${row.dataset}-${row.season ?? "na"}`}>
+                        <td>{row.dataset}</td>
+                        <td>{row.season ?? "-"}</td>
+                        <td>{row.rows.toLocaleString()}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <section className="panel wide-panel" id="recent-runs">
+          <div className="section-header">
+            <h2>Recent Runs</h2>
+            <button className="toggle-button" onClick={() => setShowRecentRuns((prev) => !prev)} disabled={isIngesting}>
+              {showRecentRuns ? "Collapse" : "Expand"}
+            </button>
+          </div>
+          {!showRecentRuns ? (
+            <p className="hint">Collapsed. Expand to review ingest run history.</p>
+          ) : (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Started</th>
+                    <th>Source</th>
+                    <th>Table</th>
+                    <th>Status</th>
+                    <th>Curated</th>
+                    <th>Unresolved</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {runs.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="empty-row">
+                        No ingest runs yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    runs.map((row) => (
+                      <tr key={row.ingest_run_id}>
+                        <td>{new Date(row.started_at).toLocaleString()}</td>
+                        <td>{row.source_system}</td>
+                        <td>{row.source_table}</td>
+                        <td>{row.status}</td>
+                        <td>{row.rows_curated}</td>
+                        <td>{row.rows_unresolved}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      </main>
+    </div>
+  );
+}
+
+export default App;

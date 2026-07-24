@@ -21,6 +21,24 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--week", type=int, required=True)
     parser.add_argument("--slate", type=str, default="sunday_main")
     parser.add_argument(
+        "--simulation-run-id",
+        type=str,
+        default=None,
+        help=(
+            "Completed matching simulation run whose stable-ID player outcomes "
+            "override target-slate projections."
+        ),
+    )
+    parser.add_argument(
+        "--baseline-simulation-run-id",
+        type=str,
+        default=None,
+        help=(
+            "Optional compatible unshocked simulation run used as the paired "
+            "baseline for candidate generation and portfolio comparison."
+        ),
+    )
+    parser.add_argument(
         "--contest-objective",
         choices=["balanced", "cash", "gpp"],
         default="balanced",
@@ -95,6 +113,8 @@ def main() -> None:
         season=args.season,
         week=args.week,
         slate=args.slate,
+        simulation_run_id=args.simulation_run_id,
+        baseline_simulation_run_id=args.baseline_simulation_run_id,
         contest_objective=args.contest_objective,
         candidate_lineups=args.candidate_lineups,
         output_lineups=args.output_lineups,
@@ -139,6 +159,25 @@ def main() -> None:
         "season": result.season,
         "week": result.week,
         "slate": result.slate,
+        "simulation_run_id": result.simulation_run_id,
+        "simulation_outcomes_loaded": result.simulation_outcomes_loaded,
+        "simulation_projection_overrides": (
+            result.simulation_projection_overrides
+        ),
+        "baseline_simulation_run_id": (
+            result.baseline_simulation_run_id
+        ),
+        "baseline_simulation_outcomes_loaded": (
+            result.baseline_simulation_outcomes_loaded
+        ),
+        "baseline_simulation_projection_overrides": (
+            result.baseline_simulation_projection_overrides
+        ),
+        "portfolio_comparison": (
+            result.portfolio_comparison.model_dump()
+            if result.portfolio_comparison is not None
+            else None
+        ),
         "contest_objective": result.contest_objective,
         "contest_objective_weights": result.contest_objective_weights,
         "late_swap_applied": result.late_swap_applied,

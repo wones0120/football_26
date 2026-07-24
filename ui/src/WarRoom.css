@@ -1,0 +1,787 @@
+:root {
+  --war-bg: #0b0e12;
+  --war-surface: #11161c;
+  --war-surface-2: #171d24;
+  --war-line: rgba(206, 216, 224, 0.12);
+  --war-line-strong: rgba(206, 216, 224, 0.22);
+  --war-text: #eef2f4;
+  --war-muted: #8e9aa5;
+  --war-faint: #596672;
+  --war-green: #64d69a;
+  --war-amber: #e4b76f;
+  --war-red: #ef7d72;
+  --war-blue: #74a7ff;
+  --war-ink: #05070a;
+}
+
+body:has(.war-room) {
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+    radial-gradient(circle at 18% 0%, rgba(116, 167, 255, 0.12), transparent 30%),
+    radial-gradient(circle at 88% 10%, rgba(100, 214, 154, 0.1), transparent 24%),
+    var(--war-bg);
+  background-size: 36px 36px, 36px 36px, auto, auto, auto;
+}
+
+body:has(.war-room) #root {
+  max-width: none;
+  padding: 0;
+}
+
+.war-room {
+  min-height: 100vh;
+  overflow-x: hidden;
+  padding: 14px;
+  color: var(--war-text);
+  font-family: "Aptos", "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+}
+
+.war-command,
+.war-status-grid,
+.war-layout,
+.war-bottom {
+  max-width: 1780px;
+  margin: 0 auto;
+}
+
+.war-command {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: minmax(220px, 0.9fr) minmax(360px, 1.2fr) minmax(260px, 0.8fr);
+  gap: 12px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--war-line);
+  border-radius: 8px;
+  background: rgba(10, 14, 18, 0.9);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(18px);
+}
+
+.war-brand,
+.war-controls,
+.war-actions,
+.war-status-grid,
+.board-title,
+.signal-meta,
+.decision-table-head,
+.decision-row,
+.game-grid,
+.war-bottom,
+.lineup-cards,
+.exposure-row {
+  display: grid;
+}
+
+.war-brand {
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: center;
+}
+
+.war-mark {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid var(--war-line-strong);
+  border-radius: 7px;
+  color: var(--war-green);
+  background: linear-gradient(135deg, rgba(100, 214, 154, 0.16), rgba(116, 167, 255, 0.08));
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.war-brand p,
+.war-panel-title span,
+.war-status-grid span,
+.signal-meta,
+.signal-headline span,
+.decision-table-head,
+.debate-card span,
+.lineup-cards span,
+.exposure-row span {
+  margin: 0;
+  color: var(--war-muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.war-brand h1 {
+  margin: 2px 0 0;
+  font-size: 1.15rem;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.war-controls {
+  grid-template-columns: 110px 86px minmax(180px, 1fr);
+  gap: 8px;
+}
+
+.war-controls label {
+  display: grid;
+  gap: 4px;
+  color: var(--war-muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.war-controls input,
+.war-controls select {
+  min-width: 0;
+  height: 38px;
+  border: 1px solid var(--war-line);
+  border-radius: 7px;
+  background: #090c10;
+  color: var(--war-text);
+  font: inherit;
+  font-size: 0.88rem;
+  padding: 0 10px;
+  outline: none;
+}
+
+.war-controls input:focus,
+.war-controls select:focus {
+  border-color: rgba(116, 167, 255, 0.62);
+  box-shadow: 0 0 0 3px rgba(116, 167, 255, 0.12);
+}
+
+.war-actions {
+  grid-template-columns: 1fr repeat(4, auto);
+  gap: 8px;
+  align-items: center;
+  justify-content: end;
+}
+
+.war-actions button,
+.board-tabs button,
+.debate-button {
+  height: 38px;
+  border: 1px solid rgba(100, 214, 154, 0.28);
+  border-radius: 7px;
+  background: rgba(100, 214, 154, 0.12);
+  color: var(--war-text);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.war-actions button {
+  padding: 0 12px;
+}
+
+.war-actions .war-secondary,
+.board-tabs button {
+  border-color: var(--war-line);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.war-pending {
+  min-width: 0;
+  color: var(--war-amber);
+  font-size: 0.78rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.war-status-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.war-status-grid article,
+.war-panel {
+  border: 1px solid var(--war-line);
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.022));
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.24);
+}
+
+.war-status-grid article {
+  padding: 12px;
+}
+
+.war-status-grid strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 1.2rem;
+  letter-spacing: -0.03em;
+}
+
+.war-status-grid small {
+  display: block;
+  margin-top: 5px;
+  color: var(--war-faint);
+  font-size: 0.76rem;
+}
+
+.war-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.75fr) minmax(520px, 1.9fr) minmax(240px, 0.85fr);
+  gap: 10px;
+  margin-top: 10px;
+  align-items: stretch;
+}
+
+.war-panel {
+  min-width: 0;
+  padding: 12px;
+}
+
+.war-panel-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--war-line);
+}
+
+.war-panel-title strong {
+  font-size: 0.95rem;
+}
+
+.signal-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.signal-banner {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px solid rgba(100, 214, 154, 0.2);
+  border-radius: 7px;
+  background: rgba(100, 214, 154, 0.08);
+  color: var(--war-text);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.signal-banner-error {
+  border-color: rgba(239, 125, 114, 0.24);
+  background: rgba(239, 125, 114, 0.08);
+}
+
+.signal-row {
+  display: grid;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid rgba(206, 216, 224, 0.09);
+  border-radius: 7px;
+  background: rgba(5, 7, 10, 0.46);
+}
+
+.signal-row-state {
+  min-height: 84px;
+  align-content: center;
+}
+
+.signal-row-error {
+  border-color: rgba(239, 125, 114, 0.24);
+  background: rgba(239, 125, 114, 0.08);
+}
+
+.signal-meta {
+  grid-template-columns: auto 1fr;
+  gap: 8px;
+}
+
+.signal-headline {
+  display: grid;
+  gap: 5px;
+}
+
+.signal-headline span {
+  color: var(--war-blue);
+}
+
+.signal-headline strong {
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+
+.signal-score {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--war-muted);
+  font-size: 0.78rem;
+}
+
+.signal-score strong {
+  color: var(--war-green);
+}
+
+.signal-score a {
+  color: var(--war-blue);
+  text-decoration: none;
+}
+
+.signal-score a:hover {
+  text-decoration: underline;
+}
+
+.war-center {
+  display: grid;
+  gap: 10px;
+}
+
+.board-title {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  align-items: center;
+}
+
+.board-title-copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.board-title-copy strong {
+  line-height: 1.25;
+}
+
+.board-tabs {
+  display: flex;
+  gap: 6px;
+}
+
+.board-tabs button {
+  flex: 0 0 auto;
+  min-width: 82px;
+  height: 32px;
+  padding: 0 10px;
+  font-size: 0.74rem;
+}
+
+.board-tabs .active {
+  border-color: rgba(116, 167, 255, 0.48);
+  color: var(--war-blue);
+  background: rgba(116, 167, 255, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(116, 167, 255, 0.08);
+}
+
+.decision-table {
+  margin-top: 10px;
+}
+
+.decision-table-head,
+.decision-row {
+  grid-template-columns: minmax(150px, 1.5fr) 0.72fr 0.5fr 0.5fr 0.55fr 0.55fr 0.55fr 0.7fr;
+  gap: 10px;
+  align-items: center;
+}
+
+.decision-table-head {
+  padding: 0 10px 7px;
+  border-bottom: 1px solid var(--war-line);
+}
+
+.decision-row {
+  position: relative;
+  padding: 10px;
+  border-bottom: 1px solid rgba(206, 216, 224, 0.08);
+}
+
+.decision-row-state {
+  grid-template-columns: 1fr;
+}
+
+.decision-row:last-child {
+  border-bottom: 0;
+}
+
+.decision-row > span {
+  color: #d9e0e5;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.decision-row p {
+  grid-column: 1 / -1;
+  margin: -2px 0 0;
+  color: var(--war-muted);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.decision-row-error p {
+  color: var(--war-red);
+}
+
+.player-cell {
+  display: grid;
+  gap: 3px;
+}
+
+.player-cell strong {
+  font-size: 0.95rem;
+}
+
+.player-cell span {
+  color: var(--war-faint);
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.positive {
+  color: var(--war-green) !important;
+}
+
+.negative {
+  color: var(--war-red) !important;
+}
+
+.stance {
+  justify-self: start;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--war-line);
+  font-size: 0.72rem !important;
+}
+
+.stance-core,
+.stance-over {
+  color: var(--war-green) !important;
+  border-color: rgba(100, 214, 154, 0.32);
+  background: rgba(100, 214, 154, 0.1);
+}
+
+.stance-debate {
+  color: var(--war-amber) !important;
+  border-color: rgba(228, 183, 111, 0.32);
+  background: rgba(228, 183, 111, 0.1);
+}
+
+.stance-under {
+  color: var(--war-red) !important;
+  border-color: rgba(239, 125, 114, 0.32);
+  background: rgba(239, 125, 114, 0.1);
+}
+
+.game-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.game-grid article,
+.debate-card,
+.lineup-cards article {
+  border: 1px solid rgba(206, 216, 224, 0.09);
+  border-radius: 7px;
+  background: rgba(5, 7, 10, 0.4);
+}
+
+.game-grid article {
+  padding: 10px;
+}
+
+.game-grid article > span {
+  color: var(--war-muted);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.game-grid article > strong {
+  display: block;
+  margin-top: 7px;
+  color: var(--war-blue);
+  font-size: 1.6rem;
+}
+
+.game-grid dl {
+  display: grid;
+  gap: 5px;
+  margin: 8px 0 0;
+}
+
+.game-grid div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.game-grid dt,
+.game-grid dd {
+  margin: 0;
+  color: var(--war-muted);
+  font-size: 0.75rem;
+}
+
+.game-grid dd {
+  color: var(--war-text);
+  font-weight: 750;
+}
+
+.debate-rail {
+  display: flex;
+  flex-direction: column;
+}
+
+.debate-card {
+  margin-top: 10px;
+  padding: 10px;
+}
+
+.debate-card.locked {
+  border-color: rgba(100, 214, 154, 0.24);
+  background: rgba(100, 214, 154, 0.08);
+}
+
+.debate-card p {
+  margin: 7px 0 0;
+  color: #d8e0e5;
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.debate-controls {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.debate-controls label {
+  display: grid;
+  gap: 6px;
+  color: var(--war-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.debate-controls select,
+.debate-controls textarea {
+  width: 100%;
+  border: 1px solid var(--war-line);
+  border-radius: 7px;
+  background: rgba(9, 12, 16, 0.92);
+  color: var(--war-text);
+  font: inherit;
+  padding: 10px;
+  box-sizing: border-box;
+}
+
+.debate-controls textarea {
+  resize: vertical;
+  min-height: 96px;
+}
+
+.debate-controls select:focus,
+.debate-controls textarea:focus {
+  border-color: rgba(116, 167, 255, 0.62);
+  box-shadow: 0 0 0 3px rgba(116, 167, 255, 0.12);
+  outline: none;
+}
+
+.debate-stance-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.debate-stance-group button {
+  height: 34px;
+  border: 1px solid var(--war-line);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--war-text);
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding: 0 10px;
+  cursor: pointer;
+}
+
+.debate-stance-group button.active {
+  border-color: rgba(100, 214, 154, 0.34);
+  background: rgba(100, 214, 154, 0.14);
+  color: var(--war-green);
+}
+
+.debate-button {
+  width: 100%;
+  margin-top: auto;
+}
+
+.war-bottom {
+  grid-template-columns: minmax(340px, 0.9fr) minmax(520px, 1.5fr);
+  gap: 10px;
+  margin-top: 10px;
+  padding-bottom: 14px;
+}
+
+.exposure-bars {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.exposure-empty {
+  color: var(--war-muted);
+  font-size: 0.84rem;
+  line-height: 1.5;
+  padding: 4px 0;
+}
+
+.exposure-row {
+  grid-template-columns: 42px 1fr 42px;
+  gap: 10px;
+  align-items: center;
+}
+
+.exposure-row div {
+  height: 9px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.exposure-row i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.exposure-row strong {
+  color: var(--war-text);
+  font-size: 0.78rem;
+  text-align: right;
+}
+
+.tone-green {
+  background: var(--war-green);
+}
+
+.tone-blue {
+  background: var(--war-blue);
+}
+
+.tone-amber {
+  background: var(--war-amber);
+}
+
+.tone-red {
+  background: var(--war-red);
+}
+
+.lineup-cards {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.lineup-cards article {
+  padding: 10px;
+}
+
+.lineup-empty {
+  border: 1px solid rgba(206, 216, 224, 0.09);
+  border-radius: 7px;
+  background: rgba(5, 7, 10, 0.4);
+}
+
+.lineup-cards article > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.lineup-cards strong {
+  color: var(--war-green);
+  font-size: 1.15rem;
+}
+
+.lineup-cards p {
+  min-height: 42px;
+  margin: 10px 0;
+  color: #d7dfe5;
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.lineup-cards footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--war-line);
+}
+
+@media (max-width: 1180px) {
+  .war-command,
+  .war-layout,
+  .war-bottom {
+    grid-template-columns: 1fr;
+  }
+
+  .war-command {
+    position: static;
+  }
+
+  .war-actions {
+    grid-template-columns: 1fr auto auto;
+  }
+}
+
+@media (max-width: 820px) {
+  .war-room {
+    padding: 8px;
+  }
+
+  .war-controls,
+  .war-status-grid,
+  .game-grid,
+  .lineup-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .decision-table {
+    overflow-x: auto;
+  }
+
+  .decision-table-head,
+  .decision-row {
+    min-width: 840px;
+  }
+
+  .board-title {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .board-tabs {
+    width: 100%;
+  }
+
+  .board-tabs button {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .war-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .war-actions button {
+    width: 100%;
+  }
+}

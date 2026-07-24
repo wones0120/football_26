@@ -377,6 +377,82 @@ class SimulationRun(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime)
 
 
+class UltimateLineupRun(Base):
+    __tablename__ = "ultimate_lineup_run"
+    __table_args__ = (
+        UniqueConstraint(
+            "idempotency_key",
+            name="uq_ultimate_lineup_run_idempotency_key",
+        ),
+        Index(
+            "idx_ultimate_lineup_run_slice",
+            "source_system",
+            "season",
+            "week",
+            "slate",
+            "created_at",
+        ),
+        Index(
+            "idx_ultimate_lineup_run_status",
+            "status",
+            "updated_at",
+        ),
+    )
+
+    ultimate_lineup_run_id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_system: Mapped[str] = mapped_column(String(32), nullable=False)
+    season: Mapped[int] = mapped_column(Integer, nullable=False)
+    week: Mapped[int] = mapped_column(Integer, nullable=False)
+    slate: Mapped[str] = mapped_column(String(64), nullable=False)
+    request_json: Mapped[dict] = mapped_column(JSON_DOCUMENT, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default="queued",
+    )
+    stage: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="queued",
+    )
+    progress_current: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+    )
+    progress_total: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+    )
+    progress_message: Mapped[str | None] = mapped_column(Text)
+    checkpoint_path: Mapped[str | None] = mapped_column(Text)
+    attempt_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+    )
+    result_json: Mapped[dict | None] = mapped_column(JSON_DOCUMENT)
+    error_message: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=utcnow_naive,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=utcnow_naive,
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
 class SimulatedPlayerOutcome(Base):
     __tablename__ = "simulated_player_outcome"
     __table_args__ = (

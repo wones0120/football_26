@@ -2,12 +2,40 @@
 
 This log records decisions that affect reproducibility, production defaults, or historical-model acceptance. The operational backlog remains in `docs/TODO.md`.
 
+## 2026-07-24 — Make numbered migrations authoritative for target schema
+
+- Decision: remove all `target` schema DDL from product services. Migrations `0013` and `0014` adopt the nine columns previously added opportunistically and record the exact migrated table, column/type/nullability, and constraint contract. Runtime services perform read-only compatibility validation against only the tables they use.
+- Evidence: the static governance test rejects runtime `target` DDL, focused product-service and schema tests pass, and the canonical PostgreSQL target check reports 55 expected tables, 55 actual tables, and zero issues with an exact 14-file migration ledger.
+- Rationale: idempotent `CREATE TABLE IF NOT EXISTS` and `ADD COLUMN IF NOT EXISTS` calls can hide missing deployments and structural drift. A migration-recorded catalog contract makes deployment history authoritative while preserving actionable runtime failures.
+- Production impact: deployers must apply every numbered migration before starting product workflows. A missing or changed table, column/type, or constraint now fails compatibility validation instead of being silently created or altered by a request.
+
+## 2026-07-21 — Persist async ultimate-lineup runs and checkpoint retries
+
+- Decision: represent each UI-triggered ultimate-lineup comparison as an application-database run with a unique caller idempotency key, immutable request hash/payload, atomic queued-to-running claim, stage-local progress, terminal result/error, and attempt lineage. Assign a server-managed transactional candidate checkpoint when the caller does not provide one, and resume it on a compatible failed-run retry.
+- Evidence: `backend/app/tests/test_ultimate_lineup_runs.py` proves exact idempotent reuse, different-request conflict, atomic worker completion/failure persistence, retry attempt lineage, checkpoint-resume selection, and create/get API behavior. The existing checkpoint test still proves resumed candidate UID order matches an uninterrupted sequence, simulation reoptimization tests now observe training/candidate/portfolio progress stages, and the production UI build passes.
+- Rationale: candidate generation can outlive a normal browser request. Returning a run ID immediately makes the control plane responsive and observable, while persistent state prevents duplicate clicks and refreshes from silently launching different work. Keeping the candidate sequence in its existing SQLite checkpoint avoids storing hundreds of thousands of lineups in the application database.
+- Production impact: the prior synchronous `POST /api/lineups/ultimate` remains available. The UI uses `POST /api/lineups/ultimate-runs`, polls the run, and can retry failed work. Run state is durable, but dispatch still occurs in the API process; multi-instance production should replace dispatch with a dedicated queue without changing the run schema or API contract.
+
+## 2026-07-20 — Pair compatible simulation runs to isolate shock sensitivity
+
+- Decision: allow a scenario lineup request to name an optional `baseline_simulation_run_id`. The baseline must be completed, unshocked, and compatible with the scenario's slice, iterations, non-null seed, history minimum, prior weight, noise scale, and residual-learning setting; the scenario must contain a role or point-in-time shock. A missing legacy residual flag is interpreted as its historical default, `false`.
+- Evidence: targeted tests prove paired baseline projections are applied before candidate generation, source-native and canonical overrides work, incompatible seeds and shocked baselines fail, unshocked scenarios fail, and no-run/single-run behavior remains intact. The 118-test backend suite passes. A paired Week 18 replay matched `663/663` outcomes in both runs, produced `80%` overlap between two 20-lineup portfolios from `332` shared candidates, and recovered `+3.28` scenario projected-blend points after the shocked target's exposure moved from `20%` to `0%`.
+- Rationale: the original single-run comparison measures the complete difference between lineup-default and scenario projections. A same-seed, same-parameter simulated baseline isolates the shock from simulation-method differences while retaining the same candidate-pool and exposure-cap controls.
+- Production impact: API/CLI callers may add `baseline_simulation_run_id`; responses expose both run IDs and loaded/matched counts. Omitting it preserves the existing single-run comparison, and omitting both run IDs preserves default lineup generation.
+
+## 2026-07-19 — Reoptimize one shared lineup pool from persisted simulation runs
+
+- Decision: let ultimate classic lineup requests select one completed, matching `simulation_run_id`; overlay its persisted mean/p90 outcomes by canonical or source-native player ID after baseline candidate generation, then independently rescore and exposure-cap baseline and scenario portfolios from that shared candidate set.
+- Evidence: `backend/app/tests/test_simulation_lineup_reoptimization.py` proves completed-run lookup, exact slice validation, stable-ID overrides, a controlled `0%` lineup overlap, `-100%`/`+100%` target exposure movement, and a `+29.0` scenario projected-blend reoptimization lift. A bounded replay of completed Week 18 role-shock run `821c7b46-aad1-458d-a63d-055ea775c92b` matched all `663` outcomes, produced `25%` overlap across two 20-lineup portfolios from `944` shared candidates, recovered `+10.18` scenario projected-blend points, and improved the scenario objective score by `+0.886`. The complete 117-test backend suite passes.
+- Rationale: generating candidates once isolates projection sensitivity and reoptimization from random candidate-pool drift. Persisted simulation lineage keeps the shock assumptions reproducible, while stable IDs preserve the canonical identity contract.
+- Production impact: `POST /api/lineups/ultimate` and `scripts/run_ultimate_lineups.py` accept optional `simulation_run_id`. Responses report loaded/matched outcomes, lineup overlap, projected-blend and objective lifts, and stable-ID exposure deltas. Missing, incomplete, empty, or wrong-slice runs fail explicitly; omitting the field preserves prior behavior.
+
 ## 2026-07-19 — Keep weather/news shocks caller-authoritative and point-in-time
 
 - Decision: accept opt-in weather/news shocks with timezone-aware observed and scenario-cutoff timestamps, explicit team/position or stable player-ID targeting, and caller-supplied mean/volatility multipliers. Shocks compound in request order after baseline, residual, and role adjustments.
 - Evidence: `backend/app/tests/test_point_in_time_shocks.py` proves deterministic distribution transforms, exact team/position and source-ID targeting, missing-ID failure, timestamp cutoff enforcement, post-floor mean preservation, and persisted parameters. `docs/point_in_time_shock_validation_2025_late_season.{json,md}` records warning-free W16-W18 replays, zero unexpected targets, exact requested aggregate mean multipliers, and an exact same-seed repeat.
 - Rationale: the platform can stress-test current information without pretending unavailable historical weather/news feeds exist or embedding unvalidated causal effect sizes. Stable identities and explicit multipliers keep every assumption reviewable.
-- Production impact: ordinary simulation is unchanged when `point_in_time_shocks` is empty. Requests and effective seed remain stored on `simulation_run`; responses expose the cutoff and sequential player impacts. Shock means are guaranteed after the nonnegative floor; lineup generation does not yet consume scenario runs.
+- Production impact: ordinary simulation is unchanged when `point_in_time_shocks` is empty. Requests and effective seed remain stored on `simulation_run`; responses expose the cutoff and sequential player impacts. Shock means are guaranteed after the nonnegative floor; a completed matching run can be selected explicitly for ultimate lineup reoptimization.
 
 ## 2026-07-19 — Make late-swap lock state explicit and identity-safe
 

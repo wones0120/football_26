@@ -29,6 +29,17 @@ python scripts/apply_migrations.py
 
 Expected result: every file under `migrations/` is listed in `schema_migrations`. Rerunning the command must report the migrations as already applied.
 
+Verify the migration-owned product schema and the ORM-managed public schema:
+
+```bash
+python scripts/check_schema_drift.py --schema target
+python scripts/check_schema_drift.py
+```
+
+The target check must report 55 expected and actual tables with no issues.
+Product services do not create or alter `target` tables; a compatibility error
+means the numbered migrations are incomplete or the database has drifted.
+
 For an intentionally disposable local database only, the reset path is:
 
 ```bash
@@ -56,6 +67,10 @@ Both endpoints should return JSON without a database-schema error.
 ## 4. Load historical NFL data
 
 Use the UI nflreadpy bootstrap action, or call the documented ingest endpoints for schedules and weekly stats. Run history must show row counts and an `ok` status before continuing.
+
+The primary UI now opens in `Digital Twin`. Use `Operations` for product ingestion/readiness workflows and
+`Research Lab` for the original Data Ops simulation, backtest, and baseline-versus-shock tools. During Vite
+development, `/api` is proxied to `http://127.0.0.1:8000`; production remains same-origin.
 
 Verify:
 
@@ -149,7 +164,7 @@ Acceptance requires:
 
 ## Recovery notes
 
-- `UndefinedTable`: rerun `python scripts/apply_migrations.py` against the database configured in `.env`.
+- `UndefinedTable` or a target-schema compatibility error: rerun `python scripts/apply_migrations.py` against the database configured in `.env`, then run both drift checks above. Runtime services will not repair `target` schema.
 - Empty simulation/backtest: confirm mapped salary players have earlier weekly-stat history.
 - High unresolved count: use grouped triage before manual row-by-row repair.
 - Missing report links: confirm the run contains `suite_manifest.json` and listed artifacts remain under its own benchmark directory.

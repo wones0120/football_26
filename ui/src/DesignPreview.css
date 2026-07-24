@@ -1,0 +1,313 @@
+.design-preview {
+  min-height: 100vh;
+  color: #f4efe6;
+  background:
+    radial-gradient(circle at top left, rgba(178, 142, 96, 0.18), transparent 28%),
+    radial-gradient(circle at 85% 15%, rgba(99, 131, 161, 0.2), transparent 24%),
+    linear-gradient(160deg, #111317 0%, #171b21 38%, #0e1116 100%);
+}
+
+.preview-chrome {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.2rem 1.4rem 0;
+}
+
+.preview-back,
+.preview-badge {
+  border-radius: 999px;
+  border: 1px solid rgba(212, 191, 149, 0.24);
+  background: rgba(244, 239, 230, 0.04);
+  color: #f4efe6;
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  backdrop-filter: blur(10px);
+}
+
+.preview-back {
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  transition: background 180ms ease, transform 180ms ease;
+}
+
+.preview-back:hover {
+  background: rgba(244, 239, 230, 0.1);
+  transform: translateY(-1px);
+}
+
+.preview-badge {
+  padding: 0.55rem 0.9rem;
+}
+
+.preview-hero,
+.preview-lanes,
+.preview-board {
+  padding-left: 1.4rem;
+  padding-right: 1.4rem;
+}
+
+.preview-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(320px, 0.9fr);
+  gap: 1.5rem;
+  padding-top: 1.4rem;
+  align-items: stretch;
+}
+
+.preview-kicker {
+  margin: 0 0 0.8rem;
+  color: #c6a978;
+  font-size: 0.74rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.preview-hero-copy h1 {
+  margin: 0;
+  max-width: 10ch;
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", "URW Palladio L", serif;
+  font-size: clamp(3rem, 6vw, 5.7rem);
+  line-height: 0.94;
+  letter-spacing: -0.05em;
+  font-weight: 700;
+}
+
+.preview-lead {
+  max-width: 58ch;
+  margin: 1.2rem 0 1.4rem;
+  color: rgba(244, 239, 230, 0.76);
+  font-size: 1.04rem;
+  line-height: 1.7;
+}
+
+.preview-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.preview-metrics div,
+.preview-hero-panel,
+.lane-card,
+.board-card,
+.board-callout {
+  background: rgba(244, 239, 230, 0.035);
+  border: 1px solid rgba(212, 191, 149, 0.14);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(16px);
+}
+
+.preview-metrics div {
+  border-radius: 20px;
+  padding: 1rem;
+}
+
+.preview-metrics span,
+.preview-panel-topline span,
+.lane-card span,
+.board-card-header span,
+.board-callout span,
+.stack-metric span {
+  display: block;
+  color: rgba(244, 239, 230, 0.56);
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.preview-metrics strong,
+.preview-panel-topline strong,
+.board-callout strong,
+.stack-metric strong {
+  display: block;
+  margin-top: 0.45rem;
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+.preview-hero-panel {
+  border-radius: 28px;
+  padding: 1rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.preview-hero-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(198, 169, 120, 0.14), transparent 35%);
+  pointer-events: none;
+}
+
+.preview-panel-topline {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 0.8rem;
+}
+
+.signal-card {
+  position: relative;
+  z-index: 1;
+  border-radius: 22px;
+  padding: 1rem;
+  background: rgba(10, 12, 15, 0.56);
+  border: 1px solid rgba(212, 191, 149, 0.1);
+}
+
+.signal-card + .signal-card {
+  margin-top: 0.8rem;
+}
+
+.signal-card-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.signal-team {
+  font-size: 0.78rem;
+  letter-spacing: 0.18em;
+  color: #c6a978;
+  text-transform: uppercase;
+}
+
+.signal-impact {
+  padding: 0.28rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.signal-impact-high {
+  background: rgba(208, 122, 94, 0.16);
+  color: #ffb39a;
+}
+
+.signal-impact-medium {
+  background: rgba(195, 166, 105, 0.16);
+  color: #f1d392;
+}
+
+.signal-card h3 {
+  margin: 0.7rem 0 0.45rem;
+  font-size: 1rem;
+  line-height: 1.45;
+}
+
+.signal-card p,
+.lane-card p,
+.board-callout strong,
+.stack-metric strong {
+  color: rgba(244, 239, 230, 0.74);
+}
+
+.preview-lanes {
+  margin-top: 1.2rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.lane-card,
+.board-card,
+.board-callout {
+  border-radius: 24px;
+  padding: 1.15rem;
+}
+
+.lane-card h2,
+.board-header h2,
+.board-card h3 {
+  margin: 0.5rem 0 0.55rem;
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", "URW Palladio L", serif;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.lane-card h2 {
+  font-size: 1.55rem;
+  line-height: 1.08;
+}
+
+.lane-card p {
+  margin: 0;
+  line-height: 1.65;
+}
+
+.preview-board {
+  margin-top: 1.2rem;
+  padding-bottom: 1.6rem;
+}
+
+.board-header {
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  align-items: end;
+  margin-bottom: 1rem;
+}
+
+.board-header h2 {
+  max-width: 13ch;
+  font-size: clamp(2rem, 4vw, 3rem);
+  line-height: 0.98;
+}
+
+.board-callout {
+  max-width: 28rem;
+}
+
+.board-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+  gap: 1rem;
+}
+
+.board-card table {
+  margin-top: 0.8rem;
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.board-card th,
+.board-card td {
+  padding: 0.8rem 0.25rem;
+  border-bottom: 1px solid rgba(212, 191, 149, 0.12);
+  color: rgba(244, 239, 230, 0.82);
+}
+
+.board-card th {
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(244, 239, 230, 0.5);
+}
+
+.stack-metric + .stack-metric {
+  margin-top: 0.95rem;
+  padding-top: 0.95rem;
+  border-top: 1px solid rgba(212, 191, 149, 0.12);
+}
+
+@media (max-width: 960px) {
+  .preview-hero,
+  .preview-lanes,
+  .board-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .preview-metrics,
+  .board-header {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .board-header {
+    align-items: start;
+  }
+}

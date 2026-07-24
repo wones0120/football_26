@@ -505,6 +505,27 @@ class SimulateWeekResponse(BaseModel):
     scenario_warnings: list[str] = Field(default_factory=list)
 
 
+class SimulationRunOptionResponse(BaseModel):
+    simulation_run_id: str
+    source_system: str
+    season: int
+    week: int
+    slate: str
+    iterations: int
+    random_seed: int | None
+    players_simulated: int
+    status: str
+    has_role_shocks: bool
+    has_point_in_time_shocks: bool
+    started_at: datetime
+    completed_at: datetime | None
+
+
+class SimulationRunListResponse(BaseModel):
+    rows: list[SimulationRunOptionResponse]
+    compatible_baseline_run_ids: list[str] = Field(default_factory=list)
+
+
 class BacktestPlayerRowResponse(BaseModel):
     player_master_id: str | None
     source_player_key: str | None
@@ -855,6 +876,12 @@ class UltimateLineupRequest(BaseModel):
     season: int = Field(..., ge=2000)
     week: int = Field(..., ge=1, le=25)
     slate: str = Field(default="sunday_main", min_length=1)
+    simulation_run_id: str | None = Field(default=None, min_length=1, max_length=36)
+    baseline_simulation_run_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=36,
+    )
     contest_objective: Literal["balanced", "cash", "gpp"] = "balanced"
     candidate_lineups: int = Field(default=100000, ge=1000, le=500000)
     output_lineups: int = Field(default=150, ge=10, le=1000)
@@ -894,6 +921,21 @@ class UltimateLineupRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_checkpoint_controls(self) -> UltimateLineupRequest:
+        if (
+            self.baseline_simulation_run_id is not None
+            and self.simulation_run_id is None
+        ):
+            raise ValueError(
+                "simulation_run_id is required when "
+                "baseline_simulation_run_id is supplied"
+            )
+        if (
+            self.baseline_simulation_run_id is not None
+            and self.baseline_simulation_run_id == self.simulation_run_id
+        ):
+            raise ValueError(
+                "baseline_simulation_run_id must differ from simulation_run_id"
+            )
         if self.resume_from_checkpoint and not self.checkpoint_path:
             raise ValueError(
                 "checkpoint_path is required when resume_from_checkpoint is true"
@@ -971,11 +1013,50 @@ class UltimateLineupExposureRowResponse(BaseModel):
     candidate_exposure_rate: float
 
 
+class UltimateLineupPortfolioExposureDeltaResponse(BaseModel):
+    player_master_id: str | None = None
+    source_player_key: str | None = None
+    player_name: str
+    team: str | None
+    position: str
+    salary: int
+    baseline_exposure_count: int
+    baseline_exposure_rate: float
+    scenario_exposure_count: int
+    scenario_exposure_rate: float
+    exposure_rate_delta: float
+
+
+class UltimateLineupPortfolioComparisonResponse(BaseModel):
+    simulation_run_id: str
+    baseline_simulation_run_id: str | None = None
+    shared_candidate_lineups: int
+    baseline_output_lineups: int
+    scenario_output_lineups: int
+    lineup_overlap_count: int
+    lineup_overlap_rate: float
+    baseline_portfolio_baseline_projected_blend: float
+    baseline_portfolio_scenario_projected_blend: float
+    scenario_portfolio_scenario_projected_blend: float
+    projected_blend_reoptimization_lift: float
+    baseline_portfolio_scenario_objective_score: float
+    scenario_portfolio_scenario_objective_score: float
+    objective_reoptimization_lift: float
+    exposure_changes: list[UltimateLineupPortfolioExposureDeltaResponse]
+
+
 class UltimateLineupResponse(BaseModel):
     source_system: str
     season: int
     week: int
     slate: str
+    simulation_run_id: str | None = None
+    simulation_outcomes_loaded: int = 0
+    simulation_projection_overrides: int = 0
+    baseline_simulation_run_id: str | None = None
+    baseline_simulation_outcomes_loaded: int = 0
+    baseline_simulation_projection_overrides: int = 0
+    portfolio_comparison: UltimateLineupPortfolioComparisonResponse | None = None
     contest_objective: Literal["balanced", "cash", "gpp"]
     contest_objective_weights: dict[str, float]
     late_swap_applied: bool = False
@@ -1001,6 +1082,39 @@ class UltimateLineupResponse(BaseModel):
     discovered_patterns: list[str]
     rows: list[UltimateLineupRowResponse]
     exposures: list[UltimateLineupExposureRowResponse]
+
+
+class UltimateLineupRunCreateRequest(BaseModel):
+    idempotency_key: str = Field(..., min_length=1, max_length=255)
+    request: UltimateLineupRequest
+
+
+class UltimateLineupRunResponse(BaseModel):
+    ultimate_lineup_run_id: str
+    idempotency_key: str
+    source_system: str
+    season: int
+    week: int
+    slate: str
+    status: Literal["queued", "running", "completed", "failed"]
+    stage: str
+    progress_current: int
+    progress_total: int
+    progress_percent: float
+    progress_message: str | None = None
+    checkpoint_path: str | None = None
+    attempt_count: int
+    error_message: str | None = None
+    created_at: datetime
+    updated_at: datetime
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    result: UltimateLineupResponse | None = None
+
+
+class UltimateLineupRunCreateResponse(BaseModel):
+    created: bool
+    run: UltimateLineupRunResponse
 
 
 class UnresolvedRowResponse(BaseModel):

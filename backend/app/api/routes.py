@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -34,6 +34,9 @@ from ..schemas import (
     ModelDefaultsResponse,
     UltimateLineupRequest,
     UltimateLineupResponse,
+    UltimateLineupRunCreateRequest,
+    UltimateLineupRunCreateResponse,
+    UltimateLineupRunResponse,
     NflReadPyBootstrapRequest,
     NflReadPySeasonRequest,
     OptimalVsPredictedBacktestRequest,
@@ -46,6 +49,7 @@ from ..schemas import (
     SalaryIngestRequest,
     SimulateWeekRequest,
     SimulateWeekResponse,
+    SimulationRunListResponse,
     SeasonCoverageResponse,
     UnresolvedListResponse,
     UnresolvedRowResponse,
@@ -61,6 +65,15 @@ from ..services.benchmarks import (
 from ..services.ingest import IngestService
 from ..services.lineup_learning import LineupLearningService
 from ..services.simulation import SimulationService
+from ..services.ultimate_lineup_runs import (
+    UltimateLineupRunConflictError,
+    UltimateLineupRunStateError,
+    create_ultimate_lineup_run,
+    execute_ultimate_lineup_run,
+    get_ultimate_lineup_run,
+    retry_ultimate_lineup_run,
+    ultimate_lineup_run_response,
+)
 
 
 router = APIRouter(prefix="/api")
@@ -264,6 +277,33 @@ def simulate_week(
     return result
 
 
+@router.get("/simulate/runs", response_model=SimulationRunListResponse)
+def simulation_runs(
+    source_system: str = Query(
+        default="draftkings",
+        pattern="^(draftkings|fanduel)$",
+    ),
+    season: int = Query(..., ge=2000),
+    week: int = Query(..., ge=1, le=25),
+    slate: str = Query(..., min_length=1),
+    scenario_run_id: str | None = Query(default=None, min_length=1),
+    limit: int = Query(default=100, ge=1, le=200),
+    session: Session = Depends(get_db_session),
+) -> SimulationRunListResponse:
+    service = LineupLearningService(session)
+    try:
+        return service.list_completed_simulation_runs(
+            source_system=source_system,
+            season=season,
+            week=week,
+            slate=slate,
+            scenario_run_id=scenario_run_id,
+            limit=limit,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 @router.post(
     "/simulate/residual-snapshot",
     response_model=ResidualSnapshotResponse,
@@ -361,6 +401,75 @@ def lineups_generate_ultimate(
         return service.build_ultimate_lineups(request)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post(
+    "/lineups/ultimate-runs",
+    response_model=UltimateLineupRunCreateResponse,
+    status_code=202,
+)
+def lineups_start_ultimate_run(
+    request: UltimateLineupRunCreateRequest,
+    background_tasks: BackgroundTasks,
+    session: Session = Depends(get_db_session),
+) -> UltimateLineupRunCreateResponse:
+    try:
+        run, created = create_ultimate_lineup_run(
+            session,
+            idempotency_key=request.idempotency_key,
+            request=request.request,
+        )
+    except UltimateLineupRunConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if run.status == "queued":
+        background_tasks.add_task(
+            execute_ultimate_lineup_run,
+            run.ultimate_lineup_run_id,
+        )
+    return UltimateLineupRunCreateResponse(
+        created=created,
+        run=ultimate_lineup_run_response(run),
+    )
+
+
+@router.get(
+    "/lineups/ultimate-runs/{ultimate_lineup_run_id}",
+    response_model=UltimateLineupRunResponse,
+)
+def lineups_get_ultimate_run(
+    ultimate_lineup_run_id: str,
+    session: Session = Depends(get_db_session),
+) -> UltimateLineupRunResponse:
+    run = get_ultimate_lineup_run(session, ultimate_lineup_run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Ultimate-lineup run not found")
+    return ultimate_lineup_run_response(run)
+
+
+@router.post(
+    "/lineups/ultimate-runs/{ultimate_lineup_run_id}/retry",
+    response_model=UltimateLineupRunResponse,
+    status_code=202,
+)
+def lineups_retry_ultimate_run(
+    ultimate_lineup_run_id: str,
+    background_tasks: BackgroundTasks,
+    session: Session = Depends(get_db_session),
+) -> UltimateLineupRunResponse:
+    try:
+        run = retry_ultimate_lineup_run(
+            session,
+            ultimate_lineup_run_id,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except UltimateLineupRunStateError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    background_tasks.add_task(
+        execute_ultimate_lineup_run,
+        run.ultimate_lineup_run_id,
+    )
+    return ultimate_lineup_run_response(run)
 
 
 @router.post("/lineups/optimal-vs-predicted", response_model=OptimalVsPredictedBacktestResponse)

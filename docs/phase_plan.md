@@ -1,25 +1,29 @@
 # Phase Plan
 
-Last reviewed: 2026-07-19
+Last reviewed: 2026-07-24
+
+This is the executive roadmap. `docs/TODO.md` is the authoritative source for
+active task status, priority, dependencies, and acceptance checks.
 
 ## Executive Status
 
 1. Phase 1 data foundation and deterministic identity workflows are demoable.
 2. Phase 2 control-plane ingestion, unresolved repair, freshness, model defaults, and benchmark visibility are demoable.
 3. Phase 3 historical feature, projection, uncertainty, calibration, walk-forward learning, default-off online residual scoring, and rejected game-regime specialist research are implemented and evidence-backed.
-4. Phase 4 historical replay, showdown/classic lineup intelligence, exposure controls, pre-lock popularity/duplication proxies, manual role and point-in-time weather/news stress tests, contest objectives, deterministic late swap, 100k candidate research, and durable large-run resume are implemented.
+4. Phase 4 historical replay, showdown/classic lineup intelligence, exposure controls, pre-lock popularity/duplication proxies, manual role and point-in-time weather/news stress tests, contest objectives, deterministic late swap, 100k candidate research, durable large-run resume, and persisted async baseline-versus-shock portfolio runs are implemented.
+5. Target-schema governance is migration-authoritative: runtime product services are read-only toward schema, and CI validates the recorded contract for all 55 product tables (`ENG-001`).
 
 ## Execution Board
 
 ### Now
-1. Keep `classic` and `showdown` lineup backtests as separate tracks with stable API/UI workflows.
-2. Track classic/showdown gap metrics, bootstrap intervals, projection interval coverage, and captain-prior drift every recurring benchmark cycle.
-3. Preserve current production defaults until broader walk-forward acceptance gates beat them.
+1. Close the remaining one-repository parity gate: the real DraftKings portfolio/export smoke test (`CON-001`). Workspace visual QA (`CON-002`) and fresh-database migration/drift proof (`CON-003`) are complete.
+2. Review and checkpoint the consolidation branch, then archive `football_opt` without deleting it (`CON-004`).
+3. Keep classic and showdown benchmarks separate, track their declared quality metrics, and preserve current production defaults until a walk-forward acceptance gate beats them.
 
 ### Next
-1. Add an explicit, slice-validated `simulation_run_id` projection override to
-   lineup generation and measure matched baseline-versus-shock portfolio
-   sensitivity.
+1. Move long-running dispatch to a dedicated worker queue (`OPS-001`) and build the resumable weekly orchestrator (`OPS-002`).
+2. Finish live advanced-GPP and persistent showdown cash/GPP integration (`OPT-001`, `OPT-002`).
+3. Share active slate/run context across workspaces (`ENG-002`), then complete point-in-time input capture and explicit model-promotion governance (`DATA-002`, `MODEL-002`).
 
 ## Phase 1 (Now): Data Foundation
 1. Canonical identity tables (`player_master`, `player_alias`, `unresolved_player_queue`).

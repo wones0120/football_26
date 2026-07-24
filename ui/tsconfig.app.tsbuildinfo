@@ -1,1 +1,1 @@
-{"root":["./src/app.tsx","./src/api.ts","./src/main.tsx","./src/vite-env.d.ts"],"version":"5.9.3"}
+{"root":["./src/app.tsx","./src/appshell.tsx","./src/contestworkflow.tsx","./src/dailynewsbrief.tsx","./src/designpreview.tsx","./src/digitaltwin.tsx","./src/modelworkbench.tsx","./src/researchworkspace.tsx","./src/warroom.tsx","./src/api.ts","./src/main.tsx","./src/vite-env.d.ts","./src/research/controlplane.tsx","./src/research/api.ts","./src/research/index.ts"],"version":"5.9.3"}

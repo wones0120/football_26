@@ -1,0 +1,161 @@
+
+=== STEP: classic_backtest ===
+COMMAND: /Users/wones/git/football_26/.venv/bin/python /Users/wones/git/football_26/scripts/run_optimal_vs_predicted_lineups.py --source-system draftkings --season-start 2024 --season-end 2025 --slate-type classic --lineups-per-slate 120 --training-window-slates 24 --min-training-slates 4 --min-training-rows 2000 --learned-only --random-seed 42 --output-json /Users/wones/git/football_26/docs/benchmarks/20260607_072834/classic_backtest.json --limit-slates 2 --quiet-progress
+
+Traceback (most recent call last):
+  File "/Users/wones/git/football_26/.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 143, in __init__
+    self._dbapi_connection = engine.raw_connection()
+                             ~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Users/wones/git/football_26/.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 3301, in raw_connection
+    return self.pool.connect()
+           ~~~~~~~~~~~~~~~~~^^
+  File "/Users/wones/git/football_26/.venv/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 447, in connect
+    return _ConnectionFairy._checkout(self)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/Users/wones/git/football_26/.venv/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 1264, in _checkout
+    fairy = _ConnectionRecord.checkout(pool)
+  File "/Users/wones/git/football_26/.venv/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 711, in checkout
+    rec = pool._do_get()
+  File "/Users/wones/git/football_26/.venv/lib/python3.13/site-packages/sqlalchemy/pool/impl.py", line 177, in _do_get
+    with util.safe_reraise():
+         ~~~~~~~~~~~~~~~~~^^
+  File "/Users/wones/git/football_26/.venv/lib/python3.13/site-packages/sqlalchemy/util/langhelpers.py", line 224, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "/Users/wones/git/football_26/.venv/lib/python3.13/site-packages/sqlalchemy/pool/impl.py", line 175, in _do_get
+    return self._create_connection()
+           ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Users/wones/git/football_26/.venv/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 388, in _create_connection
+    return _ConnectionRecord(self)
+  File "/Users/wones/git/football_26/.venv/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 673, in __init__
+    self.__connect()
+    ~~~~~~~~~~~~~~^^
+  File "/Users/wones/git/football_26/.venv/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 899, in __connect
+    with util.safe_reraise():
+         ~~~~~~~~~~~~~~~~~^^
+  File "/Users/wones/git/football_26/.venv/lib/python3.13/site-packages/sqlalchemy/util/langhelpers.py", line 224, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "/Users/wones/git/football_26/.venv/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 895, in __connect
+    self.dbapi_connection = connection = pool._invoke_creator(self)
+                                         ~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/Users/wones/git/football_26/.venv/lib/python3.13/site-packages/sqlalchemy/engine/create.py", line 661, in connect
+    return dialect.connect(*cargs, **cparams)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/Users/wones/git/football_26/.venv/lib/python3.13/site-packages/sqlalchemy/engine/default.py", line 629, in connect
+    return self.loaded_dbapi.connect(*cargs, **cparams)  # type: ignore[no-any-return]  # NOQA: E501
+           ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/Users/wones/git/football_26/.venv/lib/python3.13/site-packages/psycopg/connection.py", line 125, in connect
+    raise type(last_ex)("\n".join(lines)).with_traceback(None)
+psycopg.OperationalError: connection is bad: connection to server at "127.0.0.1", port 5432 failed: Operation not permitted
+	Is the server running on that host and accepting TCP/IP connections?
+Multiple connection attempts failed. All failures were:
+- host: 'localhost', port: 5432, hostaddr: '::1': connection is bad: connection to server at "::1", port 5432 failed: Operation not permitted
+	Is the server running on that host and accepting TCP/IP connections?
+- host: 'localhost', port: 5432, hostaddr: '127.0.0.1': connection is bad: connection to server at "127.0.0.1", port 5432 failed: Operation not permitted
+	Is the server running on that host and accepting TCP/IP connections?
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/wones/git/football_26/scripts/run_optimal_vs_predicted_lineups.py", line 101, in <module>
+    main()
+    ~~~~^^
+  File "/Users/wones/git/football_26/scripts/run_optimal_vs_predicted_lineups.py", line 74, in main
+    result = service.run_optimal_vs_predicted_backtest(request, progress_hook=progress_hook)
+  File "/Users/wones/git/football_26/backend/app/services/lineup_learning.py", line 5723, in run_optimal_vs_predicted_backtest
+    slices = self._fetch_available_slate_slices(
+        source_system=request.source_system,
+    ...<2 lines>...
+        slate_filter=request.slate,
+    )
+  File "/Users/wones/git/football_26/backend/app/services/lineup_learning.py", line 746, in _fetch_available_slate_slices
+    rows = self.session.execute(
+           ~~~~~~~~~~~~~~~~~~~~^
+        select(CuratedSalary.season, CuratedSalary.week, CuratedSalary.slate)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        .order_by(CuratedSalary.season, CuratedSalary.week, CuratedSalary.slate)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ).all()
+    ^
+  File "/Users/wones/git/football_26/.venv/lib/python3.13/site-packages/sqlalchemy/orm/session.py", line 2365, in execute
+    return self._execute_internal(
+           ~~~~~~~~~~~~~~~~~~~~~~^
+        statement,
+        ^^^^^^^^^^
+    ...<4 lines>...
+        _add_event=_add_event,
+        ^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/wones/git/football_26/.venv/lib/python3.13/site-packages/sqlalchemy/orm/session.py", line 2241, in _execute_internal
+    conn = self._connection_for_bind(bind)
+  File "/Users/wones/git/football_26/.venv/lib/python3.13/site-packages/sqlalchemy/orm/session.py", line 2110, in _connection_for_bind
+    return trans._connection_for_bind(engine, execution_options)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<string>", line 2, in _connection_for_bind
+  File "/Users/wones/git/football_26/.venv/lib/python3.13/site-packages/sqlalchemy/orm/state_changes.py", line 137, in _go
+    ret_value = fn(self, *arg, **kw)
+  File "/Users/wones/git/football_26/.venv/lib/python3.13/site-packages/sqlalchemy/orm/session.py", line 1189, in _connection_for_bind
+    conn = bind.connect()
+  File "/Users/wones/git/football_26/.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 3277, in connect
+    return self._connection_cls(self)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/Users/wones/git/football_26/.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 145, in __init__
+    Connection._handle_dbapi_exception_noconnection(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        err, dialect, engine
+        ^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/wones/git/football_26/.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 2440, in _handle_dbapi_exception_noconnection
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "/Users/wones/git/football_26/.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 143, in __init__
+    self._dbapi_connection = engine.raw_connection()
+                             ~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Users/wones/git/football_26/.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 3301, in raw_connection
+    return self.pool.connect()
+           ~~~~~~~~~~~~~~~~~^^
+  File "/Users/wones/git/football_26/.venv/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 447, in connect
+    return _ConnectionFairy._checkout(self)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/Users/wones/git/football_26/.venv/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 1264, in _checkout
+    fairy = _ConnectionRecord.checkout(pool)
+  File "/Users/wones/git/football_26/.venv/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 711, in checkout
+    rec = pool._do_get()
+  File "/Users/wones/git/football_26/.venv/lib/python3.13/site-packages/sqlalchemy/pool/impl.py", line 177, in _do_get
+    with util.safe_reraise():
+         ~~~~~~~~~~~~~~~~~^^
+  File "/Users/wones/git/football_26/.venv/lib/python3.13/site-packages/sqlalchemy/util/langhelpers.py", line 224, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "/Users/wones/git/football_26/.venv/lib/python3.13/site-packages/sqlalchemy/pool/impl.py", line 175, in _do_get
+    return self._create_connection()
+           ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Users/wones/git/football_26/.venv/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 388, in _create_connection
+    return _ConnectionRecord(self)
+  File "/Users/wones/git/football_26/.venv/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 673, in __init__
+    self.__connect()
+    ~~~~~~~~~~~~~~^^
+  File "/Users/wones/git/football_26/.venv/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 899, in __connect
+    with util.safe_reraise():
+         ~~~~~~~~~~~~~~~~~^^
+  File "/Users/wones/git/football_26/.venv/lib/python3.13/site-packages/sqlalchemy/util/langhelpers.py", line 224, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "/Users/wones/git/football_26/.venv/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 895, in __connect
+    self.dbapi_connection = connection = pool._invoke_creator(self)
+                                         ~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/Users/wones/git/football_26/.venv/lib/python3.13/site-packages/sqlalchemy/engine/create.py", line 661, in connect
+    return dialect.connect(*cargs, **cparams)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/Users/wones/git/football_26/.venv/lib/python3.13/site-packages/sqlalchemy/engine/default.py", line 629, in connect
+    return self.loaded_dbapi.connect(*cargs, **cparams)  # type: ignore[no-any-return]  # NOQA: E501
+           ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/Users/wones/git/football_26/.venv/lib/python3.13/site-packages/psycopg/connection.py", line 125, in connect
+    raise type(last_ex)("\n".join(lines)).with_traceback(None)
+sqlalchemy.exc.OperationalError: (psycopg.OperationalError) connection is bad: connection to server at "127.0.0.1", port 5432 failed: Operation not permitted
+	Is the server running on that host and accepting TCP/IP connections?
+Multiple connection attempts failed. All failures were:
+- host: 'localhost', port: 5432, hostaddr: '::1': connection is bad: connection to server at "::1", port 5432 failed: Operation not permitted
+	Is the server running on that host and accepting TCP/IP connections?
+- host: 'localhost', port: 5432, hostaddr: '127.0.0.1': connection is bad: connection to server at "127.0.0.1", port 5432 failed: Operation not permitted
+	Is the server running on that host and accepting TCP/IP connections?
+(Background on this error at: https://sqlalche.me/e/20/e3q8)

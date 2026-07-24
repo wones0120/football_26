@@ -1,0 +1,103 @@
+[
+  {
+    "source_id": "espn_nfl_news",
+    "name": "ESPN NFL News",
+    "source_type": "rss",
+    "url": "https://www.espn.com/espn/rss/nfl/news",
+    "enabled": true,
+    "content_mode": "metadata_only",
+    "notes": "Verified returning RSS on 2026-06-21. Enable only after confirming continued availability and your usage expectations."
+  },
+  {
+    "source_id": "cbs_nfl_news",
+    "name": "CBS Sports NFL News",
+    "source_type": "rss",
+    "url": "https://www.cbssports.com/rss/headlines/nfl/",
+    "enabled": true,
+    "content_mode": "metadata_only",
+    "notes": "Verified returning RSS on 2026-06-21. Enable only after confirming continued availability and your usage expectations."
+  },
+  {
+    "source_id": "chiefs_official_news",
+    "name": "Kansas City Chiefs Official News",
+    "source_type": "rss",
+    "url": "",
+    "enabled": false,
+    "content_mode": "metadata_only",
+    "notes": "Placeholder for a verified official Chiefs feed or official news endpoint."
+  },
+  {
+    "source_id": "bills_official_news",
+    "name": "Buffalo Bills Official News",
+    "source_type": "rss",
+    "url": "",
+    "enabled": false,
+    "content_mode": "metadata_only",
+    "notes": "Placeholder for a verified official Bills feed or official news endpoint."
+  },
+  {
+    "source_id": "ravens_official_news",
+    "name": "Baltimore Ravens Official News",
+    "source_type": "rss",
+    "url": "",
+    "enabled": false,
+    "content_mode": "metadata_only",
+    "notes": "Placeholder for a verified official Ravens feed or official news endpoint."
+  },
+  {
+    "source_id": "eagles_official_news",
+    "name": "Philadelphia Eagles Official News",
+    "source_type": "rss",
+    "url": "",
+    "enabled": false,
+    "content_mode": "metadata_only",
+    "notes": "Placeholder for a verified official Eagles feed or official news endpoint."
+  },
+  {
+    "source_id": "dolphins_official_news",
+    "name": "Miami Dolphins Official News",
+    "source_type": "rss",
+    "url": "",
+    "enabled": false,
+    "content_mode": "metadata_only",
+    "notes": "Placeholder for a verified official Dolphins feed or official news endpoint."
+  },
+  {
+    "source_id": "fortyniners_official_news",
+    "name": "San Francisco 49ers Official News",
+    "source_type": "rss",
+    "url": "",
+    "enabled": false,
+    "content_mode": "metadata_only",
+    "notes": "Placeholder for a verified official 49ers feed or official news endpoint."
+  },
+  {
+    "source_id": "official_injury_page",
+    "name": "Official Injury Report Page",
+    "source_type": "injury_table",
+    "url": "https://www.nfl.com/injuries/",
+    "enabled": true,
+    "content_mode": "factual_table_only",
+    "notes": "Requires a stable table layout before enabling. Adjust column_map and table_index if needed.",
+    "options": {
+      "table_index": 0,
+      "column_map": {
+        "Player": "player_name",
+        "Team": "team",
+        "Position": "position",
+        "Injury": "injury",
+        "Practice Status": "practice_status",
+        "Game Status": "game_status"
+      }
+    }
+  },
+  {
+    "source_id": "manual_notes",
+    "name": "Manual Notes",
+    "source_type": "manual",
+    "url": null,
+    "enabled": true,
+    "content_mode": "manually_provided_text",
+    "notes": "Use for pasted summaries or source links that should be included without automated crawling."
+  }
+]

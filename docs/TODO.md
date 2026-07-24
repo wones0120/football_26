@@ -1,152 +1,163 @@
-# Football_26 TODO Backlog
+# football_26 Canonical Backlog
 
-Last updated: 2026-07-19
+Last reviewed: 2026-07-24
 
-## Completed Baseline (Reference)
-- [x] Showdown captain descriptive analysis completed for 2024-2025.
-- [x] Showdown captain archetype model v1 trained and evaluated.
-- [x] Showdown captain-informed A/B backtest implemented and validated.
-- [x] Showdown captain strength sweep completed; production default is `0.35` at `2,500` lineups/slate.
-- [x] Main-slate value-driver analysis completed (positions, O/U, spread, FLEX tendencies).
-- [x] Combined professional report generated for showdown + regular slates.
+This is the single source of truth for active product, data, modeling, simulation,
+and operational work in `football_26`. Completed implementation history belongs in
+`RELEASE_NOTES.md`, with durable architecture and model decisions in
+`docs/DECISIONS.md` and `docs/MODEL_REGISTRY.md`.
 
-## Next Session Runbook (Execute In Order)
-- [x] Task 1: Productionize showdown defaults.
-  - Goal: no manual model path/strength entry required in normal runs.
-  - Deliverable:
-    - config keys for `showdown_captain_model_path` and `showdown_captain_prior_strength`.
-    - UI uses defaults automatically, with override controls.
-  - Acceptance:
-    - running showdown backtest from UI with defaults produces captain-informed mode at `0.35`.
-- [x] Task 2: Add benchmark suite command.
-  - Goal: one command runs full recurring benchmark stack.
-  - Deliverable:
-    - script that runs classic backtest, showdown baseline, showdown captain-informed, and main-slate analysis.
-    - writes results into dated folder `docs/benchmarks/<timestamp>/`.
-  - Acceptance:
-    - one command returns non-empty output folder with all JSON + summary markdown.
-- [x] Task 3: Add benchmark delta comparison.
-  - Goal: quickly determine whether model quality improved or regressed.
-  - Deliverable:
-    - script that compares latest benchmark folder to previous folder.
-    - outputs change report for mean/median gaps, win rates, and stability.
-  - Acceptance:
-    - markdown delta report generated with clear up/down indicators.
-- [x] Task 4: Wire reports into UI.
-  - Goal: consume analysis without leaving control plane.
-  - Deliverable:
-    - UI section listing latest generated reports (main slate, showdown, combined).
-    - click to open/download artifacts.
-  - Acceptance:
-    - no manual filesystem navigation needed to access current reports.
+Imported roadmaps under `docs/product/` are design references. They do not set
+priority or status after repository consolidation.
 
-## P0 - Resume First
-- [x] Finalize default showdown captain settings in product flows (`model_path`, `prior_strength=0.35`) and expose as saved presets.
-- [x] Add one-click UI action to run the combined showdown + classic benchmark suite and write timestamped artifacts.
-- [x] Add a single "Current Model Card" view in UI (data range, slates, key metrics, best params, artifact links).
+## North Star
 
-## P0 - Data Integrity and Coverage
-- [x] Add ingestion validation gates: enforce required columns, type checks, duplicate checks per file before write.
-- [x] Add DST-specific identity pipeline rules (team defense aliases, no player-name matching fallback for DST).
-- [x] Add automated unresolved-queue triage reports (new unresolveds by source/week/slate).
-- [x] Add data freshness checks for salaries/injuries/schedules/stats with UI status badges.
+Produce an auditable DFS decision chain for every contest entry:
 
-## P0 - Evaluation Framework
-- [x] Create a canonical benchmark command that runs:
-  - classic optimal-vs-predicted
-  - showdown baseline
-  - showdown captain-informed
-  - main-slate value-driver refresh
-- [x] Save benchmark outputs under dated folders and compare against previous run with delta tables.
-- [x] Add confidence intervals / bootstrap error bars for gap metrics and win-rate metrics.
+`source snapshots -> canonical identity -> features -> projections -> human/rule adjustments -> simulations -> optimizer -> portfolio -> export -> results -> learning`
 
-## P1 - Main Slate Modeling (Classic)
-- [x] Convert main-slate value-driver findings into learned features used by lineup scoring.
-- [x] Add game-environment features for classic lineups:
-  - team implied totals
-  - game totals
-  - spread context
-  - opponent-adjusted matchup features
-- [x] Add ablation tests for classic lineup scoring to measure feature contribution.
-- [x] Add classic parameter sweep (candidate lineups per slate, training windows, thresholds) and persist best config.
+Every stage must be point-in-time safe, reproducible by run ID, operationally
+observable, and reversible without overwriting earlier evidence.
 
-## P1 - Showdown Modeling
-- [x] Retire historical injury reports as a dependency; keep the rejected injury-based candidate documented but off the critical path.
-- [x] Add injury-free usage-weighted roster continuity from prior carries/targets and the current salary pool.
-  - Evidence: with unresolved salary players included in identity coverage, continuity scored `27.3%` top-1 / `51.5%` top-2 versus baseline `33.3%` / `57.6%` across 33 evaluated slates; not promoted.
-- [x] Add season-segment drift checks and automatic alerts when captain priors shift materially.
-- [x] Extend captain modeling beyond position class with salary-relative `premium`, `core`, and `value` role buckets within position.
-- [x] Add showdown scenario analysis module:
-  - which captain archetypes win by matchup/game context
-  - descriptive and predictive views for future slates
-  - Evidence: `docs/showdown_captain_scenarios_2024_2025.{json,md}` contains 41-slate role distributions and sample-gated, Laplace-smoothed future-safe scenario priors.
+## How To Use This Backlog
 
-## P1 - Player Projection Engine
-- [x] Implement opponent-specific player scoring distributions (player-vs-opponent history plus rolling defense-by-position mean and p90 context).
-- [x] Add teammate-on/off context features (player injury status, team skill-position outs, same-position outs, and usage multipliers).
-- [x] Train and compare model families (rolling baseline, ridge linear, regression tree, and shallow neural net) under strict whole-week time-split validation.
-  - Evidence: `docs/projection_model_family_comparison_2024_2025.{json,md}`; the validation-selected tree achieved `2.610` MAE on the untouched 2025 W12-W18 test window. Production was not automatically changed.
-- [x] Calibrate uncertainty (mean, p75, p90, p95, and 25+ point tail risk) and track calibration drift.
-  - Evidence: `docs/projection_calibration_drift_2024_2025.{json,md}` covers 15/15 Sunday-main slates and 2,856 players with no configured alerts.
+- Work in priority order unless a dependency or external-data blocker is explicit.
+- Keep no more than two tasks marked `In progress` at once.
+- A task is not complete until its acceptance check and relevant tests pass.
+- Move completed tasks to `RELEASE_NOTES.md`; do not let this file become a completion ledger.
+- New work requires a stable ID, priority, status, dependency, and acceptance check.
+- Model candidates never become production defaults automatically.
 
-## P1 - Lineup Generator and Policy Learning
-- [x] Build policy-learning loop from historical actual top lineups (top-k per slate) into lineup scoring.
-- [x] Add salary-structure priors, learned player/QB/DST exposure caps, and correlation/anti-correlation controls.
-- [x] Retire observed historical ownership as a dependency; do not substitute realized outcomes.
-- [x] Add a clearly named pre-lock `popularity_proxy` and lineup duplication-risk score from salary, projection, value, game environment, and generated-lineup concentration.
-  - Evidence: `docs/popularity_proxy_validation_2024_2025.{json,md}`; penalty `0.25` reduced risk `1.1%` for a `0.2%` projected-blend cost across 12 slates. Default remains zero.
-- [x] Add robust validity checks for every generated candidate and selected lineup with hard-fail violation details.
-- [x] Support 100k+ candidate experiments with deterministic seeds (request default `100000`, maximum `500000`).
-- [x] Add interrupted-run checkpoint/resume support for 100k+ candidate experiments.
-  - Evidence: ultimate generation now writes incremental SQLite transactions with full RNG/adaptive-stage state, rejects incompatible resumes, and reuses completed candidate sets. `backend/app/tests/test_candidate_checkpoint.py` proves resumed UID order exactly matches an uninterrupted run.
-- [x] Add contest-specific cash/GPP objective profiles without observed ownership.
-  - Evidence: `backend/app/tests/test_contest_objectives.py` proves balanced preserves the existing score exactly, cash rewards mean plus bust avoidance, GPP rewards ceiling/tail signals plus lower proxy duplication risk, and invalid profiles/shapes fail explicitly.
-- [x] Add deterministic late swap for staggered lock times using source-native identities.
-  - Evidence: `backend/app/tests/test_late_swap.py` proves locked originals are required, other players from started teams are excluded, identical seeds reproduce the exact lineup sequence, invalid source IDs/original rosters fail, and lock-assessment timestamps must be timezone-aware.
+Status values:
 
-## P2 - UI / Control Plane
-- [x] Add dedicated "Analysis" area for generated reports (showdown, main slate, combined).
-- [x] Add run history explorer with filters (source, season range, slate type, model config).
-- [x] Add expandable/collapsible sections for all heavy tables by default (ingest queues, coverage, recent runs, and benchmark history default collapsed; simulation/backtest result tables remain).
-  - Evidence: `ui/src/App.tsx` initializes unresolved repair, curated salary slices, season coverage, recent ingest runs, and benchmark history collapsed. Production build plus rendered 390px/1440px checks confirmed expand/collapse behavior, no page-level horizontal overflow, and scroll-contained result tables.
-- [x] Add export bundle action (JSON + MD report + config snapshot).
+- `Ready`: sufficiently defined and unblocked.
+- `In progress`: active implementation work.
+- `Blocked`: waiting on named data, authority, or another task.
+- `Research`: evidence must be produced before implementation or promotion.
+- `Parked`: intentionally outside the current execution horizon.
 
-## P2 - Ops / Engineering
-- [x] Add integration tests for ingestion->curation->backtest critical path.
-  - Evidence: `backend/app/tests/test_critical_path_integration.py` mocks only nflreadpy and verifies player bootstrap, six weekly-stat rows, two immutable salary rows, two canonically resolved curated rows, prior-week projections, and current-week actual scoring in one database session.
-- [x] Add migration smoke test and schema drift checker in CI.
-  - Evidence: `.github/workflows/schema-smoke.yml` provisions PostgreSQL 16, applies all nine migrations to an empty database, verifies the ledger and a no-op second pass, and compares 18 migrated tables with ORM columns, types, constraints, foreign keys, and indexes.
-- [x] Add runbook for full environment bootstrap from empty database (`docs/BOOTSTRAP_RUNBOOK.md`).
-- [x] Add scheduled nightly benchmark automation and artifact retention policy.
-  - Evidence: `.github/workflows/nightly-benchmarks.yml` schedules the canonical suite on the historical-data runner, uploads each run for 30 days, compares the prior successful run, and invokes marker-scoped local retention. `backend/app/tests/test_benchmark_retention.py` proves manual and symlinked directories are excluded.
+## Verified Combined Baseline
 
-## P2 - Documentation
-- [x] Keep `docs/phase_plan.md` as executive roadmap.
-- [x] Keep this file (`docs/TODO.md`) as operational backlog.
-- [x] Add `docs/DECISIONS.md` for architecture/parameter decisions with dates and rationale.
-- [x] Add `docs/MODEL_REGISTRY.md` with model versions, training windows, and acceptance metrics.
+Application behavior was verified during consolidation on 2026-07-22; fresh-database
+schema parity was reverified on 2026-07-24:
 
-## External-Data / Runtime Blockers
-- [x] Historical injury snapshots are unavailable; superseded by usage-weighted roster continuity.
-- [x] Historical ownership is unavailable; superseded by the implemented popularity/duplication proxy.
-- [x] Add durable checkpoint storage and interrupted-run resume for large candidate generation.
+- `football_26` is the canonical repository and application.
+- Digital Twin, Model Workbench, War Room, Research Lab, Contest Delivery,
+  Intelligence, and Operations run in one Vite application.
+- One FastAPI process exposes 103 route contracts without method/path collisions.
+- All 14 numbered migrations apply to PostgreSQL with an exact
+  ledger and a no-op second pass; 19 ORM-managed `public` tables have zero drift,
+  and all 55 migration-owned `target` tables have a recorded compatibility contract.
+- The combined suite passes 339 Python tests and the production UI build passes.
+- A persisted 1,000-iteration Week 11 simulation and optimizer lineage reload through
+  the consolidated API.
+- Runtime scans contain no import or filesystem dependency on `football_opt`.
 
-## New Ideas Without Vendor History
-- [x] Usage-weighted roster continuity for latent availability (rejected as a standalone captain feature set; retained for role-shock research).
-- [x] Popularity and duplication proxy (default penalty zero; `0.25` retained as an opt-in research setting).
-- [x] Role-shock opportunity reallocation simulations with UI controls and lineup-fragility reporting.
-  - Evidence: `docs/role_shock_fragility_2025_w18.{json,md}`; Gibbs exposure `30%` to `0%`, 70% lineup overlap, `+6.69` reoptimization lift.
-- [x] Point-in-time weather/news shock simulation for pre-lock stress testing.
-  - Evidence: `backend/app/tests/test_point_in_time_shocks.py` proves timestamp cutoffs, deterministic mean/volatility transforms, stable-ID and team/position targeting, failure on missing IDs, post-floor mean preservation, and persisted scenario lineage. `docs/point_in_time_shock_validation_2025_late_season.{json,md}` records warning-free W16-W18 replays and exact same-seed reproduction.
-- [x] Online weekly residual learning with validation-selected shrinkage and strict prior-week cutoffs.
-  - Evidence: `docs/online_residual_learning_2024_2025.{json,md}`; untouched-test MAE `4.818` to `4.602` (`+4.48%`) across 1,205 observations.
-  - Integration: immutable weekly snapshots and a DraftKings-only, default-off simulation gate. `docs/online_residual_snapshot_backfill_2024_2025.json` records 15 snapshots, 3,342 observations, and zero failures; a separate verification rerun reused all 15.
-- [x] Future-safe game-regime ensemble with global fallback evaluated.
-  - Evidence: `docs/game_regime_ensemble_2024_2025.{json,md}`; validation MAE `-0.27%`, untouched-test MAE `-0.04%`, and 2/5 test slices improved. Rejected standalone; production unchanged.
-- Roadmap: `docs/NEXT_IDEAS.md`.
+See `docs/CONSOLIDATION.md` for the complete contract and verification evidence.
 
-## Parking Lot
-- [x] Add contest-specific objective functions (cash vs GPP) with separate optimization targets.
-- [x] Add late-swap workflow support for slates with staggered start times.
-- [x] Add weather/news shock scenario simulation for pre-lock stress testing.
-- [ ] Add explicit `simulation_run_id` projection overrides to lineup generation and validate baseline-versus-shock portfolio sensitivity.
+## Execution Order
+
+1. Close the one-repository consolidation gates (`CON-*`).
+2. Make long-running and weekly workflows production-safe (`OPS-*`, `ENG-*`).
+3. Finish the live cash, GPP, and showdown engines (`OPT-*`).
+4. Strengthen point-in-time data, model governance, and correlated simulations
+   (`DATA-*`, `MODEL-*`, `SIM-*`).
+5. Close the outcome and personal-learning loop (`LEARN-*`).
+
+## P0 — Consolidation Closeout
+
+| ID | Status | Work | Dependencies | Acceptance check |
+| --- | --- | --- | --- | --- |
+| CON-001 | Blocked | Run one real DraftKings entry-template workflow through import, completed optimizer selection, portfolio assignment, validation, CSV generation, download, and persisted reload. | A real DK entry template for a populated slate | Entry count, site IDs, roster slots, salary, contest IDs, content hash, and reloaded artifact all match; validation has no errors. |
+| CON-004 | Blocked | Review and checkpoint the consolidation branch, then make `football_opt` read-only or archive it. Deletion remains a separate explicit decision. | CON-001 | Diff is reviewed, combined checks pass, branch is committed, recovery reference is recorded, and daily development uses only `football_26`. |
+
+## P1 — Production Operations And Engineering
+
+| ID | Status | Work | Dependencies | Acceptance check |
+| --- | --- | --- | --- | --- |
+| OPS-001 | Ready | Move benchmarks, projection builds, simulations, and ultimate-lineup jobs from API-process background work to a dedicated worker queue while preserving current run IDs, idempotency, progress, retry, checkpoint, and result contracts. | CON-004 recommended | API restarts do not lose work; duplicate dispatch reuses the same request; workers can retry/resume; run status remains UI-visible. |
+| OPS-002 | Ready | Implement the resumable weekly orchestrator from imported `DT-801`: ingest, readiness, predict, adjust, simulate, optimize, validate, and export as separately inspectable stages. | OPS-001, CON-001 | A weekly run resumes after an interrupted stage without repeating completed writes and exposes logs, counts, warnings, errors, and artifact IDs. |
+| OPS-003 | Blocked | Add lock-aware news, injury, ownership, projection, and lineup refreshes (`DT-802`). | DATA-002, OPS-002 | Each refresh creates a new cutoff-stamped run, preserves prior versions, and never changes a locked historical snapshot. |
+| OPS-004 | Blocked | Add pre-lock and post-result monitoring for data staleness, drift, calibration, failed jobs, and export readiness (`DT-804`). | OPS-002, LEARN-001 | Alerts identify an actionable owner, affected slate/run, threshold, and recovery step. |
+| ENG-002 | Ready | Share active season/week/slate context and persisted-run selection across Digital Twin, Models, War Room, Research Lab, Delivery, and Operations. | None | Changing the active slate in one workspace updates the shell and destination workspace without silently resetting compatible run selections. |
+
+## P1 — Complete The Live Decision Engines
+
+| ID | Status | Work | Dependencies | Acceptance check |
+| --- | --- | --- | --- | --- |
+| OPT-001 (`DT-501`) | Ready | Wire the advanced classic GPP service into the live optimizer behind an explicit strategy/version flag. | Existing `DT-104`, `DT-105`, `DT-502` foundations | Selected strategy is actually executed, validated, persisted, reloadable, and visible in optimizer explanations and UI results. |
+| OPT-002 (`DT-601`) | Ready | Finish the showdown solver’s move into the persistent format/objective architecture. | Existing persistent optimizer contracts | Showdown cash and GPP are distinct run types; lineups, captain/flex slots, failures, and lineage survive restart and reload. |
+| OPT-003 (`DT-404`) | Blocked | Add diversified cash portfolios and deterministic late-news replacement rules. | OPT-005 | Multiple legal cash lineups respect exposure/risk limits; replacements preserve locked players and produce an auditable before/after report. |
+| OPT-004 (`DT-402`) | Research | Complete promotion-grade classic cash stacking replay with proven pre-lock salary inputs and normalized cash outcome evidence. | DATA-001 | Walk-forward comparisons use complete actuals and defensible cash-line/field evidence; promoted policy beats the unconstrained baseline on declared downside and median gates. |
+| OPT-005 (`DT-403`) | Blocked | Complete cash contest evaluation with verified contest type, fees, field size, payout tiers, and real historical cash files. | DATA-001 | Reports include win/double-up rate, median and lower-tail margin, ROI only where payouts are exact, and uncertainty across slates. |
+
+## P2 — Data Quality And Point-In-Time Inputs
+
+| ID | Status | Work | Dependencies | Acceptance check |
+| --- | --- | --- | --- | --- |
+| DATA-001 | Blocked | Import verified historical cash contest files and real entry templates with contest metadata and payout tiers. | User-provided/source-authorized files | Files are content-addressed, identity-safe, cutoff-labeled, deduplicated, and sufficient for CON-001 plus OPT-004/005. |
+| DATA-002 (`DT-304`) | Research | Add point-in-time Vegas, props, weather, depth-chart, injury, and role snapshots, starting only with sources whose historical availability can be proven. | Source and usage decisions | Each record has source, observed-at, effective-at, ingest-run lineage, canonical identities, and a replay test proving post-lock data is excluded. |
+| DATA-003 | Ready | Reassess legacy identity warnings after consolidation and either resolve deterministic cases or explicitly retain quarantine/waiver reasons. | None | Readiness reports distinguish resolved, ambiguous, no-match, and accepted quarantine; no unresolved record enters modeling or lineups silently. |
+
+## P2 — Projection And Model Governance
+
+| ID | Status | Work | Dependencies | Acceptance check |
+| --- | --- | --- | --- | --- |
+| MODEL-001 (`DT-302`) | Research | Finish QB/RB/WR/TE opportunity-efficiency decomposition and formal DST ablations with a promotion-grade untouched holdout. | DATA-002 where a feature needs external context | Ablations report walk-forward MAE/calibration by position and role; DST evidence includes an untouched holdout rather than diagnostic-only improvement. |
+| MODEL-002 (`DT-305`) | Ready | Complete model-registry champion/challenger evaluation and explicit promotion/rollback rules. | Existing immutable projection runs | A challenger cannot become active without declared data window, feature/code hashes, comparable gates, approval record, and reversible active-pointer change. |
+| MODEL-003 | Research | Re-evaluate accepted default-off online residual learning on new completed slates and decide whether it should remain experimental, be promoted, or be retired. | LEARN-001, enough new post-cutoff slates | Later-window MAE, RMSE, calibration, slice stability, and identity coverage are compared with the unchanged production baseline. |
+
+## P2 — Correlated GPP And Showdown Simulation
+
+| ID | Status | Work | Dependencies | Acceptance check |
+| --- | --- | --- | --- | --- |
+| SIM-001 (`DT-503`) | Research | Replace independent player draws with joint game/player simulations using shared latent game states and learned correlations. | DATA-002, MODEL-001 | Marginal distributions remain calibrated while observed teammate/opponent correlations and game totals are reproduced out of sample. |
+| SIM-002 (`DT-504`) | Blocked | Sample realistic opponent fields from ownership and construction behavior. | SIM-001, existing ownership challenger | Generated fields match historical ownership ranks, stacks, salary usage, roster construction, and duplication distributions by contest format. |
+| SIM-003 (`DT-505`) | Blocked | Optimize expected payout and top-percentile probability instead of summed player P90. | SIM-001, SIM-002, verified payouts | Replay reports top 1%, top 0.1%, cash rate, expected payout, ROI, and uncertainty against the current objective. |
+| SIM-004 (`DT-506`) | Blocked | Add contest-aware GPP portfolio exposure, diversification, and entry assignment. | SIM-003, existing portfolio persistence | Risk/exposure limits and lineup allocation vary explicitly by field size, payout structure, entry count, and user risk budget. |
+| SHOW-001 (`DT-602`) | Blocked | Build captain- and flex-specific ownership models. | OPT-002, sufficient showdown ownership data | Calibration and rank metrics are reported separately for CPT and FLEX with strict earlier-slate validation. |
+| SHOW-002 (`DT-603`) | Blocked | Add showdown game-script simulations and construction features. | SIM-001, OPT-002 | Replays cover 5-1/4-2/3-3 structures, game scripts, role changes, kicker/DST behavior, and calibrated scoring outcomes. |
+| SHOW-003 (`DT-604`) | Blocked | Estimate lineup duplication and prize splitting. | SIM-002, SHOW-001, SHOW-002 | Expected payout incorporates estimated duplicated-lineup counts and split prizes with calibration evidence. |
+| SHOW-004 (`DT-605`) | Blocked | Optimize showdown cash stability and GPP expected payout separately. | SHOW-002, SHOW-003 | Both objectives beat simple P90 maximization on declared walk-forward metrics without sharing post-lock data. |
+
+## P2 — Outcome And Personal Learning
+
+| ID | Status | Work | Dependencies | Acceptance check |
+| --- | --- | --- | --- | --- |
+| LEARN-001 (`DT-803`) | Blocked | Load contest results and evaluate projections, symbolic rules, beliefs, lineups, portfolios, and exports after every completed slate. | OPS-002, verified result files | Each completed slate produces one auditable report tied to source files and exact run IDs, with missing evidence shown rather than inferred. |
+| LEARN-002 (`DT-704`) | Blocked | Ask targeted agent questions only for high-value uncertainty or model/human disagreement. | Existing guarded belief modifiers, LEARN-001 recommended | Triggers use versioned value-of-information rules; every question, answer, no-change response, and resulting modifier is persisted. |
+| LEARN-003 (`DT-705`) | Blocked | Score human beliefs and accepted/rejected/no-change answers after outcomes. | LEARN-001, LEARN-002 | Reports show where intervention helped, hurt, or had no measurable effect by scope and confidence, without rewriting the original belief. |
+| LEARN-004 (`DT-706`) | Blocked | Learn a guarded personal-policy challenger from accumulated feedback. | LEARN-003, minimum evidence thresholds | Recommendations are replayed against model-only and human-only variants, require approval, and cannot silently change an active rule or model. |
+
+## P3 — Parked Horizons
+
+| ID | Status | Work | Revisit when |
+| --- | --- | --- | --- |
+| PARK-001 | Parked | Best Ball draft, roster, ADP, playoff-correlation, advancement, and payout modeling. | Weekly DFS operations and learning are stable; a separate product/schema decision is approved. |
+| PARK-002 | Parked | Fully autonomous symbolic-rule disabling or retuning. | LEARN-001 has sufficient evidence and explicit safety/rollback governance exists. |
+| PARK-003 | Parked | Additional paid/vendor feeds. | A source adds measurable point-in-time signal, licensing is clear, and the existing feed cannot meet the need. |
+| PARK-004 | Parked | Delete the archived `football_opt` repository. | The user explicitly chooses deletion after the archive/recovery period. |
+
+## Recurring Operating Work
+
+These are routines, not backlog-completion tasks:
+
+- Run classic and showdown benchmarks as separate tracks.
+- Track gap metrics, bootstrap intervals, projection coverage, ownership calibration,
+  and captain-prior drift after material changes and on the scheduled cadence.
+- Preserve production defaults until a declared walk-forward gate beats them.
+- Review unresolved identity, data freshness, job failures, and export readiness before lock.
+- Record accepted/rejected model decisions in `docs/DECISIONS.md` and
+  `docs/MODEL_REGISTRY.md`.
+
+## Definition Of Done
+
+Every completed task must satisfy the applicable requirements:
+
+1. Stable canonical identities; no raw display-name joins.
+2. Point-in-time cutoffs and immutable run/source lineage.
+3. Idempotent, observable UI/API action with actionable failures.
+4. Numbered migration for persistence changes.
+5. Targeted tests plus the relevant combined regression/build checks.
+6. Replay or walk-forward evidence for performance claims.
+7. Documentation and release-note synchronization.
