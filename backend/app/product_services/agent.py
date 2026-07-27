@@ -168,6 +168,7 @@ class NewsMatchupAgent:
     def __init__(self, engine=None, config: AgentConfig | None = None) -> None:
         self.engine = engine or create_engine(get_connection_string())
         self.config = config or AgentConfig()
+        self.load_warnings: list[str] = []
 
     def _ensure_symbolic_schema(self) -> None:
         ddl = """
@@ -916,6 +917,9 @@ class NewsMatchupAgent:
                 )
         except Exception as exc:
             logger.warning("Could not load injuries for symbolic agent: %s", exc)
+            self.load_warnings.append(
+                "Symbolic injury inputs were unavailable; injury rules evaluated no rows."
+            )
             return pd.DataFrame()
         if df.empty:
             return df
@@ -944,6 +948,9 @@ class NewsMatchupAgent:
                 )
         except Exception as exc:
             logger.warning("Could not load matchups for symbolic agent: %s", exc)
+            self.load_warnings.append(
+                "Symbolic matchup inputs were unavailable; matchup rules evaluated no rows."
+            )
             return pd.DataFrame()
         if df.empty:
             return df
@@ -1305,13 +1312,84 @@ class NewsMatchupAgent:
             rule_versions=rule_versions or {},
         )
 
+    def fetch_completed_run_summary(self, rule_run_id: str) -> dict[str, int] | None:
+        """Return counts for a completed run so orchestrator retries can recover it."""
+        try:
+            with self.engine.begin() as conn:
+                row = conn.execute(
+                    text(
+                        """
+                        SELECT run.rules_loaded, run.rules_applied,
+                               (SELECT COUNT(DISTINCT adjusted.player_id)
+                                FROM target.symbolic_adjusted_projection adjusted
+                                WHERE adjusted.rule_run_id = run.rule_run_id)
+                                   AS projections_seen,
+                               (SELECT COUNT(DISTINCT application.player_id)
+                                FROM target.symbolic_rule_application application
+                                WHERE application.rule_run_id = run.rule_run_id)
+                                   AS projections_adjusted,
+                               (SELECT COUNT(*)
+                                FROM target.symbolic_rule_application application
+                                WHERE application.rule_run_id = run.rule_run_id)
+                                   AS trace_rows
+                        FROM target.symbolic_rule_run run
+                        WHERE run.rule_run_id = :rule_run_id
+                          AND run.status = 'completed'
+                        """
+                    ),
+                    {"rule_run_id": rule_run_id},
+                ).mappings().first()
+                if row:
+                    return {key: int(row[key] or 0) for key in (
+                        "rules_loaded",
+                        "rules_applied",
+                        "projections_seen",
+                        "projections_adjusted",
+                        "trace_rows",
+                    )}
+        except Exception:  # noqa: BLE001 - target lineage can be unavailable in legacy DBs
+            pass
+        try:
+            with self.engine.begin() as conn:
+                row = conn.execute(
+                    text(
+                        """
+                        SELECT rules_loaded, rules_applied, projections_seen,
+                               projections_adjusted
+                        FROM symbolic_rule_runs
+                        WHERE rule_run_id = :rule_run_id AND status = 'completed'
+                        """
+                    ),
+                    {"rule_run_id": rule_run_id},
+                ).mappings().first()
+                if row:
+                    trace_rows = conn.execute(
+                        text(
+                            "SELECT COUNT(*) FROM symbolic_adjustments "
+                            "WHERE rule_run_id = :rule_run_id"
+                        ),
+                        {"rule_run_id": rule_run_id},
+                    ).scalar_one()
+                    return {
+                        "rules_loaded": int(row["rules_loaded"] or 0),
+                        "rules_applied": int(row["rules_applied"] or 0),
+                        "projections_seen": int(row["projections_seen"] or 0),
+                        "projections_adjusted": int(row["projections_adjusted"] or 0),
+                        "trace_rows": int(trace_rows or 0),
+                    }
+        except Exception:  # noqa: BLE001 - no completed legacy run exists
+            return None
+        return None
+
     def run(
         self,
         season: int,
         week: int,
         slate: str | None = None,
         projection_run_id: str | None = None,
+        rule_run_id: str | None = None,
     ) -> Tuple[pd.DataFrame, List[AgentAdjustment], AgentConfig, List[AgentTrace]]:
+        self.load_warnings = []
         rules = self._load_rules()
         injuries = self._load_injuries(season, week)
         matchups = self._load_matchups(season, week)
@@ -1327,7 +1405,7 @@ class NewsMatchupAgent:
             run_ids = proj["projection_run_id"].dropna().astype(str).unique().tolist()
             if run_ids:
                 projection_run_id = run_ids[0]
-        rule_run_id = str(uuid.uuid4())
+        rule_run_id = rule_run_id or str(uuid.uuid4())
         config = AgentConfig(
             rules_source=self.config.rules_source,
             rules_loaded=len(rules),

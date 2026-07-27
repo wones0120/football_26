@@ -451,6 +451,9 @@ def create_prediction_run_context(
     feature_cols: Iterable[str],
     *,
     data_cutoff_at: datetime | None = None,
+    feature_run_id: str | None = None,
+    model_run_id: str | None = None,
+    projection_run_id: str | None = None,
 ) -> PredictionRunContext:
     cutoff = data_cutoff_at or datetime.now(timezone.utc)
     if cutoff.tzinfo is None:
@@ -459,9 +462,9 @@ def create_prediction_run_context(
         "\n".join(sorted(str(col) for col in feature_cols)).encode("utf-8")
     ).hexdigest()
     return PredictionRunContext(
-        feature_run_id=str(uuid.uuid4()),
-        model_run_id=str(uuid.uuid4()),
-        projection_run_id=str(uuid.uuid4()),
+        feature_run_id=feature_run_id or str(uuid.uuid4()),
+        model_run_id=model_run_id or str(uuid.uuid4()),
+        projection_run_id=projection_run_id or str(uuid.uuid4()),
         data_cutoff_at=cutoff,
         feature_set_hash=feature_set_hash,
     )
@@ -523,6 +526,56 @@ class PredictionsService:
     def __init__(self, connection_string: str | None = None) -> None:
         self.connection_string = connection_string or get_connection_string()
         self.engine = create_engine(self.connection_string)
+
+    def fetch_completed_run_summary(
+        self,
+        projection_run_id: str,
+    ) -> dict[str, Any] | None:
+        """Reload the immutable run contract after a worker/result-write crash."""
+        inspector = inspect(self.engine)
+        if not inspector.has_table("projection_run", schema="target"):
+            return None
+        with self.engine.connect() as connection:
+            row = connection.execute(
+                text(
+                    """
+                    SELECT pr.projection_run_id, pr.model_run_id,
+                           mr.feature_run_id, pr.season, pr.week, pr.row_count,
+                           pr.data_cutoff_at, mr.params_json
+                    FROM target.projection_run pr
+                    JOIN target.model_run mr
+                      ON mr.model_run_id = pr.model_run_id
+                    WHERE pr.projection_run_id = :projection_run_id
+                      AND pr.status = 'completed'
+                    """
+                ),
+                {"projection_run_id": projection_run_id},
+            ).mappings().first()
+        if row is None:
+            return None
+        params = row.get("params_json") or {}
+        if isinstance(params, str):
+            try:
+                params = json.loads(params)
+            except json.JSONDecodeError:
+                params = {}
+        calibration = (
+            params.get("calibration", {})
+            if isinstance(params, dict)
+            else {}
+        )
+        return {
+            "season": int(row["season"]),
+            "week": int(row["week"]),
+            "rows_written": int(row["row_count"]),
+            "message": "Predictions generated",
+            "feature_run_id": str(row["feature_run_id"]),
+            "model_run_id": str(row["model_run_id"]),
+            "projection_run_id": str(row["projection_run_id"]),
+            "data_cutoff_at": row.get("data_cutoff_at"),
+            "target_persisted": True,
+            "calibration_metrics": calibration,
+        }
 
     @staticmethod
     def _normalize_team(team: str | None) -> str:
@@ -858,6 +911,9 @@ class PredictionsService:
         positions: Iterable[str] | None = None,
         slate: str | None = None,
         data_cutoff_at: datetime | None = None,
+        feature_run_id: str | None = None,
+        model_run_id: str | None = None,
+        projection_run_id: str | None = None,
     ) -> PredictionRunResult:
         df = self._load_features(season)
         if df.empty:
@@ -880,6 +936,9 @@ class PredictionsService:
         context = create_prediction_run_context(
             feature_cols,
             data_cutoff_at=data_cutoff_at,
+            feature_run_id=feature_run_id,
+            model_run_id=model_run_id,
+            projection_run_id=projection_run_id,
         )
 
         # Pull target-week rows from DB and treat non-numeric labels as unlabeled

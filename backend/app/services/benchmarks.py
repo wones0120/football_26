@@ -193,7 +193,7 @@ def build_benchmark_export_bundle(run_name: str) -> io.BytesIO | None:
     return payload
 
 
-def _allocate_run_directory() -> Path:
+def allocate_benchmark_run_directory() -> Path:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     for suffix in range(1000):
         name = timestamp if suffix == 0 else f"{timestamp}_{suffix:02d}"
@@ -229,9 +229,18 @@ def _latest_successful_run(*, exclude: Path) -> Path | None:
     return candidates[0] if candidates else None
 
 
-def run_benchmark_suite(request: Any) -> dict[str, Any]:
+def run_benchmark_suite(
+    request: Any,
+    *,
+    run_directory: str | Path | None = None,
+) -> dict[str, Any]:
     BENCHMARK_ROOT.mkdir(parents=True, exist_ok=True)
-    run_dir = _allocate_run_directory()
+    run_dir = (
+        Path(run_directory).expanduser().resolve()
+        if run_directory is not None
+        else allocate_benchmark_run_directory()
+    )
+    run_dir.mkdir(parents=True, exist_ok=True)
 
     command = [
         sys.executable,

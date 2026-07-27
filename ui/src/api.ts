@@ -119,6 +119,78 @@ export type OptimizerResponse = {
   updated_at?: string;
 };
 
+export type OperationalJob = {
+  job_id: string;
+  job_type: string;
+  idempotency_key: string;
+  status: "queued" | "running" | "completed" | "failed";
+  stage: string;
+  progress_current: number;
+  progress_total: number;
+  progress_percent: number;
+  progress_message?: string | null;
+  run_id?: string | null;
+  attempt_count: number;
+  max_attempts: number;
+  error_message?: string | null;
+  result?: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+  started_at?: string | null;
+  completed_at?: string | null;
+};
+
+export type OperationalJobCreateResponse = {
+  created: boolean;
+  job: OperationalJob;
+};
+
+export type WeeklyRunStage = {
+  stage: string;
+  stage_order: number;
+  status: "pending" | "running" | "completed" | "failed";
+  attempt_count: number;
+  message?: string | null;
+  counts: Record<string, unknown>;
+  logs: string[];
+  warnings: string[];
+  errors: string[];
+  artifact_ids: Record<string, unknown>;
+  result?: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+  started_at?: string | null;
+  completed_at?: string | null;
+};
+
+export type WeeklyRun = {
+  weekly_run_id: string;
+  operational_job_id: string;
+  season: number;
+  week: number;
+  slate: string;
+  status: "queued" | "running" | "completed" | "failed";
+  current_stage: string;
+  progress_current: number;
+  progress_total: number;
+  progress_percent: number;
+  warning_count: number;
+  error_count: number;
+  artifact_ids: Record<string, Record<string, unknown>>;
+  data_cutoff_at?: string | null;
+  stages: WeeklyRunStage[];
+  created_at: string;
+  updated_at: string;
+  started_at?: string | null;
+  completed_at?: string | null;
+};
+
+export type WeeklyRunCreateResponse = {
+  created: boolean;
+  job: OperationalJob;
+  run: WeeklyRun;
+};
+
 export type PredictionResponse = {
   season: number;
   week: number;
@@ -689,7 +761,12 @@ function normalizeFetchError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
 }
 
-async function postJson<T>(path: string, body: unknown, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<T> {
+async function postJson<T>(
+  path: string,
+  body: unknown,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+  extraHeaders: Record<string, string> = {}
+): Promise<T> {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -697,6 +774,7 @@ async function postJson<T>(path: string, body: unknown, timeoutMs = DEFAULT_TIME
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        ...extraHeaders,
       },
       body: JSON.stringify(body),
       signal: controller.signal,
@@ -710,6 +788,88 @@ async function postJson<T>(path: string, body: unknown, timeoutMs = DEFAULT_TIME
   } finally {
     window.clearTimeout(timeout);
   }
+}
+
+function newIdempotencyKey(jobType: string): string {
+  const nonce = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
+  return `${jobType}:${nonce}`;
+}
+
+async function waitForOperationalJob<T>(jobId: string): Promise<T> {
+  for (;;) {
+    const job = await getJson<OperationalJob>(`/jobs/${encodeURIComponent(jobId)}`, 30_000);
+    if (job.status === "completed") {
+      if (!job.result) throw new Error(`Operational job ${jobId} completed without a result`);
+      return job.result as T;
+    }
+    if (job.status === "failed") {
+      throw new Error(job.error_message || `Operational job ${jobId} failed`);
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 1000));
+  }
+}
+
+async function enqueueAndWait<T>(
+  path: string,
+  body: unknown,
+  jobType: string
+): Promise<T> {
+  const queued = await postJson<OperationalJobCreateResponse>(
+    path,
+    body,
+    30_000,
+    { "Idempotency-Key": newIdempotencyKey(jobType) }
+  );
+  return waitForOperationalJob<T>(queued.job.job_id);
+}
+
+export function fetchOperationalJobs(limit = 25): Promise<{ rows: OperationalJob[] }> {
+  return getJson(`/jobs?limit=${encodeURIComponent(String(limit))}`, 30_000);
+}
+
+export function createWeeklyRun(payload: {
+  season: number;
+  week: number;
+  slate: string;
+  draftkings_directory?: string;
+  recursive?: boolean;
+  projection_run_id?: string;
+  contest_format: "classic" | "showdown";
+  objective: "cash" | "gpp";
+  strategy?: string;
+  num_simulations?: number;
+  optimizer_params?: Record<string, unknown>;
+  template_id?: string;
+  portfolio_name?: string;
+}): Promise<WeeklyRunCreateResponse> {
+  return postJson(
+    "/weekly-runs",
+    payload,
+    30_000,
+    { "Idempotency-Key": newIdempotencyKey("weekly-run") },
+  );
+}
+
+export function fetchWeeklyRuns(params: {
+  season?: number;
+  week?: number;
+  slate?: string;
+  limit?: number;
+} = {}): Promise<{ rows: WeeklyRun[] }> {
+  const query = new URLSearchParams();
+  if (params.season !== undefined) query.set("season", String(params.season));
+  if (params.week !== undefined) query.set("week", String(params.week));
+  if (params.slate) query.set("slate", params.slate);
+  query.set("limit", String(params.limit ?? 5));
+  return getJson(`/weekly-runs?${query.toString()}`, 30_000);
+}
+
+export function retryWeeklyRun(weeklyRunId: string): Promise<OperationalJob> {
+  return postJson(
+    `/weekly-runs/${encodeURIComponent(weeklyRunId)}/retry`,
+    {},
+    30_000,
+  );
 }
 
 async function getJson<T>(path: string, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<T> {
@@ -873,7 +1033,7 @@ export function runPredictions(payload: {
   slate?: string;
   data_cutoff_at?: string;
 }): Promise<PredictionResponse> {
-  return postJson("/predict/run", payload);
+  return enqueueAndWait("/predict/run", payload, "projection");
 }
 
 export function fetchValidation(table?: string): Promise<ValidationResponse> {
@@ -954,7 +1114,7 @@ export function runSlateSimulation(payload: {
   projection_run_id?: string;
   ownership_run_id?: string;
 }): Promise<SimulationResponse> {
-  return postJson("/simulations/run", payload, 120_000);
+  return enqueueAndWait("/simulations/run", payload, "slate-simulation");
 }
 
 export function fetchLatestSlateSimulation(params: {

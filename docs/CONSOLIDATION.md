@@ -76,3 +76,14 @@ and counts are recorded in `docs/CON-003_SCHEMA_PARITY.md`.
 
 The canonical database does not yet contain a DraftKings entry template. Import one real template,
 then create, validate, download, and reload a portfolio export before archiving `football_opt`.
+
+Post-consolidation note (2026-07-27): `OPS-001` and `OPS-002` added durable worker dispatch plus
+weekly-run create/list/detail/retry contracts and eight inspectable ingest-to-export checkpoints.
+Migrations `0015` and `0016` add three ORM-managed `public` tables. The current application exposes
+110 collision-free route contracts and passes 353 backend tests plus the production UI build.
+Migration `0016` is applied in `football_26_dev`, its target schema check reports 55/55 tables and
+zero issues, and a live weekly run persisted six stages through optimization before the known
+missing-template gate. The legacy development `public` schema still contains the pre-consolidation
+extra tables and type drift identified by the public drift check; the new weekly tables did not add
+an issue. The fresh-database counts above remain the dated `CON-003` evidence through its recorded migration
+ledger; deployers must apply both migrations before starting the worker.

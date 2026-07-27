@@ -10,10 +10,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from backend.app.api import routes
 from backend.app.api.routes import router
 from backend.app.db import get_db_session
-from backend.app.models import Base
+from backend.app.models import Base, OperationalJob
 from backend.app.schemas import UltimateLineupRequest, UltimateLineupResponse
 from backend.app.services import ultimate_lineup_runs
 from backend.app.services.lineup_learning import LineupLearningService
@@ -215,7 +214,6 @@ def test_failed_run_can_be_retried(
 
 
 def test_ultimate_run_api_create_get_and_idempotency_conflict(
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     engine = create_engine(
         "sqlite+pysqlite://",
@@ -233,12 +231,6 @@ def test_ultimate_run_api_create_get_and_idempotency_conflict(
         with factory() as session:
             yield session
 
-    scheduled: list[str] = []
-    monkeypatch.setattr(
-        routes,
-        "execute_ultimate_lineup_run",
-        lambda run_id: scheduled.append(run_id),
-    )
     app.dependency_overrides[get_db_session] = override_session
     client = TestClient(app)
     body = {
@@ -252,13 +244,18 @@ def test_ultimate_run_api_create_get_and_idempotency_conflict(
     assert created_payload["created"] is True
     run_id = created_payload["run"]["ultimate_lineup_run_id"]
     assert created_payload["run"]["status"] == "queued"
-    assert scheduled == [run_id]
+    with factory() as session:
+        queued_jobs = session.query(OperationalJob).all()
+        assert len(queued_jobs) == 1
+        assert queued_jobs[0].run_id == run_id
+        assert queued_jobs[0].status == "queued"
 
     reused = client.post("/api/lineups/ultimate-runs", json=body)
     assert reused.status_code == 202
     assert reused.json()["created"] is False
     assert reused.json()["run"]["ultimate_lineup_run_id"] == run_id
-    assert scheduled == [run_id, run_id]
+    with factory() as session:
+        assert session.query(OperationalJob).count() == 1
 
     fetched = client.get(f"/api/lineups/ultimate-runs/{run_id}")
     assert fetched.status_code == 200

@@ -120,8 +120,20 @@ class PortfolioService:
         template_id: str,
         lineup_ids: list[str] | None = None,
         default_contest_id: str | None = None,
+        portfolio_id: str | None = None,
     ) -> PortfolioResult:
         self._ensure_schema()
+        if portfolio_id:
+            existing = self.get_portfolio(portfolio_id)
+            if existing is not None:
+                if (
+                    existing.optimizer_run_id != optimizer_run_id
+                    or existing.template_id != template_id
+                ):
+                    raise ValueError(
+                        f"Portfolio ID {portfolio_id} is already associated with different lineage"
+                    )
+                return existing
         with self.engine.begin() as conn:
             optimizer = conn.execute(text("""
                 SELECT optimizer_run_id, season, week, slate_id, contest_format, objective, status
@@ -157,7 +169,7 @@ class PortfolioService:
         unavailable = sorted(set(selected_lineups).difference(available_lineups))
         if unavailable:
             raise ValueError(f"Lineups do not belong to optimizer run: {', '.join(unavailable)}")
-        portfolio_id = str(uuid.uuid4())
+        portfolio_id = portfolio_id or str(uuid.uuid4())
         assignments = self._build_assignment_plan(
             portfolio_id=portfolio_id,
             template_id=template_id,

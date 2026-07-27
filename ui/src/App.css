@@ -846,6 +846,67 @@ table tbody tr:last-child {
   background: linear-gradient(90deg, transparent, rgba(112, 225, 165, 0.42), rgba(116, 167, 255, 0.32), transparent);
 }
 
+.weekly-run-panel {
+  display: grid;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.weekly-run-launch {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.weekly-run-launch label {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.weekly-run-launch small {
+  color: var(--shell-muted);
+  font-weight: 500;
+}
+
+.weekly-run-detail,
+.weekly-run-summary {
+  display: grid;
+  gap: 10px;
+}
+
+.weekly-run-summary {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.weekly-run-summary > div {
+  display: grid;
+  gap: 3px;
+}
+
+.weekly-run-summary span,
+.weekly-run-summary small {
+  color: var(--shell-muted);
+}
+
+.weekly-stage-table td:nth-child(4),
+.weekly-stage-table td:nth-child(5),
+.weekly-stage-table td:nth-child(6) {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .weekly-run-launch,
+  .weekly-run-summary {
+    grid-template-columns: 1fr;
+  }
+}
+
 .operations-command-copy h2,
 .operations-command-copy p {
   margin: 0;

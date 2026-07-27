@@ -453,6 +453,211 @@ class UltimateLineupRun(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime)
 
 
+class OperationalJob(Base):
+    """Durable work item claimed by the standalone worker process."""
+
+    __tablename__ = "operational_job"
+    __table_args__ = (
+        UniqueConstraint(
+            "job_type",
+            "idempotency_key",
+            name="uq_operational_job_type_idempotency_key",
+        ),
+        Index(
+            "idx_operational_job_dispatch",
+            "status",
+            "available_at",
+            "created_at",
+        ),
+        Index(
+            "idx_operational_job_lease",
+            "status",
+            "lease_expires_at",
+        ),
+    )
+
+    job_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    job_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    request_json: Mapped[dict] = mapped_column(JSON_DOCUMENT, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default="queued",
+    )
+    stage: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        default="queued",
+    )
+    progress_current: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+    )
+    progress_total: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+    )
+    progress_message: Mapped[str | None] = mapped_column(Text)
+    run_id: Mapped[str | None] = mapped_column(String(255))
+    checkpoint_json: Mapped[dict | None] = mapped_column(JSON_DOCUMENT)
+    result_json: Mapped[dict | None] = mapped_column(JSON_DOCUMENT)
+    error_message: Mapped[str | None] = mapped_column(Text)
+    attempt_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+    )
+    max_attempts: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=3,
+    )
+    available_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=utcnow_naive,
+    )
+    locked_by: Mapped[str | None] = mapped_column(String(255))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=utcnow_naive,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=utcnow_naive,
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class WeeklyRun(Base):
+    """One durable end-to-end weekly workflow execution."""
+
+    __tablename__ = "weekly_run"
+    __table_args__ = (
+        Index(
+            "idx_weekly_run_scope",
+            "season",
+            "week",
+            "slate",
+            "created_at",
+        ),
+        Index("idx_weekly_run_status", "status", "updated_at"),
+    )
+
+    weekly_run_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    operational_job_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("operational_job.job_id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    season: Mapped[int] = mapped_column(Integer, nullable=False)
+    week: Mapped[int] = mapped_column(Integer, nullable=False)
+    slate: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default="queued",
+    )
+    current_stage: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        default="queued",
+    )
+    data_cutoff_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=utcnow_naive,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=utcnow_naive,
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class WeeklyRunStage(Base):
+    """Inspectable checkpoint for one stage of a weekly workflow."""
+
+    __tablename__ = "weekly_run_stage"
+    __table_args__ = (
+        UniqueConstraint(
+            "weekly_run_id",
+            "stage_order",
+            name="uq_weekly_run_stage_order",
+        ),
+        Index("idx_weekly_run_stage_status", "status", "updated_at"),
+    )
+
+    weekly_run_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("weekly_run.weekly_run_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    stage: Mapped[str] = mapped_column(String(64), primary_key=True)
+    stage_order: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default="pending",
+    )
+    attempt_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+    )
+    message: Mapped[str | None] = mapped_column(Text)
+    counts_json: Mapped[dict] = mapped_column(
+        JSON_DOCUMENT,
+        nullable=False,
+        default=dict,
+    )
+    logs_json: Mapped[list] = mapped_column(
+        JSON_DOCUMENT,
+        nullable=False,
+        default=list,
+    )
+    warnings_json: Mapped[list] = mapped_column(
+        JSON_DOCUMENT,
+        nullable=False,
+        default=list,
+    )
+    errors_json: Mapped[list] = mapped_column(
+        JSON_DOCUMENT,
+        nullable=False,
+        default=list,
+    )
+    artifact_ids_json: Mapped[dict] = mapped_column(
+        JSON_DOCUMENT,
+        nullable=False,
+        default=dict,
+    )
+    result_json: Mapped[dict | None] = mapped_column(JSON_DOCUMENT)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=utcnow_naive,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=utcnow_naive,
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
 class SimulatedPlayerOutcome(Base):
     __tablename__ = "simulated_player_outcome"
     __table_args__ = (

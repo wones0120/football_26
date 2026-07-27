@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from uuid import uuid4
+
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -17,7 +19,6 @@ from ..schemas import (
     AutoDiscoverIngestResponse,
     BenchmarkRunListResponse,
     BenchmarkSuiteRunRequest,
-    BenchmarkSuiteRunResponse,
     BacktestRangeABRequest,
     BacktestRangeABResponse,
     BacktestWeekABResponse,
@@ -48,7 +49,6 @@ from ..schemas import (
     ResidualSnapshotResponse,
     SalaryIngestRequest,
     SimulateWeekRequest,
-    SimulateWeekResponse,
     SimulationRunListResponse,
     SeasonCoverageResponse,
     UnresolvedListResponse,
@@ -60,7 +60,16 @@ from ..services.benchmarks import (
     build_model_defaults_response,
     list_benchmark_runs,
     resolve_benchmark_artifact,
-    run_benchmark_suite,
+)
+from ..job_schemas import OperationalJobCreateResponse
+from ..services.job_queue import (
+    BENCHMARK_JOB,
+    RESEARCH_SIMULATION_JOB,
+    ULTIMATE_LINEUP_JOB,
+    JobConflictError,
+    enqueue_job,
+    job_response,
+    retry_job,
 )
 from ..services.ingest import IngestService
 from ..services.lineup_learning import LineupLearningService
@@ -69,7 +78,6 @@ from ..services.ultimate_lineup_runs import (
     UltimateLineupRunConflictError,
     UltimateLineupRunStateError,
     create_ultimate_lineup_run,
-    execute_ultimate_lineup_run,
     get_ultimate_lineup_run,
     retry_ultimate_lineup_run,
     ultimate_lineup_run_response,
@@ -122,8 +130,21 @@ def benchmark_export_bundle(run_name: str) -> StreamingResponse:
     )
 
 
-@router.post("/benchmarks/run-suite", response_model=BenchmarkSuiteRunResponse)
-def benchmark_run_suite(request: BenchmarkSuiteRunRequest) -> BenchmarkSuiteRunResponse:
+@router.post(
+    "/benchmarks/run-suite",
+    response_model=OperationalJobCreateResponse,
+    status_code=202,
+)
+def benchmark_run_suite(
+    request: BenchmarkSuiteRunRequest,
+    idempotency_key: str | None = Header(
+        default=None,
+        alias="Idempotency-Key",
+        min_length=1,
+        max_length=255,
+    ),
+    session: Session = Depends(get_db_session),
+) -> OperationalJobCreateResponse:
     settings = get_settings()
     request = request.model_copy(
         update={
@@ -134,8 +155,19 @@ def benchmark_run_suite(request: BenchmarkSuiteRunRequest) -> BenchmarkSuiteRunR
             else settings.showdown_captain_prior_strength,
         }
     )
-    payload = run_benchmark_suite(request)
-    return BenchmarkSuiteRunResponse(**payload)
+    try:
+        job, created = enqueue_job(
+            session,
+            job_type=BENCHMARK_JOB,
+            idempotency_key=idempotency_key or f"benchmark:{uuid4()}",
+            request_payload=request.model_dump(mode="json"),
+            max_attempts=2,
+        )
+    except JobConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return OperationalJobCreateResponse(created=created, job=job_response(job))
 
 
 @router.post("/ingest/salaries", response_model=IngestResultResponse)
@@ -265,16 +297,34 @@ def data_freshness(
     )
 
 
-@router.post("/simulate/week", response_model=SimulateWeekResponse)
+@router.post(
+    "/simulate/week",
+    response_model=OperationalJobCreateResponse,
+    status_code=202,
+)
 def simulate_week(
     request: SimulateWeekRequest,
+    idempotency_key: str | None = Header(
+        default=None,
+        alias="Idempotency-Key",
+        min_length=1,
+        max_length=255,
+    ),
     session: Session = Depends(get_db_session),
-) -> SimulateWeekResponse:
-    service = SimulationService(session)
-    result = service.simulate_week(request)
-    if result.status == "failed":
-        raise HTTPException(status_code=422, detail=result.error_message or "simulation failed")
-    return result
+) -> OperationalJobCreateResponse:
+    try:
+        job, created = enqueue_job(
+            session,
+            job_type=RESEARCH_SIMULATION_JOB,
+            idempotency_key=idempotency_key or f"research-simulation:{uuid4()}",
+            request_payload=request.model_dump(mode="json"),
+            run_id=str(uuid4()),
+        )
+    except JobConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return OperationalJobCreateResponse(created=created, job=job_response(job))
 
 
 @router.get("/simulate/runs", response_model=SimulationRunListResponse)
@@ -410,7 +460,6 @@ def lineups_generate_ultimate(
 )
 def lineups_start_ultimate_run(
     request: UltimateLineupRunCreateRequest,
-    background_tasks: BackgroundTasks,
     session: Session = Depends(get_db_session),
 ) -> UltimateLineupRunCreateResponse:
     try:
@@ -422,9 +471,15 @@ def lineups_start_ultimate_run(
     except UltimateLineupRunConflictError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     if run.status == "queued":
-        background_tasks.add_task(
-            execute_ultimate_lineup_run,
-            run.ultimate_lineup_run_id,
+        enqueue_job(
+            session,
+            job_type=ULTIMATE_LINEUP_JOB,
+            idempotency_key=run.ultimate_lineup_run_id,
+            request_payload={
+                "ultimate_lineup_run_id": run.ultimate_lineup_run_id,
+            },
+            run_id=run.ultimate_lineup_run_id,
+            max_attempts=1,
         )
     return UltimateLineupRunCreateResponse(
         created=created,
@@ -453,7 +508,6 @@ def lineups_get_ultimate_run(
 )
 def lineups_retry_ultimate_run(
     ultimate_lineup_run_id: str,
-    background_tasks: BackgroundTasks,
     session: Session = Depends(get_db_session),
 ) -> UltimateLineupRunResponse:
     try:
@@ -465,10 +519,18 @@ def lineups_retry_ultimate_run(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except UltimateLineupRunStateError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    background_tasks.add_task(
-        execute_ultimate_lineup_run,
-        run.ultimate_lineup_run_id,
+    job, _created = enqueue_job(
+        session,
+        job_type=ULTIMATE_LINEUP_JOB,
+        idempotency_key=run.ultimate_lineup_run_id,
+        request_payload={
+            "ultimate_lineup_run_id": run.ultimate_lineup_run_id,
+        },
+        run_id=run.ultimate_lineup_run_id,
+        max_attempts=1,
     )
+    if job.status == "failed":
+        retry_job(session, job.job_id)
     return ultimate_lineup_run_response(run)
 
 

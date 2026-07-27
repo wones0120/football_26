@@ -435,9 +435,23 @@ class IngestService:
         season: int | None,
         week: int | None,
         slate: str | None,
+        ingest_run_id: str | None = None,
     ) -> IngestRun:
+        if ingest_run_id:
+            existing = self.session.get(IngestRun, ingest_run_id)
+            if existing is not None:
+                existing.status = "running"
+                existing.rows_raw = 0
+                existing.rows_curated = 0
+                existing.rows_unresolved = 0
+                existing.error_message = None
+                existing.started_at = utcnow_naive()
+                existing.completed_at = None
+                self.session.add(existing)
+                self.session.commit()
+                return existing
         run = IngestRun(
-            ingest_run_id=str(uuid.uuid4()),
+            ingest_run_id=ingest_run_id or str(uuid.uuid4()),
             source_system=source_system,
             source_table=source_table,
             source_path=source_path,
@@ -451,6 +465,12 @@ class IngestService:
         self.session.add(run)
         self.session.commit()
         return run
+
+    def _completed_run(self, ingest_run_id: str | None) -> IngestRun | None:
+        if not ingest_run_id:
+            return None
+        run = self.session.get(IngestRun, ingest_run_id)
+        return run if run is not None and run.status == "completed" else None
 
     def _complete_run(
         self,
@@ -704,10 +724,19 @@ class IngestService:
             query = query.filter(RawNflWeeklyStat.week.in_(weeks))
         query.delete(synchronize_session=False)
 
-    def ingest_salaries(self, request: SalaryIngestRequest) -> IngestResultResponse:
+    def ingest_salaries(
+        self,
+        request: SalaryIngestRequest,
+        *,
+        ingest_run_id: str | None = None,
+    ) -> IngestResultResponse:
         path = Path(request.path).expanduser().resolve()
         if not path.exists():
             raise ValueError(f"File not found: {path}")
+
+        completed = self._completed_run(ingest_run_id)
+        if completed is not None:
+            return IngestResultResponse.model_validate(completed, from_attributes=True)
 
         run = self._new_run(
             source_system=request.source_system,
@@ -716,6 +745,7 @@ class IngestService:
             season=request.season,
             week=request.week,
             slate=request.slate,
+            ingest_run_id=ingest_run_id,
         )
         rows_raw = 0
         rows_curated = 0
@@ -826,10 +856,19 @@ class IngestService:
             )
             return IngestResultResponse.model_validate(run, from_attributes=True)
 
-    def ingest_injuries(self, request: InjuryIngestRequest) -> IngestResultResponse:
+    def ingest_injuries(
+        self,
+        request: InjuryIngestRequest,
+        *,
+        ingest_run_id: str | None = None,
+    ) -> IngestResultResponse:
         path = Path(request.path).expanduser().resolve()
         if not path.exists():
             raise ValueError(f"File not found: {path}")
+
+        completed = self._completed_run(ingest_run_id)
+        if completed is not None:
+            return IngestResultResponse.model_validate(completed, from_attributes=True)
 
         run = self._new_run(
             source_system=request.source_system,
@@ -838,6 +877,7 @@ class IngestService:
             season=request.season,
             week=request.week,
             slate=request.slate,
+            ingest_run_id=ingest_run_id,
         )
         rows_raw = 0
         rows_curated = 0

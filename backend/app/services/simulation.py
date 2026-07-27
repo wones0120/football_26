@@ -1521,9 +1521,40 @@ class SimulationService:
             scenario_warnings,
         )
 
-    def _new_run(self, request: SimulateWeekRequest) -> SimulationRun:
+    def _new_run(
+        self,
+        request: SimulateWeekRequest,
+        *,
+        simulation_run_id: str | None = None,
+    ) -> SimulationRun:
+        run_id = simulation_run_id or str(uuid.uuid4())
+        run = (
+            self.session.get(SimulationRun, run_id)
+            if simulation_run_id is not None
+            else None
+        )
+        if run is not None:
+            self.session.query(SimulatedPlayerOutcome).filter(
+                SimulatedPlayerOutcome.simulation_run_id == run_id
+            ).delete(synchronize_session=False)
+            run.source_system = request.source_system
+            run.season = request.season
+            run.week = request.week
+            run.slate = request.slate
+            run.iterations = request.iterations
+            run.random_seed = request.random_seed
+            run.parameters_json = request.model_dump(mode="json")
+            run.players_considered = 0
+            run.players_simulated = 0
+            run.status = "running"
+            run.error_message = None
+            run.started_at = utcnow_naive()
+            run.completed_at = None
+            self.session.commit()
+            self.session.refresh(run)
+            return run
         run = SimulationRun(
-            simulation_run_id=str(uuid.uuid4()),
+            simulation_run_id=run_id,
             source_system=request.source_system,
             season=request.season,
             week=request.week,
@@ -1561,8 +1592,13 @@ class SimulationService:
         self.session.refresh(run)
         return run
 
-    def simulate_week(self, request: SimulateWeekRequest) -> SimulateWeekResponse:
-        run = self._new_run(request)
+    def simulate_week(
+        self,
+        request: SimulateWeekRequest,
+        *,
+        simulation_run_id: str | None = None,
+    ) -> SimulateWeekResponse:
+        run = self._new_run(request, simulation_run_id=simulation_run_id)
         players_considered = 0
         players_simulated = 0
         top_rows: list[SimulatedPlayerOutcomeResponse] = []

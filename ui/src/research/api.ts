@@ -463,6 +463,32 @@ export type BenchmarkSuiteRunResult = {
   run?: BenchmarkRun | null;
 };
 
+export type OperationalJob = {
+  job_id: string;
+  job_type: string;
+  idempotency_key: string;
+  status: "queued" | "running" | "completed" | "failed";
+  stage: string;
+  progress_current: number;
+  progress_total: number;
+  progress_percent: number;
+  progress_message?: string | null;
+  run_id?: string | null;
+  attempt_count: number;
+  max_attempts: number;
+  error_message?: string | null;
+  result?: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+  started_at?: string | null;
+  completed_at?: string | null;
+};
+
+type OperationalJobCreateResponse = {
+  created: boolean;
+  job: OperationalJob;
+};
+
 export type AutoDiscoveredFile = {
   file_name: string;
   path: string;
@@ -505,16 +531,52 @@ async function errorMessage(res: Response): Promise<string> {
   }
 }
 
-async function postJson<T>(path: string, body: unknown): Promise<T> {
+async function postJson<T>(
+  path: string,
+  body: unknown,
+  extraHeaders: Record<string, string> = {}
+): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...extraHeaders },
     body: JSON.stringify(body),
   });
   if (!res.ok) {
     throw new Error(await errorMessage(res));
   }
   return (await res.json()) as T;
+}
+
+function newIdempotencyKey(jobType: string): string {
+  const nonce = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
+  return `${jobType}:${nonce}`;
+}
+
+async function waitForOperationalJob<T>(jobId: string): Promise<T> {
+  for (;;) {
+    const job = await getJson<OperationalJob>(`/jobs/${encodeURIComponent(jobId)}`);
+    if (job.status === "completed") {
+      if (!job.result) throw new Error(`Operational job ${jobId} completed without a result`);
+      return job.result as T;
+    }
+    if (job.status === "failed") {
+      throw new Error(job.error_message || `Operational job ${jobId} failed`);
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 1000));
+  }
+}
+
+async function enqueueAndWait<T>(
+  path: string,
+  body: unknown,
+  jobType: string
+): Promise<T> {
+  const queued = await postJson<OperationalJobCreateResponse>(
+    path,
+    body,
+    { "Idempotency-Key": newIdempotencyKey(jobType) }
+  );
+  return waitForOperationalJob<T>(queued.job.job_id);
 }
 
 async function getJson<T>(path: string): Promise<T> {
@@ -612,7 +674,7 @@ export function simulateWeek(payload: {
     volatility_multiplier: number;
   }>;
 }): Promise<SimulateWeekResult> {
-  return postJson("/simulate/week", payload);
+  return enqueueAndWait("/simulate/week", payload, "research-simulation");
 }
 
 export function fetchSimulationRuns(params: {
@@ -753,7 +815,7 @@ export function runBenchmarkSuite(payload?: {
   showdown_captain_model_path?: string;
   showdown_captain_prior_strength?: number;
 }): Promise<BenchmarkSuiteRunResult> {
-  return postJson("/benchmarks/run-suite", payload ?? {});
+  return enqueueAndWait("/benchmarks/run-suite", payload ?? {}, "benchmark");
 }
 
 export function fetchSeasonCoverage(): Promise<{ rows: SeasonCoverageRow[] }> {

@@ -1,6 +1,6 @@
 # football_26 Canonical Backlog
 
-Last reviewed: 2026-07-24
+Last reviewed: 2026-07-27
 
 This is the single source of truth for active product, data, modeling, simulation,
 and operational work in `football_26`. Completed implementation history belongs in
@@ -44,11 +44,18 @@ schema parity was reverified on 2026-07-24:
 - `football_26` is the canonical repository and application.
 - Digital Twin, Model Workbench, War Room, Research Lab, Contest Delivery,
   Intelligence, and Operations run in one Vite application.
-- One FastAPI process exposes 103 route contracts without method/path collisions.
+- One FastAPI process exposes 110 route contracts without method/path collisions.
 - All 14 numbered migrations apply to PostgreSQL with an exact
   ledger and a no-op second pass; 19 ORM-managed `public` tables have zero drift,
   and all 55 migration-owned `target` tables have a recorded compatibility contract.
-- The combined suite passes 339 Python tests and the production UI build passes.
+- `OPS-001` and `OPS-002` add contiguous migrations `0015` and `0016` plus three
+  ORM-managed `public` tables for durable jobs, weekly runs, and stage checkpoints;
+  focused metadata/migration tests pass, while the dated fresh-PostgreSQL baseline
+  above remains the last disposable-cluster proof.
+- The combined suite passes 353 Python tests and the production UI build passes.
+- Development weekly run `aeb1e82f-ab0d-4ffe-a38b-88db355e7f3e` persisted six
+  stages through optimization and stopped explicitly at the `CON-001` real-template
+  validation gate; completed ingest/readiness writes were skipped on resume.
 - A persisted 1,000-iteration Week 11 simulation and optimizer lineage reload through
   the consolidated API.
 - Runtime scans contain no import or filesystem dependency on `football_opt`.
@@ -75,10 +82,8 @@ See `docs/CONSOLIDATION.md` for the complete contract and verification evidence.
 
 | ID | Status | Work | Dependencies | Acceptance check |
 | --- | --- | --- | --- | --- |
-| OPS-001 | Ready | Move benchmarks, projection builds, simulations, and ultimate-lineup jobs from API-process background work to a dedicated worker queue while preserving current run IDs, idempotency, progress, retry, checkpoint, and result contracts. | CON-004 recommended | API restarts do not lose work; duplicate dispatch reuses the same request; workers can retry/resume; run status remains UI-visible. |
-| OPS-002 | Ready | Implement the resumable weekly orchestrator from imported `DT-801`: ingest, readiness, predict, adjust, simulate, optimize, validate, and export as separately inspectable stages. | OPS-001, CON-001 | A weekly run resumes after an interrupted stage without repeating completed writes and exposes logs, counts, warnings, errors, and artifact IDs. |
-| OPS-003 | Blocked | Add lock-aware news, injury, ownership, projection, and lineup refreshes (`DT-802`). | DATA-002, OPS-002 | Each refresh creates a new cutoff-stamped run, preserves prior versions, and never changes a locked historical snapshot. |
-| OPS-004 | Blocked | Add pre-lock and post-result monitoring for data staleness, drift, calibration, failed jobs, and export readiness (`DT-804`). | OPS-002, LEARN-001 | Alerts identify an actionable owner, affected slate/run, threshold, and recovery step. |
+| OPS-003 | Blocked | Add lock-aware news, injury, ownership, projection, and lineup refreshes (`DT-802`). | DATA-002 | Each refresh creates a new cutoff-stamped run, preserves prior versions, and never changes a locked historical snapshot. |
+| OPS-004 | Blocked | Add pre-lock and post-result monitoring for data staleness, drift, calibration, failed jobs, and export readiness (`DT-804`). | LEARN-001 | Alerts identify an actionable owner, affected slate/run, threshold, and recovery step. |
 | ENG-002 | Ready | Share active season/week/slate context and persisted-run selection across Digital Twin, Models, War Room, Research Lab, Delivery, and Operations. | None | Changing the active slate in one workspace updates the shell and destination workspace without silently resetting compatible run selections. |
 
 ## P1 — Complete The Live Decision Engines
@@ -124,7 +129,7 @@ See `docs/CONSOLIDATION.md` for the complete contract and verification evidence.
 
 | ID | Status | Work | Dependencies | Acceptance check |
 | --- | --- | --- | --- | --- |
-| LEARN-001 (`DT-803`) | Blocked | Load contest results and evaluate projections, symbolic rules, beliefs, lineups, portfolios, and exports after every completed slate. | OPS-002, verified result files | Each completed slate produces one auditable report tied to source files and exact run IDs, with missing evidence shown rather than inferred. |
+| LEARN-001 (`DT-803`) | Blocked | Load contest results and evaluate projections, symbolic rules, beliefs, lineups, portfolios, and exports after every completed slate. | Verified result files | Each completed slate produces one auditable report tied to source files and exact run IDs, with missing evidence shown rather than inferred. |
 | LEARN-002 (`DT-704`) | Blocked | Ask targeted agent questions only for high-value uncertainty or model/human disagreement. | Existing guarded belief modifiers, LEARN-001 recommended | Triggers use versioned value-of-information rules; every question, answer, no-change response, and resulting modifier is persisted. |
 | LEARN-003 (`DT-705`) | Blocked | Score human beliefs and accepted/rejected/no-change answers after outcomes. | LEARN-001, LEARN-002 | Reports show where intervention helped, hurt, or had no measurable effect by scope and confidence, without rewriting the original belief. |
 | LEARN-004 (`DT-706`) | Blocked | Learn a guarded personal-policy challenger from accumulated feedback. | LEARN-003, minimum evidence thresholds | Recommendations are replayed against model-only and human-only variants, require approval, and cannot silently change an active rule or model. |

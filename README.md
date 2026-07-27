@@ -16,7 +16,7 @@ Canonical repository for the DFS data, modeling, simulation, Digital Twin, and c
 2. Copy `.env.example` to `.env` and set Postgres credentials.
 3. Start PostgreSQL.
 4. Run migrations.
-5. Start API.
+5. Start API and the dedicated operational worker in separate terminals.
 
 ```bash
 python3 -m venv .venv
@@ -27,6 +27,16 @@ cp .env.example .env
 python scripts/apply_migrations.py
 uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
 ```
+
+In a second activated terminal, start the durable worker queue consumer:
+
+```bash
+python -m backend.app.worker
+```
+
+The API only records long-running work. At least one worker must be running to execute queued
+benchmark, projection, research-simulation, slate-simulation, and ultimate-lineup jobs. Use
+`python -m backend.app.worker --help` for worker identity, polling, lease, and one-job options.
 
 Fresh database reset (recommended when coming from legacy schemas):
 
@@ -87,7 +97,7 @@ Salary and injury CSVs are validated before any existing curated slice is cleare
 
 ## API Families
 
-The single FastAPI application exposes 103 non-conflicting route contracts. Primary families are:
+The single FastAPI application exposes 110 non-conflicting route contracts. Primary families are:
 
 - `/api/ingest`, `/api/coverage`, `/api/unresolved`, and `/api/player-master` for the canonical data foundation.
 - `/api/predict`, `/api/features`, `/api/ownership`, `/api/simulate`, and `/api/simulations` for model and scenario runs.
@@ -96,6 +106,57 @@ The single FastAPI application exposes 103 non-conflicting route contracts. Prim
 - `/api/digital-twin` for beliefs, thought capture, guarded impact previews, and immutable model/human variants.
 - `/api/news-monitor` and `/api/agent` for live intelligence, feedback, symbolic rules, and learning evaluation.
 - `/api/benchmarks` for reproducible classic/showdown model evaluation and artifact access.
+- `/api/jobs` for durable worker status, progress, results, errors, and retry.
+- `/api/weekly-runs` for resumable ingest-to-export workflow dispatch, stage inspection, and retry.
+
+## Durable Operational Worker Queue
+
+Migration `0015_operational_job_queue.sql` adds the `operational_job` table. Long-running API calls
+now return `202 Accepted` with a durable job instead of running CPU/database work in FastAPI:
+
+- `POST /api/benchmarks/run-suite`
+- `POST /api/predict/run`
+- `POST /api/simulate/week`
+- `POST /api/simulations/run`
+- `POST /api/lineups/ultimate-runs` (the existing ultimate-run response contract is unchanged)
+
+The first four responses contain `created` and `job`; their unchanged former result payload is
+stored as `job.result` after completion. The application UI queues and polls automatically, so its
+completed benchmark, projection, and simulation views retain their existing result shapes.
+
+Callers that may retry a dispatch should send the same `Idempotency-Key` header. Reusing a key with
+the exact request returns the original job and stable underlying run ID; reusing it with different
+inputs returns `409 Conflict`. Jobs are inspectable through `GET /api/jobs` and
+`GET /api/jobs/{job_id}`. Failed jobs can be requeued with `POST /api/jobs/{job_id}/retry`; failed
+ultimate-lineup work should normally use its existing checkpoint-aware retry endpoint.
+
+Workers claim jobs with expiring leases and heartbeat while work is active. A worker restart can
+reclaim an expired job without changing its job/run identity. Automatic attempts are bounded, the
+final expired lease becomes a visible failure, and ultimate candidate generation retains its
+transactional SQLite checkpoint behavior. Operations → Run activity shows recent queue status,
+stage, progress, attempts, and run IDs. Restart worker processes after deploying code so newly
+registered job types and handlers are loaded.
+
+## Resumable Weekly Runs
+
+Migration `0016_weekly_orchestrator.sql` adds `weekly_run` and `weekly_run_stage`. Queue a complete
+decision chain with `POST /api/weekly-runs` and an `Idempotency-Key`. The request fixes the active
+season, week, slate, cutoff, contest mode, simulation seed, optimizer parameters, and optional
+DraftKings directory/template or exact `projection_run_id`. The worker executes these separately
+inspectable stages:
+
+`ingest → readiness → predict → adjust → simulate → optimize → validate → export`
+
+Use `GET /api/weekly-runs`, `GET /api/weekly-runs/{weekly_run_id}`, and
+`POST /api/weekly-runs/{weekly_run_id}/retry` to inspect or resume work. Each stage reports its
+attempt count, logs, row/iteration counts, warnings, errors, result summary, and artifact IDs.
+For prediction, the orchestrator reuses a completed exact requested run or the readiness-selected
+active immutable run before dispatching a new build. New-write artifact IDs are allocated before
+execution. On retry, completed stages are skipped and the first incomplete stage reuses its IDs, so
+a worker interruption does not repeat completed writes. If no entry template is supplied or
+ingested, validation stops with an explicit operator-action error and export remains pending. The
+Operations workspace exposes the same launcher, eight-stage report, and `Resume Failed Stage`
+action.
 
 ## Migration Notes
 
@@ -116,7 +177,7 @@ python scripts/check_schema_drift.py
 
 The checks validate contiguous migration names, the exact migration ledger, a
 second no-op migration pass, the migration-recorded table/column/constraint
-contract for all 55 `target` tables, and structural agreement between the 19
+contract for all 55 `target` tables, and structural agreement between the 22
 migrated `public` tables and SQLAlchemy metadata. Product services only validate
 the recorded `target` contract; they never create or alter those tables at
 runtime. Neither check uses `AUTO_CREATE_TABLES`.
@@ -144,9 +205,10 @@ Historical injury and ownership data are not required.
 1. `football_26` is the canonical combined repository; `football_opt` is a read-only reference until parity gates pass.
 2. The Digital Twin product shell and the full Data Ops/Simulation Research Lab run from one Vite application.
 3. The backend exposes both product and research API families through one FastAPI process without route collisions.
-4. All 55 product `target` tables are migration-owned through `0014`; runtime services fail on incompatible table, column, type, or constraint drift instead of repairing schema.
-5. Baseline-versus-shock portfolio generation runs asynchronously with persisted status, idempotency, progress polling, and checkpoint retry.
-6. See `docs/CONSOLIDATION.md` for the ownership contract, parity gates, and archival policy.
+4. All 55 product `target` tables are migration-owned through `0014`; migrations `0015` and `0016` own the durable public queue and weekly-stage checkpoints. Runtime services fail on incompatible target schema drift instead of repairing it.
+5. Benchmarks, projection builds, both simulation families, baseline-versus-shock portfolio generation, and the eight-stage weekly decision chain run through a standalone persisted worker queue with idempotency, leases, progress polling, retry, and checkpoint resume.
+6. The Operations workspace can queue and inspect ingest, readiness, prediction, adjustment, simulation, optimization, validation, and export as one resumable weekly run.
+7. See `docs/CONSOLIDATION.md` for the ownership contract, parity gates, and archival policy.
 
 Detailed product architecture and the imported Digital Twin roadmap are retained under `docs/product/`.
 
@@ -163,11 +225,11 @@ Detailed product architecture and the imported Digital Twin roadmap are retained
 - New benchmark runs attach deterministic nonparametric percentile bootstrap intervals to classic/showdown mean and median gaps plus captain A/B win-rate and gap-lift metrics. Defaults are 2,000 samples at 95% confidence, with seed, sample count, standard error, and bounds stored in the artifacts.
 - `--bootstrap-samples` and `--confidence-level` override the defaults for CLI runs; the benchmark API accepts matching fields and records them in `suite_manifest.json`.
 - `Reset To Defaults` restores the backend-configured model settings listed in `.env.example`.
-- `Run Benchmark Suite` runs the canonical classic/showdown stack and writes a unique folder under `docs/benchmarks`.
+- `Run Benchmark Suite` queues the canonical classic/showdown stack on the operational worker and writes a unique folder under `docs/benchmarks`.
 - `Analysis & Reports` opens the latest JSON/Markdown outputs and downloads a ZIP containing all available benchmark artifacts plus `suite_manifest.json` as the exact config snapshot.
 - Benchmark run history defaults collapsed and can be filtered by source, status, overlapping season range, classic/showdown track, or any model-config value.
 - Heavy operational tables default collapsed with compact summaries: unresolved triage/repair, curated salary slices, season coverage, recent ingest runs, and benchmark history. Simulation and backtest result tables remain directly available in horizontally scrollable containers.
-- Benchmark execution currently runs synchronously through the API, so full-history suites can keep the request open for several minutes.
+- Benchmark execution survives API restarts because FastAPI records the job and the standalone worker owns execution.
 
 ### Nightly Benchmark Automation
 
@@ -444,7 +506,7 @@ The Projection Simulation UI uses persistent asynchronous runs instead of keepin
 - `GET /api/lineups/ultimate-runs/{id}` exposes queued/running/completed/failed status, training/candidate/portfolio stage progress, attempt count, checkpoint location, error text, and the final response.
 - `POST /api/lineups/ultimate-runs/{id}/retry` retries failed runs. Server-managed checkpoints under `artifacts/checkpoints/ultimate-runs/` are reused when compatible, so candidate generation resumes deterministically rather than starting over.
 
-The UI polls the run, renders stage-local progress, reuses completed idempotent results, and offers `Retry From Checkpoint` after failure. Run metadata and results are stored in the application database; candidate state remains in the transactional SQLite checkpoint artifact. Execution is currently dispatched by the API process, so a multi-instance deployment should move dispatch to a dedicated worker queue while retaining this database contract.
+The UI polls the run, renders stage-local progress, reuses completed idempotent results, and offers `Retry From Checkpoint` after failure. Run metadata and results are stored in the application database; candidate state remains in the transactional SQLite checkpoint artifact. The standalone operational worker now owns dispatch, while the ultimate-run schema and API contract remain unchanged.
 
 ## Contest-Specific Lineup Objectives
 

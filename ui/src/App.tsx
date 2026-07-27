@@ -20,7 +20,10 @@ import type {
 import {
   analyzePastSlate,
   buildFeatures,
+  createWeeklyRun,
   fetchLatestPredictions,
+  fetchOperationalJobs,
+  fetchWeeklyRuns,
   fetchDataQualityHistory,
   fetchOptimizerResults,
   fetchSlateReadiness,
@@ -42,6 +45,7 @@ import {
   runOwnershipModel,
   runPredictions,
   runSlateSimulation,
+  retryWeeklyRun,
   setSymbolicRuleEnabled,
   startPostgres,
   upsertSymbolicRule,
@@ -49,6 +53,7 @@ import {
   type BuildFeaturesResponse,
   type OwnershipLoadPayload,
   type OwnershipPayoutTierInput,
+  type OperationalJob,
   type PredictionRow,
   type SymbolicBacktestResponse,
   type SymbolicRule,
@@ -56,6 +61,7 @@ import {
   type StartingQBResponse,
   type UnmatchedSalaryRow,
   type ValidationRow,
+  type WeeklyRun,
 } from "./api";
 import { fetchUnmatchedInjuries, type UnmatchedInjuryRow } from "./api";
 const SLATE_OPTIONS = [
@@ -228,6 +234,15 @@ function readinessFailureMessage(report: SlateReadinessResponse, gateKey: SlateR
   return messages.length > 0 ? messages.join(" ") : report.gates[gateKey].message;
 }
 
+function compactTelemetry(values: Record<string, unknown>) {
+  const entries = Object.entries(values);
+  if (entries.length === 0) return "—";
+  return entries
+    .slice(0, 3)
+    .map(([key, value]) => `${key.replaceAll("_", " ")}: ${Array.isArray(value) ? value.length : String(value ?? "—")}`)
+    .join(" · ");
+}
+
 function App() {
   const [viewMode, setViewMode] = useState<ViewMode>("digital-twin");
   const [season, setSeason] = useState(DEFAULT_SEASON);
@@ -262,6 +277,11 @@ function App() {
   } | null>(null);
   const [predictionRows, setPredictionRows] = useState<PredictionRow[]>([]);
   const [simulationStatus, setSimulationStatus] = useState<SimulationResponse | null>(null);
+  const [operationalJobs, setOperationalJobs] = useState<OperationalJob[]>([]);
+  const [weeklyRuns, setWeeklyRuns] = useState<WeeklyRun[]>([]);
+  const [weeklyDirectory, setWeeklyDirectory] = useState("");
+  const [weeklyTemplateId, setWeeklyTemplateId] = useState("");
+  const [weeklyRunError, setWeeklyRunError] = useState<string | null>(null);
   const [predictionPreview] = useState<PredictionRow[]>([]);
   const [validationTable, setValidationTable] = useState("nfl_weekly_data_with_scores");
   const [validationRows, setValidationRows] = useState<ValidationRow[]>([]);
@@ -496,6 +516,87 @@ function App() {
     startingQBStatus,
     slateReadiness,
   ]);
+
+  useEffect(() => {
+    if (viewMode !== "workspace") return;
+    let cancelled = false;
+    let timer: number | undefined;
+    const refreshJobs = async () => {
+      try {
+        const [jobs, workflows] = await Promise.all([
+          fetchOperationalJobs(12),
+          fetchWeeklyRuns({ season, week, slate, limit: 5 }),
+        ]);
+        if (!cancelled) {
+          setOperationalJobs(jobs.rows);
+          setWeeklyRuns(workflows.rows);
+        }
+      } catch {
+        // The worker/API may be intentionally offline during local UI-only work.
+      } finally {
+        if (!cancelled) timer = window.setTimeout(refreshJobs, 3000);
+      }
+    };
+    refreshJobs().catch(() => undefined);
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [viewMode, season, week, slate]);
+
+  const launchWeeklyRun = async () => {
+    setPendingAction("Queueing weekly run...");
+    setWeeklyRunError(null);
+    try {
+      const response = await createWeeklyRun({
+        season,
+        week,
+        slate,
+        draftkings_directory: weeklyDirectory.trim() || undefined,
+        contest_format: contestFormat,
+        objective: optimizerObjective,
+        strategy: "gpp",
+        num_simulations: 1000,
+        optimizer_params: {
+          num_lineups: numLineups,
+          max_exposure: maxExposure / 100,
+          enforce_single_te: enforceSingleTE,
+          avoid_dst_opponents: avoidDstOpponents,
+          ...(contestFormat === "classic" && optimizerObjective === "cash"
+            ? { stack_policy_id: cashStackPolicyId }
+            : {}),
+          exclude_players: excludePlayers
+            .split(",")
+            .map((value) => value.trim())
+            .filter(Boolean),
+        },
+        template_id: weeklyTemplateId.trim() || undefined,
+        portfolio_name: `${season} W${week} ${slate}`,
+      });
+      setWeeklyRuns((current) => [
+        response.run,
+        ...current.filter((row) => row.weekly_run_id !== response.run.weekly_run_id),
+      ]);
+    } catch (err) {
+      setWeeklyRunError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
+  const retryFailedWeeklyRun = async (weeklyRunId: string) => {
+    setPendingAction("Requeueing weekly run...");
+    setWeeklyRunError(null);
+    try {
+      await retryWeeklyRun(weeklyRunId);
+      const workflows = await fetchWeeklyRuns({ season, week, slate, limit: 5 });
+      setWeeklyRuns(workflows.rows);
+    } catch (err) {
+      setWeeklyRunError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setPendingAction(null);
+    }
+  };
 
   useEffect(() => {
     const loadRules = async () => {
@@ -1168,6 +1269,93 @@ function App() {
             <strong>{slate.replaceAll("_", " ")}</strong>
           </div>
         </div>
+      </section>
+
+      <section className="panel operations-panel weekly-run-panel" aria-labelledby="weekly-run-title">
+        <div className="operations-panel-heading">
+          <span>Weekly control</span>
+          <h2 id="weekly-run-title">Resumable decision chain</h2>
+          <p>Queue all eight stages on the durable worker. Completed stage writes are reused after a retry.</p>
+        </div>
+        <div className="weekly-run-launch">
+          <label>
+            DraftKings directory <small>Optional ingest</small>
+            <input
+              value={weeklyDirectory}
+              onChange={(event) => setWeeklyDirectory(event.target.value)}
+              placeholder="~/Downloads"
+            />
+          </label>
+          <label>
+            Entry template ID <small>Optional when directory contains one</small>
+            <input
+              value={weeklyTemplateId}
+              onChange={(event) => setWeeklyTemplateId(event.target.value)}
+              placeholder="template_..."
+            />
+          </label>
+          <button
+            className="operations-primary-action"
+            onClick={launchWeeklyRun}
+            disabled={pendingAction !== null || (!weeklyDirectory.trim() && !weeklyTemplateId.trim())}
+          >
+            Run Weekly Pipeline
+          </button>
+        </div>
+        {weeklyRunError && <div className="error inline-error">{weeklyRunError}</div>}
+        {weeklyRuns.length === 0 ? (
+          <p className="placeholder">No weekly workflow has been queued for this slate.</p>
+        ) : (() => {
+          const run = weeklyRuns[0];
+          const queueJob = operationalJobs.find(
+            (job) => job.job_id === run.operational_job_id,
+          );
+          return (
+            <div className="weekly-run-detail">
+              <div className="weekly-run-summary">
+                <div>
+                  <span>{run.status} · {run.current_stage.replaceAll("_", " ")}</span>
+                  <strong>{run.progress_current}/{run.progress_total} stages · {run.progress_percent.toFixed(0)}%</strong>
+                  <small>{run.warning_count} warnings · {run.error_count} errors · run {run.weekly_run_id.slice(0, 12)}</small>
+                </div>
+                {run.status === "failed" && queueJob?.status === "failed" && (
+                  <button onClick={() => retryFailedWeeklyRun(run.weekly_run_id)} disabled={pendingAction !== null}>
+                    Resume Failed Stage
+                  </button>
+                )}
+                {run.status === "failed" && queueJob?.status === "queued" && (
+                  <small>Automatic retry queued</small>
+                )}
+              </div>
+              <div className="scroll-table">
+                <table className="compact-table weekly-stage-table">
+                  <thead>
+                    <tr><th>Stage</th><th>Status</th><th>Attempt</th><th>Counts</th><th>Artifacts</th><th>Latest detail</th></tr>
+                  </thead>
+                  <tbody>
+                    {run.stages.map((stage) => {
+                      const detail = stage.errors[0]
+                        ?? stage.warnings[0]
+                        ?? stage.logs[stage.logs.length - 1]
+                        ?? stage.message
+                        ?? "Waiting";
+                      return (
+                        <tr key={`${run.weekly_run_id}-${stage.stage}`}>
+                          <td>{stage.stage}</td>
+                          <td className={`status-${stage.status}`}>{stage.status}</td>
+                          <td>{stage.attempt_count}</td>
+                          <td title={JSON.stringify(stage.counts)}>{compactTelemetry(stage.counts)}</td>
+                          <td title={JSON.stringify(stage.artifact_ids)}>{compactTelemetry(stage.artifact_ids)}</td>
+                          <td title={detail}>{detail}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })()}
       </section>
 
       <div className="operations-grid">
@@ -1978,6 +2166,39 @@ function App() {
             {lastLoadType && <span className="summary-subtitle">{lastLoadType}</span>}
           </div>
           {error && <div className="error inline-error">{error}</div>}
+          {operationalJobs.length > 0 && (
+            <div className="status-card">
+              <h3>Durable worker queue</h3>
+              <table className="compact-table">
+                <thead>
+                  <tr>
+                    <th>Type</th>
+                    <th>Status</th>
+                    <th>Stage</th>
+                    <th>Progress</th>
+                    <th>Attempts</th>
+                    <th>Run</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {operationalJobs.map((job) => (
+                    <tr key={job.job_id}>
+                      <td>{job.job_type.replaceAll("_", " ")}</td>
+                      <td>{job.status}</td>
+                      <td>{job.stage.replaceAll("_", " ")}</td>
+                      <td title={job.progress_message ?? undefined}>
+                        {job.progress_percent.toFixed(0)}%
+                      </td>
+                      <td>{job.attempt_count}/{job.max_attempts}</td>
+                      <td title={job.run_id ?? job.job_id}>
+                        {(job.run_id ?? job.job_id).slice(0, 12)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
           {loadSummaries.length > 0 && (
             <div className="status-card">
               <h3>Load Results</h3>
@@ -2330,7 +2551,7 @@ function App() {
               </table>
             </div>
           )}
-          {loadSummaries.length === 0 && !slateStatus && !optimizerStatus && !error && (
+          {operationalJobs.length === 0 && loadSummaries.length === 0 && !slateStatus && !optimizerStatus && !error && (
             <p className="placeholder">No activity yet.</p>
           )}
         </section>

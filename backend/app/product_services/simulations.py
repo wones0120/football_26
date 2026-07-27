@@ -573,6 +573,7 @@ class SimulationService:
         salary_cap: int = 50_000,
         projection_run_id: str | None = None,
         ownership_run_id: str | None = None,
+        simulation_run_id: str | None = None,
     ) -> SimulationResult:
         if contest_format != "classic":
             raise ValueError("DT-502 supports classic slates; showdown simulation is tracked by DT-603.")
@@ -580,6 +581,10 @@ class SimulationService:
             raise ValueError("num_simulations must be between 1 and 20000.")
         if not slate.strip():
             raise ValueError("slate is required.")
+        if simulation_run_id is not None:
+            existing = self.fetch_by_id(simulation_run_id)
+            if existing is not None:
+                return existing
         pool, selected_projection_run_id, selected_ownership_run_id, cutoff = self._load_pool(
             season=season,
             week=week,
@@ -598,7 +603,7 @@ class SimulationService:
         rows = build_simulation_rows(pool, counts, successful_simulations=successful)
         created_at = datetime.now(timezone.utc)
         result = SimulationResult(
-            simulation_run_id=str(uuid.uuid4()),
+            simulation_run_id=simulation_run_id or str(uuid.uuid4()),
             simulation_model_id=SIMULATION_MODEL_ID,
             season=season,
             week=week,
@@ -621,6 +626,64 @@ class SimulationService:
         )
         self._persist(result, salary_cap=int(salary_cap))
         return result
+
+    def fetch_by_id(self, simulation_run_id: str) -> SimulationResult | None:
+        inspector = inspect(self.engine)
+        if not (
+            inspector.has_table("simulation_run", schema="target")
+            and inspector.has_table("player_simulation", schema="target")
+        ):
+            return None
+        with self.engine.begin() as connection:
+            run = connection.execute(
+                text(
+                    """
+                    SELECT * FROM target.simulation_run
+                    WHERE simulation_run_id = :simulation_run_id
+                      AND status = 'completed'
+                    """
+                ),
+                {"simulation_run_id": simulation_run_id},
+            ).mappings().first()
+            if not run:
+                return None
+            rows = connection.execute(
+                text(
+                    """
+                    SELECT player_id, player_display_name, position, salary,
+                           projection_mean, optimal_lineup_count,
+                           optimal_lineup_probability, field_ownership, leverage_score
+                    FROM target.player_simulation
+                    WHERE simulation_run_id = :simulation_run_id
+                    ORDER BY optimal_lineup_probability DESC, projection_mean DESC,
+                             player_display_name
+                    """
+                ),
+                {"simulation_run_id": simulation_run_id},
+            ).mappings().all()
+        return SimulationResult(
+            simulation_run_id=str(run["simulation_run_id"]),
+            simulation_model_id=str(run["simulation_model_id"]),
+            season=int(run["season"]),
+            week=int(run["week"]),
+            slate=str(run["slate_id"]),
+            contest_format=str(run["contest_format"]),
+            projection_run_id=str(run["projection_run_id"]),
+            ownership_run_id=(
+                str(run["ownership_run_id"])
+                if run.get("ownership_run_id")
+                else None
+            ),
+            num_simulations=int(run["num_simulations"]),
+            successful_simulations=int(run["successful_simulations"]),
+            seed=int(run["seed"]),
+            salary_cap=int(run["salary_cap"]),
+            status=str(run["status"]),
+            message=str(run.get("message") or ""),
+            data_cutoff_at=run.get("data_cutoff_at"),
+            created_at=run["created_at"],
+            rows=[dict(row) for row in rows],
+        )
 
     def fetch_latest(
         self,

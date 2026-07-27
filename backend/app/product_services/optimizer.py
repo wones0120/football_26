@@ -2315,8 +2315,13 @@ class OptimizerService:
         projection_run_id: str | None = None,
         rule_run_id: str | None = None,
         data_cutoff_at: datetime | None = None,
+        optimizer_run_id: str | None = None,
     ) -> OptimizerJob:
-        job_id = str(uuid.uuid4())
+        job_id = optimizer_run_id or str(uuid.uuid4())
+        if optimizer_run_id:
+            existing = self.get_job(optimizer_run_id)
+            if existing is not None and existing.status == "completed":
+                return existing
         now = datetime.now(timezone.utc).replace(tzinfo=None)
         params = dict(params or {})
 

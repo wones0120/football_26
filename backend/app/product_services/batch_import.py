@@ -198,17 +198,90 @@ class DraftKingsBatchImportService:
     def entry_template_id(source_file_id: str, season: int, week: int, slate: str) -> str:
         return f"template_{uuid.uuid5(uuid.NAMESPACE_URL, f'{source_file_id}|{season}|{week}|{slate}')}"
 
-    def import_directory(self, directory: str, *, season: int, week: int, slate: str, recursive: bool = False, dry_run: bool = False) -> BatchImportResult:
+    def get_batch_result(self, batch_id: str) -> BatchImportResult | None:
+        self._ensure_schema()
+        with self.engine.begin() as conn:
+            batch = conn.execute(text("""
+                SELECT batch_id, directory, dry_run, completed_at, discovered,
+                       imported, deduplicated, skipped, failed
+                FROM target.import_batch WHERE batch_id = :batch_id
+            """), {"batch_id": batch_id}).mappings().first()
+            if not batch or batch["completed_at"] is None:
+                return None
+            files = conn.execute(text("""
+                SELECT path, file_type, status, season, week, slate_id,
+                       rows_written, source_file_id, contest_id, template_id, message
+                FROM target.import_batch_file
+                WHERE batch_id = :batch_id ORDER BY file_number
+            """), {"batch_id": batch_id}).mappings().all()
+        return BatchImportResult(
+            batch_id=str(batch["batch_id"]),
+            directory=str(batch["directory"]),
+            discovered=int(batch["discovered"]),
+            imported=int(batch["imported"]),
+            deduplicated=int(batch["deduplicated"]),
+            skipped=int(batch["skipped"]),
+            failed=int(batch["failed"]),
+            dry_run=bool(batch["dry_run"]),
+            files=[
+                BatchFileResult(
+                    path=str(row["path"]),
+                    file_type=str(row["file_type"]),
+                    status=str(row["status"]),
+                    season=int(row["season"]),
+                    week=int(row["week"]),
+                    slate=str(row["slate_id"]),
+                    rows_written=int(row["rows_written"]),
+                    source_file_id=row["source_file_id"],
+                    contest_id=row["contest_id"],
+                    template_id=row["template_id"],
+                    message=str(row["message"] or ""),
+                )
+                for row in files
+            ],
+        )
+
+    def import_directory(
+        self,
+        directory: str,
+        *,
+        season: int,
+        week: int,
+        slate: str,
+        recursive: bool = False,
+        dry_run: bool = False,
+        batch_id: str | None = None,
+    ) -> BatchImportResult:
         root = Path(directory).expanduser()
         if not root.is_dir():
             raise ValueError(f"Batch import directory not found: {root}")
         pattern = "**/*" if recursive else "*"
         paths = sorted(path for path in root.glob(pattern) if path.is_file() and path.suffix.lower() in self.SUPPORTED_SUFFIXES)
-        batch_id = str(uuid.uuid4())
+        batch_id = batch_id or str(uuid.uuid4())
         self._ensure_schema()
+        existing = self.get_batch_result(batch_id)
+        if existing is not None:
+            return existing
         with self.engine.begin() as conn:
-            conn.execute(text("INSERT INTO target.import_batch (batch_id, directory, dry_run, discovered) VALUES (:batch_id, :directory, :dry_run, :discovered)"),
-                         {"batch_id": batch_id, "directory": str(root), "dry_run": dry_run, "discovered": len(paths)})
+            conn.execute(text("""
+                INSERT INTO target.import_batch
+                    (batch_id, directory, dry_run, discovered)
+                VALUES (:batch_id, :directory, :dry_run, :discovered)
+                ON CONFLICT (batch_id) DO UPDATE SET
+                    directory = EXCLUDED.directory,
+                    dry_run = EXCLUDED.dry_run,
+                    discovered = EXCLUDED.discovered,
+                    completed_at = NULL,
+                    imported = 0,
+                    deduplicated = 0,
+                    skipped = 0,
+                    failed = 0
+            """), {"batch_id": batch_id, "directory": str(root),
+                      "dry_run": dry_run, "discovered": len(paths)})
+            conn.execute(
+                text("DELETE FROM target.import_batch_file WHERE batch_id = :batch_id"),
+                {"batch_id": batch_id},
+            )
         results: list[BatchFileResult] = []
         for path in paths:
             file_type = self.classify_file(path)

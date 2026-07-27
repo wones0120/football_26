@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 import subprocess
 import logging
+from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import Response
 
 from Database import NFLIngestionController, NFLDataSource
@@ -36,6 +38,17 @@ from ..product_services.predictions import PredictionsService
 import pandas as pd
 import polars as pl
 from sqlalchemy import text
+from sqlalchemy.orm import Session
+
+from ..db import get_db_session
+from ..job_schemas import OperationalJobCreateResponse
+from ..services.job_queue import (
+    PROJECTION_JOB,
+    SLATE_SIMULATION_JOB,
+    JobConflictError,
+    enqueue_job,
+    job_response,
+)
 
 from ..product_dependencies import (
     get_ingestion_controller,
@@ -94,7 +107,6 @@ from ..product_schemas import (
     SlateRequest,
     WeekLoadRequest,
     PredictionRunRequest,
-    PredictionRunResponse,
     ActivePredictionRunRequest,
     ActivePredictionRunResponse,
     OwnershipLoadRequest,
@@ -965,94 +977,42 @@ def analyze_past_ownership(
     return PastSlateAnalysisResponse(**result)
 
 
-@router.post("/predict/run", response_model=PredictionRunResponse)
+@router.post(
+    "/predict/run",
+    response_model=OperationalJobCreateResponse,
+    status_code=202,
+)
 def run_predictions(
     request: PredictionRunRequest,
-    service: PredictionsService = Depends(get_predictions_service),
-) -> PredictionRunResponse:
-    slate_for_prediction = request.slate
-    if request.slate:
-        connection_string = get_connection_string()
-        db_manager = NFLDatabaseManager(connection_string)
-        with db_manager.engine.connect() as connection:
-            salary_count = connection.execute(
-                text(
-                    "SELECT COUNT(*) FROM curated_salaries "
-                    "WHERE season = :season AND week = :week AND slate = :slate"
-                ),
-                {"season": request.season, "week": request.week, "slate": request.slate},
-            ).scalar_one()
-        if salary_count == 0:
-            logging.warning(
-                "No curated_salaries found for season=%s week=%s slate=%s; running projections without slate filter.",
-                request.season,
-                request.week,
-                request.slate,
-            )
-            slate_for_prediction = None
-
-    # Ensure inputs exist: compute DK scoring and feature store for the whole season.
-    scored_rows = build_weekly_scores(
-        season=request.season,
-        weeks=None,
-        connection_string=get_connection_string(),
-    )
-    if scored_rows == 0:
-        raise HTTPException(
-            status_code=422,
-            detail=f"No weekly stats found for season {request.season}. Load any completed week first.",
-        )
-
-    feature_rows = build_player_features(
-        season=request.season,
-        weeks=None,
-        connection_string=get_connection_string(),
-    )
-    if feature_rows == 0:
-        # If the target week has no rows yet, attempt a future-week build using historical data
-        try:
-            feature_rows = build_player_features(
-                season=request.season,
-                weeks=None,
-                future_week=request.week,
-                connection_string=get_connection_string(),
-            )
-        except Exception:
-            feature_rows = 0
-    if feature_rows == 0:
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                f"No predictive features available for season {request.season} "
-                f"week {request.week}. Load stats and salaries, then retry."
-            ),
-        )
-
+    idempotency_key: str | None = Header(
+        default=None,
+        alias="Idempotency-Key",
+        min_length=1,
+        max_length=255,
+    ),
+    session: Session = Depends(get_db_session),
+) -> OperationalJobCreateResponse:
     try:
-        result = service.train_and_predict(
-            season=request.season,
-            week=request.week,
-            positions=request.positions,
-            slate=slate_for_prediction,
-            data_cutoff_at=request.data_cutoff_at,
+        projection_run_id = str(uuid4())
+        job, created = enqueue_job(
+            session,
+            job_type=PROJECTION_JOB,
+            idempotency_key=idempotency_key or f"projection:{uuid4()}",
+            request_payload=request.model_dump(mode="json"),
+            run_id=projection_run_id,
+            checkpoint={
+                "feature_run_id": str(uuid4()),
+                "model_run_id": str(uuid4()),
+                "data_cutoff_at": (
+                    request.data_cutoff_at or datetime.now(UTC)
+                ).isoformat(),
+            },
         )
+    except JobConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except RuntimeError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-    message = "Predictions generated" if result.records else "No predictions generated"
-    return PredictionRunResponse(
-        season=request.season,
-        week=request.week,
-        rows_written=len(result.records),
-        message=message,
-        feature_run_id=result.feature_run_id,
-        model_run_id=result.model_run_id,
-        projection_run_id=result.projection_run_id,
-        data_cutoff_at=result.data_cutoff_at,
-        target_persisted=result.target_persisted,
-        calibration_metrics=result.calibration_metrics or {},
-    )
+    return OperationalJobCreateResponse(created=created, job=job_response(job))
 
 
 
@@ -1598,16 +1558,34 @@ def run_optimizer(
     )
 
 
-@router.post("/simulations/run", response_model=SimulationRunResponse)
+@router.post(
+    "/simulations/run",
+    response_model=OperationalJobCreateResponse,
+    status_code=202,
+)
 def run_slate_simulation(
     request: SimulationRunRequest,
-    service: SimulationService = Depends(get_simulation_service),
-) -> SimulationRunResponse:
+    idempotency_key: str | None = Header(
+        default=None,
+        alias="Idempotency-Key",
+        min_length=1,
+        max_length=255,
+    ),
+    session: Session = Depends(get_db_session),
+) -> OperationalJobCreateResponse:
     try:
-        result = service.run(**request.model_dump())
+        job, created = enqueue_job(
+            session,
+            job_type=SLATE_SIMULATION_JOB,
+            idempotency_key=idempotency_key or f"slate-simulation:{uuid4()}",
+            request_payload=request.model_dump(mode="json"),
+            run_id=str(uuid4()),
+        )
+    except JobConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return SimulationRunResponse(**result.__dict__)
+    return OperationalJobCreateResponse(created=created, job=job_response(job))
 
 
 @router.get("/simulations/latest", response_model=SimulationRunResponse)

@@ -125,3 +125,10 @@ def test_orm_metadata_matches_migrated_postgresql_type_contract() -> None:
         signature["ultimate_lineup_run"]["columns"]["result_json"]["type"]
         == "JSONB"
     )
+    assert signature["operational_job"]["columns"]["request_json"]["type"] == "JSONB"
+    assert signature["operational_job"]["columns"]["result_json"]["type"] == "JSONB"
+    assert signature["weekly_run_stage"]["columns"]["counts_json"]["type"] == "JSONB"
+    assert (
+        signature["weekly_run_stage"]["columns"]["artifact_ids_json"]["type"]
+        == "JSONB"
+    )

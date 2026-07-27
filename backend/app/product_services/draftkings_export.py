@@ -183,8 +183,9 @@ class DraftKingsExportService:
         rows: list[dict[str, Any]],
         expected_entry_count: int,
         max_exposure: float = 1.0,
+        validation_id: str | None = None,
     ) -> ExportValidationResult:
-        validation_id = str(uuid.uuid4())
+        validation_id = validation_id or str(uuid.uuid4())
         errors: list[ExportValidationIssue] = []
         warnings: list[ExportValidationIssue] = []
         if len(rows) != expected_entry_count:
@@ -298,8 +299,46 @@ class DraftKingsExportService:
             required_tables=("dk_export_validation", "dk_upload_export"),
         )
 
-    def validate_portfolio(self, portfolio_id: str) -> ExportValidationResult:
+    def get_validation(self, validation_id: str) -> ExportValidationResult | None:
         self._ensure_schema()
+        with self.engine.begin() as conn:
+            row = conn.execute(text("""
+                SELECT validation_id, portfolio_id, status, checks_run,
+                       errors_json, warnings_json
+                FROM target.dk_export_validation
+                WHERE validation_id = :validation_id
+            """), {"validation_id": validation_id}).mappings().first()
+        if not row:
+            return None
+
+        def issues(value: Any) -> list[ExportValidationIssue]:
+            payload = json.loads(value) if isinstance(value, str) else list(value or [])
+            return [ExportValidationIssue(**dict(item)) for item in payload]
+
+        return ExportValidationResult(
+            validation_id=str(row["validation_id"]),
+            portfolio_id=str(row["portfolio_id"]),
+            status=str(row["status"]),
+            checks_run=int(row["checks_run"]),
+            errors=issues(row["errors_json"]),
+            warnings=issues(row["warnings_json"]),
+        )
+
+    def validate_portfolio(
+        self,
+        portfolio_id: str,
+        *,
+        validation_id: str | None = None,
+    ) -> ExportValidationResult:
+        self._ensure_schema()
+        if validation_id:
+            existing = self.get_validation(validation_id)
+            if existing is not None and existing.status == "passed":
+                if existing.portfolio_id != portfolio_id:
+                    raise ValueError(
+                        f"Validation ID {validation_id} belongs to a different portfolio"
+                    )
+                return existing
         with self.engine.begin() as conn:
             context = conn.execute(text("""
                 SELECT portfolio.portfolio_id, portfolio.template_id,
@@ -355,6 +394,7 @@ class DraftKingsExportService:
             rows=rows,
             expected_entry_count=int(context["row_count"]),
             max_exposure=max_exposure,
+            validation_id=validation_id,
         )
         with self.engine.begin() as conn:
             conn.execute(text("""
@@ -363,6 +403,11 @@ class DraftKingsExportService:
                      errors_json, warnings_json)
                 VALUES (:validation_id, :portfolio_id, :status, :checks_run,
                         CAST(:errors_json AS JSONB), CAST(:warnings_json AS JSONB))
+                ON CONFLICT (validation_id) DO UPDATE SET
+                    status = EXCLUDED.status,
+                    checks_run = EXCLUDED.checks_run,
+                    errors_json = EXCLUDED.errors_json,
+                    warnings_json = EXCLUDED.warnings_json
             """), {
                 "validation_id": result.validation_id,
                 "portfolio_id": portfolio_id,
@@ -373,8 +418,33 @@ class DraftKingsExportService:
             })
         return result
 
-    def generate_export(self, portfolio_id: str) -> DraftKingsExportResult:
-        validation = self.validate_portfolio(portfolio_id)
+    def generate_export(
+        self,
+        portfolio_id: str,
+        *,
+        export_id: str | None = None,
+        validation_id: str | None = None,
+    ) -> DraftKingsExportResult:
+        if export_id:
+            existing = self.get_export(export_id)
+            if existing is not None:
+                if existing.portfolio_id != portfolio_id:
+                    raise ValueError(
+                        f"Export ID {export_id} belongs to a different portfolio"
+                    )
+                return existing
+        validation = (
+            self.get_validation(validation_id)
+            if validation_id
+            else None
+        )
+        if validation is None or validation.status != "passed":
+            validation = self.validate_portfolio(
+                portfolio_id,
+                validation_id=validation_id,
+            )
+        if validation.portfolio_id != portfolio_id:
+            raise ValueError("Export validation belongs to a different portfolio")
         if validation.status != "passed":
             summary = "; ".join(issue.message for issue in validation.errors[:5])
             raise ValueError(f"Export validation failed: {summary}")
@@ -418,7 +488,7 @@ class DraftKingsExportService:
             rows=rows,
         )
         digest = hashlib.sha256(csv_content.encode("utf-8")).hexdigest()
-        export_id = str(uuid.uuid4())
+        export_id = export_id or str(uuid.uuid4())
         safe_name = re.sub(r"[^A-Za-z0-9_-]+", "_", str(portfolio["portfolio_name"])).strip("_") or "portfolio"
         file_name = f"draftkings_{safe_name}_{export_id[:8]}.csv"
         with self.engine.begin() as conn:

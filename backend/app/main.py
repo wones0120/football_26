@@ -4,6 +4,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .api.product_routes import router as product_router
+from .api.job_routes import router as job_router
+from .api.weekly_routes import router as weekly_router
 from .api.routes import router
 from .db import initialize_database
 
@@ -29,6 +31,8 @@ app.add_middleware(
 )
 app.include_router(router)
 app.include_router(product_router)
+app.include_router(job_router)
+app.include_router(weekly_router)
 
 
 @app.get("/", include_in_schema=False)
