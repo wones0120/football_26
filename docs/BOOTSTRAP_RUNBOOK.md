@@ -36,7 +36,7 @@ python scripts/check_schema_drift.py --schema target
 python scripts/check_schema_drift.py
 ```
 
-The target check must report 55 expected and actual tables with no issues.
+The target check must report 57 expected and actual tables with no issues.
 Product services do not create or alter `target` tables; a compatibility error
 means the numbered migrations are incomplete or the database has drifted.
 

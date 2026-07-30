@@ -75,7 +75,7 @@ def test_every_product_target_table_has_a_numbered_migration() -> None:
     product_tables = _target_tables_in_product_code()
     migrated_tables = _target_tables_in_migrations()
 
-    assert len(migrated_tables) == 55
+    assert len(migrated_tables) == 57
     assert product_tables <= migrated_tables, sorted(product_tables - migrated_tables)
 
 
@@ -100,6 +100,7 @@ def test_target_schema_migrations_are_in_the_canonical_ledger() -> None:
     assert "0012_target_ownership_and_digital_twin.sql" in migration_names
     assert "0013_target_schema_governance.sql" in migration_names
     assert "0014_refresh_target_schema_contract.sql" in migration_names
+    assert "0017_model_promotion_governance.sql" in migration_names
 
 
 def test_latest_target_schema_migration_records_the_contract() -> None:

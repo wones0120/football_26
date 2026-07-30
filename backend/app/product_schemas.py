@@ -494,7 +494,7 @@ class ActivePredictionRunRequest(BaseModel):
     week: int = Field(..., ge=1, le=25)
     slate: str = Field(..., min_length=1)
     projection_run_id: str = Field(..., min_length=1)
-    selection_reason: str = Field(default="manual_selection", min_length=1)
+    approval_decision_id: str = Field(..., min_length=1)
 
 
 class ActivePredictionRunResponse(BaseModel):
@@ -509,6 +509,90 @@ class ActivePredictionRunResponse(BaseModel):
     created_at: datetime
     selection_reason: str
     active: bool
+
+
+class ModelWeekBoundary(BaseModel):
+    season: int = Field(..., ge=2000)
+    week: int = Field(..., ge=1, le=25)
+
+
+class ModelWeekWindow(BaseModel):
+    start: ModelWeekBoundary
+    end: ModelWeekBoundary
+
+
+class ModelEvaluationDataWindow(BaseModel):
+    training: ModelWeekWindow
+    validation: ModelWeekWindow
+    test: ModelWeekWindow
+
+
+class ModelMetricGate(BaseModel):
+    metric: str = Field(..., min_length=1)
+    direction: Literal["minimize", "maximize"]
+    champion_value: float
+    challenger_value: float
+    required_improvement: float = 0.0
+
+
+class ModelChallengerEvaluationRequest(BaseModel):
+    champion_projection_run_id: str = Field(..., min_length=1)
+    challenger_projection_run_id: str = Field(..., min_length=1)
+    data_window: ModelEvaluationDataWindow
+    champion_code_hash: str = Field(
+        ..., min_length=64, max_length=64, pattern=r"^[0-9a-fA-F]{64}$"
+    )
+    challenger_code_hash: str = Field(
+        ..., min_length=64, max_length=64, pattern=r"^[0-9a-fA-F]{64}$"
+    )
+    gates: List[ModelMetricGate] = Field(..., min_length=1)
+    evaluated_by: str = Field(..., min_length=1)
+    evidence_uri: str = Field(..., min_length=1)
+    notes: Optional[str] = None
+
+
+class ModelChallengerEvaluationResponse(BaseModel):
+    evaluation_id: str
+    contract_id: str
+    season: int
+    week: int
+    slate_id: str
+    champion_projection_run_id: str
+    challenger_projection_run_id: str
+    data_window: dict[str, Any]
+    champion_feature_set_hash: str
+    challenger_feature_set_hash: str
+    champion_code_hash: str
+    challenger_code_hash: str
+    gates: List[dict[str, Any]]
+    gate_results: List[dict[str, Any]]
+    status: Literal["passed", "blocked"]
+    evaluation_hash: str
+    evaluated_by: str
+    evidence_uri: str
+    notes: Optional[str] = None
+    created_at: datetime
+
+
+class ModelPromotionApprovalRequest(BaseModel):
+    approved_by: str = Field(..., min_length=1)
+    approval_reason: str = Field(..., min_length=1)
+
+
+class ModelPromotionDecisionResponse(BaseModel):
+    decision_id: str
+    contract_id: str
+    evaluation_id: str
+    action: Literal["promotion", "rollback"]
+    approved_by: str
+    approval_reason: str
+    previous_projection_run_id: str
+    selected_projection_run_id: str
+    rollback_of_decision_id: Optional[str] = None
+    decision_hash: str
+    selection_reason: str
+    active: bool
+    created_at: datetime
 
 
 class OwnershipPayoutTier(BaseModel):

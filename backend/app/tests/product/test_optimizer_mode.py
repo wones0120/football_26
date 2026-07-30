@@ -31,6 +31,32 @@ from backend.app.product_services.optimizer import (
 
 
 class OptimizerModeTests(unittest.TestCase):
+    def test_target_pool_query_excludes_injuries_after_projection_cutoff(self):
+        service = OptimizerService.__new__(OptimizerService)
+        service.engine = MagicMock()
+        inspector = MagicMock()
+        inspector.has_table.return_value = True
+        inspector.get_columns.return_value = []
+
+        with (
+            patch("backend.app.product_services.optimizer.inspect", return_value=inspector),
+            patch(
+                "backend.app.product_services.optimizer.pd.read_sql",
+                return_value=pd.DataFrame(),
+            ) as read_sql,
+        ):
+            pool = service._load_target_player_pool(
+                season=2025,
+                week=11,
+                slate="SUNDAY_MAIN",
+                projection_run_id="projection-1",
+            )
+
+        self.assertTrue(pool.empty)
+        sql = str(read_sql.call_args.args[0])
+        self.assertIn("injury.as_of <= p.data_cutoff_at", sql)
+        self.assertIn("p.data_cutoff_at IS NOT NULL", sql)
+
     def test_simulation_merge_preserves_existing_ownership_when_evidence_is_null(self):
         pool = pd.DataFrame(
             [

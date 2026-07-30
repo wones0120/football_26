@@ -90,6 +90,8 @@ Salary and injury CSVs are validated before any existing curated slice is cleare
 - `lookback_hours` defines the trailing window for “new” unresolved records and defaults to 24 hours.
 - The UI section `Automated Triage by Source / Week / Slate` refreshes after ingestion and resolution actions, ranking groups by recent count, open volume, and recency.
 - The detailed repair queue remains available below the grouped report for create-or-link resolution.
+- `scripts/product/audit_salary_identities.py` performs a read-only reassessment of every unresolved legacy salary identity. It reports newly deterministic matches, stored/current reason drift, missing quarantine records, unresolved DSTs, and the accepted `ambiguous`/`no_match` quarantine totals; any blocker returns a nonzero exit status.
+- Slate readiness exposes resolved, ambiguous, no-match, accepted-quarantine, unaccepted-quarantine, and untracked counts. Untracked or unaccepted rows fail every input gate, while accepted quarantine rows remain excluded from target salary snapshots plus optimizer and replay salary inputs.
 
 ## Data Freshness
 
@@ -98,12 +100,26 @@ Salary and injury CSVs are validated before any existing curated slice is cleare
 - Thresholds are 24 hours for salaries, 12 hours for injuries, and 168 hours for schedules and weekly stats.
 - The UI section `Data Freshness` refreshes when the selected slice changes and after ingest actions.
 
+## Point-In-Time Input Safety
+
+Historical injury context uses the `point_in_time_cutoff_v1` contract. A snapshot is visible only
+when both `snapshot_injury_status.as_of` and the selected projection's `data_cutoff_at` exist and the
+snapshot was observed at or before that cutoff. Simulation pools, optimizer pools, and target
+symbolic injury rules all use the same predicate. Missing timestamps fail closed, so retrospective
+imports cannot silently influence replay.
+
+The current 2024–2025 FanDuel injury indicators and nflverse schedule betting fields are not approved
+as historical pre-lock inputs: they were loaded on February 25, 2026, and do not preserve when those
+values were first available. DATA-002 remains blocked until a source supplies trustworthy observation
+timestamps or the platform begins prospective capture. See
+`docs/DATA-002_SOURCE_AVAILABILITY_AUDIT.md` for exact coverage and source decisions.
+
 ## API Families
 
-The single FastAPI application exposes 110 non-conflicting route contracts. Primary families are:
+The single FastAPI application exposes 114 non-conflicting route contracts. Primary families are:
 
 - `/api/ingest`, `/api/coverage`, `/api/unresolved`, and `/api/player-master` for the canonical data foundation.
-- `/api/predict`, `/api/features`, `/api/ownership`, `/api/simulate`, and `/api/simulations` for model and scenario runs.
+- `/api/predict`, `/api/model-governance`, `/api/features`, `/api/ownership`, `/api/simulate`, and `/api/simulations` for model evaluation, approved active-run changes, and scenario runs.
 - `/api/lineups`, `/api/optimizer`, `/api/portfolios`, and `/api/exports` for lineup generation and contest delivery.
 - `/api/slate/readiness` and `/api/data/quality` for point-in-time operational gates and durable quality history.
 - `/api/digital-twin` for beliefs, thought capture, guarded impact previews, and immutable model/human variants.
@@ -187,6 +203,24 @@ ingested, validation stops with an explicit operator-action error and export rem
 Operations workspace exposes the same launcher, eight-stage report, and `Resume Failed Stage`
 action.
 
+## Model Promotion Governance
+
+Migration `0017_model_promotion_governance.sql` adds immutable challenger evaluations and approval
+decisions. A completed prediction run initializes an active pointer only when that slate has no
+champion; later runs remain challengers. `POST /api/model-governance/evaluations` accepts only
+completed champion and challenger runs from the same season/week/slate and records ordered,
+non-overlapping training/validation/test windows, exact persisted feature hashes, declared code
+hashes, comparable metric gates, evaluator identity, and an evidence URI. At least one gate must
+require a strict positive improvement, and every declared gate must pass before promotion.
+
+`POST /api/model-governance/evaluations/{evaluation_id}/promote` requires a named approver and
+reason, verifies that the evaluated champion is still active, records a content-addressed approval,
+and changes the pointer in the same transaction. Rollback uses
+`POST /api/model-governance/decisions/{promotion_decision_id}/rollback`; it records a second approval
+and atomically restores the exact prior run. `POST /api/predict/active` is now read-only confirmation
+of the run selected by a currently applied promotion or rollback decision; it no longer accepts an
+arbitrary selection reason or changes a pointer itself.
+
 ## Migration Notes
 
 Migrations live in `/migrations`. The migration runner tracks applied files in
@@ -206,7 +240,7 @@ python scripts/check_schema_drift.py
 
 The checks validate contiguous migration names, the exact migration ledger, a
 second no-op migration pass, the migration-recorded table/column/constraint
-contract for all 55 `target` tables, and structural agreement between the 22
+contract for all 57 `target` tables, and structural agreement between the 22
 migrated `public` tables and SQLAlchemy metadata. Product services only validate
 the recorded `target` contract; they never create or alter those tables at
 runtime. Neither check uses `AUTO_CREATE_TABLES`.
@@ -234,7 +268,7 @@ Historical injury and ownership data are not required.
 1. `football_26` is the canonical combined repository; `football_opt` is a read-only reference until parity gates pass.
 2. The Digital Twin product shell and the full Data Ops/Simulation Research Lab run from one Vite application.
 3. The backend exposes both product and research API families through one FastAPI process without route collisions.
-4. All 55 product `target` tables are migration-owned through `0014`; migrations `0015` and `0016` own the durable public queue and weekly-stage checkpoints. Runtime services fail on incompatible target schema drift instead of repairing it.
+4. All 57 product `target` tables are migration-owned through `0017`; migrations `0015` and `0016` own the durable public queue and weekly-stage checkpoints, while `0017` owns model evaluation and promotion decisions. Runtime services fail on incompatible target schema drift instead of repairing it.
 5. Benchmarks, projection builds, both simulation families, baseline-versus-shock portfolio generation, and the eight-stage weekly decision chain run through a standalone persisted worker queue with idempotency, leases, progress polling, retry, and checkpoint resume.
 6. The Operations workspace can queue and inspect ingest, readiness, prediction, adjustment, simulation, optimization, validation, and export as one resumable weekly run.
 7. See `docs/CONSOLIDATION.md` for the ownership contract, parity gates, and archival policy.

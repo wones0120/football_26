@@ -19,6 +19,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from scripts.product.apply_target_schema_adapters import create_target_schema_sql, qident
+from backend.app.product_services.point_in_time import injury_snapshot_cutoff_sql
 
 
 RULE_SET_ID = "injury_symbolic_v0"
@@ -89,6 +90,10 @@ def apply_symbolic_rules(
 ) -> SymbolicRunResult:
     s = qident(target_schema)
     extra_filter, params = filters_sql(season, week)
+    injury_cutoff_predicate = injury_snapshot_cutoff_sql(
+        injury_alias="injury",
+        projection_alias="proj",
+    )
 
     with engine.begin() as conn:
         for statement in create_target_schema_sql(target_schema):
@@ -265,6 +270,7 @@ def apply_symbolic_rules(
                         WHERE injury.season = proj.season
                           AND injury.week = proj.week
                           AND injury.player_id = proj.player_id
+                          AND {injury_cutoff_predicate}
                         ORDER BY injury.as_of DESC NULLS LAST
                         LIMIT 1
                     ) injury ON TRUE

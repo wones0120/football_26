@@ -16,6 +16,7 @@ from sqlalchemy.engine import Engine
 
 from Database.config import get_connection_string
 
+from .point_in_time import injury_snapshot_cutoff_sql
 from .target_schema import validate_target_schema
 
 
@@ -294,21 +295,25 @@ class SimulationService:
             name_expression = "COALESCE(NULLIF(d.full_name, ''), p.player_id)" if has_player else "p.player_id"
             player_join = "LEFT JOIN target.dim_player d ON d.player_id = p.player_id" if has_player else ""
             has_injuries = inspector.has_table("snapshot_injury_status", schema="target")
-            injury_cte = ""
             injury_join = ""
             injury_filter = ""
             if has_injuries:
-                injury_cte = """,
-                    latest_injury AS (
-                        SELECT DISTINCT ON (player_id)
-                            player_id, injury_status
-                        FROM target.snapshot_injury_status
-                        WHERE season = :season AND week = :week
-                          AND (slate IS NULL OR UPPER(slate) = UPPER(:slate))
-                        ORDER BY player_id, as_of DESC
-                    )
+                cutoff_predicate = injury_snapshot_cutoff_sql(
+                    injury_alias="injury",
+                    projection_alias="p",
+                )
+                injury_join = f"""
+                    LEFT JOIN LATERAL (
+                        SELECT injury.injury_status
+                        FROM target.snapshot_injury_status injury
+                        WHERE injury.season = :season AND injury.week = :week
+                          AND injury.player_id = p.player_id
+                          AND (injury.slate IS NULL OR UPPER(injury.slate) = UPPER(:slate))
+                          AND {cutoff_predicate}
+                        ORDER BY injury.as_of DESC
+                        LIMIT 1
+                    ) i ON TRUE
                 """
-                injury_join = "LEFT JOIN latest_injury i ON i.player_id = p.player_id"
                 injury_filter = (
                     "WHERE COALESCE(i.injury_status, '') !~* "
                     "'(OUT|IR|PUP|NFI|RESERVE)'"
@@ -333,7 +338,6 @@ class SimulationService:
                           AND (slate_id IS NULL OR UPPER(slate_id) IN (UPPER(:slate), 'DEFAULT'))
                         ORDER BY player_id, created_at DESC
                     )
-                    {injury_cte}
                     SELECT
                         p.player_id,
                         {name_expression} AS player_display_name,

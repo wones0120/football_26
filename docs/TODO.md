@@ -1,6 +1,6 @@
 # football_26 Canonical Backlog
 
-Last reviewed: 2026-07-27
+Last reviewed: 2026-07-30
 
 This is the single source of truth for active product, data, modeling, simulation,
 and operational work in `football_26`. Completed implementation history belongs in
@@ -98,15 +98,15 @@ See `docs/CONSOLIDATION.md` for the complete contract and verification evidence.
 | ID | Status | Work | Dependencies | Acceptance check |
 | --- | --- | --- | --- | --- |
 | DATA-001 | Blocked | Import verified historical cash contest files and real entry templates with contest metadata and payout tiers. | User-provided/source-authorized files | Files are content-addressed, identity-safe, cutoff-labeled, deduplicated, and sufficient for CON-001 plus OPT-004/005. |
-| DATA-002 (`DT-304`) | Research | Add point-in-time Vegas, props, weather, depth-chart, injury, and role snapshots, starting only with sources whose historical availability can be proven. | Source and usage decisions | Each record has source, observed-at, effective-at, ingest-run lineage, canonical identities, and a replay test proving post-lock data is excluded. |
-| DATA-003 | Ready | Reassess legacy identity warnings after consolidation and either resolve deterministic cases or explicitly retain quarantine/waiver reasons. | None | Readiness reports distinguish resolved, ambiguous, no-match, and accepted quarantine; no unresolved record enters modeling or lineups silently. |
+| DATA-002 (`DT-304`) | Blocked | Add point-in-time Vegas, props, weather, depth-chart, injury, and role snapshots. The first source audit found no approved historical feed with preserved observation time. `point_in_time_cutoff_v1` now prevents retrospectively loaded injury rows from entering simulation, optimization, or symbolic-rule replay. | A timestamped/source-authorized historical feed or prospective 2026 capture; source-specific usage approval | Each record has source, observed-at, effective-at, ingest-run lineage, canonical identities, and a replay test proving post-lock data is excluded. Evidence: `docs/DATA-002_SOURCE_AVAILABILITY_AUDIT.md`. |
+| DATA-003 | Done | Reassessed all 1,010 legacy unresolved salary identities against 10,972 current masters: zero became deterministic, while 979 `no_match` and 31 `ambiguous` decisions reproduced exactly and remain accepted quarantines. The read-only `salary_identity_audit_v1` command fails on new deterministic matches, reason drift, untracked rows, unexpected reasons, or unresolved DSTs. | None | Readiness reports resolved, ambiguous, no-match, accepted, unaccepted, and untracked counts; the development audit has zero blockers, and target snapshots plus optimizer/replay salary inputs require canonical IDs. Evidence: `docs/DATA-003_IDENTITY_REASSESSMENT.md`. |
 
 ## P2 — Projection And Model Governance
 
 | ID | Status | Work | Dependencies | Acceptance check |
 | --- | --- | --- | --- | --- |
 | MODEL-001 (`DT-302`) | Research | Finish QB/RB/WR/TE opportunity-efficiency decomposition and formal DST ablations with a promotion-grade untouched holdout. | DATA-002 where a feature needs external context | Ablations report walk-forward MAE/calibration by position and role; DST evidence includes an untouched holdout rather than diagnostic-only improvement. |
-| MODEL-002 (`DT-305`) | Ready | Complete model-registry champion/challenger evaluation and explicit promotion/rollback rules. | Existing immutable projection runs | A challenger cannot become active without declared data window, feature/code hashes, comparable gates, approval record, and reversible active-pointer change. |
+| MODEL-002 (`DT-305`) | Done | Added immutable `model_challenger_evaluation_v1` and `model_promotion_decision_v1` contracts. New projection runs remain challengers once a scope has a champion; promotion requires ordered time windows, exact feature/code lineage, at least one strict improvement gate, all gates passing, a named approval, and an atomic compare-and-set pointer change. Rollback records a second approval and restores the exact champion. | Existing immutable projection runs | Focused tests cover invalid windows, blocked gates, API contracts, approval-only selection, atomic promotion, and exact rollback. PostgreSQL migration `0017` applies idempotently with 57 expected/actual target tables and preserves the current Week 11 champion. Evidence: `docs/MODEL-002_PROMOTION_GOVERNANCE.md`. |
 | MODEL-003 | Research | Re-evaluate accepted default-off online residual learning on new completed slates and decide whether it should remain experimental, be promoted, or be retired. | LEARN-001, enough new post-cutoff slates | Later-window MAE, RMSE, calibration, slice stability, and identity coverage are compared with the unchanged production baseline. |
 
 ## P2 — Correlated GPP And Showdown Simulation

@@ -31,6 +31,15 @@ class AppSmokeTests(unittest.TestCase):
         self.assertIn("/api/agent/rules", payload["paths"])
         self.assertIn("/api/agent/backtest", payload["paths"])
         self.assertIn("/api/agent/learning/evaluate", payload["paths"])
+        self.assertIn("/api/model-governance/evaluations", payload["paths"])
+        self.assertIn(
+            "/api/model-governance/evaluations/{evaluation_id}/promote",
+            payload["paths"],
+        )
+        self.assertIn(
+            "/api/model-governance/decisions/{promotion_decision_id}/rollback",
+            payload["paths"],
+        )
 
     def test_root_serves_ui_or_placeholder(self) -> None:
         response = self.client.get("/")

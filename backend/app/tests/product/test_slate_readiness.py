@@ -69,6 +69,7 @@ class SlateReadinessTests(unittest.TestCase):
         metrics = _complete_metrics()
         metrics.resolved_identity_rows = 40
         metrics.quarantined_identity_rows = 10
+        metrics.quarantine_reason_counts = {"no_match": 8, "ambiguous": 2}
         metrics.injury_rows = 0
         metrics.injury_identity_rows = 0
         metrics.projected_salary_rows = 35
@@ -103,6 +104,40 @@ class SlateReadinessTests(unittest.TestCase):
         self.assertEqual(identity["status"], "fail")
         self.assertEqual(identity["details"]["untracked"], 1)
         self.assertIn("not quarantined", identity["message"])
+        self.assertTrue(all(gate["status"] == "fail" for gate in report["gates"].values()))
+
+    def test_identity_report_distinguishes_accepted_quarantine_reasons(self) -> None:
+        metrics = _complete_metrics()
+        metrics.resolved_identity_rows = 47
+        metrics.quarantined_identity_rows = 3
+        metrics.quarantine_reason_counts = {"no_match": 2, "ambiguous": 1}
+
+        report = evaluate_slate_readiness(metrics)
+        identity = next(
+            check for check in report["checks"] if check["check_id"] == "player_identity_coverage"
+        )
+
+        self.assertEqual(identity["status"], "warn")
+        self.assertEqual(identity["details"]["resolved"], 47)
+        self.assertEqual(identity["details"]["ambiguous"], 1)
+        self.assertEqual(identity["details"]["no_match"], 2)
+        self.assertEqual(identity["details"]["accepted_quarantine"], 3)
+        self.assertEqual(identity["details"]["unaccepted_quarantine"], 0)
+
+    def test_unaccepted_quarantine_reason_blocks_every_input_gate(self) -> None:
+        metrics = _complete_metrics()
+        metrics.resolved_identity_rows = 49
+        metrics.quarantined_identity_rows = 1
+        metrics.quarantine_reason_counts = {"missing_name": 1}
+
+        report = evaluate_slate_readiness(metrics)
+        identity = next(
+            check for check in report["checks"] if check["check_id"] == "player_identity_coverage"
+        )
+
+        self.assertEqual(identity["status"], "fail")
+        self.assertEqual(identity["details"]["unaccepted_quarantine"], 1)
+        self.assertIn("do not have an accepted reason", identity["message"])
         self.assertTrue(all(gate["status"] == "fail" for gate in report["gates"].values()))
 
     def test_report_id_is_stable_for_identical_metrics(self) -> None:

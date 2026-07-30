@@ -1,6 +1,6 @@
 # Model Registry
 
-Last reviewed: 2026-07-18
+Last reviewed: 2026-07-30
 
 | Model / Policy | Version / Artifact | Training or analysis window | Acceptance evidence | Status |
 |---|---|---|---|---|
@@ -22,10 +22,14 @@ Last reviewed: 2026-07-18
 | Online weekly residual learner | `docs/online_residual_learning_2024_2025.json`; `docs/online_residual_snapshot_backfill_2024_2025.json` | 15 Sunday-main slates; validation 2025 W05-W10; untouched test W11-W18 | Prior `5.0`; test MAE `4.818` to `4.602` (`+4.48%`); 15 immutable snapshots / 3,342 observations / zero failures | Production-capable for DraftKings simulation; default off |
 | Simulation uncertainty calibration | `docs/projection_calibration_drift_2024_2025.json` | 15 Sunday-main slates; 2,856 players | P75/P90/P95 `76.4%` / `90.3%` / `94.7%`; tail error `+0.2` points; zero alerts | Accepted |
 | Historical top-lineup policy | `actual_top_lineup*` tables and `run_actual_top_lineup_learning` | Strictly prior slates within configured window | Top-k labels, walk-forward selection uplift, feature insights | Production-capable |
+| Projection promotion control | `model_challenger_evaluation_v1`; `model_promotion_decision_v1` | Evaluation-declared ordered training/validation/test weeks | Exact champion/challenger run IDs, feature/code hashes, comparable gates, evaluator evidence, named promotion and rollback approvals | Production governance |
 
 ## Registry Rules
 
 1. Production promotion requires time-safe validation and a persisted artifact or deterministic training definition.
-2. Research artifacts never replace product defaults automatically.
-3. Every artifact must record its source, season/week window, feature set or hash where available, random seed, and acceptance metric.
-4. Rejected models remain documented so weak candidates are not unknowingly repeated.
+2. Completing a projection run may initialize an empty scope, but it never replaces an existing champion.
+3. A challenger evaluation must name one active champion and one completed same-scope challenger, ordered non-overlapping training/validation/test windows, exact persisted feature hashes, declared code hashes, comparable metric values, evaluator identity, and an evidence URI.
+4. At least one gate must require strict positive improvement and all gates must pass. Guardrail gates may tolerate only their explicitly declared regression bound.
+5. Promotion requires a named approver and reason. The approval record and compare-and-set active-pointer change commit atomically only while the evaluated champion remains active.
+6. Rollback requires a second named approval tied to the original promotion and restores that decision's exact previous projection run atomically.
+7. Research artifacts never replace product defaults automatically, and rejected models remain documented so weak candidates are not unknowingly repeated.

@@ -9,6 +9,7 @@ import math
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Iterable, List, Optional, Any
 
 import numpy as np
@@ -445,6 +446,12 @@ class PredictionRunContext:
     projection_run_id: str
     data_cutoff_at: datetime
     feature_set_hash: str
+    code_hash: str
+
+
+def prediction_code_hash() -> str:
+    """Hash the prediction implementation recorded by newly persisted model runs."""
+    return hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
 
 
 def create_prediction_run_context(
@@ -467,6 +474,7 @@ def create_prediction_run_context(
         projection_run_id=projection_run_id or str(uuid.uuid4()),
         data_cutoff_at=cutoff,
         feature_set_hash=feature_set_hash,
+        code_hash=prediction_code_hash(),
     )
 
 
@@ -760,6 +768,7 @@ class PredictionsService:
                                 "random_state": 42,
                                 "training_rows": len(train_df),
                                 "feature_columns": feature_cols,
+                                "code_hash": context.code_hash,
                                 "uncertainty_model": "position-aware walk-forward residual quantiles",
                                 "calibration": _json_safe(calibration_metrics or {}),
                             },
@@ -886,10 +895,7 @@ class PredictionsService:
                             VALUES
                                 (:season, :week, :slate_id, :projection_run_id,
                                  'prediction_run_completed', now())
-                            ON CONFLICT (season, week, slate_id) DO UPDATE SET
-                                projection_run_id = EXCLUDED.projection_run_id,
-                                selection_reason = EXCLUDED.selection_reason,
-                                selected_at = EXCLUDED.selected_at
+                            ON CONFLICT (season, week, slate_id) DO NOTHING
                             """
                         ),
                         {
@@ -1331,25 +1337,48 @@ class PredictionsService:
         week: int,
         slate: str,
         projection_run_id: str,
-        selection_reason: str = "manual_selection",
+        approval_decision_id: str,
     ) -> dict[str, Any]:
-        """Select one existing immutable projection run as active for a slate."""
+        """Reload an active pointer only when it matches an applied approval decision."""
         normalized_slate = slate.strip() or "DEFAULT"
-        normalized_reason = selection_reason.strip() or "manual_selection"
-        with self.engine.begin() as connection:
+        normalized_decision_id = approval_decision_id.strip()
+        if not normalized_decision_id:
+            raise ValueError("approval_decision_id is required")
+        validate_target_schema(
+            self.engine,
+            consumer=type(self).__name__,
+            required_tables=(
+                "projection_run",
+                "active_projection_run",
+                "model_promotion_decision",
+            ),
+        )
+        with self.engine.connect() as connection:
             run = connection.execute(
                 text(
                     """
-                    SELECT projection_run_id, model_run_id, season, week, slate_id,
-                           row_count, data_cutoff_at, status, created_at
-                    FROM target.projection_run
-                    WHERE projection_run_id = :projection_run_id
-                      AND season = :season AND week = :week
-                      AND UPPER(slate_id) = UPPER(:slate_id)
-                      AND status = 'completed'
+                    SELECT pr.projection_run_id, pr.model_run_id, pr.season, pr.week,
+                           pr.slate_id, pr.row_count, pr.data_cutoff_at, pr.status,
+                           pr.created_at, active.selection_reason
+                    FROM target.model_promotion_decision decision
+                    JOIN target.projection_run pr
+                      ON pr.projection_run_id = decision.selected_projection_run_id
+                    JOIN target.active_projection_run active
+                      ON active.season = pr.season
+                     AND active.week = pr.week
+                     AND UPPER(active.slate_id) = UPPER(pr.slate_id)
+                     AND active.projection_run_id = pr.projection_run_id
+                     AND active.selection_reason =
+                         'model_' || decision.action || ':' || decision.decision_id
+                    WHERE decision.decision_id = :approval_decision_id
+                      AND pr.projection_run_id = :projection_run_id
+                      AND pr.season = :season AND pr.week = :week
+                      AND UPPER(pr.slate_id) = UPPER(:slate_id)
+                      AND pr.status = 'completed'
                     """
                 ),
                 {
+                    "approval_decision_id": normalized_decision_id,
                     "projection_run_id": projection_run_id,
                     "season": season,
                     "week": week,
@@ -1358,35 +1387,12 @@ class PredictionsService:
             ).mappings().first()
             if not run:
                 raise ValueError(
-                    f"Projection run {projection_run_id} does not belong to "
-                    f"season {season} week {week} slate {normalized_slate}."
+                    f"Projection run {projection_run_id} is not the active selection for "
+                    f"approved decision {normalized_decision_id} in season {season} "
+                    f"week {week} slate {normalized_slate}."
                 )
-            connection.execute(
-                text(
-                    """
-                    INSERT INTO target.active_projection_run
-                        (season, week, slate_id, projection_run_id,
-                         selection_reason, selected_at)
-                    VALUES
-                        (:season, :week, :slate_id, :projection_run_id,
-                         :selection_reason, now())
-                    ON CONFLICT (season, week, slate_id) DO UPDATE SET
-                        projection_run_id = EXCLUDED.projection_run_id,
-                        selection_reason = EXCLUDED.selection_reason,
-                        selected_at = EXCLUDED.selected_at
-                    """
-                ),
-                {
-                    "season": season,
-                    "week": week,
-                    "slate_id": normalized_slate,
-                    "projection_run_id": projection_run_id,
-                    "selection_reason": normalized_reason,
-                },
-            )
         return {
             **dict(run),
-            "selection_reason": normalized_reason,
             "active": True,
         }
 

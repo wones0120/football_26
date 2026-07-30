@@ -19,6 +19,7 @@ from sqlalchemy.exc import ProgrammingError, ResourceClosedError
 from Database.config import get_connection_string
 from Database.operations import ensure_table_columns
 from .gpp_optimizer import run_gpp_pipeline, Player as GPPPlayer, GPPOptimizerResult
+from .point_in_time import injury_snapshot_cutoff_sql
 from .simulations import SimulationService
 from .target_schema import validate_target_schema
 
@@ -1357,21 +1358,25 @@ class OptimizerService:
             "calibration_sample_size": "p.calibration_sample_size" if "calibration_sample_size" in projection_columns else "0",
         }
         has_injuries = inspector.has_table("snapshot_injury_status", schema="target")
-        injury_cte = ""
         injury_join = ""
         injury_filter = ""
         if has_injuries:
-            injury_cte = """,
-                latest_injury AS (
-                    SELECT DISTINCT ON (player_id)
-                        player_id, injury_status
-                    FROM target.snapshot_injury_status
-                    WHERE season = :season AND week = :week
-                      AND (slate IS NULL OR UPPER(slate) = UPPER(:slate))
-                    ORDER BY player_id, as_of DESC
-                )
+            cutoff_predicate = injury_snapshot_cutoff_sql(
+                injury_alias="injury",
+                projection_alias="p",
+            )
+            injury_join = f"""
+                LEFT JOIN LATERAL (
+                    SELECT injury.injury_status
+                    FROM target.snapshot_injury_status injury
+                    WHERE injury.season = :season AND injury.week = :week
+                      AND injury.player_id = s.player_id
+                      AND (injury.slate IS NULL OR UPPER(injury.slate) = UPPER(:slate))
+                      AND {cutoff_predicate}
+                    ORDER BY injury.as_of DESC
+                    LIMIT 1
+                ) i ON TRUE
             """
-            injury_join = "LEFT JOIN latest_injury i ON i.player_id = s.player_id"
             injury_filter = "WHERE COALESCE(i.injury_status, '') !~* '(OUT|IR|PUP|NFI|RESERVE)'"
 
         query = text(
@@ -1404,7 +1409,6 @@ class OptimizerService:
                   )
                 ORDER BY player_id, created_at DESC
             )
-            {injury_cte}
             SELECT
                 s.player_id,
                 s.site_player_id AS dk_player_id,

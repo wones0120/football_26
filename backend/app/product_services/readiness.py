@@ -30,6 +30,7 @@ SHOWDOWN_GATES = ("showdown_cash", "showdown_gpp")
 GPP_GATES = ("classic_gpp", "showdown_gpp")
 REQUIRED_CLASSIC_POSITIONS = {"QB": 1, "RB": 2, "WR": 3, "TE": 1, "DST": 1}
 ELIGIBLE_POSITIONS = frozenset(REQUIRED_CLASSIC_POSITIONS)
+ACCEPTED_IDENTITY_QUARANTINE_REASONS = frozenset({"ambiguous", "no_match"})
 
 
 def _normalized_position(value: object) -> str:
@@ -197,11 +198,20 @@ def evaluate_slate_readiness(metrics: SlateReadinessMetrics) -> dict[str, Any]:
     )
 
     identity_rate = metrics.resolved_identity_rows / eligible if eligible else 0.0
+    accepted_quarantine_rows = sum(
+        count
+        for reason, count in metrics.quarantine_reason_counts.items()
+        if reason in ACCEPTED_IDENTITY_QUARANTINE_REASONS
+    )
+    unaccepted_quarantine_rows = max(
+        metrics.quarantined_identity_rows - accepted_quarantine_rows,
+        0,
+    )
     untracked_identity_rows = max(
         eligible - metrics.resolved_identity_rows - metrics.quarantined_identity_rows,
         0,
     )
-    if untracked_identity_rows:
+    if untracked_identity_rows or unaccepted_quarantine_rows:
         identity_status = "fail"
     else:
         identity_status = "pass" if identity_rate >= 0.98 else "warn" if identity_rate >= 0.50 else "fail"
@@ -210,7 +220,12 @@ def evaluate_slate_readiness(metrics: SlateReadinessMetrics) -> dict[str, Any]:
     )
     if metrics.quarantined_identity_rows:
         identity_message += (
-            f" {metrics.quarantined_identity_rows} unresolved salaries are quarantined and excluded."
+            f" {accepted_quarantine_rows} unresolved salaries have accepted quarantine reasons"
+            " and are excluded."
+        )
+    if unaccepted_quarantine_rows:
+        identity_message += (
+            f" {unaccepted_quarantine_rows} quarantined salaries do not have an accepted reason."
         )
     if untracked_identity_rows:
         identity_message += f" {untracked_identity_rows} unresolved salaries are not quarantined."
@@ -223,11 +238,17 @@ def evaluate_slate_readiness(metrics: SlateReadinessMetrics) -> dict[str, Any]:
             applies_to=all_gates,
             blocks=all_gates,
             value=round(identity_rate, 4),
-            threshold=">= 98% pass; >= 50% warn; every unresolved row quarantined",
+            threshold=(
+                ">= 98% pass; >= 50% warn; every unresolved row quarantined as ambiguous or no_match"
+            ),
             details={
                 "resolved": metrics.resolved_identity_rows,
                 "eligible": eligible,
                 "quarantined": metrics.quarantined_identity_rows,
+                "ambiguous": metrics.quarantine_reason_counts.get("ambiguous", 0),
+                "no_match": metrics.quarantine_reason_counts.get("no_match", 0),
+                "accepted_quarantine": accepted_quarantine_rows,
+                "unaccepted_quarantine": unaccepted_quarantine_rows,
                 "untracked": untracked_identity_rows,
                 "quarantine_reasons": metrics.quarantine_reason_counts,
                 "quarantine_enforcement": "excluded_from_optimizer_projection_and_replay_inputs",

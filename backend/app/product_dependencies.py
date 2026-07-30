@@ -12,6 +12,7 @@ from .product_services.portfolio import PortfolioService
 from .product_services.draftkings_export import DraftKingsExportService
 from .product_services.slate import SlateDataService
 from .product_services.predictions import PredictionsService
+from .product_services.model_governance import ModelGovernanceService
 from .product_services.replay import ClassicCashStackReplayService
 from .product_services.readiness import SlateReadinessService
 from .product_services.data_quality import DataQualityService
@@ -86,6 +87,11 @@ def get_data_source() -> NFLDataSource:
 @lru_cache()
 def get_predictions_service() -> PredictionsService:
     return PredictionsService()
+
+
+@lru_cache()
+def get_model_governance_service() -> ModelGovernanceService:
+    return ModelGovernanceService()
 
 
 @lru_cache()

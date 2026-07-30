@@ -65,6 +65,7 @@ from ..product_dependencies import (
     get_data_source,
     get_news_monitor_service,
     get_predictions_service,
+    get_model_governance_service,
     get_starting_qb_service,
     get_ownership_service,
     get_batch_import_service,
@@ -109,6 +110,10 @@ from ..product_schemas import (
     PredictionRunRequest,
     ActivePredictionRunRequest,
     ActivePredictionRunResponse,
+    ModelChallengerEvaluationRequest,
+    ModelChallengerEvaluationResponse,
+    ModelPromotionApprovalRequest,
+    ModelPromotionDecisionResponse,
     OwnershipLoadRequest,
     OwnershipProjectionListResponse,
     OwnershipRunRequest,
@@ -171,6 +176,7 @@ from ..product_services.validation import fetch_weekly_row_counts, fetch_unmatch
 from ..product_services.validation import process_unmatched_players
 from ..product_services.agent import NewsMatchupAgent
 from ..product_services.starters import StartingQBService
+from ..product_services.model_governance import ModelGovernanceService
 
 router = APIRouter(prefix="/api")
 agent = NewsMatchupAgent()
@@ -1209,11 +1215,90 @@ def select_active_prediction_run(
             week=request.week,
             slate=request.slate,
             projection_run_id=request.projection_run_id,
-            selection_reason=request.selection_reason,
+            approval_decision_id=request.approval_decision_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return ActivePredictionRunResponse(**selected)
+
+
+@router.post(
+    "/model-governance/evaluations",
+    response_model=ModelChallengerEvaluationResponse,
+)
+def create_model_challenger_evaluation(
+    request: ModelChallengerEvaluationRequest,
+    service: ModelGovernanceService = Depends(get_model_governance_service),
+) -> ModelChallengerEvaluationResponse:
+    try:
+        evaluation = service.create_evaluation(
+            champion_projection_run_id=request.champion_projection_run_id,
+            challenger_projection_run_id=request.challenger_projection_run_id,
+            data_window=request.data_window.model_dump(),
+            champion_code_hash=request.champion_code_hash,
+            challenger_code_hash=request.challenger_code_hash,
+            gates=[gate.model_dump() for gate in request.gates],
+            evaluated_by=request.evaluated_by,
+            evidence_uri=request.evidence_uri,
+            notes=request.notes,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return ModelChallengerEvaluationResponse(**evaluation)
+
+
+@router.get(
+    "/model-governance/evaluations/{evaluation_id}",
+    response_model=ModelChallengerEvaluationResponse,
+)
+def get_model_challenger_evaluation(
+    evaluation_id: str,
+    service: ModelGovernanceService = Depends(get_model_governance_service),
+) -> ModelChallengerEvaluationResponse:
+    evaluation = service.get_evaluation(evaluation_id)
+    if evaluation is None:
+        raise HTTPException(status_code=404, detail="Model evaluation not found")
+    return ModelChallengerEvaluationResponse(**evaluation)
+
+
+@router.post(
+    "/model-governance/evaluations/{evaluation_id}/promote",
+    response_model=ModelPromotionDecisionResponse,
+)
+def promote_model_challenger(
+    evaluation_id: str,
+    request: ModelPromotionApprovalRequest,
+    service: ModelGovernanceService = Depends(get_model_governance_service),
+) -> ModelPromotionDecisionResponse:
+    try:
+        decision = service.promote(
+            evaluation_id,
+            approved_by=request.approved_by,
+            approval_reason=request.approval_reason,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return ModelPromotionDecisionResponse(**decision)
+
+
+@router.post(
+    "/model-governance/decisions/{promotion_decision_id}/rollback",
+    response_model=ModelPromotionDecisionResponse,
+)
+def rollback_model_promotion(
+    promotion_decision_id: str,
+    request: ModelPromotionApprovalRequest,
+    service: ModelGovernanceService = Depends(get_model_governance_service),
+) -> ModelPromotionDecisionResponse:
+    try:
+        decision = service.rollback(
+            promotion_decision_id,
+            approved_by=request.approved_by,
+            approval_reason=request.approval_reason,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return ModelPromotionDecisionResponse(**decision)
 
 
 @router.get("/data/unmatched-salaries", response_model=UnmatchedSalaryResponse)

@@ -39,6 +39,8 @@ TARGET_LEARNING_TABLES = [
     "feature_player_game",
     "model_registry",
     "model_run",
+    "model_challenger_evaluation",
+    "model_promotion_decision",
     "player_projection",
     "symbolic_rule",
     "symbolic_rule_version",

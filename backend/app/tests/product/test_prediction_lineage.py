@@ -23,6 +23,8 @@ class PredictionLineageTests(unittest.TestCase):
         self.assertNotEqual(first.model_run_id, second.model_run_id)
         self.assertNotEqual(first.projection_run_id, second.projection_run_id)
         self.assertEqual(first.data_cutoff_at.tzinfo, timezone.utc)
+        self.assertEqual(first.code_hash, second.code_hash)
+        self.assertEqual(len(first.code_hash), 64)
 
     def test_prediction_game_id_is_stable_across_team_order(self):
         first = prediction_game_id(
@@ -116,6 +118,8 @@ class PredictionLineageTests(unittest.TestCase):
         executed_sql = [str(call.args[0]) for call in connection.execute.call_args_list]
         self.assertTrue(any("INSERT INTO target.projection_run" in sql for sql in executed_sql))
         self.assertTrue(any("INSERT INTO target.active_projection_run" in sql for sql in executed_sql))
+        active_sql = next(sql for sql in executed_sql if "INSERT INTO target.active_projection_run" in sql)
+        self.assertIn("DO NOTHING", active_sql)
         self.assertFalse(any("DELETE FROM player_expected_points" in sql for sql in executed_sql))
 
     def test_active_run_resolution_uses_explicit_scope_pointer(self):
@@ -140,10 +144,10 @@ class PredictionLineageTests(unittest.TestCase):
         self.assertEqual(resolved, "projection-active")
         self.assertIn("target.active_projection_run", str(connection.execute.call_args.args[0]))
 
-    def test_manual_active_run_selection_validates_scope_and_updates_pointer(self):
+    def test_active_run_selection_requires_an_applied_approval_decision(self):
         service = PredictionsService.__new__(PredictionsService)
         service.engine = MagicMock()
-        connection = service.engine.begin.return_value.__enter__.return_value
+        connection = service.engine.connect.return_value.__enter__.return_value
         run_result = MagicMock()
         run_result.mappings.return_value.first.return_value = {
             "projection_run_id": "projection-old",
@@ -155,22 +159,24 @@ class PredictionLineageTests(unittest.TestCase):
             "data_cutoff_at": None,
             "status": "completed",
             "created_at": datetime(2025, 11, 16, 12, 0, tzinfo=timezone.utc),
+            "selection_reason": "model_rollback:decision-1",
         }
-        connection.execute.side_effect = [run_result, MagicMock()]
+        connection.execute.return_value = run_result
 
         selected = service.select_active_prediction_run(
             season=2025,
             week=11,
             slate="SUNDAY_MAIN",
             projection_run_id="projection-old",
-            selection_reason="rollback_after_review",
+            approval_decision_id="decision-1",
         )
 
         self.assertTrue(selected["active"])
         self.assertEqual(selected["projection_run_id"], "projection-old")
-        pointer_call = connection.execute.call_args_list[1]
-        self.assertIn("INSERT INTO target.active_projection_run", str(pointer_call.args[0]))
-        self.assertEqual(pointer_call.args[1]["selection_reason"], "rollback_after_review")
+        self.assertEqual(selected["selection_reason"], "model_rollback:decision-1")
+        approval_call = connection.execute.call_args_list[0]
+        self.assertIn("target.model_promotion_decision", str(approval_call.args[0]))
+        self.assertEqual(approval_call.args[1]["approval_decision_id"], "decision-1")
 
 
 if __name__ == "__main__":

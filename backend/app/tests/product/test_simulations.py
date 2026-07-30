@@ -1,6 +1,6 @@
 import unittest
 from datetime import datetime, timezone
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pandas as pd
@@ -38,6 +38,37 @@ def classic_pool() -> pd.DataFrame:
 
 
 class SlateSimulationTests(unittest.TestCase):
+    def test_injury_pool_query_excludes_snapshots_after_projection_cutoff(self):
+        service = SimulationService.__new__(SimulationService)
+        service.engine = MagicMock()
+        service._resolve_projection_run = lambda *_args, **_kwargs: "projection-1"
+        service._load_ownership = lambda *_args, **_kwargs: (
+            None,
+            pd.DataFrame(columns=["player_id", "field_ownership"]),
+        )
+        inspector = MagicMock()
+        inspector.has_table.return_value = True
+
+        with (
+            patch("backend.app.product_services.simulations.inspect", return_value=inspector),
+            patch(
+                "backend.app.product_services.simulations.pd.read_sql",
+                return_value=pd.DataFrame(),
+            ) as read_sql,
+            self.assertRaisesRegex(ValueError, "No salary rows"),
+        ):
+            service._load_pool(
+                season=2025,
+                week=11,
+                slate="SUNDAY_MAIN",
+                projection_run_id="projection-1",
+                ownership_run_id=None,
+            )
+
+        sql = str(read_sql.call_args.args[0])
+        self.assertIn("injury.as_of <= p.data_cutoff_at", sql)
+        self.assertIn("p.data_cutoff_at IS NOT NULL", sql)
+
     def test_sampling_is_seeded_non_negative_and_preserves_shape(self):
         pool = classic_pool()
 

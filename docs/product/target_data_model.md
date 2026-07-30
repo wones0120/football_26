@@ -70,7 +70,11 @@ salary adapter repairs only unique, explainable name/team/position matches and
 never creates an offensive player identity from salary data alone. Each
 unresolved source row is stored with its reason and candidate IDs; optimizer,
 projection snapshots, and replay inputs require a canonical player ID and
-therefore exclude open quarantine rows.
+therefore exclude open quarantine rows. Readiness accepts only persisted open
+`ambiguous` or `no_match` reasons; the separate read-only identity audit reruns
+the current deterministic matcher to verify those stored decisions. Missing
+records, reason drift, newly deterministic matches, and any other quarantine
+reason remain blocking audit findings.
 
 Required columns:
 
@@ -275,12 +279,18 @@ Recommended snapshot tables:
 
 Common snapshot columns:
 
-- `as_of`
+- `observed_at` (or legacy-compatible `as_of`), recording when this system/source could first prove the value was available
+- `effective_at`, recording when the value applies, which must never substitute for observation time
+- `ingest_run_id`
 - `source`
 - `season`
 - `week`
 - `game_id`
 - `player_id` where applicable
+
+Replay visibility is fail closed: both observation time and the consuming run's cutoff must exist,
+and `observed_at <= data_cutoff_at`. A game date, report week, file name, or retrospective load time
+does not prove earlier availability. The same rule applies even when the eventual value is accurate.
 
 ## Feature Tables
 
@@ -387,7 +397,12 @@ Required columns:
 
 ### `active_projection_run`
 
-One explicit active-run pointer per season/week/slate. A newly completed prediction run advances its scope atomically; `POST /api/predict/active` can deliberately move the pointer back to an earlier immutable run after validating that the run belongs to the same scope.
+One explicit active-run pointer per season/week/slate. The first completed prediction may initialize
+an empty scope. Once a champion exists, later completed runs remain challengers and cannot advance
+the pointer. Only a passed `model_challenger_evaluation` plus named promotion approval may select a
+challenger, and only a named rollback approval may restore the promotion decision's exact prior run.
+Both changes use an optimistic compare-and-set in the approval transaction. `POST /api/predict/active`
+only confirms the currently applied decision; it does not mutate this table.
 
 Required columns:
 
@@ -397,6 +412,57 @@ Required columns:
 - `projection_run_id`
 - `selection_reason`
 - `selected_at`
+
+### `model_challenger_evaluation`
+
+Content-addressed, immutable comparison between the active champion and one completed challenger in
+the same season/week/slate. The contract records ordered non-overlapping training, validation, and
+test windows; exact feature-set hashes from both model runs; declared code hashes checked against
+persisted lineage when available; comparable metric gates and their observed results; evaluator;
+and evidence location. At least one gate must require a strict positive improvement. The status is
+`passed` only when every declared gate passes; a `blocked` evaluation cannot be promoted.
+
+Required columns:
+
+- `evaluation_id`
+- `season`
+- `week`
+- `slate_id`
+- `champion_projection_run_id`
+- `challenger_projection_run_id`
+- `data_window_json`
+- `champion_feature_set_hash`
+- `challenger_feature_set_hash`
+- `champion_code_hash`
+- `challenger_code_hash`
+- `gate_policy_json`
+- `gate_results_json`
+- `status`
+- `evaluation_hash`
+- `evaluated_by`
+- `evidence_uri`
+- `notes`
+- `created_at`
+
+### `model_promotion_decision`
+
+Append-only named approval for either promotion or rollback. A promotion references a passed
+evaluation and records the active champion as `previous_projection_run_id` plus the challenger as
+`selected_projection_run_id`. A rollback references that promotion, reverses those exact run IDs,
+and cannot be applied twice. Decision creation and active-pointer movement commit atomically.
+
+Required columns:
+
+- `decision_id`
+- `evaluation_id`
+- `action`
+- `approved_by`
+- `approval_reason`
+- `previous_projection_run_id`
+- `selected_projection_run_id`
+- `rollback_of_decision_id`
+- `decision_hash`
+- `created_at`
 
 ### `player_projection`
 
@@ -1348,6 +1414,8 @@ Required columns:
 - `model_run`
 - `projection_run`
 - `active_projection_run`
+- `model_challenger_evaluation`
+- `model_promotion_decision`
 - `player_projection`
 
 4. Symbolic reasoning:
