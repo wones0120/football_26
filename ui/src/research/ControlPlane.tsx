@@ -108,6 +108,20 @@ const FRESHNESS_LABELS: Record<DataFreshnessRow["dataset"], string> = {
   weekly_stats: "Weekly Stats",
 };
 
+type ResearchControlPlaneProps = {
+  season: number;
+  week: number;
+  slate: string;
+  slateOptions: string[];
+  selectedLineupSimulationRunId: string;
+  selectedBaselineSimulationRunId: string;
+  onSeasonChange: (value: number) => void;
+  onWeekChange: (value: number) => void;
+  onSlateChange: (value: string) => void;
+  onSelectedLineupSimulationRunIdChange: (runId: string) => void;
+  onSelectedBaselineSimulationRunIdChange: (runId: string) => void;
+};
+
 function formatMetric(value?: number | null, digits = 2): string {
   if (value == null || !Number.isFinite(value)) return "-";
   return value.toFixed(digits);
@@ -166,12 +180,20 @@ function hasBenchmarkMetrics(run: BenchmarkRun): boolean {
   );
 }
 
-function App() {
-  const slateOptions = ["sunday_main", "sunday_night", "monday_night", "thursday_night"] as const;
+function App({
+  season,
+  week,
+  slate,
+  slateOptions,
+  selectedLineupSimulationRunId,
+  selectedBaselineSimulationRunId,
+  onSeasonChange,
+  onWeekChange,
+  onSlateChange,
+  onSelectedLineupSimulationRunIdChange,
+  onSelectedBaselineSimulationRunIdChange,
+}: ResearchControlPlaneProps) {
   const [sourceSystem, setSourceSystem] = useState<"draftkings" | "fanduel">("draftkings");
-  const [season, setSeason] = useState(2025);
-  const [week, setWeek] = useState(1);
-  const [slate, setSlate] = useState<string>(slateOptions[0]);
   const [historyStartSeason, setHistoryStartSeason] = useState(2018);
   const [historyEndSeason, setHistoryEndSeason] = useState(2025);
   const [salaryPath, setSalaryPath] = useState("~/Downloads/DKSalaries.csv");
@@ -247,8 +269,6 @@ function App() {
   const [simulationRunId, setSimulationRunId] = useState<string | null>(null);
   const [simulationRunOptions, setSimulationRunOptions] = useState<SimulationRunOption[]>([]);
   const [compatibleBaselineRunIds, setCompatibleBaselineRunIds] = useState<string[]>([]);
-  const [selectedLineupSimulationRunId, setSelectedLineupSimulationRunId] = useState("");
-  const [selectedBaselineSimulationRunId, setSelectedBaselineSimulationRunId] = useState("");
   const [simulationRunsLoading, setSimulationRunsLoading] = useState(false);
   const [portfolioContestObjective, setPortfolioContestObjective] =
     useState<"balanced" | "cash" | "gpp">("balanced");
@@ -466,9 +486,9 @@ function App() {
       });
       setSimulationRunOptions(response.rows);
       setCompatibleBaselineRunIds(response.compatible_baseline_run_ids);
-      setSelectedBaselineSimulationRunId((current) =>
-        response.compatible_baseline_run_ids.includes(current)
-          ? current
+      onSelectedBaselineSimulationRunIdChange(
+        response.compatible_baseline_run_ids.includes(selectedBaselineSimulationRunId)
+          ? selectedBaselineSimulationRunId
           : response.compatible_baseline_run_ids[0] ?? ""
       );
     } finally {
@@ -504,6 +524,8 @@ function App() {
   }, [sourceSystem, season, week, slate]);
 
   useEffect(() => {
+    setSimulationRows([]);
+    setSimulationRunId(null);
     setRoleShockCandidates([]);
     setRoleShockPlayerIdentity("");
     setRoleShockImpacts([]);
@@ -512,74 +534,77 @@ function App() {
     setResidualSnapshotCount(0);
     setResidualLearningApplied(false);
     setScenarioWarnings([]);
+    setBacktestResult(null);
   }, [sourceSystem, season, week, slate]);
 
   useEffect(() => {
     let cancelled = false;
     setSimulationRunOptions([]);
     setCompatibleBaselineRunIds([]);
-    setSelectedLineupSimulationRunId("");
-    setSelectedBaselineSimulationRunId("");
     setUltimateLineupRun(null);
     setUltimateLineupResult(null);
     setSimulationRunsLoading(true);
-    fetchSimulationRuns({
-      source_system: sourceSystem,
-      season,
-      week,
-      slate,
-    })
-      .then((response) => {
+    async function loadSimulationRunOptions() {
+      try {
+        const scopeResponse = await fetchSimulationRuns({
+          source_system: sourceSystem,
+          season,
+          week,
+          slate,
+        });
         if (cancelled) return;
-        setSimulationRunOptions(response.rows);
-        setCompatibleBaselineRunIds([]);
-      })
-      .catch((err) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
-      })
-      .finally(() => {
-        if (!cancelled) setSimulationRunsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [sourceSystem, season, week, slate]);
-
-  useEffect(() => {
-    if (!selectedLineupSimulationRunId) {
-      setCompatibleBaselineRunIds([]);
-      setSelectedBaselineSimulationRunId("");
-      return;
-    }
-    let cancelled = false;
-    setSimulationRunsLoading(true);
-    fetchSimulationRuns({
-      source_system: sourceSystem,
-      season,
-      week,
-      slate,
-      scenario_run_id: selectedLineupSimulationRunId,
-    })
-      .then((response) => {
-        if (cancelled) return;
-        setSimulationRunOptions(response.rows);
-        setCompatibleBaselineRunIds(response.compatible_baseline_run_ids);
-        setSelectedBaselineSimulationRunId((current) =>
-          response.compatible_baseline_run_ids.includes(current)
-            ? current
-            : response.compatible_baseline_run_ids[0] ?? ""
+        const selectedRunIsCompatible = scopeResponse.rows.some(
+          (run) => run.simulation_run_id === selectedLineupSimulationRunId,
         );
-      })
-      .catch((err) => {
+        if (!selectedRunIsCompatible && selectedLineupSimulationRunId) {
+          setSimulationRunOptions(scopeResponse.rows);
+          onSelectedLineupSimulationRunIdChange("");
+          onSelectedBaselineSimulationRunIdChange("");
+          return;
+        }
+        const response = selectedRunIsCompatible
+          ? await fetchSimulationRuns({
+              source_system: sourceSystem,
+              season,
+              week,
+              slate,
+              scenario_run_id: selectedLineupSimulationRunId,
+            })
+          : scopeResponse;
+        if (cancelled) return;
+        setSimulationRunOptions(response.rows);
+        const compatibleBaselineRunIds = selectedRunIsCompatible
+          ? response.compatible_baseline_run_ids
+          : [];
+        setCompatibleBaselineRunIds(compatibleBaselineRunIds);
+        const nextBaselineRunId = compatibleBaselineRunIds.includes(
+          selectedBaselineSimulationRunId,
+        )
+          ? selectedBaselineSimulationRunId
+          : compatibleBaselineRunIds[0] ?? "";
+        if (nextBaselineRunId !== selectedBaselineSimulationRunId) {
+          onSelectedBaselineSimulationRunIdChange(nextBaselineRunId);
+        }
+      } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err));
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setSimulationRunsLoading(false);
-      });
+      }
+    }
+    loadSimulationRunOptions().catch(() => undefined);
     return () => {
       cancelled = true;
     };
-  }, [selectedLineupSimulationRunId]);
+  }, [
+    onSelectedBaselineSimulationRunIdChange,
+    onSelectedLineupSimulationRunIdChange,
+    selectedBaselineSimulationRunId,
+    selectedLineupSimulationRunId,
+    slate,
+    sourceSystem,
+    season,
+    week,
+  ]);
 
   useEffect(() => {
     setUltimateLineupRun(null);
@@ -964,7 +989,7 @@ function App() {
       setResidualLearningApplied(result.residual_learning_applied);
       setScenarioWarnings(result.scenario_warnings);
       if (roleShock || pointShock) {
-        setSelectedLineupSimulationRunId(result.simulation_run_id);
+        onSelectedLineupSimulationRunIdChange(result.simulation_run_id);
       } else {
         await refreshSimulationRunOptions();
       }
@@ -1540,7 +1565,7 @@ function App() {
               <input
                 type="number"
                 value={season}
-                onChange={(event) => setSeason(Number(event.target.value))}
+                onChange={(event) => onSeasonChange(Number(event.target.value))}
               />
             </label>
             <label>
@@ -1548,12 +1573,12 @@ function App() {
               <input
                 type="number"
                 value={week}
-                onChange={(event) => setWeek(Number(event.target.value))}
+                onChange={(event) => onWeekChange(Number(event.target.value))}
               />
             </label>
             <label>
               Slate
-              <select value={slate} onChange={(event) => setSlate(event.target.value)}>
+              <select value={slate} onChange={(event) => onSlateChange(event.target.value)}>
                 {slateOptions.map((value) => (
                   <option key={value} value={value}>
                     {value}
@@ -2186,8 +2211,8 @@ function App() {
                 <select
                   value={selectedLineupSimulationRunId}
                   onChange={(event) => {
-                    setSelectedLineupSimulationRunId(event.target.value);
-                    setSelectedBaselineSimulationRunId("");
+                    onSelectedLineupSimulationRunIdChange(event.target.value);
+                    onSelectedBaselineSimulationRunIdChange("");
                   }}
                   disabled={
                     simulationRunsLoading ||
@@ -2213,7 +2238,7 @@ function App() {
                 Compatible Baseline Run
                 <select
                   value={selectedBaselineSimulationRunId}
-                  onChange={(event) => setSelectedBaselineSimulationRunId(event.target.value)}
+                  onChange={(event) => onSelectedBaselineSimulationRunIdChange(event.target.value)}
                   disabled={
                     !selectedLineupSimulationRunId ||
                     simulationRunsLoading ||

@@ -1000,7 +1000,7 @@ downloadable only when linked to a passed validation.
 
 ### `optimizer_run`
 
-One optimizer execution. For classic cash, `objective_config_json` stores the complete immutable `classic_cash_v1` weights, certainty scale, and fragility penalty rather than only the generic objective name.
+One optimizer execution. For classic cash, `objective_config_json` stores the complete immutable `classic_cash_v1` weights, certainty scale, and fragility penalty rather than only the generic objective name. For classic GPP, `strategy` stores the canonical versioned engine ID (`classic_gpp_baseline_v1` or `classic_gpp_slate_aware_v1`), while `constraint_config_json` stores its declared strategy config plus the exact runtime slate, portfolio, and stack-policy evidence. Showdown uses distinct `showdown_cash_baseline_v1` and `showdown_gpp_baseline_v1` strategy IDs; its objective config declares the basic P90 score, 1.5x CPT multiplier, one-CPT/five-FLEX shape, salary cap, team limit, and evidence status. Completed and failed modes both retain status, message, strategy config, and projection/rule/cutoff lineage. Each persisted lineup also receives a dedicated `optimizer_strategy` explanation so reloaded results remain auditable.
 
 Required columns:
 
@@ -1044,7 +1044,7 @@ Required columns:
 
 ### `lineup_player`
 
-Lineup membership. `player_json` retains the player-level cash mean, median, P10 floor, role certainty, fragility, weighted components, penalty, score, and repeated lineup summary when `classic_cash_v1` is active.
+Lineup membership. `player_json` retains the player-level cash mean, median, P10 floor, role certainty, fragility, weighted components, penalty, score, and repeated lineup summary when `classic_cash_v1` is active. Showdown rows retain base salary, mean, and P90 alongside their slot-adjusted values and P90 objective contribution. They persist normalized `slot_index` order with the CPT first and the authoritative `CPT` or `FLEX` value in `roster_position`; reload reconstructs both from these columns even if an older JSON payload is incomplete.
 
 Required columns:
 

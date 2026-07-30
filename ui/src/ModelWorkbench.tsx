@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   buildFeatures,
   fetchLatestPredictions,
@@ -22,6 +22,8 @@ type ModelWorkbenchProps = {
   week: number;
   slate: string;
   slateOptions: string[];
+  projectionRunId?: string;
+  onProjectionRunChange: (runId: string | null) => void;
   onSeasonChange: (season: number) => void;
   onWeekChange: (week: number) => void;
   onSlateChange: (slate: string) => void;
@@ -153,6 +155,8 @@ export function ModelWorkbench({
   week,
   slate,
   slateOptions,
+  projectionRunId,
+  onProjectionRunChange,
   onSeasonChange,
   onWeekChange,
   onSlateChange,
@@ -195,6 +199,18 @@ export function ModelWorkbench({
   const backtestDelta = backtest?.overall?.mae_delta ?? null;
   const calibration = useMemo(() => calibrationReport(predictionRunResult), [predictionRunResult]);
 
+  useEffect(() => {
+    setProjections([]);
+    setProjectionStatus("idle");
+    setProjectionError(null);
+    setFeatureResult(null);
+    setPredictionRunResult(null);
+    setAgentResult(null);
+    setBacktest(null);
+    setActionStatus(null);
+    setActionError(null);
+  }, [season, slate, week]);
+
   const refreshCoverage = async () => {
     setCoverage((current) =>
       current.map((item) => ({ ...item, status: "loading", error: null }))
@@ -211,15 +227,22 @@ export function ModelWorkbench({
     );
   };
 
-  const refreshModelState = async () => {
+  const refreshModelState = async (requestedRunId = projectionRunId) => {
     setProjectionStatus("loading");
     setProjectionError(null);
     try {
       const [predictionResponse, rulesResponse] = await Promise.all([
-        fetchLatestPredictions({ season, week, slate, limit: 1000 }),
+        fetchLatestPredictions({
+          season,
+          week,
+          slate,
+          limit: 1000,
+          projectionRunId: requestedRunId,
+        }),
         fetchSymbolicRules({ include_disabled: true }),
       ]);
       setProjections(predictionResponse.rows);
+      onProjectionRunChange(predictionResponse.projection_run_id ?? null);
       setRules(rulesResponse.rows);
       setProjectionStatus("ready");
     } catch (error) {
@@ -255,12 +278,13 @@ export function ModelWorkbench({
     runAction("Running projection model", async () => {
       const result = await runPredictions({ season, week, slate });
       setPredictionRunResult(result);
-      await refreshModelState();
+      onProjectionRunChange(result.projection_run_id ?? null);
+      await refreshModelState(result.projection_run_id ?? undefined);
     });
 
   const handleRunAgent = () =>
     runAction("Running symbolic adjustments", async () => {
-      const result = await runAgent(season, week, slate);
+      const result = await runAgent(season, week, slate, projectionRunId);
       setAgentResult(result);
       await refreshModelState();
     });
@@ -407,7 +431,7 @@ export function ModelWorkbench({
                 <div><strong>Inspect</strong><small>Confirm the slate is ready</small></div>
               </div>
               <div className="pipeline-stage-actions">
-                <button type="button" onClick={refreshModelState}>
+                <button type="button" onClick={() => refreshModelState()}>
                   <span>Refresh model state</span><i aria-hidden="true">↗</i>
                 </button>
                 <button type="button" onClick={refreshCoverage}>
@@ -467,8 +491,8 @@ export function ModelWorkbench({
             </article>
             <article>
               <span>Prediction Run</span>
-              <strong>{predictionRunResult ? "Complete" : "Not run"}</strong>
-              <small>{predictionRunResult ? `${predictionRunResult.message} (${predictionRunResult.rows_written} rows)` : "Run projections after features are current."}</small>
+              <strong>{predictionRunResult ? "Complete" : projectionRunId ? "Selected" : "Not run"}</strong>
+              <small>{predictionRunResult ? `${predictionRunResult.message} (${predictionRunResult.rows_written} rows)` : projectionRunId ? `Persisted run ${projectionRunId}` : "Run projections after features are current."}</small>
             </article>
             <article>
               <span>Symbolic Run</span>
@@ -575,7 +599,7 @@ export function ModelWorkbench({
               <span>Projection Sample</span>
               <h3>Top projected players</h3>
             </div>
-            <button type="button" onClick={refreshModelState}>
+            <button type="button" onClick={() => refreshModelState()}>
               Refresh
             </button>
           </div>

@@ -22,6 +22,8 @@ type WarRoomProps = {
   slateOptions: string[];
   pendingAction: string | null;
   optimizerStatus: OptimizerResponse | null;
+  projectionRunId?: string;
+  onProjectionRunChange: (runId: string | null) => void;
   onSeasonChange: (season: number) => void;
   onWeekChange: (week: number) => void;
   onSlateChange: (slate: string) => void;
@@ -475,6 +477,8 @@ export function WarRoom({
   slateOptions,
   pendingAction,
   optimizerStatus,
+  projectionRunId,
+  onProjectionRunChange,
   onSeasonChange,
   onWeekChange,
   onSlateChange,
@@ -581,7 +585,7 @@ export function WarRoom({
       setDecisionError(null);
       try {
         const [predictionResponse, ownershipResponse] = await Promise.all([
-          fetchLatestPredictions({ season, week, slate, limit: 1000 }),
+          fetchLatestPredictions({ season, week, slate, limit: 1000, projectionRunId }),
           fetchLatestOwnership({ season, week, slate, limit: 1000 }),
         ]);
         const simulationResponse = await fetchLatestSlateSimulation({
@@ -592,6 +596,7 @@ export function WarRoom({
         });
         if (!cancelled) {
           setProjectionRows(predictionResponse.rows);
+          onProjectionRunChange(predictionResponse.projection_run_id ?? null);
           setOwnershipRows(ownershipResponse.rows);
           setSimulationRows(simulationResponse?.rows ?? []);
         }
@@ -616,7 +621,7 @@ export function WarRoom({
     return () => {
       cancelled = true;
     };
-  }, [season, week, slate]);
+  }, [onProjectionRunChange, projectionRunId, season, week, slate]);
 
   useEffect(() => {
     if (decisionRows.length === 0) {

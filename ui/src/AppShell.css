@@ -329,7 +329,8 @@ body:has(.product-shell) #root {
 }
 
 .shell-slate-chip span,
-.shell-slate-chip strong {
+.shell-slate-chip strong,
+.shell-slate-chip small {
   display: block;
 }
 
@@ -347,6 +348,16 @@ body:has(.product-shell) #root {
   font-size: 0.67rem;
   font-weight: 650;
   text-transform: capitalize;
+}
+
+.shell-slate-chip small {
+  overflow: hidden;
+  max-width: 190px;
+  margin-top: 2px;
+  color: var(--shell-muted);
+  font-size: 0.58rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .shell-command-trigger {

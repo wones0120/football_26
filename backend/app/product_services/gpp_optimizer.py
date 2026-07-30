@@ -536,7 +536,7 @@ def analyze_slate(players: List[Player], chalk_threshold: float = 20.0) -> Slate
 def build_slate_config(analysis: SlateAnalysis) -> SlateConfig:
     # Stack defaults adjust with slate size: shorter slates -> more stacking
     if analysis.game_count <= 3:
-        stacks = StackRules(min_pass_catchers=2, min_bring_backs=1, max_from_team=5)
+        stacks = StackRules(min_pass_catchers=2, min_bring_backs=1, max_from_team=4)
         tag_caps = LineupTagCaps(max_chalk=3, min_leverage=3, max_punts=1, max_total_ownership=140.0)
         weights = ObjectiveWeights(projection=1.0, leverage=0.35, correlation=0.25)
     elif analysis.game_count <= 6:
@@ -594,6 +594,9 @@ def _build_lineup(
     config: SlateConfig,
     exposure_remaining: Dict[str, int] | None,
     exclude_lineups: List[set],
+    *,
+    enforce_single_te: bool = False,
+    avoid_dst_opponents: bool = False,
 ) -> Optional[List[int]]:
     if not players:
         return None
@@ -623,17 +626,35 @@ def _build_lineup(
     model += pulp.lpSum(x[i] for i in rb_idx) >= 2
     model += pulp.lpSum(x[i] for i in wr_idx) >= 3
     model += pulp.lpSum(x[i] for i in te_idx) >= 1
+    if enforce_single_te:
+        model += pulp.lpSum(x[i] for i in te_idx) <= 1
 
     # Team limits
     for team in {p.team for p in players}:
         team_idx = [i for i, p in enumerate(players) if p.team == team]
         model += pulp.lpSum(x[i] for i in team_idx) <= config.stack_rules.max_from_team
 
+    if avoid_dst_opponents:
+        for dst_index in dst_idx:
+            dst_opponent = players[dst_index].opponent
+            if not dst_opponent:
+                continue
+            for player_index, player in enumerate(players):
+                if player.position in {"DST", "D", "DEF"}:
+                    continue
+                if player.team == dst_opponent:
+                    model += x[player_index] + x[dst_index] <= 1
+
     # Stacking: pass catchers and bring-backs
     for i in qb_idx:
         qb = players[i]
         same_team = [j for j, p in enumerate(players) if p.team == qb.team and p.position in config.stack_rules.pass_catcher_positions and j != i]
-        opp_team = [j for j, p in enumerate(players) if p.opponent == qb.team or (p.team == qb.opponent)]
+        opp_team = [
+            j
+            for j, p in enumerate(players)
+            if p.team == qb.opponent
+            and p.position in config.stack_rules.pass_catcher_positions
+        ]
         if same_team:
             model += pulp.lpSum(x[j] for j in same_team) >= config.stack_rules.min_pass_catchers * x[i]
         if opp_team:
@@ -756,9 +777,27 @@ def generate_portfolio(
     num_lineups: int,
     engine: Engine | None = None,
     config_builder: Callable[[SlateAnalysis], SlateConfig] = build_slate_config,
+    players: List[Player] | None = None,
+    ownership_available: bool | None = None,
+    max_exposure: float = 0.5,
+    enforce_single_te: bool = False,
+    avoid_dst_opponents: bool = False,
 ) -> GPPOptimizerResult:
     engine = engine or create_engine(get_connection_string())
-    players, counts = load_player_pool(engine, season, week, slate)
+    if players is None:
+        players, counts = load_player_pool(engine, season, week, slate)
+    else:
+        players = list(players)
+        counts = {
+            "salaries": len(players),
+            "projections": len(players),
+            "ownership": int(
+                ownership_available
+                if ownership_available is not None
+                else any(player.ownership > 0 for player in players)
+            ),
+            "kept": len(players),
+        }
     if not players:
         raise RuntimeError(
             "No player pool found for slate "
@@ -773,6 +812,16 @@ def generate_portfolio(
     tag_players(players, base_config.tag_thresholds)
     analysis = analyze_slate(players)
     config = config_builder(analysis)
+    leverage_available = any(
+        player.optimal_lineup_probability is not None for player in players
+    )
+    if not leverage_available and config.tag_caps.min_leverage:
+        config = SlateConfig(**{**config.__dict__})
+        config.tag_caps = LineupTagCaps(**{**config.tag_caps.__dict__})
+        config.tag_caps.min_leverage = 0
+        config.portfolio_targets = PortfolioTargets(
+            **{**config.portfolio_targets.__dict__, "min_leverage_count": 0}
+        )
     # If no ownership data, relax tag constraints so the solver can build lineups
     if counts.get("ownership", 0) == 0:
         config = SlateConfig(
@@ -797,7 +846,7 @@ def generate_portfolio(
     if config.stack_rules.max_from_team < min_team_cap:
         config = SlateConfig(**{**config.__dict__})
         config.stack_rules = StackRules(**{**config.stack_rules.__dict__})
-        config.stack_rules.max_from_team = min_team_cap
+        config.stack_rules.max_from_team = min(4, min_team_cap)
 
     exclude_lineups: List[set] = []
     used_counts: Dict[str, int] = {}
@@ -805,14 +854,22 @@ def generate_portfolio(
 
     iterations = 0
     max_iterations = 3
+    max_exposure = max(0.01, min(1.0, float(max_exposure)))
     while iterations < max_iterations and len(lineups) < num_lineups:
         iterations += 1
-        exposure_limit = max(1, math.ceil(num_lineups * 0.5))  # default 50% cap unless overridden
+        exposure_limit = max(1, math.ceil(num_lineups * max_exposure))
         remaining = {p.player_id: exposure_limit - used_counts.get(p.player_id, 0) for p in players}
 
         new_lineups: List[List[int]] = []
         for _ in range(num_lineups - len(lineups)):
-            lineup_idxs = _build_lineup(players, config, remaining, exclude_lineups)
+            lineup_idxs = _build_lineup(
+                players,
+                config,
+                remaining,
+                exclude_lineups,
+                enforce_single_te=enforce_single_te,
+                avoid_dst_opponents=avoid_dst_opponents,
+            )
             if not lineup_idxs:
                 break
             new_lineups.append(lineup_idxs)
@@ -918,9 +975,25 @@ def run_gpp_pipeline(
     num_lineups: int = 20,
     export_dir: str | None = None,
     engine: Engine | None = None,
+    players: List[Player] | None = None,
+    ownership_available: bool | None = None,
+    max_exposure: float = 0.5,
+    enforce_single_te: bool = False,
+    avoid_dst_opponents: bool = False,
 ) -> GPPOptimizerResult:
     """End-to-end entry point: load slate, build config, generate portfolio, export results."""
-    result = generate_portfolio(season, week, slate, num_lineups, engine=engine)
+    result = generate_portfolio(
+        season,
+        week,
+        slate,
+        num_lineups,
+        engine=engine,
+        players=players,
+        ownership_available=ownership_available,
+        max_exposure=max_exposure,
+        enforce_single_te=enforce_single_te,
+        avoid_dst_opponents=avoid_dst_opponents,
+    )
     if export_dir:
         csv_path = f"{export_dir}/lineups_{slate}_{season}w{week}.csv"
         md_path = f"{export_dir}/summary_{slate}_{season}w{week}.md"

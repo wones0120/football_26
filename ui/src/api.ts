@@ -107,6 +107,8 @@ export type DataQualityHistoryResponse = {
 export type OptimizerResponse = {
   job_id: string;
   status: string;
+  strategy: string;
+  strategy_config: Record<string, unknown>;
   contest_format: "classic" | "showdown";
   objective: "cash" | "gpp";
   projection_run_id?: string | null;
@@ -1393,8 +1395,18 @@ export function analyzePastSlate(payload: {
   return postJson("/ownership/analyze-past", payload);
 }
 
-export function runAgent(season: number, week: number, slate?: string): Promise<AgentRunResponse> {
-  return postJson("/agent/run", { season, week, slate });
+export function runAgent(
+  season: number,
+  week: number,
+  slate?: string,
+  projectionRunId?: string,
+): Promise<AgentRunResponse> {
+  return postJson("/agent/run", {
+    season,
+    week,
+    slate,
+    projection_run_id: projectionRunId,
+  });
 }
 
 export function fetchSymbolicRules(params?: {

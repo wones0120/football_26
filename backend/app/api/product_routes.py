@@ -1530,21 +1530,26 @@ def run_optimizer(
     request: OptimizerRunRequest,
     service: OptimizerService = Depends(get_optimizer_service),
 ) -> OptimizerStatusResponse:
-    job = service.run_job(
-        season=request.season,
-        week=request.week,
-        slate=request.slate,
-        strategy=request.strategy,
-        params=request.params,
-        contest_format=request.contest_format,
-        objective=request.objective,
-        projection_run_id=request.projection_run_id,
-        rule_run_id=request.rule_run_id,
-        data_cutoff_at=request.data_cutoff_at,
-    )
+    try:
+        job = service.run_job(
+            season=request.season,
+            week=request.week,
+            slate=request.slate,
+            strategy=request.strategy,
+            params=request.params,
+            contest_format=request.contest_format,
+            objective=request.objective,
+            projection_run_id=request.projection_run_id,
+            rule_run_id=request.rule_run_id,
+            data_cutoff_at=request.data_cutoff_at,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return OptimizerStatusResponse(
         job_id=job.job_id,
         status=job.status,
+        strategy=job.strategy,
+        strategy_config=job.params.get("strategy_config", {}),
         contest_format=job.contest_format,
         objective=job.objective,
         projection_run_id=job.projection_run_id,
@@ -1643,6 +1648,8 @@ def get_optimizer_results(
     return OptimizerStatusResponse(
         job_id=job.job_id,
         status=job.status,
+        strategy=job.strategy,
+        strategy_config=job.params.get("strategy_config", {}),
         contest_format=job.contest_format,
         objective=job.objective,
         projection_run_id=job.projection_run_id,

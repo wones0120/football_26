@@ -13,6 +13,9 @@ active task status, priority, dependencies, and acceptance checks.
 4. Phase 4 historical replay, showdown/classic lineup intelligence, exposure controls, pre-lock popularity/duplication proxies, manual role and point-in-time weather/news stress tests, contest objectives, deterministic late swap, 100k candidate research, durable large-run resume, and persisted async baseline-versus-shock portfolio runs are implemented.
 5. Target-schema governance is migration-authoritative: runtime product services are read-only toward schema, and CI validates the recorded contract for all 55 product tables (`ENG-001`).
 6. Long-running work uses a leased standalone worker, and the weekly ingest-to-export decision chain persists eight separately inspectable, resumable checkpoints (`OPS-001`, `OPS-002`).
+7. Digital Twin, Models, War Room, Research Lab, Delivery, and Operations share one active slate plus scope-compatible persisted-run selections (`ENG-002`).
+8. Classic GPP exposes a persisted versioned strategy choice; the advanced slate-aware engine runs on exact live lineage without silent baseline fallback (`OPT-001`).
+9. Showdown cash and GPP have distinct versioned basic-captain contracts; completed lineups, normalized CPT/FLEX slots, failures, and exact run lineage persist and reload (`OPT-002`).
 
 ## Execution Board
 
@@ -22,9 +25,8 @@ active task status, priority, dependencies, and acceptance checks.
 3. Keep classic and showdown benchmarks separate, track their declared quality metrics, and preserve current production defaults until a walk-forward acceptance gate beats them.
 
 ### Next
-1. Finish live advanced-GPP and persistent showdown cash/GPP integration (`OPT-001`, `OPT-002`).
-2. Share active slate/run context across workspaces (`ENG-002`), then complete point-in-time input capture and explicit model-promotion governance (`DATA-002`, `MODEL-002`).
-3. Add lock-aware weekly refreshes after the point-in-time source contract is proven (`OPS-003`, `DATA-002`).
+1. Complete point-in-time input capture and explicit model-promotion governance (`DATA-002`, `MODEL-002`).
+2. Add lock-aware weekly refreshes after the point-in-time source contract is proven (`OPS-003`, `DATA-002`).
 
 ## Phase 1 (Now): Data Foundation
 1. Canonical identity tables (`player_master`, `player_alias`, `unresolved_player_queue`).

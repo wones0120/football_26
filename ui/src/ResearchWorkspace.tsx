@@ -3,8 +3,35 @@ import { createPortal } from "react-dom";
 
 import { ResearchControlPlane } from "./research";
 import researchStyles from "./research/styles.css?inline";
+import { researchSlateId } from "./workspaceContext";
 
-export function ResearchWorkspace() {
+type ResearchWorkspaceProps = {
+  season: number;
+  week: number;
+  slate: string;
+  slateOptions: string[];
+  selectedSimulationRunId: string;
+  selectedBaselineRunId: string;
+  onSeasonChange: (value: number) => void;
+  onWeekChange: (value: number) => void;
+  onSlateChange: (value: string) => void;
+  onSelectedSimulationRunIdChange: (runId: string) => void;
+  onSelectedBaselineRunIdChange: (runId: string) => void;
+};
+
+export function ResearchWorkspace({
+  season,
+  week,
+  slate,
+  slateOptions,
+  selectedSimulationRunId,
+  selectedBaselineRunId,
+  onSeasonChange,
+  onWeekChange,
+  onSlateChange,
+  onSelectedSimulationRunIdChange,
+  onSelectedBaselineRunIdChange,
+}: ResearchWorkspaceProps) {
   const [portalTarget, setPortalTarget] = useState<HTMLDivElement | null>(null);
 
   const attachWorkspace = useCallback((host: HTMLDivElement | null) => {
@@ -28,7 +55,22 @@ export function ResearchWorkspace() {
 
   return (
     <div className="research-shadow-host" ref={attachWorkspace}>
-      {portalTarget && createPortal(<ResearchControlPlane />, portalTarget)}
+      {portalTarget && createPortal(
+        <ResearchControlPlane
+          season={season}
+          week={week}
+          slate={researchSlateId(slate)}
+          slateOptions={slateOptions.map(researchSlateId)}
+          selectedLineupSimulationRunId={selectedSimulationRunId}
+          selectedBaselineSimulationRunId={selectedBaselineRunId}
+          onSeasonChange={onSeasonChange}
+          onWeekChange={onWeekChange}
+          onSlateChange={onSlateChange}
+          onSelectedLineupSimulationRunIdChange={onSelectedSimulationRunIdChange}
+          onSelectedBaselineSimulationRunIdChange={onSelectedBaselineRunIdChange}
+        />,
+        portalTarget,
+      )}
     </div>
   );
 }

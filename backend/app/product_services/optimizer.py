@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 import math
 import json
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 import logging
@@ -30,6 +30,10 @@ CLASSIC_CASH_STACK_UNCONSTRAINED_ID = "classic_cash_unconstrained_v1"
 CLASSIC_CASH_STACK_QB_PAIR_ID = "classic_cash_qb_pair_v1"
 CLASSIC_CASH_STACK_QB_PAIR_BRINGBACK_ID = "classic_cash_qb_pair_bringback_v1"
 CLASSIC_GPP_STACK_LEGACY_ID = "classic_gpp_double_bringback_v1"
+CLASSIC_GPP_BASELINE_STRATEGY_ID = "classic_gpp_baseline_v1"
+CLASSIC_GPP_ADVANCED_STRATEGY_ID = "classic_gpp_slate_aware_v1"
+SHOWDOWN_CASH_BASELINE_STRATEGY_ID = "showdown_cash_baseline_v1"
+SHOWDOWN_GPP_BASELINE_STRATEGY_ID = "showdown_gpp_baseline_v1"
 
 
 @dataclass(frozen=True)
@@ -44,6 +48,143 @@ class CashObjectiveConfig:
 
 
 DEFAULT_CASH_OBJECTIVE = CashObjectiveConfig()
+
+
+@dataclass(frozen=True)
+class OptimizerStrategyConfig:
+    strategy_id: str
+    version: str
+    contest_format: str
+    objective: str
+    engine: str
+    evidence_status: str
+    description: str
+
+
+OPTIMIZER_STRATEGIES = {
+    CLASSIC_GPP_BASELINE_STRATEGY_ID: OptimizerStrategyConfig(
+        strategy_id=CLASSIC_GPP_BASELINE_STRATEGY_ID,
+        version="v1",
+        contest_format="classic",
+        objective="gpp",
+        engine="legacy_ilp",
+        evidence_status="production_baseline",
+        description="Current classic GPP P90/leverage ILP with the legacy double-stack policy.",
+    ),
+    CLASSIC_GPP_ADVANCED_STRATEGY_ID: OptimizerStrategyConfig(
+        strategy_id=CLASSIC_GPP_ADVANCED_STRATEGY_ID,
+        version="v1",
+        contest_format="classic",
+        objective="gpp",
+        engine="slate_aware_gpp",
+        evidence_status="explicit_candidate",
+        description=(
+            "Slate-aware classic GPP portfolio optimizer with ownership templates, "
+            "correlation bonuses, leverage, uniqueness, and exposure controls."
+        ),
+    ),
+    SHOWDOWN_CASH_BASELINE_STRATEGY_ID: OptimizerStrategyConfig(
+        strategy_id=SHOWDOWN_CASH_BASELINE_STRATEGY_ID,
+        version="v1",
+        contest_format="showdown",
+        objective="cash",
+        engine="captain_ilp",
+        evidence_status="basic_p90_baseline",
+        description=(
+            "Persistent Showdown cash contract using the basic one-captain, "
+            "five-flex P90 solver pending DT-605 objective research."
+        ),
+    ),
+    SHOWDOWN_GPP_BASELINE_STRATEGY_ID: OptimizerStrategyConfig(
+        strategy_id=SHOWDOWN_GPP_BASELINE_STRATEGY_ID,
+        version="v1",
+        contest_format="showdown",
+        objective="gpp",
+        engine="captain_ilp",
+        evidence_status="basic_p90_baseline",
+        description=(
+            "Persistent Showdown GPP contract using the basic one-captain, "
+            "five-flex P90 solver pending DT-605 objective research."
+        ),
+    ),
+}
+
+
+def resolve_optimizer_strategy(
+    *,
+    contest_format: str,
+    objective: str,
+    strategy: str,
+) -> dict:
+    """Resolve an explicit, versioned engine selection for the requested mode."""
+    requested = str(strategy or "").strip().lower()
+    if not requested:
+        raise ValueError("strategy must be a non-empty optimizer strategy ID")
+
+    if contest_format == "classic" and objective == "gpp":
+        source = "explicit"
+        if requested in {"gpp", "baseline"}:
+            requested = CLASSIC_GPP_BASELINE_STRATEGY_ID
+            source = "legacy_alias"
+        config = OPTIMIZER_STRATEGIES.get(requested)
+        if (
+            config is None
+            or config.contest_format != contest_format
+            or config.objective != objective
+        ):
+            raise ValueError(
+                "strategy must be one of: "
+                + ", ".join(
+                    sorted(
+                        strategy_id
+                        for strategy_id, strategy_config in OPTIMIZER_STRATEGIES.items()
+                        if strategy_config.contest_format == contest_format
+                        and strategy_config.objective == objective
+                    )
+                )
+                + " for classic gpp"
+            )
+        resolved = asdict(config)
+        resolved["source"] = source
+        return resolved
+
+    if contest_format == "showdown":
+        expected_strategy = (
+            SHOWDOWN_CASH_BASELINE_STRATEGY_ID
+            if objective == "cash"
+            else SHOWDOWN_GPP_BASELINE_STRATEGY_ID
+        )
+        source = "explicit"
+        if requested in {"gpp", "baseline", "captain"}:
+            requested = expected_strategy
+            source = "legacy_alias"
+        config = OPTIMIZER_STRATEGIES.get(requested)
+        if (
+            config is None
+            or config.contest_format != contest_format
+            or config.objective != objective
+        ):
+            raise ValueError(
+                f"strategy must be {expected_strategy} for showdown {objective}"
+            )
+        resolved = asdict(config)
+        resolved["source"] = source
+        return resolved
+
+    if requested in OPTIMIZER_STRATEGIES:
+        raise ValueError(
+            f"strategy {requested} is not valid for {contest_format} {objective}"
+        )
+    return {
+        "strategy_id": requested,
+        "version": "legacy",
+        "contest_format": contest_format,
+        "objective": objective,
+        "engine": "legacy_ilp",
+        "evidence_status": "legacy_mode_contract",
+        "description": "Existing optimizer engine for this format/objective mode.",
+        "source": "request",
+    }
 
 
 @dataclass(frozen=True)
@@ -708,6 +849,11 @@ class OptimizerService:
                         for row in lineup
                     )
                     leverage_score = sum(_safe_float(row.get("leverage")) for row in lineup)
+                    objective_score = cash_summary.get("objective_score")
+                    if job.contest_format == "showdown":
+                        objective_score = sum(
+                            _safe_float(row.get("objective_score")) for row in lineup
+                        )
                     connection.execute(
                         text(
                             """
@@ -732,7 +878,7 @@ class OptimizerService:
                             "projected_median": cash_summary.get("projected_median"),
                             "projected_floor": cash_summary.get("projected_floor_p10"),
                             "projected_p90": projected_p90,
-                            "objective_score": cash_summary.get("objective_score"),
+                            "objective_score": objective_score,
                             "average_role_certainty": cash_summary.get("average_role_certainty"),
                             "fragility_penalty": cash_summary.get("total_fragility_penalty"),
                             "ownership_sum": ownership_sum,
@@ -742,14 +888,18 @@ class OptimizerService:
                     )
                     player_rows = []
                     for slot_index, row in enumerate(lineup):
+                        roster_position = str(
+                            row.get("roster_position") or row.get("position") or ""
+                        ).upper()
+                        player_payload = dict(row)
+                        player_payload["lineup_slot_index"] = slot_index
+                        player_payload["roster_position"] = roster_position
                         player_rows.append(
                             {
                                 "lineup_id": lineup_id,
                                 "slot_index": slot_index,
                                 "player_id": str(row.get("player_id") or row.get("dk_player_id") or ""),
-                                "roster_position": str(
-                                    row.get("roster_position") or row.get("position") or ""
-                                ),
+                                "roster_position": roster_position,
                                 "salary": _safe_float(row.get("salary")),
                                 "projection": _safe_float(
                                     row.get("projection", row.get("predicted_mean"))
@@ -761,7 +911,9 @@ class OptimizerService:
                                     row.get("ownership", row.get("projected_ownership"))
                                 ),
                                 "player_json": json.dumps(
-                                    _json_safe(row), sort_keys=True, allow_nan=False
+                                    _json_safe(player_payload),
+                                    sort_keys=True,
+                                    allow_nan=False,
                                 ),
                             }
                         )
@@ -806,6 +958,34 @@ class OptimizerService:
                             ),
                         },
                     )
+                    strategy_config = job.params.get("strategy_config")
+                    if isinstance(strategy_config, dict):
+                        connection.execute(
+                            text(
+                                """
+                                INSERT INTO target.lineup_constraint_explanation
+                                    (lineup_id, constraint_name, constraint_status, explanation_json)
+                                VALUES
+                                    (:lineup_id, 'optimizer_strategy', 'applied',
+                                     CAST(:explanation_json AS JSONB))
+                                """
+                            ),
+                            {
+                                "lineup_id": lineup_id,
+                                "explanation_json": json.dumps(
+                                    _json_safe(
+                                        {
+                                            "config": strategy_config,
+                                            "runtime": job.params.get(
+                                                "strategy_runtime", {}
+                                            ),
+                                        }
+                                    ),
+                                    sort_keys=True,
+                                    allow_nan=False,
+                                ),
+                            },
+                        )
                     stack_policy = job.params.get("stack_policy")
                     if isinstance(stack_policy, dict):
                         connection.execute(
@@ -884,7 +1064,8 @@ class OptimizerService:
                 for lineup_row in lineup_rows:
                     player_rows = connection.execute(
                         text(
-                            "SELECT player_json FROM target.lineup_player "
+                            "SELECT slot_index, roster_position, player_json "
+                            "FROM target.lineup_player "
                             "WHERE lineup_id = :lineup_id ORDER BY slot_index"
                         ),
                         {"lineup_id": lineup_row["lineup_id"]},
@@ -894,7 +1075,15 @@ class OptimizerService:
                         payload = player_row.get("player_json") or {}
                         if isinstance(payload, str):
                             payload = json.loads(payload)
-                        lineup.append(dict(payload))
+                        player = dict(payload)
+                        player["lineup_slot_index"] = int(
+                            player_row.get("slot_index") or 0
+                        )
+                        if player_row.get("roster_position"):
+                            player["roster_position"] = str(
+                                player_row["roster_position"]
+                            ).upper()
+                        lineup.append(player)
                     results.append(lineup)
 
             params = run_row.get("constraint_config_json") or {}
@@ -946,6 +1135,71 @@ class OptimizerService:
             "leverage": player.leverage,
             "tags": list(player.tags),
         }
+
+    @staticmethod
+    def _gpp_players_from_pool(pool: pd.DataFrame) -> list[GPPPlayer]:
+        """Adapt the exact live optimizer pool without reloading or rematching players."""
+        players: list[GPPPlayer] = []
+        for row in pool.to_dict(orient="records"):
+            projection = _safe_float(row.get("projection", row.get("predicted_mean")))
+            ceiling = _safe_float(
+                row.get("p90", row.get("predicted_p90", projection))
+            )
+            optimal_raw = row.get("optimal_lineup_probability")
+            optimal_probability = (
+                None
+                if optimal_raw is None or pd.isna(optimal_raw)
+                else _safe_float(optimal_raw)
+            )
+            players.append(
+                GPPPlayer(
+                    player_id=str(row.get("player_id") or ""),
+                    name=str(
+                        row.get("name")
+                        or row.get("player_name")
+                        or row.get("player_display_name")
+                        or row.get("player_id")
+                        or ""
+                    ),
+                    team=str(
+                        row.get("player_team") or row.get("team") or ""
+                    ).upper(),
+                    opponent=str(
+                        row.get("opponent_team") or row.get("opponent") or ""
+                    ).upper(),
+                    position=str(
+                        row.get("position") or row.get("roster_position") or ""
+                    ).upper(),
+                    salary=int(_safe_float(row.get("salary"))),
+                    projection=projection,
+                    ceiling=ceiling,
+                    ownership=_safe_float(
+                        row.get("ownership", row.get("projected_ownership"))
+                    ),
+                    optimal_lineup_probability=optimal_probability,
+                    game_id=(
+                        str(row.get("game_id") or row.get("game_info"))
+                        if row.get("game_id") or row.get("game_info")
+                        else None
+                    ),
+                    spread=(
+                        _safe_float(row.get("spread"))
+                        if row.get("spread") is not None
+                        else None
+                    ),
+                    game_total=(
+                        _safe_float(row.get("game_total"))
+                        if row.get("game_total") is not None
+                        else None
+                    ),
+                    team_total=(
+                        _safe_float(row.get("team_total"))
+                        if row.get("team_total") is not None
+                        else None
+                    ),
+                )
+            )
+        return players
 
     def _load_symbolic_explanations(self, season: int, week: int, slate: str) -> dict[str, list[dict]]:
         """Return recent symbolic adjustment traces keyed by player_id."""
@@ -1798,6 +2052,209 @@ class OptimizerService:
             raise ValueError(f"Bring-back validation failed for QB {qb_id}: none selected")
 
     @staticmethod
+    def _validate_classic_lineups(
+        lineups: List[List[dict]],
+        *,
+        requested_lineups: int,
+        max_exposure: float,
+        enforce_single_te: bool,
+        avoid_dst_opponents: bool,
+        uniqueness_overlap: int | None = None,
+    ) -> tuple[bool, str]:
+        """Validate finalized classic lineups independently of either solver."""
+        exposure_counts: dict[str, int] = {}
+        signatures: list[set[str]] = []
+        exposure_limit = max(
+            1, int(math.ceil(max(1, requested_lineups) * max_exposure))
+        )
+
+        for lineup_number, lineup in enumerate(lineups, start=1):
+            if len(lineup) != 9:
+                return False, f"Lineup {lineup_number} has {len(lineup)} players; expected 9"
+
+            player_ids = [
+                str(row.get("player_id") or row.get("dk_player_id") or "").strip()
+                for row in lineup
+            ]
+            if any(not player_id for player_id in player_ids):
+                return False, f"Lineup {lineup_number} has a missing canonical player ID"
+            if len(set(player_ids)) != len(player_ids):
+                return False, f"Lineup {lineup_number} contains a duplicate player ID"
+
+            positions = [
+                str(row.get("position") or row.get("roster_position") or "").upper()
+                for row in lineup
+            ]
+            if positions.count("QB") != 1:
+                return False, f"Lineup {lineup_number} must contain exactly one QB"
+            if sum(position in {"DST", "D", "DEF"} for position in positions) != 1:
+                return False, f"Lineup {lineup_number} must contain exactly one DST"
+            if positions.count("RB") < 2:
+                return False, f"Lineup {lineup_number} must contain at least two RBs"
+            if positions.count("WR") < 3:
+                return False, f"Lineup {lineup_number} must contain at least three WRs"
+            if positions.count("TE") < 1:
+                return False, f"Lineup {lineup_number} must contain at least one TE"
+            if enforce_single_te and positions.count("TE") > 1:
+                return False, f"Lineup {lineup_number} violates the single-TE control"
+
+            salary = sum(_safe_float(row.get("salary")) for row in lineup)
+            if salary > SALARY_CAP:
+                return False, (
+                    f"Lineup {lineup_number} salary {salary:.0f} exceeds "
+                    f"the {SALARY_CAP} cap"
+                )
+
+            team_counts: dict[str, int] = {}
+            for row, player_id in zip(lineup, player_ids):
+                team = str(
+                    row.get("player_team") or row.get("team") or ""
+                ).upper()
+                if not team:
+                    return False, f"Lineup {lineup_number} player {player_id} is missing team"
+                team_counts[team] = team_counts.get(team, 0) + 1
+                exposure_counts[player_id] = exposure_counts.get(player_id, 0) + 1
+            if max(team_counts.values(), default=0) > TEAM_LIMIT:
+                return False, (
+                    f"Lineup {lineup_number} exceeds the {TEAM_LIMIT}-player "
+                    "classic team limit"
+                )
+
+            if avoid_dst_opponents:
+                dst = next(
+                    row
+                    for row, position in zip(lineup, positions)
+                    if position in {"DST", "D", "DEF"}
+                )
+                dst_opponent = str(
+                    dst.get("opponent_team") or dst.get("opponent") or ""
+                ).upper()
+                if dst_opponent:
+                    conflicting = [
+                        row
+                        for row, position in zip(lineup, positions)
+                        if position not in {"DST", "D", "DEF"}
+                        and str(
+                            row.get("player_team") or row.get("team") or ""
+                        ).upper()
+                        == dst_opponent
+                    ]
+                    if conflicting:
+                        return False, (
+                            f"Lineup {lineup_number} contains offense against "
+                            f"its selected DST ({dst_opponent})"
+                        )
+            signatures.append(set(player_ids))
+
+        over_exposed = sorted(
+            player_id
+            for player_id, count in exposure_counts.items()
+            if count > exposure_limit
+        )
+        if over_exposed:
+            return False, (
+                f"Player exposure exceeds {exposure_limit}/{requested_lineups}: "
+                + ", ".join(over_exposed[:5])
+            )
+
+        if uniqueness_overlap is not None:
+            for left_index, left in enumerate(signatures):
+                for right_index, right in enumerate(
+                    signatures[left_index + 1 :],
+                    start=left_index + 1,
+                ):
+                    shared = len(left & right)
+                    if shared > uniqueness_overlap:
+                        return False, (
+                            f"Lineups {left_index + 1} and {right_index + 1} "
+                            f"share {shared} players; maximum is {uniqueness_overlap}"
+                        )
+        return True, ""
+
+    @staticmethod
+    def _validate_showdown_lineups(
+        lineups: List[List[dict]],
+        *,
+        requested_lineups: int,
+        max_exposure: float,
+    ) -> tuple[bool, str]:
+        """Validate the persisted one-CPT/five-FLEX contract independently."""
+        exposure_counts: dict[str, int] = {}
+        signatures: set[tuple[tuple[str, str], ...]] = set()
+        exposure_limit = max(
+            1, int(math.ceil(max(1, requested_lineups) * max_exposure))
+        )
+
+        for lineup_number, lineup in enumerate(lineups, start=1):
+            if len(lineup) != 6:
+                return (
+                    False,
+                    f"Lineup {lineup_number} has {len(lineup)} players; expected 6",
+                )
+
+            player_ids = [
+                str(row.get("player_id") or row.get("dk_player_id") or "").strip()
+                for row in lineup
+            ]
+            if any(not player_id for player_id in player_ids):
+                return False, f"Lineup {lineup_number} has a missing canonical player ID"
+            if len(set(player_ids)) != len(player_ids):
+                return False, f"Lineup {lineup_number} contains a duplicate player ID"
+
+            roster_positions = [
+                str(row.get("roster_position") or "").strip().upper()
+                for row in lineup
+            ]
+            if roster_positions.count("CPT") != 1:
+                return False, f"Lineup {lineup_number} must contain exactly one CPT"
+            if roster_positions.count("FLEX") != 5:
+                return False, f"Lineup {lineup_number} must contain exactly five FLEX slots"
+            if any(position not in {"CPT", "FLEX"} for position in roster_positions):
+                return False, f"Lineup {lineup_number} contains an invalid showdown slot"
+
+            salary = sum(_safe_float(row.get("salary")) for row in lineup)
+            if salary > SALARY_CAP:
+                return False, (
+                    f"Lineup {lineup_number} salary {salary:.0f} exceeds "
+                    f"the {SALARY_CAP} cap"
+                )
+
+            team_counts: dict[str, int] = {}
+            for row, player_id in zip(lineup, player_ids):
+                team = str(
+                    row.get("player_team") or row.get("team") or ""
+                ).strip().upper()
+                if not team:
+                    return (
+                        False,
+                        f"Lineup {lineup_number} player {player_id} is missing team",
+                    )
+                team_counts[team] = team_counts.get(team, 0) + 1
+                exposure_counts[player_id] = exposure_counts.get(player_id, 0) + 1
+            if max(team_counts.values(), default=0) > 5:
+                return (
+                    False,
+                    f"Lineup {lineup_number} exceeds the 5-player showdown team limit",
+                )
+
+            signature = tuple(sorted(zip(player_ids, roster_positions)))
+            if signature in signatures:
+                return False, f"Lineup {lineup_number} duplicates an earlier showdown lineup"
+            signatures.add(signature)
+
+        over_exposed = sorted(
+            player_id
+            for player_id, count in exposure_counts.items()
+            if count > exposure_limit
+        )
+        if over_exposed:
+            return False, (
+                f"Player exposure exceeds {exposure_limit}/{requested_lineups}: "
+                + ", ".join(over_exposed[:5])
+            )
+        return True, ""
+
+    @staticmethod
     def _lineups_satisfy_stack(lineups: List[List[dict]], stack_cfg: dict, contest_type: str) -> tuple[bool, str]:
         """Lightweight validation for finalized lineups (baseline or GPP pipeline)."""
         if contest_type == "captain" or not bool(stack_cfg.get("enabled", True)):
@@ -2157,15 +2614,27 @@ class OptimizerService:
                 selected_flex = pulp.value(flex_vars[i]) >= 0.9
                 if selected_cap or selected_flex:
                     row = pool.loc[i].to_dict()
+                    base_salary = _safe_float(row.get("salary"))
+                    base_projection = _safe_float(row.get("projection"))
+                    base_p90 = _safe_float(row.get("p90", base_projection))
+                    base_objective = _safe_float(
+                        row.get(score_col, row.get("projection"))
+                    )
+                    row["base_salary"] = base_salary
+                    row["base_projection"] = base_projection
+                    row["base_p90"] = base_p90
                     row["is_captain"] = bool(selected_cap)
                     if selected_cap:
-                        row["salary"] = row.get("salary", 0) * 1.5
-                        row["projection"] = row.get(score_col, row.get("projection", 0)) * 1.5
-                        row["p90"] = row.get(score_col, row.get("p90", 0)) * 1.5
+                        row["salary"] = base_salary * 1.5
+                        row["projection"] = base_projection * 1.5
+                        row["p90"] = base_p90 * 1.5
+                        row["objective_score"] = base_objective * 1.5
                         row["roster_position"] = "CPT"
                     else:
-                        row["projection"] = row.get(score_col, row.get("projection", 0))
-                        row["p90"] = row.get(score_col, row.get("p90", 0))
+                        row["salary"] = base_salary
+                        row["projection"] = base_projection
+                        row["p90"] = base_p90
+                        row["objective_score"] = base_objective
                         row["roster_position"] = "FLEX"
                     lineup_rows.append(row)
             return lineup_rows
@@ -2330,13 +2799,69 @@ class OptimizerService:
             objective=objective,
             params=params,
         )
-        if contest_format == "classic" and objective == "cash":
-            params["objective_config"] = cash_objective_config()
-        stack_policy = resolve_stacking_policy(
+        strategy_config = resolve_optimizer_strategy(
             contest_format=contest_format,
             objective=objective,
-            params=params,
+            strategy=strategy,
         )
+        strategy = str(strategy_config["strategy_id"])
+        params["strategy_config"] = strategy_config
+        if strategy == CLASSIC_GPP_ADVANCED_STRATEGY_ID:
+            unsupported_stack_fields = {
+                field
+                for field in (
+                    "stack_policy_id",
+                    "stack_min",
+                    "stack_max",
+                    "bringback",
+                    "include_rb_in_stack",
+                    "bringback_positions",
+                )
+                if field in params
+            }
+            if unsupported_stack_fields:
+                raise ValueError(
+                    f"{CLASSIC_GPP_ADVANCED_STRATEGY_ID} owns its slate-aware "
+                    "stack policy and cannot be combined with: "
+                    + ", ".join(sorted(unsupported_stack_fields))
+                )
+        if contest_format == "classic" and objective == "cash":
+            params["objective_config"] = cash_objective_config()
+        if contest_format == "showdown":
+            params["objective_config"] = {
+                "objective_id": strategy,
+                "score_column": "p90",
+                "captain_multiplier": 1.5,
+                "captain_slots": 1,
+                "flex_slots": 5,
+                "salary_cap": SALARY_CAP,
+                "max_players_per_team": 5,
+                "evidence_status": "basic_p90_baseline",
+            }
+        if strategy == CLASSIC_GPP_ADVANCED_STRATEGY_ID:
+            stack_policy = {
+                "policy_id": "classic_gpp_slate_aware_stack_v1",
+                "contest_format": "classic",
+                "objective": "gpp",
+                "enabled": True,
+                "stack_min": 1,
+                "stack_max": None,
+                "bringback": True,
+                "include_rb_in_stack": True,
+                "bringback_positions": ["RB", "WR", "TE"],
+                "evidence_status": "resolved_at_runtime",
+                "description": (
+                    "The selected strategy resolves the exact stack minimum "
+                    "from slate size at runtime."
+                ),
+                "source": "optimizer_strategy",
+            }
+        else:
+            stack_policy = resolve_stacking_policy(
+                contest_format=contest_format,
+                objective=objective,
+                params=params,
+            )
         params["stack_policy_id"] = stack_policy["policy_id"]
         params["stack_policy"] = stack_policy
         projection_run_id, rule_run_id, data_cutoff_at = self._resolve_run_lineage(
@@ -2488,49 +3013,165 @@ class OptimizerService:
             lineup_results: List[List[dict]] = []
             status: str
             message: str
+            uniqueness_overlap: int | None = None
 
-            # Alternate strategy: slate-aware GPP optimizer
-            # Disable GPP pipeline when stack/bring-back enforcement is required; baseline path enforces constraints.
-            use_gpp = False
+            use_gpp = (
+                strategy_config["engine"] == "slate_aware_gpp"
+                and contest_format == "classic"
+                and objective == "gpp"
+            )
             if use_gpp:
                 try:
+                    ownership_available = (
+                        "ownership" in pool.columns
+                        and pd.to_numeric(pool["ownership"], errors="coerce")
+                        .notna()
+                        .any()
+                    )
                     gpp_result = run_gpp_pipeline(
                         season=season,
                         week=week,
                         slate=slate,
                         num_lineups=num_lineups,
                         engine=self.engine,
+                        players=self._gpp_players_from_pool(pool),
+                        ownership_available=ownership_available,
+                        max_exposure=max_exposure,
+                        enforce_single_te=enforce_single_te,
+                        avoid_dst_opponents=avoid_dst_opponents,
                     )
                     lineup_results = [
                         [self._gpp_player_to_dict(p) for p in lineup] for lineup in gpp_result.lineups
                     ]
                     status = gpp_result.status
-                    message = gpp_result.message
+                    uniqueness_overlap = gpp_result.config.uniqueness_overlap
+                    message = (
+                        f"{gpp_result.message}; strategy={strategy}; "
+                        f"validation=slate-aware-config"
+                    )
+                    stack_policy = {
+                        "policy_id": "classic_gpp_slate_aware_stack_v1",
+                        "contest_format": "classic",
+                        "objective": "gpp",
+                        "enabled": True,
+                        "stack_min": gpp_result.config.stack_rules.min_pass_catchers,
+                        "stack_max": None,
+                        "bringback": (
+                            gpp_result.config.stack_rules.min_bring_backs > 0
+                        ),
+                        "include_rb_in_stack": True,
+                        "bringback_positions": ["RB", "WR", "TE"],
+                        "max_from_team": gpp_result.config.stack_rules.max_from_team,
+                        "evidence_status": "strategy_runtime",
+                        "description": (
+                            "Slate-aware stack policy resolved by the selected "
+                            "advanced GPP strategy."
+                        ),
+                        "source": "optimizer_strategy",
+                    }
+                    stack_cfg = dict(stack_policy)
+                    params["stack_policy_id"] = stack_policy["policy_id"]
+                    params["stack_policy"] = stack_policy
+                    params["strategy_runtime"] = {
+                        "iterations": gpp_result.iterations,
+                        "analysis": asdict(gpp_result.analysis),
+                        "config": asdict(gpp_result.config),
+                        "portfolio": asdict(gpp_result.portfolio),
+                    }
                 except Exception as exc:  # noqa: BLE001
                     lineup_results = []
                     status = "failed"
-                    message = f"GPP optimizer failed: {exc}"
+                    message = f"{strategy} failed: {exc}"
             else:
                 lineup_results, status, message = _run_baseline()
+                message += f"; strategy={strategy}"
+
+            if (
+                lineup_results
+                and contest_format == "classic"
+                and objective == "gpp"
+            ):
+                ok, reason = self._validate_classic_lineups(
+                    lineup_results,
+                    requested_lineups=num_lineups,
+                    max_exposure=max_exposure,
+                    enforce_single_te=enforce_single_te,
+                    avoid_dst_opponents=avoid_dst_opponents,
+                    uniqueness_overlap=uniqueness_overlap,
+                )
+                if not ok:
+                    status = "failed"
+                    message = f"{strategy} lineup validation failed: {reason}"
+                    lineup_results = []
+
+            if lineup_results and contest_format == "showdown":
+                for lineup in lineup_results:
+                    lineup.sort(
+                        key=lambda row: (
+                            0
+                            if str(row.get("roster_position") or "").upper()
+                            == "CPT"
+                            else 1,
+                            str(row.get("player_id") or row.get("dk_player_id") or ""),
+                        )
+                    )
+                    for slot_index, row in enumerate(lineup):
+                        row["lineup_slot_index"] = slot_index
+                        row["roster_position"] = str(
+                            row.get("roster_position") or ""
+                        ).upper()
+                ok, reason = self._validate_showdown_lineups(
+                    lineup_results,
+                    requested_lineups=num_lineups,
+                    max_exposure=max_exposure,
+                )
+                if not ok:
+                    status = "failed"
+                    message = f"{strategy} lineup validation failed: {reason}"
+                    lineup_results = []
+                else:
+                    strategy_runtime = params.setdefault("strategy_runtime", {})
+                    strategy_runtime["validation"] = {
+                        "status": "passed",
+                        "lineup_count": len(lineup_results),
+                        "salary_cap": SALARY_CAP,
+                        "requested_lineups": num_lineups,
+                        "max_exposure": max_exposure,
+                        "captain_slots": 1,
+                        "flex_slots": 5,
+                        "max_players_per_team": 5,
+                    }
+                    message += "; showdown lineup validation=passed"
 
             # Validate stacks/bring-backs for any lineups produced
             if lineup_results:
                 ok, reason = self._lineups_satisfy_stack(lineup_results, stack_cfg, contest_type)
                 if not ok:
-                    if use_gpp:
-                        # Try baseline as fallback
-                        lineup_results, status, message = _run_baseline()
-                        if lineup_results:
-                            ok, reason = self._lineups_satisfy_stack(lineup_results, stack_cfg, contest_type)
-                    if not ok:
-                        status = "failed"
-                        message = f"Stack/bring-back validation failed: {reason}"
-                        lineup_results = []
+                    status = "failed"
+                    message = (
+                        f"{strategy} stack/bring-back validation failed: {reason}"
+                    )
+                    lineup_results = []
 
             if status == "completed" and lineup_results:
+                if contest_format == "classic" and objective == "gpp":
+                    strategy_runtime = params.setdefault("strategy_runtime", {})
+                    strategy_runtime["validation"] = {
+                        "status": "passed",
+                        "lineup_count": len(lineup_results),
+                        "salary_cap": SALARY_CAP,
+                        "team_limit": TEAM_LIMIT,
+                        "requested_lineups": num_lineups,
+                        "max_exposure": max_exposure,
+                        "enforce_single_te": enforce_single_te,
+                        "avoid_dst_opponents": avoid_dst_opponents,
+                        "uniqueness_overlap": uniqueness_overlap,
+                    }
+                    message += "; lineup validation=passed"
                 for lineup in lineup_results:
                     for row in lineup:
                         row["lineup_stack_policy"] = dict(stack_policy)
+                        row["lineup_optimizer_strategy"] = dict(strategy_config)
                 if contest_format == "classic" and objective == "cash":
                     missing_projection_count = 0
                     for lineup in lineup_results:

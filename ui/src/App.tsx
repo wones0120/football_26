@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import "./App.css";
 import { AppShell, type ViewMode } from "./AppShell";
 import { DailyNewsBrief } from "./DailyNewsBrief";
@@ -8,6 +8,19 @@ import { DigitalTwin } from "./DigitalTwin";
 import { ModelWorkbench } from "./ModelWorkbench";
 import { ResearchWorkspace } from "./ResearchWorkspace";
 import { WarRoom } from "./WarRoom";
+import {
+  normalizeSlateId,
+  slateContextKey,
+  updateRunSelection,
+  type PersistedRunSelection,
+  type PersistedRunSelections,
+} from "./workspaceContext";
+import {
+  CLASSIC_GPP_BASELINE_STRATEGY_ID,
+  CLASSIC_GPP_STRATEGIES,
+  optimizerStrategyId,
+  type ClassicGppStrategyId,
+} from "./optimizerStrategy";
 import type {
   LoadSummary,
   DataQualityHistoryResponse,
@@ -94,6 +107,11 @@ type OwnershipOperationStatus = {
   evidence_posture?: string;
   ownership_run_id?: string | null;
   model_metrics?: Record<string, unknown>;
+};
+
+type PredictionOperationStatus = {
+  message: string;
+  rows_written: number;
 };
 
 type OwnershipPayoutTierDraft = {
@@ -248,6 +266,36 @@ function App() {
   const [season, setSeason] = useState(DEFAULT_SEASON);
   const [week, setWeek] = useState(DEFAULT_WEEK);
   const [slate, setSlate] = useState("THURSDAY_NIGHT");
+  const [runSelections, setRunSelections] = useState<PersistedRunSelections>({});
+  const activeContext = useMemo(
+    () => ({ season, week, slate: normalizeSlateId(slate) }),
+    [season, slate, week],
+  );
+  const activeContextKey = slateContextKey(activeContext);
+  const activeRunSelection = runSelections[activeContextKey] ?? {};
+  const setActiveSlate = useCallback((value: string) => setSlate(normalizeSlateId(value)), []);
+  const updateActiveRunSelection = useCallback(
+    (patch: Partial<PersistedRunSelection>) => {
+      setRunSelections((current) => updateRunSelection(current, activeContext, patch));
+    },
+    [activeContext, activeContextKey],
+  );
+  const setActiveProjectionRunId = useCallback(
+    (runId: string | null) => updateActiveRunSelection({ projectionRunId: runId ?? undefined }),
+    [updateActiveRunSelection],
+  );
+  const setActiveResearchSimulationRunId = useCallback(
+    (runId: string) => updateActiveRunSelection({ researchSimulationRunId: runId || undefined }),
+    [updateActiveRunSelection],
+  );
+  const setActiveResearchBaselineRunId = useCallback(
+    (runId: string) => updateActiveRunSelection({ researchBaselineRunId: runId || undefined }),
+    [updateActiveRunSelection],
+  );
+  const setActiveOptimizerRunId = useCallback(
+    (runId: string) => updateActiveRunSelection({ optimizerRunId: runId.trim() || undefined }),
+    [updateActiveRunSelection],
+  );
   const [injuryPath, setInjuryPath] = useState<string>("~/Downloads/Injuries.csv");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -255,9 +303,16 @@ function App() {
   const [loadSummaries, setLoadSummaries] = useState<LoadSummary[]>([]);
   const [lastLoadType, setLastLoadType] = useState<string | null>(null);
   const [slateStatus, setSlateStatus] = useState<SlateLoadResponse | null>(null);
-  const [optimizerStatus, setOptimizerStatus] = useState<OptimizerResponse | null>(
-    null
-  );
+  const [optimizerStatuses, setOptimizerStatuses] = useState<Record<string, OptimizerResponse>>({});
+  const optimizerStatus = optimizerStatuses[activeContextKey] ?? null;
+  const setOptimizerStatus = useCallback((status: OptimizerResponse | null) => {
+    setOptimizerStatuses((current) => {
+      if (status) return { ...current, [activeContextKey]: status };
+      const next = { ...current };
+      delete next[activeContextKey];
+      return next;
+    });
+  }, [activeContextKey]);
   const [slateReadiness, setSlateReadiness] = useState<SlateReadinessResponse | null>(null);
   const [dataQualityHistory, setDataQualityHistory] = useState<DataQualityHistoryResponse | null>(null);
   const [dataQualityLoading, setDataQualityLoading] = useState(false);
@@ -266,17 +321,38 @@ function App() {
   const [maxExposure, setMaxExposure] = useState(100);
   const [contestFormat, setContestFormat] = useState<"classic" | "showdown">("classic");
   const [optimizerObjective, setOptimizerObjective] = useState<"cash" | "gpp">("gpp");
+  const [classicGppStrategy, setClassicGppStrategy] =
+    useState<ClassicGppStrategyId>(CLASSIC_GPP_BASELINE_STRATEGY_ID);
   const [cashStackPolicyId, setCashStackPolicyId] = useState<CashStackPolicyId>(
     "classic_cash_unconstrained_v1"
   );
   const [enforceSingleTE, setEnforceSingleTE] = useState(true);
   const [avoidDstOpponents, setAvoidDstOpponents] = useState(true);
-  const [predictionStatus, setPredictionStatus] = useState<{
-    message: string;
-    rows_written: number;
-  } | null>(null);
-  const [predictionRows, setPredictionRows] = useState<PredictionRow[]>([]);
-  const [simulationStatus, setSimulationStatus] = useState<SimulationResponse | null>(null);
+  const [predictionStatuses, setPredictionStatuses] = useState<Record<string, PredictionOperationStatus>>({});
+  const predictionStatus = predictionStatuses[activeContextKey] ?? null;
+  const setPredictionStatus = useCallback((status: PredictionOperationStatus | null) => {
+    setPredictionStatuses((current) => {
+      if (status) return { ...current, [activeContextKey]: status };
+      const next = { ...current };
+      delete next[activeContextKey];
+      return next;
+    });
+  }, [activeContextKey]);
+  const [predictionRowsByContext, setPredictionRowsByContext] = useState<Record<string, PredictionRow[]>>({});
+  const predictionRows = predictionRowsByContext[activeContextKey] ?? [];
+  const setPredictionRows = useCallback((rows: PredictionRow[]) => {
+    setPredictionRowsByContext((current) => ({ ...current, [activeContextKey]: rows }));
+  }, [activeContextKey]);
+  const [simulationStatuses, setSimulationStatuses] = useState<Record<string, SimulationResponse>>({});
+  const simulationStatus = simulationStatuses[activeContextKey] ?? null;
+  const setSimulationStatus = useCallback((status: SimulationResponse | null) => {
+    setSimulationStatuses((current) => {
+      if (status) return { ...current, [activeContextKey]: status };
+      const next = { ...current };
+      delete next[activeContextKey];
+      return next;
+    });
+  }, [activeContextKey]);
   const [operationalJobs, setOperationalJobs] = useState<OperationalJob[]>([]);
   const [weeklyRuns, setWeeklyRuns] = useState<WeeklyRun[]>([]);
   const [weeklyDirectory, setWeeklyDirectory] = useState("");
@@ -450,7 +526,16 @@ function App() {
   const [postgresLoading, setPostgresLoading] = useState(false);
   const [postgresDetails, setPostgresDetails] = useState<string | null>(null);
   const [futureWeek, setFutureWeek] = useState<number | "">("");
-  const [agentStatus, setAgentStatus] = useState<AgentRunResponse | null>(null);
+  const [agentStatuses, setAgentStatuses] = useState<Record<string, AgentRunResponse>>({});
+  const agentStatus = agentStatuses[activeContextKey] ?? null;
+  const setAgentStatus = useCallback((status: AgentRunResponse | null) => {
+    setAgentStatuses((current) => {
+      if (status) return { ...current, [activeContextKey]: status };
+      const next = { ...current };
+      delete next[activeContextKey];
+      return next;
+    });
+  }, [activeContextKey]);
   const [agentError, setAgentError] = useState<string | null>(null);
   const [symbolicRules, setSymbolicRules] = useState<SymbolicRule[]>([]);
   const [symbolicRulesError, setSymbolicRulesError] = useState<string | null>(null);
@@ -499,6 +584,22 @@ function App() {
     setWeek(DEFAULT_WEEK);
     setFutureWeek(DEFAULT_WEEK);
   }, []);
+
+  useEffect(() => {
+    const selectedOptimizerRunId = activeRunSelection.optimizerRunId;
+    if (!selectedOptimizerRunId || optimizerStatus?.job_id === selectedOptimizerRunId) return;
+    let cancelled = false;
+    fetchOptimizerResults(selectedOptimizerRunId)
+      .then((response) => {
+        if (!cancelled) setOptimizerStatus(response);
+      })
+      .catch(() => {
+        // Delivery performs the authoritative compatibility check when creating a portfolio.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeRunSelection.optimizerRunId, optimizerStatus?.job_id, setOptimizerStatus]);
 
   useEffect(() => {
     if (viewMode !== "workspace") return;
@@ -555,7 +656,7 @@ function App() {
         draftkings_directory: weeklyDirectory.trim() || undefined,
         contest_format: contestFormat,
         objective: optimizerObjective,
-        strategy: "gpp",
+        strategy: optimizerStrategyId(contestFormat, optimizerObjective, classicGppStrategy),
         num_simulations: 1000,
         optimizer_params: {
           num_lineups: numLineups,
@@ -708,9 +809,10 @@ function App() {
         season,
         week,
         slate,
-        strategy: "gpp",
+        strategy: optimizerStrategyId(contestFormat, optimizerObjective, classicGppStrategy),
         contest_format: contestFormat,
         objective: optimizerObjective,
+        projection_run_id: activeRunSelection.projectionRunId,
         params: {
           num_lineups: numLineups,
           max_exposure: maxExposure / 100,
@@ -726,6 +828,10 @@ function App() {
         },
       });
       setOptimizerStatus(response);
+      updateActiveRunSelection({
+        optimizerRunId: response.job_id,
+        projectionRunId: response.projection_run_id ?? activeRunSelection.projectionRunId,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -763,8 +869,17 @@ function App() {
         rows_written: response.rows_written,
       });
       // Pull latest projections after run
-      const projections = await fetchLatestPredictions({ season, week, limit: 1000, slate });
+      const projections = await fetchLatestPredictions({
+        season,
+        week,
+        limit: 1000,
+        slate,
+        projectionRunId: response.projection_run_id ?? activeRunSelection.projectionRunId,
+      });
       setPredictionRows(projections.rows);
+      updateActiveRunSelection({
+        projectionRunId: projections.projection_run_id ?? response.projection_run_id ?? undefined,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -784,8 +899,13 @@ function App() {
         contest_format: contestFormat,
         num_simulations: 1000,
         seed: 502,
+        projection_run_id: activeRunSelection.projectionRunId,
       });
       setSimulationStatus(response);
+      updateActiveRunSelection({
+        projectionRunId: response.projection_run_id,
+        slateSimulationRunId: response.simulation_run_id,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -923,8 +1043,11 @@ function App() {
     setAgentError(null);
     setPendingAction("Running news/matchup agent...");
     try {
-      const resp = await runAgent(season, week, slate);
+      const resp = await runAgent(season, week, slate, activeRunSelection.projectionRunId);
       setAgentStatus(resp);
+      updateActiveRunSelection({
+        projectionRunId: resp.projection_run_id ?? activeRunSelection.projectionRunId,
+      });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setAgentError(msg);
@@ -1136,7 +1259,7 @@ function App() {
 
   if (viewMode === "digital-twin") {
     return (
-      <AppShell activeView={viewMode} season={season} week={week} slate={slate} pendingAction={pendingAction} onNavigate={setViewMode}>
+      <AppShell activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onNavigate={setViewMode}>
         <DigitalTwin
           season={season}
           week={week}
@@ -1144,6 +1267,8 @@ function App() {
           contestFormat={contestFormat}
           optimizerObjective={optimizerObjective}
           optimizerStatus={optimizerStatus}
+          projectionRunId={activeRunSelection.projectionRunId}
+          onProjectionRunChange={setActiveProjectionRunId}
           onNavigate={setViewMode}
         />
       </AppShell>
@@ -1152,7 +1277,7 @@ function App() {
 
   if (viewMode === "preview") {
     return (
-      <AppShell activeView={viewMode} season={season} week={week} slate={slate} pendingAction={pendingAction} onNavigate={setViewMode}>
+      <AppShell activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onNavigate={setViewMode}>
         <DesignPreview onBack={() => setViewMode("war-room")} />
       </AppShell>
     );
@@ -1160,7 +1285,7 @@ function App() {
 
   if (viewMode === "news-brief") {
     return (
-      <AppShell activeView={viewMode} season={season} week={week} slate={slate} pendingAction={pendingAction} onNavigate={setViewMode}>
+      <AppShell activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onNavigate={setViewMode}>
         <DailyNewsBrief onBack={() => setViewMode("war-room")} />
       </AppShell>
     );
@@ -1168,16 +1293,17 @@ function App() {
 
   if (viewMode === "contest-workflow") {
     return (
-      <AppShell activeView={viewMode} season={season} week={week} slate={slate} pendingAction={pendingAction} onNavigate={setViewMode}>
+      <AppShell activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onNavigate={setViewMode}>
         <ContestWorkflow
           season={season}
           week={week}
           slate={slate}
           slateOptions={SLATE_OPTIONS}
-          optimizerRunId={optimizerStatus?.job_id}
+          optimizerRunId={activeRunSelection.optimizerRunId}
+          onOptimizerRunIdChange={setActiveOptimizerRunId}
           onSeasonChange={setSeason}
           onWeekChange={setWeek}
-          onSlateChange={setSlate}
+          onSlateChange={setActiveSlate}
           onOpenModelWorkbench={() => setViewMode("model-workbench")}
           onOpenOperations={() => setViewMode("workspace")}
         />
@@ -1187,15 +1313,17 @@ function App() {
 
   if (viewMode === "model-workbench") {
     return (
-      <AppShell activeView={viewMode} season={season} week={week} slate={slate} pendingAction={pendingAction} onNavigate={setViewMode}>
+      <AppShell activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onNavigate={setViewMode}>
         <ModelWorkbench
           season={season}
           week={week}
           slate={slate}
           slateOptions={SLATE_OPTIONS}
+          projectionRunId={activeRunSelection.projectionRunId}
+          onProjectionRunChange={setActiveProjectionRunId}
           onSeasonChange={setSeason}
           onWeekChange={setWeek}
-          onSlateChange={setSlate}
+          onSlateChange={setActiveSlate}
           onOpenWarRoom={() => setViewMode("war-room")}
           onOpenOperations={() => setViewMode("workspace")}
           onOpenContestWorkflow={() => setViewMode("contest-workflow")}
@@ -1206,7 +1334,7 @@ function App() {
 
   if (viewMode === "war-room") {
     return (
-      <AppShell activeView={viewMode} season={season} week={week} slate={slate} pendingAction={pendingAction} onNavigate={setViewMode}>
+      <AppShell activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onNavigate={setViewMode}>
         <WarRoom
           season={season}
           week={week}
@@ -1214,9 +1342,11 @@ function App() {
           slateOptions={SLATE_OPTIONS}
           pendingAction={pendingAction}
           optimizerStatus={optimizerStatus}
+          projectionRunId={activeRunSelection.projectionRunId}
+          onProjectionRunChange={setActiveProjectionRunId}
           onSeasonChange={setSeason}
           onWeekChange={setWeek}
-          onSlateChange={setSlate}
+          onSlateChange={setActiveSlate}
           onOpenOperations={() => setViewMode("workspace")}
           onOpenModelWorkbench={() => setViewMode("model-workbench")}
           onOpenBrief={() => setViewMode("news-brief")}
@@ -1228,14 +1358,26 @@ function App() {
 
   if (viewMode === "research") {
     return (
-      <AppShell activeView={viewMode} season={season} week={week} slate={slate} pendingAction={pendingAction} onNavigate={setViewMode}>
-        <ResearchWorkspace />
+      <AppShell activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onNavigate={setViewMode}>
+        <ResearchWorkspace
+          season={season}
+          week={week}
+          slate={slate}
+          slateOptions={SLATE_OPTIONS}
+          selectedSimulationRunId={activeRunSelection.researchSimulationRunId ?? ""}
+          selectedBaselineRunId={activeRunSelection.researchBaselineRunId ?? ""}
+          onSeasonChange={setSeason}
+          onWeekChange={setWeek}
+          onSlateChange={setActiveSlate}
+          onSelectedSimulationRunIdChange={setActiveResearchSimulationRunId}
+          onSelectedBaselineRunIdChange={setActiveResearchBaselineRunId}
+        />
       </AppShell>
     );
   }
 
   return (
-    <AppShell activeView={viewMode} season={season} week={week} slate={slate} pendingAction={pendingAction} onNavigate={setViewMode}>
+    <AppShell activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onNavigate={setViewMode}>
       <div className="operations-workspace">
       <section className="operations-command" aria-labelledby="operations-command-title">
         <div className="operations-command-copy">
@@ -1970,7 +2112,7 @@ function App() {
               Slate
               <select
                 value={slate}
-                onChange={(event) => setSlate(event.target.value)}
+                onChange={(event) => setActiveSlate(event.target.value)}
               >
                 {SLATE_OPTIONS.map((option) => (
                   <option key={option} value={option}>
@@ -2068,6 +2210,30 @@ function App() {
                 </select>
               </label>
             </div>
+            {contestFormat === "classic" && optimizerObjective === "gpp" && (
+              <div className="form-row">
+                <label>
+                  Classic GPP strategy
+                  <select
+                    value={classicGppStrategy}
+                    onChange={(event) =>
+                      setClassicGppStrategy(event.target.value as ClassicGppStrategyId)
+                    }
+                  >
+                    {CLASSIC_GPP_STRATEGIES.map((strategy) => (
+                      <option key={strategy.id} value={strategy.id}>
+                        {strategy.label}
+                      </option>
+                    ))}
+                  </select>
+                  <small>
+                    {CLASSIC_GPP_STRATEGIES.find(
+                      (strategy) => strategy.id === classicGppStrategy
+                    )?.detail}
+                  </small>
+                </label>
+              </div>
+            )}
             {contestFormat === "classic" && optimizerObjective === "cash" && (
               <div className="form-row">
                 <label>
@@ -2247,6 +2413,10 @@ function App() {
               <h3>Optimizer</h3>
               <p>Job ID: {optimizerStatus.job_id}</p>
               <p>Status: {optimizerStatus.status}</p>
+              <p>Strategy: {optimizerStatus.strategy}</p>
+              {typeof optimizerStatus.strategy_config.description === "string" && (
+                <p>{optimizerStatus.strategy_config.description}</p>
+              )}
               <p>{optimizerStatus.message}</p>
               {Array.isArray(optimizerStatus.results) && optimizerStatus.results.length > 0 && (
                 <div className="lineups-grid">

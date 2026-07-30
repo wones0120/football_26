@@ -1,19 +1,31 @@
 import unittest
 from datetime import datetime
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pandas as pd
 
+from backend.app.product_services.gpp_optimizer import (
+    GPPOptimizerResult,
+    Player,
+    PortfolioStats,
+    SlateAnalysis,
+    build_slate_config,
+)
 from backend.app.product_services.optimizer import (
     CLASSIC_CASH_STACK_QB_PAIR_BRINGBACK_ID,
     CLASSIC_CASH_STACK_QB_PAIR_ID,
     CLASSIC_CASH_STACK_UNCONSTRAINED_ID,
+    CLASSIC_GPP_ADVANCED_STRATEGY_ID,
+    CLASSIC_GPP_BASELINE_STRATEGY_ID,
     CLASSIC_GPP_STACK_LEGACY_ID,
+    SHOWDOWN_CASH_BASELINE_STRATEGY_ID,
+    SHOWDOWN_GPP_BASELINE_STRATEGY_ID,
     OptimizerJob,
     OptimizerService,
     _merge_simulation_evidence,
     _safe_float,
     resolve_optimizer_mode,
+    resolve_optimizer_strategy,
     resolve_stacking_policy,
 )
 
@@ -86,6 +98,66 @@ class OptimizerModeTests(unittest.TestCase):
             resolve_optimizer_mode(contest_format="best-ball", objective="gpp")
         with self.assertRaisesRegex(ValueError, "objective"):
             resolve_optimizer_mode(contest_format="classic", objective="double-up")
+
+    def test_classic_gpp_strategy_resolves_explicit_versioned_engines(self):
+        baseline = resolve_optimizer_strategy(
+            contest_format="classic",
+            objective="gpp",
+            strategy=CLASSIC_GPP_BASELINE_STRATEGY_ID,
+        )
+        advanced = resolve_optimizer_strategy(
+            contest_format="classic",
+            objective="gpp",
+            strategy=CLASSIC_GPP_ADVANCED_STRATEGY_ID,
+        )
+
+        self.assertEqual(baseline["engine"], "legacy_ilp")
+        self.assertEqual(advanced["engine"], "slate_aware_gpp")
+        self.assertEqual(advanced["source"], "explicit")
+
+    def test_legacy_gpp_alias_preserves_the_baseline_and_invalid_modes_fail(self):
+        legacy = resolve_optimizer_strategy(
+            contest_format="classic",
+            objective="gpp",
+            strategy="gpp",
+        )
+
+        self.assertEqual(
+            legacy["strategy_id"], CLASSIC_GPP_BASELINE_STRATEGY_ID
+        )
+        self.assertEqual(legacy["source"], "legacy_alias")
+        with self.assertRaisesRegex(ValueError, "not valid for classic cash"):
+            resolve_optimizer_strategy(
+                contest_format="classic",
+                objective="cash",
+                strategy=CLASSIC_GPP_ADVANCED_STRATEGY_ID,
+            )
+
+    def test_showdown_cash_and_gpp_resolve_distinct_versioned_contracts(self):
+        cash = resolve_optimizer_strategy(
+            contest_format="showdown",
+            objective="cash",
+            strategy="gpp",
+        )
+        gpp = resolve_optimizer_strategy(
+            contest_format="showdown",
+            objective="gpp",
+            strategy="gpp",
+        )
+
+        self.assertEqual(
+            cash["strategy_id"], SHOWDOWN_CASH_BASELINE_STRATEGY_ID
+        )
+        self.assertEqual(gpp["strategy_id"], SHOWDOWN_GPP_BASELINE_STRATEGY_ID)
+        self.assertEqual(cash["engine"], "captain_ilp")
+        self.assertEqual(gpp["engine"], "captain_ilp")
+        self.assertEqual(cash["source"], "legacy_alias")
+        with self.assertRaisesRegex(ValueError, "showdown cash"):
+            resolve_optimizer_strategy(
+                contest_format="showdown",
+                objective="cash",
+                strategy=SHOWDOWN_GPP_BASELINE_STRATEGY_ID,
+            )
 
     def test_classic_cash_defaults_to_unconstrained_replay_baseline(self):
         policy = resolve_stacking_policy(
@@ -216,6 +288,262 @@ class OptimizerModeTests(unittest.TestCase):
             )
         )
 
+    def test_advanced_strategy_executes_against_the_live_pool_without_fallback(self):
+        service = OptimizerService.__new__(OptimizerService)
+        service._jobs = {}
+        service.engine = MagicMock()
+        service._resolve_run_lineage = MagicMock(
+            return_value=("projection-run-1", "rule-run-1", None)
+        )
+        positions = ["QB", "RB", "RB", "WR", "WR", "WR", "TE", "WR", "DST"]
+        teams = ["AAA", "AAA", "BBB", "AAA", "BBB", "BBB", "CCC", "CCC", "CCC"]
+        opponents = {"AAA": "BBB", "BBB": "AAA", "CCC": "DDD"}
+        pool = pd.DataFrame(
+            [
+                {
+                    "player_id": f"player-{index}",
+                    "name": f"Player {index}",
+                    "position": position,
+                    "player_team": team,
+                    "opponent_team": opponents[team],
+                    "salary": 5000,
+                    "projection": 10.0 + index,
+                    "p90": 20.0 + index,
+                    "ownership": 5.0,
+                    "optimal_lineup_probability": 8.0,
+                }
+                for index, (position, team) in enumerate(zip(positions, teams))
+            ]
+        )
+        service._load_player_pool = MagicMock(return_value=pool)
+        service._apply_pool_filters = MagicMock(side_effect=lambda rows, contest_type: rows)
+        service._solve_lineup = MagicMock()
+        service._lineups_satisfy_stack = MagicMock(return_value=(True, ""))
+        service._attach_symbolic_explanations = MagicMock()
+        service._persist_optimizer_run = MagicMock(return_value=True)
+        gpp_players = service._gpp_players_from_pool(pool)
+        analysis = SlateAnalysis(
+            game_count=1,
+            chalk_concentration=0.0,
+            feature_games=[],
+        )
+        config = build_slate_config(analysis)
+        gpp_result = GPPOptimizerResult(
+            job_id="advanced-service-run",
+            status="completed",
+            message="Generated 1 lineup(s) after 1 iteration(s)",
+            created_at=datetime(2026, 7, 27, 12, 0, 0),
+            updated_at=datetime(2026, 7, 27, 12, 0, 0),
+            lineups=[gpp_players],
+            config=config,
+            analysis=analysis,
+            portfolio=PortfolioStats(
+                exposures={player.player_id: 1.0 for player in gpp_players},
+                tag_counts={},
+                avg_total_ownership=45.0,
+                stack_summary={"2-with-qb_1-bringback": 1},
+            ),
+            iterations=1,
+        )
+
+        with (
+            patch(
+                "backend.app.product_services.optimizer.run_gpp_pipeline",
+                return_value=gpp_result,
+            ) as run_gpp,
+            patch(
+                "backend.app.product_services.optimizer.SimulationService.fetch_latest",
+                return_value=None,
+            ),
+        ):
+            job = service.run_job(
+                season=2025,
+                week=11,
+                slate="SUNDAY_MAIN",
+                strategy=CLASSIC_GPP_ADVANCED_STRATEGY_ID,
+                params={"num_lineups": 1, "max_exposure": 0.75},
+                contest_format="classic",
+                objective="gpp",
+            )
+
+        self.assertEqual(job.status, "completed")
+        self.assertEqual(job.strategy, CLASSIC_GPP_ADVANCED_STRATEGY_ID)
+        self.assertEqual(job.params["strategy_config"]["engine"], "slate_aware_gpp")
+        self.assertEqual(
+            job.results[0][0]["lineup_optimizer_strategy"]["strategy_id"],
+            CLASSIC_GPP_ADVANCED_STRATEGY_ID,
+        )
+        self.assertEqual(
+            job.params["stack_policy"]["stack_min"],
+            config.stack_rules.min_pass_catchers,
+        )
+        self.assertIn("strategy_runtime", job.params)
+        self.assertEqual(
+            job.params["strategy_runtime"]["validation"]["status"], "passed"
+        )
+        self.assertIn("lineup validation=passed", job.message)
+        self.assertEqual(
+            {player.player_id for player in run_gpp.call_args.kwargs["players"]},
+            set(pool["player_id"]),
+        )
+        self.assertEqual(run_gpp.call_args.kwargs["max_exposure"], 0.75)
+        service._solve_lineup.assert_not_called()
+
+    def test_classic_lineup_validation_rejects_illegal_advanced_output(self):
+        lineup = [
+            {
+                "player_id": f"player-{index}",
+                "position": position,
+                "player_team": "AAA" if index < 5 else "BBB",
+                "opponent_team": "BBB" if index < 5 else "AAA",
+                "salary": 5000,
+            }
+            for index, position in enumerate(
+                ["QB", "RB", "RB", "WR", "WR", "WR", "TE", "WR", "DST"]
+            )
+        ]
+
+        valid, reason = OptimizerService._validate_classic_lineups(
+            [lineup],
+            requested_lineups=1,
+            max_exposure=1.0,
+            enforce_single_te=True,
+            avoid_dst_opponents=False,
+            uniqueness_overlap=7,
+        )
+
+        self.assertFalse(valid)
+        self.assertIn("4-player classic team limit", reason)
+
+    def test_showdown_lineup_validation_enforces_captain_flex_contract(self):
+        lineup = [
+            {
+                "player_id": f"player-{index}",
+                "roster_position": "CPT" if index == 0 else "FLEX",
+                "player_team": "AAA" if index < 3 else "BBB",
+                "salary": 7500,
+            }
+            for index in range(6)
+        ]
+
+        valid, reason = OptimizerService._validate_showdown_lineups(
+            [lineup],
+            requested_lineups=1,
+            max_exposure=1.0,
+        )
+        self.assertTrue(valid, reason)
+
+        lineup[1]["roster_position"] = "CPT"
+        valid, reason = OptimizerService._validate_showdown_lineups(
+            [lineup],
+            requested_lineups=1,
+            max_exposure=1.0,
+        )
+        self.assertFalse(valid)
+        self.assertIn("exactly one CPT", reason)
+
+    def test_showdown_solver_preserves_mean_and_p90_slot_values(self):
+        service = OptimizerService.__new__(OptimizerService)
+        pool = pd.DataFrame(
+            [
+                {
+                    "player_id": f"player-{index}",
+                    "name": f"Player {index}",
+                    "position": "WR",
+                    "player_team": "AAA" if index < 3 else "BBB",
+                    "opponent_team": "BBB" if index < 3 else "AAA",
+                    "salary": 5000,
+                    "projection": 10.0 + index,
+                    "p90": 20.0 + index,
+                }
+                for index in range(7)
+            ]
+        )
+
+        lineup = service._solve_lineup(
+            pool,
+            score_col="p90",
+            contest_type="captain",
+        )
+
+        self.assertIsNotNone(lineup)
+        self.assertEqual(len(lineup), 6)
+        self.assertEqual(
+            [row["roster_position"] for row in lineup].count("CPT"),
+            1,
+        )
+        for row in lineup:
+            multiplier = 1.5 if row["roster_position"] == "CPT" else 1.0
+            self.assertEqual(
+                row["projection"], row["base_projection"] * multiplier
+            )
+            self.assertEqual(row["p90"], row["base_p90"] * multiplier)
+            self.assertEqual(
+                row["objective_score"], row["base_p90"] * multiplier
+            )
+
+    def test_showdown_run_persists_canonical_strategy_and_slot_validation(self):
+        service = OptimizerService.__new__(OptimizerService)
+        service._jobs = {}
+        service.engine = MagicMock()
+        service._resolve_run_lineage = MagicMock(
+            return_value=("projection-run-showdown", "rule-run-showdown", None)
+        )
+        pool = pd.DataFrame(
+            [
+                {
+                    "player_id": f"player-{index}",
+                    "name": f"Player {index}",
+                    "position": "WR",
+                    "player_team": "AAA" if index < 3 else "BBB",
+                    "opponent_team": "BBB" if index < 3 else "AAA",
+                    "salary": 5000,
+                    "projection": 10.0 + index,
+                    "p90": 20.0 + index,
+                }
+                for index in range(6)
+            ]
+        )
+        lineup = [
+            {
+                **row,
+                "roster_position": "CPT" if index == 2 else "FLEX",
+                "salary": row["salary"] * (1.5 if index == 2 else 1.0),
+                "projection": row["p90"] * (1.5 if index == 2 else 1.0),
+                "p90": row["p90"] * (1.5 if index == 2 else 1.0),
+            }
+            for index, row in enumerate(pool.to_dict(orient="records"))
+        ]
+        service._load_player_pool = MagicMock(return_value=pool)
+        service._solve_lineup = MagicMock(return_value=lineup)
+        service._lineups_satisfy_stack = MagicMock(return_value=(True, ""))
+        service._attach_symbolic_explanations = MagicMock()
+        service._persist_optimizer_run = MagicMock(return_value=True)
+
+        job = service.run_job(
+            season=2025,
+            week=11,
+            slate="THURSDAY_NIGHT",
+            strategy="gpp",
+            params={"num_lineups": 1},
+            contest_format="showdown",
+            objective="cash",
+        )
+
+        self.assertEqual(job.status, "completed")
+        self.assertEqual(job.strategy, SHOWDOWN_CASH_BASELINE_STRATEGY_ID)
+        self.assertEqual(job.params["objective_config"]["captain_slots"], 1)
+        self.assertEqual(
+            job.params["strategy_runtime"]["validation"]["flex_slots"], 5
+        )
+        self.assertEqual(job.results[0][0]["roster_position"], "CPT")
+        self.assertEqual(
+            [row["lineup_slot_index"] for row in job.results[0]],
+            list(range(6)),
+        )
+        self.assertIn("showdown lineup validation=passed", job.message)
+        self.assertTrue(job.lineage_persisted)
+
     def test_optimizer_run_persistence_carries_mode_and_lineage(self):
         service = OptimizerService.__new__(OptimizerService)
         service.engine = MagicMock()
@@ -232,7 +560,14 @@ class OptimizerModeTests(unittest.TestCase):
             strategy="baseline",
             contest_format="classic",
             objective="gpp",
-            params={"num_lineups": 20},
+            params={
+                "num_lineups": 20,
+                "strategy_config": {
+                    "strategy_id": CLASSIC_GPP_BASELINE_STRATEGY_ID,
+                    "version": "v1",
+                    "engine": "legacy_ilp",
+                },
+            },
             projection_run_id="projection-run-1",
             rule_run_id="rule-run-1",
             data_cutoff_at=now,
@@ -275,6 +610,61 @@ class OptimizerModeTests(unittest.TestCase):
             and call.args[1][0].get("player_id") == "player-1"
         )
         self.assertEqual(player_payload[0]["lineup_id"], "optimizer-run-1:1")
+        self.assertTrue(
+            any(
+                "optimizer_strategy" in str(call.args[0])
+                for call in connection.execute.call_args_list
+            )
+        )
+
+    def test_failed_showdown_run_persists_status_message_and_lineage(self):
+        service = OptimizerService.__new__(OptimizerService)
+        service.engine = MagicMock()
+        connection = service.engine.begin.return_value.__enter__.return_value
+        now = datetime(2026, 7, 12, 12, 0, 0)
+        job = OptimizerJob(
+            job_id="showdown-failed-run",
+            status="failed",
+            created_at=now,
+            updated_at=now,
+            season=2025,
+            week=11,
+            slate="THURSDAY_NIGHT",
+            strategy=SHOWDOWN_CASH_BASELINE_STRATEGY_ID,
+            contest_format="showdown",
+            objective="cash",
+            params={
+                "strategy_config": {
+                    "strategy_id": SHOWDOWN_CASH_BASELINE_STRATEGY_ID,
+                    "engine": "captain_ilp",
+                }
+            },
+            projection_run_id="projection-run-failed",
+            rule_run_id="rule-run-failed",
+            data_cutoff_at=now,
+            results=None,
+            message="Optimizer failed to find lineup.",
+        )
+
+        self.assertTrue(service._persist_optimizer_run(job))
+
+        payload = next(
+            call.args[1]
+            for call in connection.execute.call_args_list
+            if len(call.args) > 1
+            and isinstance(call.args[1], dict)
+            and call.args[1].get("optimizer_run_id") == "showdown-failed-run"
+            and "contest_format" in call.args[1]
+        )
+        self.assertEqual(payload["status"], "failed")
+        self.assertEqual(payload["message"], "Optimizer failed to find lineup.")
+        self.assertEqual(payload["contest_format"], "showdown")
+        self.assertEqual(payload["objective"], "cash")
+        self.assertEqual(
+            payload["strategy"], SHOWDOWN_CASH_BASELINE_STRATEGY_ID
+        )
+        self.assertEqual(payload["projection_run_id"], "projection-run-failed")
+        self.assertEqual(payload["rule_run_id"], "rule-run-failed")
 
     def test_get_job_reloads_persisted_lineups_after_restart(self):
         service = OptimizerService.__new__(OptimizerService)
@@ -292,10 +682,15 @@ class OptimizerModeTests(unittest.TestCase):
             "season": 2025,
             "week": 11,
             "slate_id": "SUNDAY_MAIN",
-            "strategy": "baseline",
+            "strategy": SHOWDOWN_GPP_BASELINE_STRATEGY_ID,
             "contest_format": "showdown",
             "objective": "gpp",
-            "constraint_config_json": {"num_lineups": 1},
+            "constraint_config_json": {
+                "num_lineups": 1,
+                "strategy_config": {
+                    "strategy_id": SHOWDOWN_GPP_BASELINE_STRATEGY_ID
+                },
+            },
             "projection_run_id": "projection-run-2",
             "rule_run_id": None,
             "data_cutoff_at": now,
@@ -307,7 +702,12 @@ class OptimizerModeTests(unittest.TestCase):
         ]
         player_result = MagicMock()
         player_result.mappings.return_value.all.return_value = [
-            {"player_json": {"player_id": "player-2", "roster_position": "CPT"}}
+            {
+                "slot_index": index,
+                "roster_position": "CPT" if index == 0 else "FLEX",
+                "player_json": {"player_id": f"player-{index + 2}"},
+            }
+            for index in range(6)
         ]
         connection.execute.side_effect = [run_result, lineup_result, player_result]
 
@@ -316,8 +716,63 @@ class OptimizerModeTests(unittest.TestCase):
         self.assertIsNotNone(job)
         self.assertEqual(job.contest_format, "showdown")
         self.assertEqual(job.objective, "gpp")
+        self.assertEqual(job.strategy, SHOWDOWN_GPP_BASELINE_STRATEGY_ID)
         self.assertTrue(job.lineage_persisted)
         self.assertEqual(job.results[0][0]["roster_position"], "CPT")
+        self.assertEqual(
+            [row["roster_position"] for row in job.results[0]],
+            ["CPT", "FLEX", "FLEX", "FLEX", "FLEX", "FLEX"],
+        )
+        self.assertEqual(
+            [row["lineup_slot_index"] for row in job.results[0]],
+            list(range(6)),
+        )
+
+    def test_get_job_reloads_persisted_showdown_failure_after_restart(self):
+        service = OptimizerService.__new__(OptimizerService)
+        service._jobs = {}
+        service.engine = MagicMock()
+        connection = service.engine.begin.return_value.__enter__.return_value
+        now = datetime(2026, 7, 12, 12, 0, 0)
+
+        run_result = MagicMock()
+        run_result.mappings.return_value.first.return_value = {
+            "optimizer_run_id": "optimizer-run-failed",
+            "status": "failed",
+            "created_at": now,
+            "updated_at": now,
+            "season": 2025,
+            "week": 11,
+            "slate_id": "THURSDAY_NIGHT",
+            "strategy": SHOWDOWN_CASH_BASELINE_STRATEGY_ID,
+            "contest_format": "showdown",
+            "objective": "cash",
+            "constraint_config_json": {
+                "strategy_config": {
+                    "strategy_id": SHOWDOWN_CASH_BASELINE_STRATEGY_ID
+                }
+            },
+            "projection_run_id": "projection-run-failed",
+            "rule_run_id": "rule-run-failed",
+            "data_cutoff_at": now,
+            "message": "Optimizer failed to find lineup.",
+        }
+        lineup_result = MagicMock()
+        lineup_result.mappings.return_value.all.return_value = []
+        connection.execute.side_effect = [run_result, lineup_result]
+
+        job = service.get_job("optimizer-run-failed")
+
+        self.assertIsNotNone(job)
+        self.assertEqual(job.status, "failed")
+        self.assertEqual(job.contest_format, "showdown")
+        self.assertEqual(job.objective, "cash")
+        self.assertEqual(job.strategy, SHOWDOWN_CASH_BASELINE_STRATEGY_ID)
+        self.assertEqual(job.projection_run_id, "projection-run-failed")
+        self.assertEqual(job.rule_run_id, "rule-run-failed")
+        self.assertTrue(job.lineage_persisted)
+        self.assertIsNone(job.results)
+        self.assertEqual(job.message, "Optimizer failed to find lineup.")
 
     def test_optimizer_resolves_latest_target_prediction_lineage(self):
         service = OptimizerService.__new__(OptimizerService)

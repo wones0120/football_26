@@ -43,6 +43,8 @@ class OptimizerRunRequest(BaseModel):
 class OptimizerStatusResponse(BaseModel):
     job_id: str
     status: str
+    strategy: str
+    strategy_config: dict = Field(default_factory=dict)
     contest_format: str
     objective: str
     projection_run_id: Optional[str] = None

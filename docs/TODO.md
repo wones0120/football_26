@@ -84,14 +84,11 @@ See `docs/CONSOLIDATION.md` for the complete contract and verification evidence.
 | --- | --- | --- | --- | --- |
 | OPS-003 | Blocked | Add lock-aware news, injury, ownership, projection, and lineup refreshes (`DT-802`). | DATA-002 | Each refresh creates a new cutoff-stamped run, preserves prior versions, and never changes a locked historical snapshot. |
 | OPS-004 | Blocked | Add pre-lock and post-result monitoring for data staleness, drift, calibration, failed jobs, and export readiness (`DT-804`). | LEARN-001 | Alerts identify an actionable owner, affected slate/run, threshold, and recovery step. |
-| ENG-002 | Ready | Share active season/week/slate context and persisted-run selection across Digital Twin, Models, War Room, Research Lab, Delivery, and Operations. | None | Changing the active slate in one workspace updates the shell and destination workspace without silently resetting compatible run selections. |
 
 ## P1 — Complete The Live Decision Engines
 
 | ID | Status | Work | Dependencies | Acceptance check |
 | --- | --- | --- | --- | --- |
-| OPT-001 (`DT-501`) | Ready | Wire the advanced classic GPP service into the live optimizer behind an explicit strategy/version flag. | Existing `DT-104`, `DT-105`, `DT-502` foundations | Selected strategy is actually executed, validated, persisted, reloadable, and visible in optimizer explanations and UI results. |
-| OPT-002 (`DT-601`) | Ready | Finish the showdown solver’s move into the persistent format/objective architecture. | Existing persistent optimizer contracts | Showdown cash and GPP are distinct run types; lineups, captain/flex slots, failures, and lineage survive restart and reload. |
 | OPT-003 (`DT-404`) | Blocked | Add diversified cash portfolios and deterministic late-news replacement rules. | OPT-005 | Multiple legal cash lineups respect exposure/risk limits; replacements preserve locked players and produce an auditable before/after report. |
 | OPT-004 (`DT-402`) | Research | Complete promotion-grade classic cash stacking replay with proven pre-lock salary inputs and normalized cash outcome evidence. | DATA-001 | Walk-forward comparisons use complete actuals and defensible cash-line/field evidence; promoted policy beats the unconstrained baseline on declared downside and median gates. |
 | OPT-005 (`DT-403`) | Blocked | Complete cash contest evaluation with verified contest type, fees, field size, payout tiers, and real historical cash files. | DATA-001 | Reports include win/double-up rate, median and lower-tail margin, ROI only where payouts are exact, and uncertainty across slates. |

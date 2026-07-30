@@ -46,6 +46,8 @@ type DigitalTwinProps = {
   contestFormat: "classic" | "showdown";
   optimizerObjective: "cash" | "gpp";
   optimizerStatus: OptimizerResponse | null;
+  projectionRunId?: string;
+  onProjectionRunChange: (runId: string | null) => void;
   onNavigate: (view: ViewMode) => void;
 };
 
@@ -233,7 +235,17 @@ function readCashLineupSummary(status: OptimizerResponse | null): CashLineupSumm
   };
 }
 
-export function DigitalTwin({ season, week, slate, contestFormat, optimizerObjective, optimizerStatus, onNavigate }: DigitalTwinProps) {
+export function DigitalTwin({
+  season,
+  week,
+  slate,
+  contestFormat,
+  optimizerObjective,
+  optimizerStatus,
+  projectionRunId,
+  onProjectionRunChange,
+  onNavigate,
+}: DigitalTwinProps) {
   const [predictions, setPredictions] = useState<PredictionRow[]>([]);
   const [ownership, setOwnership] = useState<OwnershipProjectionRow[]>([]);
   const [newsReport, setNewsReport] = useState<NewsMonitorRunResponse | null>(null);
@@ -271,7 +283,7 @@ export function DigitalTwin({ season, week, slate, contestFormat, optimizerObjec
       setLoading(true);
       setErrors([]);
       const results = await Promise.allSettled([
-        fetchLatestPredictions({ season, week, slate, limit: 1000 }),
+        fetchLatestPredictions({ season, week, slate, limit: 1000, projectionRunId }),
         fetchLatestOwnership({ season, week, slate, limit: 1000 }),
         fetchNewsMonitorReport(reportDate),
         fetchNewsMonitorFeedback(reportDate),
@@ -286,7 +298,10 @@ export function DigitalTwin({ season, week, slate, contestFormat, optimizerObjec
       const nextErrors: string[] = [];
       const [predictionResult, ownershipResult, newsResult, feedbackResult, readinessResult, beliefResult, captureResult, impactResult, variantResult] = results;
 
-      if (predictionResult.status === "fulfilled") setPredictions(predictionResult.value.rows);
+      if (predictionResult.status === "fulfilled") {
+        setPredictions(predictionResult.value.rows);
+        onProjectionRunChange(predictionResult.value.projection_run_id ?? null);
+      }
       else {
         setPredictions([]);
         nextErrors.push("Projection source unavailable");
@@ -351,7 +366,7 @@ export function DigitalTwin({ season, week, slate, contestFormat, optimizerObjec
     return () => {
       cancelled = true;
     };
-  }, [reportDate, season, slate, week]);
+  }, [onProjectionRunChange, projectionRunId, reportDate, season, slate, week]);
 
   useEffect(() => {
     if (editingBeliefId || reviewingCandidateId) return;
@@ -412,7 +427,9 @@ export function DigitalTwin({ season, week, slate, contestFormat, optimizerObjec
         label: "Candidate portfolio",
         status: optimizerReady ? "ready" as const : "attention" as const,
         value: optimizerReady ? `${generatedLineups} lineups` : optimizerStatus?.status ?? "Not generated",
-        detail: optimizerReady ? `${optimizerStatus?.contest_format} ${optimizerStatus?.objective} run is in session.` : "Generate candidates after projections and ownership are ready.",
+        detail: optimizerReady
+          ? `${optimizerStatus?.contest_format} ${optimizerStatus?.objective} · ${optimizerStatus?.strategy}.`
+          : "Generate candidates after projections and ownership are ready.",
         action: "workspace" as ViewMode,
       },
     ],
@@ -759,7 +776,9 @@ export function DigitalTwin({ season, week, slate, contestFormat, optimizerObjec
         slate,
         contest_format: contestFormat,
         objective: optimizerObjective,
-        projection_run_id: predictions.find((row) => row.projection_run_id)?.projection_run_id ?? null,
+        projection_run_id: projectionRunId
+          ?? predictions.find((row) => row.projection_run_id)?.projection_run_id
+          ?? null,
       });
       setVariantSets((current) => [variantSet, ...current]);
       setVariantMessage({

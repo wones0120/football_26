@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import "./AppShell.css";
+import type { PersistedRunSelection } from "./workspaceContext";
 
 export type ViewMode =
   | "digital-twin"
@@ -16,6 +17,7 @@ type AppShellProps = {
   season: number;
   week: number;
   slate: string;
+  runSelection?: PersistedRunSelection;
   pendingAction?: string | null;
   onNavigate: (view: ViewMode) => void;
   children: ReactNode;
@@ -111,6 +113,7 @@ export function AppShell({
   season,
   week,
   slate,
+  runSelection,
   pendingAction,
   onNavigate,
   children,
@@ -123,6 +126,17 @@ export function AppShell({
     () => `${season} · W${week} · ${formatSlate(slate)}`,
     [season, week, slate],
   );
+  const runContextLabel = useMemo(() => {
+    const selectedRun = [
+      ["Optimizer", runSelection?.optimizerRunId],
+      ["Research", runSelection?.researchSimulationRunId],
+      ["Simulation", runSelection?.slateSimulationRunId],
+      ["Projection", runSelection?.projectionRunId],
+    ].find(([, runId]) => Boolean(runId));
+    return selectedRun?.[1]
+      ? `${selectedRun[0]} · ${selectedRun[1].slice(0, 8)}`
+      : null;
+  }, [runSelection]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -186,6 +200,7 @@ export function AppShell({
             <span><i /> Active context</span>
             <strong>{season} · Week {week}</strong>
             <small>{formatSlate(slate)}</small>
+            {runContextLabel && <small title={runContextLabel}>Run · {runContextLabel}</small>}
           </div>
         </div>
       </aside>
@@ -198,7 +213,11 @@ export function AppShell({
           </div>
           <div className="shell-top-actions">
             {pendingAction && <span className="shell-pending" aria-live="polite"><i />{pendingAction}</span>}
-            <div className="shell-slate-chip"><span>Live context</span><strong>{contextLabel}</strong></div>
+            <div className="shell-slate-chip">
+              <span>Live context</span>
+              <strong>{contextLabel}</strong>
+              {runContextLabel && <small title={runContextLabel}>{runContextLabel}</small>}
+            </div>
             <button ref={commandTriggerRef} className="shell-command-trigger" type="button" onClick={() => setPaletteOpen(true)} aria-label="Open command palette">
               <Icon name="search" /><span>Jump to</span><kbd>⌘ K</kbd>
             </button>

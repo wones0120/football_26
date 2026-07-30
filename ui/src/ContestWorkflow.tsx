@@ -18,6 +18,7 @@ type Props = {
   slate: string;
   slateOptions: string[];
   optimizerRunId?: string | null;
+  onOptimizerRunIdChange: (runId: string) => void;
   onSeasonChange: (value: number) => void;
   onWeekChange: (value: number) => void;
   onSlateChange: (value: string) => void;
@@ -43,6 +44,7 @@ export function ContestWorkflow({
   slate,
   slateOptions,
   optimizerRunId,
+  onOptimizerRunIdChange,
   onSeasonChange,
   onWeekChange,
   onSlateChange,
@@ -54,7 +56,6 @@ export function ContestWorkflow({
   const [dryRun, setDryRun] = useState(true);
   const [batch, setBatch] = useState<BatchResult | null>(null);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
-  const [optimizerId, setOptimizerId] = useState(optimizerRunId ?? "");
   const [portfolioName, setPortfolioName] = useState(`${season} W${week} ${slate}`);
   const [defaultContestId, setDefaultContestId] = useState("");
   const [portfolio, setPortfolio] = useState<PortfolioResponse | null>(null);
@@ -64,11 +65,13 @@ export function ContestWorkflow({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (optimizerRunId) setOptimizerId(optimizerRunId);
-  }, [optimizerRunId]);
-
-  useEffect(() => {
     setPortfolioName(`${season} W${week} ${slate}`);
+    setBatch(null);
+    setSelectedTemplateId("");
+    setPortfolio(null);
+    setValidation(null);
+    setExportResult(null);
+    setError(null);
   }, [season, week, slate]);
 
   const liveTemplates = useMemo(
@@ -117,7 +120,7 @@ export function ContestWorkflow({
     try {
       const result = await createPortfolio({
         portfolio_name: portfolioName,
-        optimizer_run_id: optimizerId,
+        optimizer_run_id: optimizerRunId ?? "",
         template_id: selectedTemplateId,
         default_contest_id: defaultContestId || undefined,
       });
@@ -203,11 +206,11 @@ export function ContestWorkflow({
 
         <article className="contest-card assign-card">
           <div className="contest-title"><span>Step 2</span><h2>Assign portfolio</h2><p>Pair a completed optimizer run with the imported paid entries.</p></div>
-          <label>Optimizer run ID<input value={optimizerId} onChange={(event) => setOptimizerId(event.target.value)} placeholder="Optimizer job ID" /></label>
+          <label>Optimizer run ID<input value={optimizerRunId ?? ""} onChange={(event) => onOptimizerRunIdChange(event.target.value)} placeholder="Optimizer job ID" /></label>
           <label>Entry template ID<input value={selectedTemplateId} onChange={(event) => setSelectedTemplateId(event.target.value)} placeholder="Select an imported template below" /></label>
           <label>Portfolio name<input value={portfolioName} onChange={(event) => setPortfolioName(event.target.value)} /></label>
           <label>Contest ID fallback <small>Optional</small><input value={defaultContestId} onChange={(event) => setDefaultContestId(event.target.value)} /></label>
-          <button className="primary" disabled={Boolean(pending) || !optimizerId.trim() || !selectedTemplateId.trim() || !portfolioName.trim()} onClick={runCreatePortfolio}>Create Portfolio</button>
+          <button className="primary" disabled={Boolean(pending) || !(optimizerRunId ?? "").trim() || !selectedTemplateId.trim() || !portfolioName.trim()} onClick={runCreatePortfolio}>Create Portfolio</button>
           {liveTemplates.length > 0 && <div className="template-picks"><span>Imported templates</span>{liveTemplates.map((file) => <button key={file.template_id} onClick={() => setSelectedTemplateId(file.template_id ?? "")}>{file.path.split("/").pop()}</button>)}</div>}
           {portfolio && <div className="contest-success"><strong>{portfolio.portfolio_name}</strong><span>{portfolio.assignment_count} entries · {portfolio.contest_format} {portfolio.objective}</span><code>{portfolio.portfolio_id}</code></div>}
         </article>

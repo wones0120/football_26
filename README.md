@@ -70,6 +70,9 @@ The primary application opens in `Digital Twin`. Use the product rail for `Model
 `Delivery`, `Intelligence`, and `Operations`. `Research Lab` hosts the prior Data Ops control plane in an isolated
 style boundary, preserving role/news/weather shocks, historical backtests, simulation-run selection, asynchronous
 ultimate-lineup progress, and baseline-versus-shock portfolio comparison without leaking its CSS into the product shell.
+Season, week, and slate form one active shell context across these workspaces. Projection, simulation, baseline,
+and optimizer run choices are retained per compatible slate, shown in the shell, and restored when returning to that
+slate; Research Lab converts the shared canonical slate ID to its lowercase API form at its boundary.
 
 ## CSV Validation Gates
 
@@ -108,6 +111,32 @@ The single FastAPI application exposes 110 non-conflicting route contracts. Prim
 - `/api/benchmarks` for reproducible classic/showdown model evaluation and artifact access.
 - `/api/jobs` for durable worker status, progress, results, errors, and retry.
 - `/api/weekly-runs` for resumable ingest-to-export workflow dispatch, stage inspection, and retry.
+
+## Classic GPP Optimizer Strategies
+
+Operations exposes `Classic GPP strategy` whenever the selected mode is classic
+GPP. `Legacy baseline · v1` (`classic_gpp_baseline_v1`) remains the default.
+`Slate-aware GPP · v1` (`classic_gpp_slate_aware_v1`) explicitly runs the
+advanced ownership-template, correlation, leverage, uniqueness, and exposure
+engine against the exact live projection pool. The selected version is returned
+by the optimizer API, stored on the optimizer run, included in each lineup's
+persisted explanation, and restored with persisted results. The advanced engine
+never silently falls back to the baseline when execution or lineup validation
+fails.
+
+## Persistent Showdown Optimizer Modes
+
+Operations sends explicit `showdown_cash_baseline_v1` and
+`showdown_gpp_baseline_v1` strategy contracts for Showdown cash and GPP.
+Both currently use the declared basic P90 captain ILP: one CPT at 1.5x salary
+and P90 objective score plus five FLEX slots under the $50,000 salary cap and
+five-player team limit. Player mean and P90 values remain separate in the
+persisted result. Before a run can complete, an independent validator checks canonical
+player IDs, slot shape, salary, team and exposure limits, and duplicate lineups.
+The optimizer persists successful lineups with normalized slot indexes and
+CPT/FLEX roles; failed status, messages, selected objective, strategy, projection
+and rule lineage, and cutoff also reload after an application restart. Separate
+cash-stability and GPP-payout optimization remains future `DT-605` research.
 
 ## Durable Operational Worker Queue
 
