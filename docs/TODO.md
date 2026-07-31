@@ -1,6 +1,6 @@
 # football_26 Canonical Backlog
 
-Last reviewed: 2026-07-30
+Last reviewed: 2026-07-31
 
 This is the single source of truth for active product, data, modeling, simulation,
 and operational work in `football_26`. Completed implementation history belongs in
@@ -105,7 +105,7 @@ See `docs/CONSOLIDATION.md` for the complete contract and verification evidence.
 
 | ID | Status | Work | Dependencies | Acceptance check |
 | --- | --- | --- | --- | --- |
-| MODEL-001 (`DT-302`) | Research | Finish QB/RB/WR/TE opportunity-efficiency decomposition and formal DST ablations with a promotion-grade untouched holdout. | DATA-002 where a feature needs external context | Ablations report walk-forward MAE/calibration by position and role; DST evidence includes an untouched holdout rather than diagnostic-only improvement. |
+| MODEL-001 (`DT-302`) | Blocked | The locked `model_001_opportunity_efficiency_ablation_v1` experiment completed QB/RB/WR/TE opportunity-efficiency and formal DST group ablations. Its reserved 2025 W12-W18 holdout rejected the combined candidate at `2.978` MAE versus `2.976` baseline; RB improved `0.35%`, QB/WR/TE regressed slightly, and added DST groups failed validation. Production was unchanged. | Prospectively captured 2026 salary/source cohort with proven pre-lock observation time and enough completed holdout weeks | Re-run the content-locked contract on untouched 2026 evidence; MAE and interval calibration must pass by position and lagged role, and any challenger must use MODEL-002 approval. Evidence: `docs/MODEL-001_CANDIDATE_LOCK.md`, `docs/MODEL-001_HOLDOUT_EVIDENCE.md`. |
 | MODEL-002 (`DT-305`) | Done | Added immutable `model_challenger_evaluation_v1` and `model_promotion_decision_v1` contracts. New projection runs remain challengers once a scope has a champion; promotion requires ordered time windows, exact feature/code lineage, at least one strict improvement gate, all gates passing, a named approval, and an atomic compare-and-set pointer change. Rollback records a second approval and restores the exact champion. | Existing immutable projection runs | Focused tests cover invalid windows, blocked gates, API contracts, approval-only selection, atomic promotion, and exact rollback. PostgreSQL migration `0017` applies idempotently with 57 expected/actual target tables and preserves the current Week 11 champion. Evidence: `docs/MODEL-002_PROMOTION_GOVERNANCE.md`. |
 | MODEL-003 | Research | Re-evaluate accepted default-off online residual learning on new completed slates and decide whether it should remain experimental, be promoted, or be retired. | LEARN-001, enough new post-cutoff slates | Later-window MAE, RMSE, calibration, slice stability, and identity coverage are compared with the unchanged production baseline. |
 

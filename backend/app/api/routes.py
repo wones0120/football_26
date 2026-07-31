@@ -248,6 +248,36 @@ def ingest_nflreadpy_weekly_stats(
     return result
 
 
+@router.post("/ingest/nflreadpy/weekly-rosters", response_model=IngestResultResponse)
+def ingest_nflreadpy_weekly_rosters(
+    request: NflReadPySeasonRequest,
+    session: Session = Depends(get_db_session),
+) -> IngestResultResponse:
+    service = IngestService(session)
+    result = service.ingest_nflreadpy_weekly_rosters(request)
+    if result.status == "failed":
+        raise HTTPException(
+            status_code=422,
+            detail=result.error_message or "nflreadpy roster ingest failed",
+        )
+    return result
+
+
+@router.post("/ingest/nflreadpy/snap-counts", response_model=IngestResultResponse)
+def ingest_nflreadpy_snap_counts(
+    request: NflReadPySeasonRequest,
+    session: Session = Depends(get_db_session),
+) -> IngestResultResponse:
+    service = IngestService(session)
+    result = service.ingest_nflreadpy_snap_counts(request)
+    if result.status == "failed":
+        raise HTTPException(
+            status_code=422,
+            detail=result.error_message or "nflreadpy snap-count ingest failed",
+        )
+    return result
+
+
 @router.get("/ingest/runs", response_model=IngestRunListResponse)
 def list_ingest_runs(
     limit: int = Query(default=50, ge=1, le=500),

@@ -66,7 +66,19 @@ Both endpoints should return JSON without a database-schema error.
 
 ## 4. Load historical NFL data
 
-Use the UI nflreadpy bootstrap action, or call the documented ingest endpoints for schedules and weekly stats. Run history must show row counts and an `ok` status before continuing.
+Use the UI nflreadpy bootstrap action, or call the documented ingest endpoints for schedules and weekly stats. Load the historical weekly-roster and snap-count archive with:
+
+```bash
+python scripts/load_nflreadpy_participation.py \
+  --season-start 2002 \
+  --season-end 2025
+```
+
+This stores immutable roster snapshots for 2002–2025, snap counts for every available season
+beginning in 2013, normalized player-game participation, and leakage-safe team/opponent availability
+features. The equivalent per-season endpoints are `POST /api/ingest/nflreadpy/weekly-rosters` and
+`POST /api/ingest/nflreadpy/snap-counts`. Run history must show row counts and an `ok` status before
+continuing.
 
 The primary UI now opens in `Digital Twin`. Use `Operations` for product ingestion/readiness workflows and
 `Research Lab` for the original Data Ops simulation, backtest, and baseline-versus-shock tools. During Vite
@@ -74,9 +86,9 @@ development, `/api` is proxied to `http://127.0.0.1:8000`; production remains sa
 
 Verify:
 
-- `GET /api/coverage/season` shows schedule and weekly-stat seasons.
+- `GET /api/coverage/season` shows schedule, weekly-stat, roster, snap, participation, and availability seasons.
 - `GET /api/coverage/freshness` shows the selected target data as present.
-- Repeating the same ingest does not create duplicate curated facts.
+- Repeating an ingest preserves a new immutable Bronze snapshot while rebuilding one deduplicated Silver participation view.
 
 ## 5. Load salaries and injuries
 

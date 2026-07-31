@@ -350,7 +350,14 @@ class CuratedSalarySliceResponse(BaseModel):
 
 
 class DataFreshnessRowResponse(BaseModel):
-    dataset: Literal["salaries", "injuries", "schedules", "weekly_stats"]
+    dataset: Literal[
+        "salaries",
+        "injuries",
+        "schedules",
+        "weekly_stats",
+        "weekly_rosters",
+        "snap_counts",
+    ]
     source_system: str
     season: int
     week: int

@@ -18,8 +18,11 @@ from ..models import (
     CuratedInjury,
     CuratedSalary,
     IngestRun,
+    PlayerAlias,
     PlayerMaster,
+    RawNflSnapCount,
     RawNflSchedule,
+    RawNflWeeklyRoster,
     RawNflWeeklyStat,
     RawInjuryRow,
     RawSalaryRow,
@@ -54,6 +57,7 @@ from .matching import (
     parse_opponent_from_game_info,
     upsert_alias,
 )
+from .participation import ParticipationService
 
 
 def utcnow_naive() -> datetime:
@@ -65,6 +69,8 @@ FRESHNESS_THRESHOLDS_HOURS = {
     "injuries": 12,
     "schedules": 168,
     "weekly_stats": 168,
+    "weekly_rosters": 168,
+    "snap_counts": 168,
 }
 
 
@@ -149,6 +155,22 @@ def _safe_int(value: Any) -> int | None:
         return int(float(text))
     except (ValueError, TypeError):
         return None
+
+
+def _safe_share(value: Any) -> float | None:
+    text = _safe_str(value)
+    if not text:
+        return None
+    is_percent = text.endswith("%")
+    if is_percent:
+        text = text[:-1]
+    try:
+        result = float(text)
+    except (ValueError, TypeError):
+        return None
+    if is_percent or result > 1.5:
+        result /= 100.0
+    return max(0.0, result)
 
 
 def _json_safe_value(value: Any) -> Any:
@@ -690,6 +712,42 @@ class IngestService:
                 "Unsupported nflreadpy schedule API surface. Expected load_schedules or import_schedules."
             )
 
+        if weeks and "week" in df.columns:
+            df = df[df["week"].isin(weeks)]
+        return df
+
+    def _load_nflreadpy_weekly_rosters(
+        self,
+        nfl_module: Any,
+        season: int,
+        weeks: list[int] | None,
+    ) -> pd.DataFrame:
+        if not hasattr(nfl_module, "load_rosters_weekly"):
+            raise RuntimeError("Unsupported nflreadpy API surface. Expected load_rosters_weekly.")
+        data = _call_with_supported_kwargs(
+            nfl_module.load_rosters_weekly,  # type: ignore[attr-defined]
+            season=season,
+            seasons=[season],
+        )
+        df = _coerce_dataframe(data)
+        if weeks and "week" in df.columns:
+            df = df[df["week"].isin(weeks)]
+        return df
+
+    def _load_nflreadpy_snap_counts(
+        self,
+        nfl_module: Any,
+        season: int,
+        weeks: list[int] | None,
+    ) -> pd.DataFrame:
+        if not hasattr(nfl_module, "load_snap_counts"):
+            raise RuntimeError("Unsupported nflreadpy API surface. Expected load_snap_counts.")
+        data = _call_with_supported_kwargs(
+            nfl_module.load_snap_counts,  # type: ignore[attr-defined]
+            season=season,
+            seasons=[season],
+        )
+        df = _coerce_dataframe(data)
         if weeks and "week" in df.columns:
             df = df[df["week"].isin(weeks)]
         return df
@@ -1259,6 +1317,328 @@ class IngestService:
             )
             return IngestResultResponse.model_validate(run, from_attributes=True)
 
+    def ingest_nflreadpy_weekly_rosters(self, request: NflReadPySeasonRequest) -> IngestResultResponse:
+        run = self._new_run(
+            source_system="nflreadpy",
+            source_table="weekly_rosters",
+            source_path=None,
+            season=request.season,
+            week=None,
+            slate=None,
+        )
+        rows_raw = 0
+        rows_curated = 0
+        rows_unresolved = 0
+        try:
+            try:
+                import nflreadpy as nfl  # type: ignore
+            except ModuleNotFoundError as exc:
+                raise RuntimeError(
+                    "nflreadpy is not installed. Activate your virtualenv and run "
+                    "`pip install -r requirements.txt`, then restart the API."
+                ) from exc
+
+            df = self._load_nflreadpy_weekly_rosters(
+                nfl_module=nfl,
+                season=request.season,
+                weeks=request.weeks,
+            )
+            if df.empty:
+                raise RuntimeError("nflreadpy weekly rosters returned no records.")
+            if "week" not in df.columns:
+                raise RuntimeError("Could not find a usable week column in nflreadpy weekly rosters output.")
+
+            raw_payloads: list[dict[str, Any]] = []
+            identity_cache: dict[str, str] = {}
+            queued_identities: set[str] = set()
+            for _, row in df.iterrows():
+                row_week = _safe_int(row.get("week"))
+                if row_week is None:
+                    rows_unresolved += 1
+                    continue
+                row_season = _safe_int(row.get("season")) or request.season
+                name = _safe_str(
+                    _column_map(row, ["full_name", "player_name", "football_name"])
+                )
+                team = normalize_team(_safe_str(row.get("team")))
+                position = normalize_position(_safe_str(row.get("position")))
+                gsis_id = _safe_str(row.get("gsis_id")) or None
+                pfr_id = _safe_str(row.get("pfr_id")) or None
+                game_type = _safe_str(row.get("game_type")) or None
+                roster_status = _safe_str(row.get("status")) or None
+                raw_json = _row_json(row)
+                raw_payloads.append(
+                    {
+                        "ingest_run_id": run.ingest_run_id,
+                        "source_system": "nflreadpy",
+                        "season": row_season,
+                        "week": row_week,
+                        "game_type": game_type,
+                        "team": team,
+                        "position": position,
+                        "depth_chart_position": (
+                            _safe_str(row.get("depth_chart_position")) or None
+                        ),
+                        "roster_status": roster_status,
+                        "player_name": name or None,
+                        "gsis_id": gsis_id,
+                        "pfr_id": pfr_id,
+                        "raw_row_json": raw_json,
+                    }
+                )
+                rows_raw += 1
+
+                identity_key = gsis_id or pfr_id or f"{normalize_name(name)}|{team}|{position}"
+                if identity_key in identity_cache:
+                    continue
+                player_master_id, _reason = find_player_master_id(
+                    self.session,
+                    source_system="nflreadpy",
+                    source_key=gsis_id,
+                    name=name,
+                    team=team,
+                    position=position,
+                )
+                if player_master_id is None and pfr_id:
+                    player_master_id, _reason = find_player_master_id(
+                        self.session,
+                        source_system="pfr",
+                        source_key=pfr_id,
+                        name=name,
+                        team=team,
+                        position=position,
+                    )
+                if player_master_id is None and name and (gsis_id or pfr_id):
+                    player_master_id = create_player_master(
+                        self.session,
+                        full_name=name,
+                        team=team,
+                        position=position,
+                    ).player_master_id
+
+                if player_master_id:
+                    identity_cache[identity_key] = player_master_id
+                    if gsis_id:
+                        upsert_alias(
+                            self.session,
+                            player_master_id=player_master_id,
+                            source_system="nflreadpy",
+                            source_key=gsis_id,
+                            alias_name=name or gsis_id,
+                            team=team,
+                            position=position,
+                            season=row_season,
+                            week=row_week,
+                        )
+                    if pfr_id:
+                        upsert_alias(
+                            self.session,
+                            player_master_id=player_master_id,
+                            source_system="pfr",
+                            source_key=pfr_id,
+                            alias_name=name or pfr_id,
+                            team=team,
+                            position=position,
+                            season=row_season,
+                            week=row_week,
+                        )
+                    rows_curated += 1
+                elif identity_key not in queued_identities:
+                    queued_identities.add(identity_key)
+                    rows_unresolved += 1
+                    self.session.add(
+                        UnresolvedPlayerQueue(
+                            unresolved_id=str(uuid.uuid4()),
+                            ingest_run_id=run.ingest_run_id,
+                            source_system="nflreadpy",
+                            source_table="weekly_rosters",
+                            source_player_key=gsis_id or pfr_id,
+                            season=row_season,
+                            week=row_week,
+                            raw_row_json=raw_json,
+                            normalized_name=normalize_name(name),
+                            team=team,
+                            position=position,
+                            resolution_status="open",
+                        )
+                    )
+
+            if raw_payloads:
+                self.session.bulk_insert_mappings(RawNflWeeklyRoster, raw_payloads)
+            self.session.flush()
+            ParticipationService(self.session).rebuild(season=request.season)
+            self.session.commit()
+            run = self._complete_run(
+                run_id=run.ingest_run_id,
+                status="completed",
+                rows_raw=rows_raw,
+                rows_curated=rows_curated,
+                rows_unresolved=rows_unresolved,
+            )
+            return IngestResultResponse.model_validate(run, from_attributes=True)
+        except Exception as exc:  # noqa: BLE001
+            self.session.rollback()
+            run = self._complete_run(
+                run_id=run.ingest_run_id,
+                status="failed",
+                rows_raw=rows_raw,
+                rows_curated=rows_curated,
+                rows_unresolved=rows_unresolved,
+                error_message=str(exc),
+            )
+            return IngestResultResponse.model_validate(run, from_attributes=True)
+
+    def ingest_nflreadpy_snap_counts(self, request: NflReadPySeasonRequest) -> IngestResultResponse:
+        run = self._new_run(
+            source_system="nflreadpy",
+            source_table="snap_counts",
+            source_path=None,
+            season=request.season,
+            week=None,
+            slate=None,
+        )
+        rows_raw = 0
+        rows_curated = 0
+        rows_unresolved = 0
+        try:
+            try:
+                import nflreadpy as nfl  # type: ignore
+            except ModuleNotFoundError as exc:
+                raise RuntimeError(
+                    "nflreadpy is not installed. Activate your virtualenv and run "
+                    "`pip install -r requirements.txt`, then restart the API."
+                ) from exc
+
+            df = self._load_nflreadpy_snap_counts(
+                nfl_module=nfl,
+                season=request.season,
+                weeks=request.weeks,
+            )
+            if df.empty:
+                raise RuntimeError("nflreadpy snap counts returned no records.")
+            if "week" not in df.columns:
+                raise RuntimeError("Could not find a usable week column in nflreadpy snap counts output.")
+
+            raw_payloads: list[dict[str, Any]] = []
+            queued_players: set[str] = set()
+            pfr_ids = sorted(
+                {
+                    _safe_str(value)
+                    for value in df.get("pfr_player_id", pd.Series(dtype=str)).tolist()
+                    if _safe_str(value)
+                }
+            )
+            resolved_pfr: dict[str, str | None] = {}
+            if pfr_ids:
+                resolved_pfr.update(
+                    {
+                        source_key: player_master_id
+                        for source_key, player_master_id in self.session.execute(
+                            select(PlayerAlias.source_key, PlayerAlias.player_master_id).where(
+                                and_(
+                                    PlayerAlias.source_system == "pfr",
+                                    PlayerAlias.source_key.in_(pfr_ids),
+                                )
+                            )
+                        ).all()
+                    }
+                )
+            for _, row in df.iterrows():
+                row_week = _safe_int(row.get("week"))
+                if row_week is None:
+                    rows_unresolved += 1
+                    continue
+                row_season = _safe_int(row.get("season")) or request.season
+                pfr_player_id = _safe_str(row.get("pfr_player_id")) or None
+                name = _safe_str(_column_map(row, ["player", "player_name"]))
+                team = normalize_team(_safe_str(row.get("team")))
+                opponent = normalize_team(_safe_str(row.get("opponent")))
+                position = normalize_position(_safe_str(row.get("position")))
+                raw_json = _row_json(row)
+                raw_payloads.append(
+                    {
+                        "ingest_run_id": run.ingest_run_id,
+                        "source_system": "nflreadpy",
+                        "season": row_season,
+                        "week": row_week,
+                        "game_type": _safe_str(row.get("game_type")) or None,
+                        "game_id": _safe_str(row.get("game_id")) or None,
+                        "pfr_game_id": _safe_str(row.get("pfr_game_id")) or None,
+                        "pfr_player_id": pfr_player_id,
+                        "player_name": name or None,
+                        "team": team,
+                        "opponent": opponent,
+                        "position": position,
+                        "offense_snaps": _safe_int(row.get("offense_snaps")),
+                        "offense_pct": _safe_share(row.get("offense_pct")),
+                        "defense_snaps": _safe_int(row.get("defense_snaps")),
+                        "defense_pct": _safe_share(row.get("defense_pct")),
+                        "st_snaps": _safe_int(row.get("st_snaps")),
+                        "st_pct": _safe_share(row.get("st_pct")),
+                        "raw_row_json": raw_json,
+                    }
+                )
+                rows_raw += 1
+                if pfr_player_id not in resolved_pfr:
+                    player_master_id, _reason = find_player_master_id(
+                        self.session,
+                        source_system="pfr",
+                        source_key=pfr_player_id,
+                        name=name,
+                        team=team,
+                        position=position,
+                    )
+                    if pfr_player_id:
+                        resolved_pfr[pfr_player_id] = player_master_id
+                else:
+                    player_master_id = resolved_pfr[pfr_player_id]
+                if player_master_id:
+                    rows_curated += 1
+                elif pfr_player_id and pfr_player_id not in queued_players:
+                    queued_players.add(pfr_player_id)
+                    rows_unresolved += 1
+                    self.session.add(
+                        UnresolvedPlayerQueue(
+                            unresolved_id=str(uuid.uuid4()),
+                            ingest_run_id=run.ingest_run_id,
+                            source_system="pfr",
+                            source_table="snap_counts",
+                            source_player_key=pfr_player_id,
+                            season=row_season,
+                            week=row_week,
+                            raw_row_json=raw_json,
+                            normalized_name=normalize_name(name),
+                            team=team,
+                            position=position,
+                            resolution_status="open",
+                        )
+                    )
+
+            if raw_payloads:
+                self.session.bulk_insert_mappings(RawNflSnapCount, raw_payloads)
+            self.session.flush()
+            ParticipationService(self.session).rebuild(season=request.season)
+            self.session.commit()
+            run = self._complete_run(
+                run_id=run.ingest_run_id,
+                status="completed",
+                rows_raw=rows_raw,
+                rows_curated=rows_curated,
+                rows_unresolved=rows_unresolved,
+            )
+            return IngestResultResponse.model_validate(run, from_attributes=True)
+        except Exception as exc:  # noqa: BLE001
+            self.session.rollback()
+            run = self._complete_run(
+                run_id=run.ingest_run_id,
+                status="failed",
+                rows_raw=rows_raw,
+                rows_curated=rows_curated,
+                rows_unresolved=rows_unresolved,
+                error_message=str(exc),
+            )
+            return IngestResultResponse.model_validate(run, from_attributes=True)
+
     def bootstrap_nflreadpy(self, request: NflReadPyBootstrapRequest) -> IngestResultResponse:
         run = self._new_run(
             source_system="nflreadpy",
@@ -1390,6 +1770,22 @@ class IngestService:
                         UNION ALL
                         SELECT 'raw_nfl_weekly_stat' AS dataset, season, COUNT(*)::INT AS rows
                         FROM raw_nfl_weekly_stat
+                        GROUP BY season
+                        UNION ALL
+                        SELECT 'raw_nfl_weekly_roster' AS dataset, season, COUNT(*)::INT AS rows
+                        FROM raw_nfl_weekly_roster
+                        GROUP BY season
+                        UNION ALL
+                        SELECT 'raw_nfl_snap_count' AS dataset, season, COUNT(*)::INT AS rows
+                        FROM raw_nfl_snap_count
+                        GROUP BY season
+                        UNION ALL
+                        SELECT 'curated_player_game_participation' AS dataset, season, COUNT(*)::INT AS rows
+                        FROM curated_player_game_participation
+                        GROUP BY season
+                        UNION ALL
+                        SELECT 'features_team_game_availability' AS dataset, season, COUNT(*)::INT AS rows
+                        FROM features_team_game_availability
                         GROUP BY season
                         UNION ALL
                         SELECT 'raw_salary_row' AS dataset, season, COUNT(*)::INT AS rows
@@ -1528,6 +1924,30 @@ class IngestService:
                     RawNflWeeklyStat.source_system == "nflreadpy",
                     RawNflWeeklyStat.season == season,
                     RawNflWeeklyStat.week == week,
+                ),
+            ),
+            (
+                "weekly_rosters",
+                "nflreadpy",
+                None,
+                RawNflWeeklyRoster.raw_nfl_weekly_roster_id,
+                RawNflWeeklyRoster.created_at,
+                (
+                    RawNflWeeklyRoster.source_system == "nflreadpy",
+                    RawNflWeeklyRoster.season == season,
+                    RawNflWeeklyRoster.week == week,
+                ),
+            ),
+            (
+                "snap_counts",
+                "nflreadpy",
+                None,
+                RawNflSnapCount.raw_nfl_snap_count_id,
+                RawNflSnapCount.created_at,
+                (
+                    RawNflSnapCount.source_system == "nflreadpy",
+                    RawNflSnapCount.season == season,
+                    RawNflSnapCount.week == week,
                 ),
             ),
         )

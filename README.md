@@ -2,7 +2,7 @@
 
 Canonical repository for the DFS data, modeling, simulation, Digital Twin, and contest-delivery platform:
 
-1. Multi-source ingestion (DraftKings/FanDuel CSVs + nflreadpy bootstrap).
+1. Multi-source ingestion (DraftKings/FanDuel CSVs + nflreadpy stats, schedules, rosters, and snaps).
 2. Canonical player identity using `player_master_id`.
 3. Deterministic matching + unresolved queue for manual repair.
 4. Postgres-first `public` and `target` schemas with numbered SQL migrations.
@@ -95,10 +95,31 @@ Salary and injury CSVs are validated before any existing curated slice is cleare
 
 ## Data Freshness
 
-- `GET /api/coverage/freshness` checks the selected source, season, week, and slate for curated salaries/injuries plus nflreadpy schedules/weekly stats.
+- `GET /api/coverage/freshness` checks the selected source, season, week, and slate for curated salaries/injuries plus nflreadpy schedules, weekly stats, weekly rosters, and snap counts.
 - Each dataset reports its exact slice row count, latest load time, age in hours, staleness threshold, and `fresh`, `stale`, or `missing` status.
-- Thresholds are 24 hours for salaries, 12 hours for injuries, and 168 hours for schedules and weekly stats.
+- Thresholds are 24 hours for salaries, 12 hours for injuries, and 168 hours for schedules, weekly stats, weekly rosters, and snap counts.
 - The UI section `Data Freshness` refreshes when the selected slice changes and after ingest actions.
+
+## Player Participation and Availability
+
+Migration `0018` adds immutable weekly-roster and snap-count Bronze snapshots, canonical
+player-game participation, and lagged team/opponent availability features for both offense and
+defense. A zero is classified as `did_not_play` only with an official inactive status or confirmed
+team-game snap coverage; missing source coverage remains `unknown`. Weekly box-score activity can
+prove participation when snaps are unavailable.
+
+The Gold features shift inferred snap-share losses forward one team game. A target week can see its
+team's and opponent's prior offensive and defensive losses, but never participation from the target
+game itself. Load all available history and rebuild the standard player-game matrix with:
+
+```bash
+python scripts/load_nflreadpy_participation.py --season-start 2002 --season-end 2025
+python scripts/build_player_game_feature_matrix.py --season-start 2024 --season-end 2025
+```
+
+nflverse weekly rosters cover 2002–2025; the snap-count endpoint begins with 2013. Exact schema,
+classification, lineage, feature definitions, and the local load audit are documented in
+`docs/PARTICIPATION_AVAILABILITY_PIPELINE.md`.
 
 ## Point-In-Time Input Safety
 
@@ -114,9 +135,24 @@ values were first available. DATA-002 remains blocked until a source supplies tr
 timestamps or the platform begins prospective capture. See
 `docs/DATA-002_SOURCE_AVAILABILITY_AUDIT.md` for exact coverage and source decisions.
 
+## MODEL-001 Feature Ablation
+
+`scripts/run_model_001_ablation.py` separates strictly prior QB/RB/WR/TE opportunity and efficiency
+features and formal DST defense-form and opponent-allowed groups. Run `--phase select` first to choose
+per-position candidates using data through 2025 W11 and write a content-addressed lock; only then run
+`--phase holdout` to score the reserved W12-W18 window. Injury, historical market, and salary values
+are excluded as model features because their observation times are not proven.
+
+The locked candidate was rejected: its 2,734-row holdout MAE was `2.978` versus `2.976` for the
+history baseline. RB improved `0.35%`, while QB, WR, and TE regressed slightly; DST component groups
+did not beat the validation baseline. Production remains unchanged. The exact validation ablations,
+role calibration, lock hash, and holdout gates are in `docs/MODEL-001_CANDIDATE_LOCK.md` and
+`docs/MODEL-001_HOLDOUT_EVIDENCE.md`. A prospectively captured 2026 cohort is still required before
+this research can support a promotion decision.
+
 ## API Families
 
-The single FastAPI application exposes 114 non-conflicting route contracts. Primary families are:
+The single FastAPI application exposes 116 non-conflicting route contracts. Primary families are:
 
 - `/api/ingest`, `/api/coverage`, `/api/unresolved`, and `/api/player-master` for the canonical data foundation.
 - `/api/predict`, `/api/model-governance`, `/api/features`, `/api/ownership`, `/api/simulate`, and `/api/simulations` for model evaluation, approved active-run changes, and scenario runs.

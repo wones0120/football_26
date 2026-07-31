@@ -530,6 +530,8 @@ def test_data_freshness_scopes_rows_and_classifies_age() -> None:
         "injuries",
         "schedules",
         "weekly_stats",
+        "weekly_rosters",
+        "snap_counts",
     ]
     assert rows["salaries"].status == "fresh"
     assert rows["salaries"].rows == 1
@@ -544,3 +546,5 @@ def test_data_freshness_scopes_rows_and_classifies_age() -> None:
     assert rows["weekly_stats"].status == "missing"
     assert rows["weekly_stats"].rows == 0
     assert rows["weekly_stats"].latest_loaded_at is None
+    assert rows["weekly_rosters"].status == "missing"
+    assert rows["snap_counts"].status == "missing"

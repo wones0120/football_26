@@ -64,6 +64,8 @@ def test_data_freshness_api_contract() -> None:
         "injuries",
         "schedules",
         "weekly_stats",
+        "weekly_rosters",
+        "snap_counts",
     ]
     assert all(row["status"] == "missing" for row in payload["rows"])
     assert all(row["rows"] == 0 for row in payload["rows"])

@@ -32,6 +32,7 @@ from ..models import (
     RawNflWeeklyStat,
     SimulatedPlayerOutcome,
     SimulationRun,
+    TeamGameAvailabilityFeature,
 )
 from ..schemas import (
     ActualTopLineupBuildRequest,
@@ -273,6 +274,10 @@ PLAYER_MATCHUP_MODEL_FEATURE_NAMES = [
     "injury_status_score",
     "team_skill_out_count",
     "team_position_out_count",
+    "team_offense_missing_share_lag1",
+    "team_defense_missing_share_lag1",
+    "opponent_offense_missing_share_lag1",
+    "opponent_defense_missing_share_lag1",
     "kickoff_early",
     "kickoff_late",
     "kickoff_prime",
@@ -3561,6 +3566,10 @@ class LineupLearningService:
         player_injury_status: str | None,
         team_skill_out_count: int,
         team_position_out_count: int,
+        team_offense_missing_share_lag1: float,
+        team_defense_missing_share_lag1: float,
+        opponent_offense_missing_share_lag1: float,
+        opponent_defense_missing_share_lag1: float,
         kickoff_bucket: str | None,
     ) -> np.ndarray:
         kickoff_early, kickoff_late, kickoff_prime, kickoff_unknown = _kickoff_bucket_flags(kickoff_bucket)
@@ -3583,6 +3592,10 @@ class LineupLearningService:
                 float(_injury_status_score(player_injury_status)),
                 float(max(0, team_skill_out_count)),
                 float(max(0, team_position_out_count)),
+                float(max(0.0, team_offense_missing_share_lag1)),
+                float(max(0.0, team_defense_missing_share_lag1)),
+                float(max(0.0, opponent_offense_missing_share_lag1)),
+                float(max(0.0, opponent_defense_missing_share_lag1)),
                 float(kickoff_early),
                 float(kickoff_late),
                 float(kickoff_prime),
@@ -3612,6 +3625,10 @@ class LineupLearningService:
             player_injury_status=row.player_injury_status,
             team_skill_out_count=row.team_skill_out_count,
             team_position_out_count=row.team_position_out_count,
+            team_offense_missing_share_lag1=row.team_offense_missing_share_lag1,
+            team_defense_missing_share_lag1=row.team_defense_missing_share_lag1,
+            opponent_offense_missing_share_lag1=row.opponent_offense_missing_share_lag1,
+            opponent_defense_missing_share_lag1=row.opponent_defense_missing_share_lag1,
             kickoff_bucket=row.kickoff_bucket,
         )
 
@@ -4045,6 +4062,20 @@ class LineupLearningService:
                 slate=slate,
             )
 
+        availability_rows = self.session.execute(
+            select(TeamGameAvailabilityFeature).where(
+                and_(
+                    TeamGameAvailabilityFeature.season == season,
+                    TeamGameAvailabilityFeature.week == week,
+                )
+            )
+        ).scalars().all()
+        availability_by_team = {
+            _canonical_team(feature.team): feature
+            for feature in availability_rows
+            if _canonical_team(feature.team)
+        }
+
         lookup: dict[str, tuple[float, float]] = {}
         projection_feature_rows: dict[str, dict[str, Any]] = {}
         for row in salary_rows:
@@ -4057,6 +4088,19 @@ class LineupLearningService:
             target_home_away = target_home_away_by_team.get(team_key or "", "unknown")
             target_kickoff_bucket = target_kickoff_bucket_by_team.get(team_key or "", "unknown")
             context = target_context_by_team.get(team_key or "", {})
+            availability = availability_by_team.get(team_key or "")
+            team_offense_missing_share_lag1 = float(
+                availability.team_offense_missing_share_lag1 if availability else 0.0
+            )
+            team_defense_missing_share_lag1 = float(
+                availability.team_defense_missing_share_lag1 if availability else 0.0
+            )
+            opponent_offense_missing_share_lag1 = float(
+                availability.opponent_offense_missing_share_lag1 if availability else 0.0
+            )
+            opponent_defense_missing_share_lag1 = float(
+                availability.opponent_defense_missing_share_lag1 if availability else 0.0
+            )
 
             player_records = points_by_master.get(row.player_master_id or "", [])
             player_points = [entry[0] for entry in player_records]
@@ -4223,6 +4267,10 @@ class LineupLearningService:
                 player_injury_status=injury_status,
                 team_skill_out_count=int(team_skill_out_counts.get(team_key or "", 0)),
                 team_position_out_count=int(team_position_out_counts.get((team_key or "", position), 0)),
+                team_offense_missing_share_lag1=team_offense_missing_share_lag1,
+                team_defense_missing_share_lag1=team_defense_missing_share_lag1,
+                opponent_offense_missing_share_lag1=opponent_offense_missing_share_lag1,
+                opponent_defense_missing_share_lag1=opponent_defense_missing_share_lag1,
                 kickoff_bucket=target_kickoff_bucket,
             )
             matchup_model = matchup_models.get(position or "")
@@ -4276,6 +4324,10 @@ class LineupLearningService:
                 "player_injury_status": _injury_status_bucket(injury_status),
                 "team_skill_out_count": int(team_skill_out_counts.get(team_key or "", 0)),
                 "team_position_out_count": team_position_out,
+                "team_offense_missing_share_lag1": team_offense_missing_share_lag1,
+                "team_defense_missing_share_lag1": team_defense_missing_share_lag1,
+                "opponent_offense_missing_share_lag1": opponent_offense_missing_share_lag1,
+                "opponent_defense_missing_share_lag1": opponent_defense_missing_share_lag1,
                 "projected_mean_points": mean_val,
                 "projected_p90_points": p90_val,
             }
@@ -4345,6 +4397,19 @@ class LineupLearningService:
                 feature_cache = self._projection_feature_cache.get(feature_key, {})
                 if not feature_cache:
                     raise ValueError("No projection feature cache found for target slice.")
+                slice_availability_rows = self.session.execute(
+                    select(TeamGameAvailabilityFeature).where(
+                        and_(
+                            TeamGameAvailabilityFeature.season == season,
+                            TeamGameAvailabilityFeature.week == week,
+                        )
+                    )
+                ).scalars().all()
+                slice_availability_by_team = {
+                    _canonical_team(row.team): row
+                    for row in slice_availability_rows
+                    if _canonical_team(row.team)
+                }
 
                 slice_rows: list[dict[str, Any]] = []
                 for player in pool:
@@ -4352,6 +4417,9 @@ class LineupLearningService:
                         continue
                     if player.position == "DST":
                         player_key = player.team or player.uid
+                        availability = slice_availability_by_team.get(
+                            _canonical_team(player.team) or ""
+                        )
                         feature = {
                             "source_system": source_system,
                             "season": season,
@@ -4383,6 +4451,22 @@ class LineupLearningService:
                             "player_injury_status": "unknown",
                             "team_skill_out_count": 0,
                             "team_position_out_count": 0,
+                            "team_offense_missing_share_lag1": float(
+                                availability.team_offense_missing_share_lag1
+                                if availability else 0.0
+                            ),
+                            "team_defense_missing_share_lag1": float(
+                                availability.team_defense_missing_share_lag1
+                                if availability else 0.0
+                            ),
+                            "opponent_offense_missing_share_lag1": float(
+                                availability.opponent_offense_missing_share_lag1
+                                if availability else 0.0
+                            ),
+                            "opponent_defense_missing_share_lag1": float(
+                                availability.opponent_defense_missing_share_lag1
+                                if availability else 0.0
+                            ),
                         }
                     else:
                         feature = (
@@ -4432,6 +4516,18 @@ class LineupLearningService:
                             "player_injury_status": _safe_str(feature.get("player_injury_status")) or "unknown",
                             "team_skill_out_count": int(feature.get("team_skill_out_count") or 0),
                             "team_position_out_count": int(feature.get("team_position_out_count") or 0),
+                            "team_offense_missing_share_lag1": float(
+                                feature.get("team_offense_missing_share_lag1") or 0.0
+                            ),
+                            "team_defense_missing_share_lag1": float(
+                                feature.get("team_defense_missing_share_lag1") or 0.0
+                            ),
+                            "opponent_offense_missing_share_lag1": float(
+                                feature.get("opponent_offense_missing_share_lag1") or 0.0
+                            ),
+                            "opponent_defense_missing_share_lag1": float(
+                                feature.get("opponent_defense_missing_share_lag1") or 0.0
+                            ),
                             "created_at": utcnow_naive(),
                         }
                     )

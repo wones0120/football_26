@@ -1,0 +1,314 @@
+{
+  "contract_id": "model_001_opportunity_efficiency_ablation_v1",
+  "lock_hash": "73e4597af6352da4893be80355dd714527e1ae5c33c8d7625df0a28d346c4869",
+  "holdout": {
+    "rows": 2734,
+    "slices": 5,
+    "start": [
+      2025,
+      12
+    ],
+    "end": [
+      2025,
+      18
+    ]
+  },
+  "overall": {
+    "candidate": {
+      "rows": 2734,
+      "mae": 2.977637630608778,
+      "rmse": 5.148931504335927,
+      "mean_error": 0.2391066126983739,
+      "r_squared": 0.3551289544213291
+    },
+    "baseline": {
+      "rows": 2734,
+      "mae": 2.9763489259497304,
+      "rmse": 5.151185531500397,
+      "mean_error": 0.22910746130440474,
+      "r_squared": 0.3545642255986684
+    },
+    "mae_improvement_vs_baseline": -0.0004329817138750017
+  },
+  "positions": {
+    "QB": {
+      "selected": "opportunity_efficiency",
+      "baseline": "history_baseline",
+      "candidate": {
+        "rows": 374,
+        "mae": 4.427755156867952,
+        "rmse": 6.711345273964651,
+        "mean_error": 0.4373265063146276,
+        "r_squared": 0.3762562490152628,
+        "p10_p90_coverage": 0.7700534759358288,
+        "p25_p75_coverage": 0.48663101604278075
+      },
+      "baseline_metrics": {
+        "rows": 374,
+        "mae": 4.423074190501718,
+        "rmse": 6.703017831771255,
+        "mean_error": 0.3924769274040278,
+        "r_squared": 0.37780317212545744,
+        "p10_p90_coverage": 0.7887700534759359,
+        "p25_p75_coverage": 0.48663101604278075
+      },
+      "mae_improvement_vs_baseline": -0.0010583060931434992,
+      "roles": {
+        "MOBILE": {
+          "rows": 67,
+          "mae": 7.9207793180074875,
+          "rmse": 9.569601123681718,
+          "mean_error": 0.8248626738522447,
+          "r_squared": 0.22339805934829204,
+          "p10_p90_coverage": 0.5373134328358209,
+          "p25_p75_coverage": 0.16417910447761194
+        },
+        "POCKET": {
+          "rows": 238,
+          "mae": 4.4734779934255915,
+          "rmse": 6.574421902274146,
+          "mean_error": 0.3479455309583185,
+          "r_squared": 0.3327294018442112,
+          "p10_p90_coverage": 0.773109243697479,
+          "p25_p75_coverage": 0.46218487394957986
+        },
+        "UNKNOWN": {
+          "rows": 69,
+          "mae": 0.8782674192292986,
+          "rmse": 2.4760000402952853,
+          "mean_error": 0.3693228673259497,
+          "r_squared": 0.5212710050352874,
+          "p10_p90_coverage": 0.9855072463768116,
+          "p25_p75_coverage": 0.8840579710144928
+        }
+      }
+    },
+    "RB": {
+      "selected": "history_plus_efficiency",
+      "baseline": "history_baseline",
+      "candidate": {
+        "rows": 621,
+        "mae": 2.959836818482834,
+        "rmse": 5.501851539858152,
+        "mean_error": 0.13027627123981803,
+        "r_squared": 0.38754475344763817,
+        "p10_p90_coverage": 0.8019323671497585,
+        "p25_p75_coverage": 0.48792270531400966
+      },
+      "baseline_metrics": {
+        "rows": 621,
+        "mae": 2.9701187255645434,
+        "rmse": 5.501404549085152,
+        "mean_error": 0.13938333924280502,
+        "r_squared": 0.3876442656650757,
+        "p10_p90_coverage": 0.7971014492753623,
+        "p25_p75_coverage": 0.5152979066022544
+      },
+      "mae_improvement_vs_baseline": 0.003461783191766167,
+      "roles": {
+        "COMMITTEE": {
+          "rows": 366,
+          "mae": 2.4800855136650592,
+          "rmse": 4.265135540748829,
+          "mean_error": 0.053478085325247254,
+          "r_squared": 0.1471040065495255,
+          "p10_p90_coverage": 0.8633879781420765,
+          "p25_p75_coverage": 0.45081967213114754
+        },
+        "LEAD": {
+          "rows": 102,
+          "mae": 7.299818762832087,
+          "rmse": 9.410232775066799,
+          "mean_error": 1.1032730929751982,
+          "r_squared": 0.16896604151982564,
+          "p10_p90_coverage": 0.4019607843137255,
+          "p25_p75_coverage": 0.10784313725490197
+        },
+        "RECEIVING": {
+          "rows": 18,
+          "mae": 7.305729733793602,
+          "rmse": 12.449658159069847,
+          "mean_error": -1.7261605777065732,
+          "r_squared": 0.3320895130265822,
+          "p10_p90_coverage": 0.5,
+          "p25_p75_coverage": 0.05555555555555555
+        },
+        "UNKNOWN": {
+          "rows": 135,
+          "mae": 0.40194605377237524,
+          "rmse": 1.533839642489343,
+          "mean_error": -0.1491435546212256,
+          "r_squared": -0.08500030089116284,
+          "p10_p90_coverage": 0.9777777777777777,
+          "p25_p75_coverage": 0.9333333333333333
+        }
+      }
+    },
+    "WR": {
+      "selected": "history_plus_efficiency",
+      "baseline": "history_baseline",
+      "candidate": {
+        "rows": 1033,
+        "mae": 2.8572338361867295,
+        "rmse": 4.983267603771458,
+        "mean_error": 0.27040850455587495,
+        "r_squared": 0.3021533947707209,
+        "p10_p90_coverage": 0.8121974830590513,
+        "p25_p75_coverage": 0.5043562439496612
+      },
+      "baseline_metrics": {
+        "rows": 1033,
+        "mae": 2.8517003937282497,
+        "rmse": 4.98832856310723,
+        "mean_error": 0.2845154995408986,
+        "r_squared": 0.300735222201889,
+        "p10_p90_coverage": 0.8092933204259438,
+        "p25_p75_coverage": 0.5295256534365924
+      },
+      "mae_improvement_vs_baseline": -0.0019404010570849503,
+      "roles": {
+        "PRIMARY": {
+          "rows": 122,
+          "mae": 8.244746209077189,
+          "rmse": 9.863957586565645,
+          "mean_error": 1.4279208916018111,
+          "r_squared": 0.1000392754842383,
+          "p10_p90_coverage": 0.2786885245901639,
+          "p25_p75_coverage": 0.07377049180327869
+        },
+        "ROTATION": {
+          "rows": 469,
+          "mae": 1.8196888832768436,
+          "rmse": 3.102114830063077,
+          "mean_error": 0.08628166270304011,
+          "r_squared": 0.0023531326858400314,
+          "p10_p90_coverage": 0.9339019189765458,
+          "p25_p75_coverage": 0.5842217484008528
+        },
+        "SECONDARY": {
+          "rows": 201,
+          "mae": 5.022299186786829,
+          "rmse": 6.715677387312488,
+          "mean_error": 0.15407691049689975,
+          "r_squared": 0.044099284463770094,
+          "p10_p90_coverage": 0.6268656716417911,
+          "p25_p75_coverage": 0.06965174129353234
+        },
+        "UNKNOWN": {
+          "rows": 241,
+          "mae": 0.34334976129660805,
+          "rmse": 0.9194140542101735,
+          "mean_error": 0.1397928531667851,
+          "r_squared": 0.02932711123601428,
+          "p10_p90_coverage": 1.0,
+          "p25_p75_coverage": 0.9294605809128631
+        }
+      }
+    },
+    "TE": {
+      "selected": "opportunity_efficiency",
+      "baseline": "history_baseline",
+      "candidate": {
+        "rows": 602,
+        "mae": 2.0872957936360805,
+        "rmse": 3.6006498321470857,
+        "mean_error": 0.3220429935195044,
+        "r_squared": 0.3544105149597212,
+        "p10_p90_coverage": 0.792358803986711,
+        "p25_p75_coverage": 0.5049833887043189
+      },
+      "baseline_metrics": {
+        "rows": 602,
+        "mae": 2.0832398877307696,
+        "rmse": 3.613584807887208,
+        "mean_error": 0.2708935708485212,
+        "r_squared": 0.34976375161547135,
+        "p10_p90_coverage": 0.8056478405315615,
+        "p25_p75_coverage": 0.5431893687707641
+      },
+      "mae_improvement_vs_baseline": -0.001946922161580212,
+      "roles": {
+        "PRIMARY": {
+          "rows": 32,
+          "mae": 6.234056322633977,
+          "rmse": 7.820379565744167,
+          "mean_error": 2.7619303803260653,
+          "r_squared": 0.016876503726785397,
+          "p10_p90_coverage": 0.375,
+          "p25_p75_coverage": 0.125
+        },
+        "ROTATION": {
+          "rows": 314,
+          "mae": 1.93214208133192,
+          "rmse": 2.937585655908133,
+          "mean_error": 0.27323681449970155,
+          "r_squared": 0.09714077102455654,
+          "p10_p90_coverage": 0.8312101910828026,
+          "p25_p75_coverage": 0.43312101910828027
+        },
+        "SECONDARY": {
+          "rows": 97,
+          "mae": 4.390425691746115,
+          "rmse": 5.665660911539051,
+          "mean_error": 0.4181712571864278,
+          "r_squared": 0.1015574817711683,
+          "p10_p90_coverage": 0.4742268041237113,
+          "p25_p75_coverage": 0.08247422680412371
+        },
+        "UNKNOWN": {
+          "rows": 159,
+          "mae": 0.15407773463545385,
+          "rmse": 0.3914440504551875,
+          "mean_error": -0.13126328158290718,
+          "r_squared": -0.22087663456038165,
+          "p10_p90_coverage": 0.9937106918238994,
+          "p25_p75_coverage": 0.9811320754716981
+        }
+      }
+    },
+    "DST": {
+      "selected": "dst_history_baseline",
+      "baseline": "dst_history_baseline",
+      "candidate": {
+        "rows": 104,
+        "mae": 4.21872662103974,
+        "rmse": 5.7022115410726215,
+        "mean_error": -0.6148660191269593,
+        "r_squared": -0.006725868355812459,
+        "p10_p90_coverage": 0.7788461538461539,
+        "p25_p75_coverage": 0.49038461538461536
+      },
+      "baseline_metrics": {
+        "rows": 104,
+        "mae": 4.21872662103974,
+        "rmse": 5.7022115410726215,
+        "mean_error": -0.6148660191269593,
+        "r_squared": -0.006725868355812459,
+        "p10_p90_coverage": 0.7788461538461539,
+        "p25_p75_coverage": 0.49038461538461536
+      },
+      "mae_improvement_vs_baseline": 0.0,
+      "roles": {
+        "DEFENSE": {
+          "rows": 104,
+          "mae": 4.21872662103974,
+          "rmse": 5.7022115410726215,
+          "mean_error": -0.6148660191269593,
+          "r_squared": -0.006725868355812459,
+          "p10_p90_coverage": 0.7788461538461539,
+          "p25_p75_coverage": 0.49038461538461536
+        }
+      }
+    }
+  },
+  "gates": {
+    "overall_mae_non_regression": false,
+    "dst_mae_non_regression": true,
+    "no_position_regresses_more_than_2pct": true,
+    "role_metrics_reported": true
+  },
+  "status": "rejected",
+  "production_model_changed": false,
+  "promotion_eligible": false,
+  "promotion_blocker": "Historical salary membership lacks preserved pre-lock observation timestamps; use a prospectively captured 2026 holdout before promotion."
+}

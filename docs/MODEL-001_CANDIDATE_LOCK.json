@@ -1,0 +1,670 @@
+{
+  "contract_id": "model_001_opportunity_efficiency_ablation_v1",
+  "source_system": "draftkings",
+  "windows": {
+    "train": {
+      "rows": 12008,
+      "slices": 19,
+      "start": [
+        2024,
+        4
+      ],
+      "end": [
+        2025,
+        7
+      ]
+    },
+    "validation": {
+      "rows": 2600,
+      "slices": 4,
+      "start": [
+        2025,
+        8
+      ],
+      "end": [
+        2025,
+        11
+      ]
+    },
+    "holdout": {
+      "start": [
+        2025,
+        12
+      ],
+      "end": [
+        2025,
+        18
+      ],
+      "metrics_read_during_selection": false
+    }
+  },
+  "ridge_alpha": 1.0,
+  "minimum_validation_improvement": 0.005,
+  "excluded_unproven_features": [
+    "historical_salary",
+    "injury_status",
+    "team_injury_counts",
+    "game_total_line",
+    "spread_line",
+    "implied_team_totals"
+  ],
+  "selections": {
+    "QB": {
+      "baseline": "history_baseline",
+      "selected": "opportunity_efficiency",
+      "validation_improvement_vs_baseline": 0.015124065316000449,
+      "candidates": {
+        "history_baseline": {
+          "feature_names": [
+            "player_games_history",
+            "player_roll3_mean",
+            "player_roll8_mean",
+            "player_roll8_std"
+          ],
+          "validation": {
+            "rows": 337,
+            "mae": 4.819321249302665,
+            "rmse": 7.317061053311805,
+            "mean_error": 0.0936900604096962,
+            "r_squared": 0.38708249202274003,
+            "p10_p90_coverage": 0.7566765578635015,
+            "p25_p75_coverage": 0.4629080118694362
+          }
+        },
+        "history_plus_opportunity": {
+          "feature_names": [
+            "player_games_history",
+            "player_roll3_mean",
+            "player_roll8_mean",
+            "player_roll8_std",
+            "opportunity_roll3",
+            "opportunity_roll8",
+            "opportunity_share_roll3",
+            "opportunity_share_roll8",
+            "opportunity_trend",
+            "attempts_roll3",
+            "carries_roll3",
+            "targets_roll3",
+            "carry_share_roll3",
+            "target_share_roll3"
+          ],
+          "validation": {
+            "rows": 337,
+            "mae": 4.766225000090693,
+            "rmse": 7.215777271122675,
+            "mean_error": 0.10514160551694492,
+            "r_squared": 0.40393323375490076,
+            "p10_p90_coverage": 0.7566765578635015,
+            "p25_p75_coverage": 0.4658753709198813
+          }
+        },
+        "history_plus_efficiency": {
+          "feature_names": [
+            "player_games_history",
+            "player_roll3_mean",
+            "player_roll8_mean",
+            "player_roll8_std",
+            "efficiency_roll3",
+            "efficiency_roll8",
+            "efficiency_trend"
+          ],
+          "validation": {
+            "rows": 337,
+            "mae": 4.787912934913096,
+            "rmse": 7.283756997160868,
+            "mean_error": 0.1052994964516431,
+            "r_squared": 0.39264925831270137,
+            "p10_p90_coverage": 0.7477744807121661,
+            "p25_p75_coverage": 0.4599406528189911
+          }
+        },
+        "opportunity_efficiency": {
+          "feature_names": [
+            "player_games_history",
+            "player_roll3_mean",
+            "player_roll8_mean",
+            "player_roll8_std",
+            "opportunity_roll3",
+            "opportunity_roll8",
+            "opportunity_share_roll3",
+            "opportunity_share_roll8",
+            "opportunity_trend",
+            "attempts_roll3",
+            "carries_roll3",
+            "targets_roll3",
+            "carry_share_roll3",
+            "target_share_roll3",
+            "efficiency_roll3",
+            "efficiency_roll8",
+            "efficiency_trend"
+          ],
+          "validation": {
+            "rows": 337,
+            "mae": 4.746433519949423,
+            "rmse": 7.195391190803791,
+            "mean_error": 0.11249719526531829,
+            "r_squared": 0.4072965026865363,
+            "p10_p90_coverage": 0.7566765578635015,
+            "p25_p75_coverage": 0.47181008902077154
+          }
+        },
+        "full_internal_context": {
+          "feature_names": [
+            "player_games_history",
+            "player_roll3_mean",
+            "player_roll8_mean",
+            "player_roll8_std",
+            "opportunity_roll3",
+            "opportunity_roll8",
+            "opportunity_share_roll3",
+            "opportunity_share_roll8",
+            "opportunity_trend",
+            "attempts_roll3",
+            "carries_roll3",
+            "targets_roll3",
+            "carry_share_roll3",
+            "target_share_roll3",
+            "efficiency_roll3",
+            "efficiency_roll8",
+            "efficiency_trend",
+            "defense_pos_allowed_roll3",
+            "defense_pos_allowed_roll8",
+            "defense_pos_allowed_p90_roll8"
+          ],
+          "validation": {
+            "rows": 337,
+            "mae": 4.7673122110074475,
+            "rmse": 7.207152818694899,
+            "mean_error": 0.11400896615254787,
+            "r_squared": 0.40535724591851585,
+            "p10_p90_coverage": 0.7626112759643917,
+            "p25_p75_coverage": 0.4658753709198813
+          }
+        }
+      }
+    },
+    "RB": {
+      "baseline": "history_baseline",
+      "selected": "history_plus_efficiency",
+      "validation_improvement_vs_baseline": 0.010222267974696277,
+      "candidates": {
+        "history_baseline": {
+          "feature_names": [
+            "player_games_history",
+            "player_roll3_mean",
+            "player_roll8_mean",
+            "player_roll8_std"
+          ],
+          "validation": {
+            "rows": 611,
+            "mae": 3.1278445124829037,
+            "rmse": 5.7481394966186246,
+            "mean_error": -0.10462526182889266,
+            "r_squared": 0.33942114757023234,
+            "p10_p90_coverage": 0.7855973813420621,
+            "p25_p75_coverage": 0.5106382978723404
+          }
+        },
+        "history_plus_opportunity": {
+          "feature_names": [
+            "player_games_history",
+            "player_roll3_mean",
+            "player_roll8_mean",
+            "player_roll8_std",
+            "opportunity_roll3",
+            "opportunity_roll8",
+            "opportunity_share_roll3",
+            "opportunity_share_roll8",
+            "opportunity_trend",
+            "attempts_roll3",
+            "carries_roll3",
+            "targets_roll3",
+            "carry_share_roll3",
+            "target_share_roll3"
+          ],
+          "validation": {
+            "rows": 611,
+            "mae": 3.1232717347209245,
+            "rmse": 5.740131183298273,
+            "mean_error": -0.08855738382099285,
+            "r_squared": 0.3412605035303349,
+            "p10_p90_coverage": 0.7937806873977087,
+            "p25_p75_coverage": 0.5188216039279869
+          }
+        },
+        "history_plus_efficiency": {
+          "feature_names": [
+            "player_games_history",
+            "player_roll3_mean",
+            "player_roll8_mean",
+            "player_roll8_std",
+            "efficiency_roll3",
+            "efficiency_roll8",
+            "efficiency_trend"
+          ],
+          "validation": {
+            "rows": 611,
+            "mae": 3.0958708476931203,
+            "rmse": 5.745208755863504,
+            "mean_error": -0.10488046183606414,
+            "r_squared": 0.34009458001776693,
+            "p10_p90_coverage": 0.7921440261865794,
+            "p25_p75_coverage": 0.48936170212765956
+          }
+        },
+        "opportunity_efficiency": {
+          "feature_names": [
+            "player_games_history",
+            "player_roll3_mean",
+            "player_roll8_mean",
+            "player_roll8_std",
+            "opportunity_roll3",
+            "opportunity_roll8",
+            "opportunity_share_roll3",
+            "opportunity_share_roll8",
+            "opportunity_trend",
+            "attempts_roll3",
+            "carries_roll3",
+            "targets_roll3",
+            "carry_share_roll3",
+            "target_share_roll3",
+            "efficiency_roll3",
+            "efficiency_roll8",
+            "efficiency_trend"
+          ],
+          "validation": {
+            "rows": 611,
+            "mae": 3.0970209676052227,
+            "rmse": 5.739397315810936,
+            "mean_error": -0.09051400104520049,
+            "r_squared": 0.341428930550866,
+            "p10_p90_coverage": 0.795417348608838,
+            "p25_p75_coverage": 0.502454991816694
+          }
+        },
+        "full_internal_context": {
+          "feature_names": [
+            "player_games_history",
+            "player_roll3_mean",
+            "player_roll8_mean",
+            "player_roll8_std",
+            "opportunity_roll3",
+            "opportunity_roll8",
+            "opportunity_share_roll3",
+            "opportunity_share_roll8",
+            "opportunity_trend",
+            "attempts_roll3",
+            "carries_roll3",
+            "targets_roll3",
+            "carry_share_roll3",
+            "target_share_roll3",
+            "efficiency_roll3",
+            "efficiency_roll8",
+            "efficiency_trend",
+            "defense_pos_allowed_roll3",
+            "defense_pos_allowed_roll8",
+            "defense_pos_allowed_p90_roll8"
+          ],
+          "validation": {
+            "rows": 611,
+            "mae": 3.117025486002003,
+            "rmse": 5.740649593557615,
+            "mean_error": -0.060531670154359916,
+            "r_squared": 0.3411415122657889,
+            "p10_p90_coverage": 0.7921440261865794,
+            "p25_p75_coverage": 0.513911620294599
+          }
+        }
+      }
+    },
+    "WR": {
+      "baseline": "history_baseline",
+      "selected": "history_plus_efficiency",
+      "validation_improvement_vs_baseline": 0.011524196418342623,
+      "candidates": {
+        "history_baseline": {
+          "feature_names": [
+            "player_games_history",
+            "player_roll3_mean",
+            "player_roll8_mean",
+            "player_roll8_std"
+          ],
+          "validation": {
+            "rows": 987,
+            "mae": 2.8699952539298,
+            "rmse": 4.9463529790255025,
+            "mean_error": 0.2022262164022048,
+            "r_squared": 0.34812685851033087,
+            "p10_p90_coverage": 0.8014184397163121,
+            "p25_p75_coverage": 0.5096251266464032
+          }
+        },
+        "history_plus_opportunity": {
+          "feature_names": [
+            "player_games_history",
+            "player_roll3_mean",
+            "player_roll8_mean",
+            "player_roll8_std",
+            "opportunity_roll3",
+            "opportunity_roll8",
+            "opportunity_share_roll3",
+            "opportunity_share_roll8",
+            "opportunity_trend",
+            "attempts_roll3",
+            "carries_roll3",
+            "targets_roll3",
+            "carry_share_roll3",
+            "target_share_roll3"
+          ],
+          "validation": {
+            "rows": 987,
+            "mae": 2.8956746645895284,
+            "rmse": 4.92169611430234,
+            "mean_error": 0.29304535867032333,
+            "r_squared": 0.3546096496732546,
+            "p10_p90_coverage": 0.790273556231003,
+            "p25_p75_coverage": 0.47011144883485306
+          }
+        },
+        "history_plus_efficiency": {
+          "feature_names": [
+            "player_games_history",
+            "player_roll3_mean",
+            "player_roll8_mean",
+            "player_roll8_std",
+            "efficiency_roll3",
+            "efficiency_roll8",
+            "efficiency_trend"
+          ],
+          "validation": {
+            "rows": 987,
+            "mae": 2.836920864903802,
+            "rmse": 4.937559739416466,
+            "mean_error": 0.17615365659657087,
+            "r_squared": 0.3504424966110359,
+            "p10_p90_coverage": 0.8074974670719351,
+            "p25_p75_coverage": 0.49442755825734547
+          }
+        },
+        "opportunity_efficiency": {
+          "feature_names": [
+            "player_games_history",
+            "player_roll3_mean",
+            "player_roll8_mean",
+            "player_roll8_std",
+            "opportunity_roll3",
+            "opportunity_roll8",
+            "opportunity_share_roll3",
+            "opportunity_share_roll8",
+            "opportunity_trend",
+            "attempts_roll3",
+            "carries_roll3",
+            "targets_roll3",
+            "carry_share_roll3",
+            "target_share_roll3",
+            "efficiency_roll3",
+            "efficiency_roll8",
+            "efficiency_trend"
+          ],
+          "validation": {
+            "rows": 987,
+            "mae": 2.8442806373337435,
+            "rmse": 4.925151677956155,
+            "mean_error": 0.26583764488393474,
+            "r_squared": 0.35370306369076154,
+            "p10_p90_coverage": 0.7811550151975684,
+            "p25_p75_coverage": 0.44984802431610943
+          }
+        },
+        "full_internal_context": {
+          "feature_names": [
+            "player_games_history",
+            "player_roll3_mean",
+            "player_roll8_mean",
+            "player_roll8_std",
+            "opportunity_roll3",
+            "opportunity_roll8",
+            "opportunity_share_roll3",
+            "opportunity_share_roll8",
+            "opportunity_trend",
+            "attempts_roll3",
+            "carries_roll3",
+            "targets_roll3",
+            "carry_share_roll3",
+            "target_share_roll3",
+            "efficiency_roll3",
+            "efficiency_roll8",
+            "efficiency_trend",
+            "defense_pos_allowed_roll3",
+            "defense_pos_allowed_roll8",
+            "defense_pos_allowed_p90_roll8"
+          ],
+          "validation": {
+            "rows": 987,
+            "mae": 2.8519443530660453,
+            "rmse": 4.928756590802087,
+            "mean_error": 0.2568870730185527,
+            "r_squared": 0.35275661698909244,
+            "p10_p90_coverage": 0.7831813576494427,
+            "p25_p75_coverage": 0.46099290780141844
+          }
+        }
+      }
+    },
+    "TE": {
+      "baseline": "history_baseline",
+      "selected": "opportunity_efficiency",
+      "validation_improvement_vs_baseline": 0.04686015643925209,
+      "candidates": {
+        "history_baseline": {
+          "feature_names": [
+            "player_games_history",
+            "player_roll3_mean",
+            "player_roll8_mean",
+            "player_roll8_std"
+          ],
+          "validation": {
+            "rows": 565,
+            "mae": 2.1294794262531225,
+            "rmse": 3.9369539220031147,
+            "mean_error": 0.04207507157461923,
+            "r_squared": 0.4273128598767736,
+            "p10_p90_coverage": 0.7982300884955752,
+            "p25_p75_coverage": 0.5238938053097345
+          }
+        },
+        "history_plus_opportunity": {
+          "feature_names": [
+            "player_games_history",
+            "player_roll3_mean",
+            "player_roll8_mean",
+            "player_roll8_std",
+            "opportunity_roll3",
+            "opportunity_roll8",
+            "opportunity_share_roll3",
+            "opportunity_share_roll8",
+            "opportunity_trend",
+            "attempts_roll3",
+            "carries_roll3",
+            "targets_roll3",
+            "carry_share_roll3",
+            "target_share_roll3"
+          ],
+          "validation": {
+            "rows": 565,
+            "mae": 2.071075180580864,
+            "rmse": 3.816831278840329,
+            "mean_error": -0.008179108386861304,
+            "r_squared": 0.46172688036215936,
+            "p10_p90_coverage": 0.7982300884955752,
+            "p25_p75_coverage": 0.5327433628318584
+          }
+        },
+        "history_plus_efficiency": {
+          "feature_names": [
+            "player_games_history",
+            "player_roll3_mean",
+            "player_roll8_mean",
+            "player_roll8_std",
+            "efficiency_roll3",
+            "efficiency_roll8",
+            "efficiency_trend"
+          ],
+          "validation": {
+            "rows": 565,
+            "mae": 2.0891742430350924,
+            "rmse": 3.929136521137991,
+            "mean_error": 0.03186719455195805,
+            "r_squared": 0.42958491092786,
+            "p10_p90_coverage": 0.8053097345132744,
+            "p25_p75_coverage": 0.5185840707964602
+          }
+        },
+        "opportunity_efficiency": {
+          "feature_names": [
+            "player_games_history",
+            "player_roll3_mean",
+            "player_roll8_mean",
+            "player_roll8_std",
+            "opportunity_roll3",
+            "opportunity_roll8",
+            "opportunity_share_roll3",
+            "opportunity_share_roll8",
+            "opportunity_trend",
+            "attempts_roll3",
+            "carries_roll3",
+            "targets_roll3",
+            "carry_share_roll3",
+            "target_share_roll3",
+            "efficiency_roll3",
+            "efficiency_roll8",
+            "efficiency_trend"
+          ],
+          "validation": {
+            "rows": 565,
+            "mae": 2.0296916872047324,
+            "rmse": 3.8072656883247853,
+            "mean_error": -0.013852445888330102,
+            "r_squared": 0.46442149685837997,
+            "p10_p90_coverage": 0.8088495575221238,
+            "p25_p75_coverage": 0.49911504424778763
+          }
+        },
+        "full_internal_context": {
+          "feature_names": [
+            "player_games_history",
+            "player_roll3_mean",
+            "player_roll8_mean",
+            "player_roll8_std",
+            "opportunity_roll3",
+            "opportunity_roll8",
+            "opportunity_share_roll3",
+            "opportunity_share_roll8",
+            "opportunity_trend",
+            "attempts_roll3",
+            "carries_roll3",
+            "targets_roll3",
+            "carry_share_roll3",
+            "target_share_roll3",
+            "efficiency_roll3",
+            "efficiency_roll8",
+            "efficiency_trend",
+            "defense_pos_allowed_roll3",
+            "defense_pos_allowed_roll8",
+            "defense_pos_allowed_p90_roll8"
+          ],
+          "validation": {
+            "rows": 565,
+            "mae": 2.036834896032919,
+            "rmse": 3.8042377117718735,
+            "mean_error": -0.015484252132846996,
+            "r_squared": 0.4652730656184604,
+            "p10_p90_coverage": 0.8088495575221238,
+            "p25_p75_coverage": 0.45309734513274336
+          }
+        }
+      }
+    },
+    "DST": {
+      "baseline": "dst_history_baseline",
+      "selected": "dst_history_baseline",
+      "validation_improvement_vs_baseline": 0.0,
+      "candidates": {
+        "dst_history_baseline": {
+          "feature_names": [
+            "dst_points_roll8"
+          ],
+          "validation": {
+            "rows": 100,
+            "mae": 4.12839903136613,
+            "rmse": 5.4253474841261164,
+            "mean_error": 0.388941359522109,
+            "r_squared": -0.0067481153573230035,
+            "p10_p90_coverage": 0.78,
+            "p25_p75_coverage": 0.49
+          }
+        },
+        "dst_defense_form": {
+          "feature_names": [
+            "dst_points_roll8",
+            "dst_sacks_roll8",
+            "dst_takeaways_roll8",
+            "dst_touchdowns_roll8",
+            "dst_points_allowed_score_roll8"
+          ],
+          "validation": {
+            "rows": 100,
+            "mae": 4.148852412645385,
+            "rmse": 5.419667520108766,
+            "mean_error": 0.41252544014784237,
+            "r_squared": -0.00464122736256023,
+            "p10_p90_coverage": 0.8,
+            "p25_p75_coverage": 0.51
+          }
+        },
+        "dst_opponent_allowed": {
+          "feature_names": [
+            "dst_points_roll8",
+            "opponent_dst_points_allowed_roll8",
+            "opponent_sacks_allowed_roll8",
+            "opponent_takeaways_allowed_roll8",
+            "opponent_dst_touchdowns_allowed_roll8"
+          ],
+          "validation": {
+            "rows": 100,
+            "mae": 4.1817812536201115,
+            "rmse": 5.524852581727024,
+            "mean_error": 0.3360578815807109,
+            "r_squared": -0.04401585826965615,
+            "p10_p90_coverage": 0.78,
+            "p25_p75_coverage": 0.5
+          }
+        },
+        "dst_full_internal_context": {
+          "feature_names": [
+            "dst_points_roll8",
+            "dst_sacks_roll8",
+            "dst_takeaways_roll8",
+            "dst_touchdowns_roll8",
+            "dst_points_allowed_score_roll8",
+            "opponent_dst_points_allowed_roll8",
+            "opponent_sacks_allowed_roll8",
+            "opponent_takeaways_allowed_roll8",
+            "opponent_dst_touchdowns_allowed_roll8"
+          ],
+          "validation": {
+            "rows": 100,
+            "mae": 4.204638949844673,
+            "rmse": 5.527096962661844,
+            "mean_error": 0.35505661574372605,
+            "r_squared": -0.044864259268729834,
+            "p10_p90_coverage": 0.77,
+            "p25_p75_coverage": 0.47
+          }
+        }
+      }
+    }
+  },
+  "production_model_changed": false,
+  "lock_hash": "73e4597af6352da4893be80355dd714527e1ae5c33c8d7625df0a28d346c4869"
+}

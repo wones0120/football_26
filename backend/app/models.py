@@ -306,6 +306,146 @@ class RawNflWeeklyStat(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow_naive)
 
 
+class RawNflWeeklyRoster(Base):
+    __tablename__ = "raw_nfl_weekly_roster"
+    __table_args__ = (
+        Index("idx_raw_nfl_weekly_roster_slice", "season", "week", "team"),
+        Index("idx_raw_nfl_weekly_roster_gsis", "gsis_id"),
+        Index("idx_raw_nfl_weekly_roster_pfr", "pfr_id"),
+    )
+
+    raw_nfl_weekly_roster_id: Mapped[int] = mapped_column(
+        BIGINT_ID, primary_key=True, autoincrement=True
+    )
+    ingest_run_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("ingest_run.ingest_run_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    source_system: Mapped[str] = mapped_column(String(32), nullable=False)
+    season: Mapped[int] = mapped_column(Integer, nullable=False)
+    week: Mapped[int] = mapped_column(Integer, nullable=False)
+    game_type: Mapped[str | None] = mapped_column(String(16))
+    team: Mapped[str | None] = mapped_column(String(16))
+    position: Mapped[str | None] = mapped_column(String(16))
+    depth_chart_position: Mapped[str | None] = mapped_column(String(16))
+    roster_status: Mapped[str | None] = mapped_column(String(32))
+    player_name: Mapped[str | None] = mapped_column(String(128))
+    gsis_id: Mapped[str | None] = mapped_column(String(64))
+    pfr_id: Mapped[str | None] = mapped_column(String(64))
+    raw_row_json: Mapped[dict] = mapped_column(JSON_DOCUMENT, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow_naive)
+
+
+class RawNflSnapCount(Base):
+    __tablename__ = "raw_nfl_snap_count"
+    __table_args__ = (
+        Index("idx_raw_nfl_snap_count_slice", "season", "week", "team"),
+        Index("idx_raw_nfl_snap_count_player", "pfr_player_id", "season", "week"),
+    )
+
+    raw_nfl_snap_count_id: Mapped[int] = mapped_column(
+        BIGINT_ID, primary_key=True, autoincrement=True
+    )
+    ingest_run_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("ingest_run.ingest_run_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    source_system: Mapped[str] = mapped_column(String(32), nullable=False)
+    season: Mapped[int] = mapped_column(Integer, nullable=False)
+    week: Mapped[int] = mapped_column(Integer, nullable=False)
+    game_type: Mapped[str | None] = mapped_column(String(16))
+    game_id: Mapped[str | None] = mapped_column(String(64))
+    pfr_game_id: Mapped[str | None] = mapped_column(String(64))
+    pfr_player_id: Mapped[str | None] = mapped_column(String(64))
+    player_name: Mapped[str | None] = mapped_column(String(128))
+    team: Mapped[str | None] = mapped_column(String(16))
+    opponent: Mapped[str | None] = mapped_column(String(16))
+    position: Mapped[str | None] = mapped_column(String(16))
+    offense_snaps: Mapped[int | None] = mapped_column(Integer)
+    offense_pct: Mapped[float | None] = mapped_column(Float)
+    defense_snaps: Mapped[int | None] = mapped_column(Integer)
+    defense_pct: Mapped[float | None] = mapped_column(Float)
+    st_snaps: Mapped[int | None] = mapped_column(Integer)
+    st_pct: Mapped[float | None] = mapped_column(Float)
+    raw_row_json: Mapped[dict] = mapped_column(JSON_DOCUMENT, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow_naive)
+
+
+class CuratedPlayerGameParticipation(Base):
+    __tablename__ = "curated_player_game_participation"
+    __table_args__ = (
+        UniqueConstraint(
+            "season", "week", "game_id", "player_master_id", "team",
+            name="uq_curated_player_game_participation",
+        ),
+        Index("idx_curated_participation_slice", "season", "week", "team"),
+        Index("idx_curated_participation_player", "player_master_id", "season", "week"),
+    )
+
+    curated_player_game_participation_id: Mapped[int] = mapped_column(
+        BIGINT_ID, primary_key=True, autoincrement=True
+    )
+    season: Mapped[int] = mapped_column(Integer, nullable=False)
+    week: Mapped[int] = mapped_column(Integer, nullable=False)
+    game_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    game_type: Mapped[str | None] = mapped_column(String(16))
+    player_master_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("player_master.player_master_id"), nullable=False
+    )
+    player_name: Mapped[str | None] = mapped_column(String(128))
+    team: Mapped[str] = mapped_column(String(16), nullable=False)
+    opponent: Mapped[str | None] = mapped_column(String(16))
+    position: Mapped[str | None] = mapped_column(String(16))
+    roster_status: Mapped[str | None] = mapped_column(String(32))
+    participation_status: Mapped[str] = mapped_column(String(24), nullable=False)
+    participation_reason: Mapped[str] = mapped_column(String(48), nullable=False)
+    offense_snaps: Mapped[int | None] = mapped_column(Integer)
+    offense_snap_share: Mapped[float | None] = mapped_column(Float)
+    defense_snaps: Mapped[int | None] = mapped_column(Integer)
+    defense_snap_share: Mapped[float | None] = mapped_column(Float)
+    st_snaps: Mapped[int | None] = mapped_column(Integer)
+    st_snap_share: Mapped[float | None] = mapped_column(Float)
+    box_score_activity: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    roster_ingest_run_id: Mapped[str | None] = mapped_column(String(36))
+    snap_ingest_run_id: Mapped[str | None] = mapped_column(String(36))
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow_naive)
+
+
+class TeamGameAvailabilityFeature(Base):
+    __tablename__ = "features_team_game_availability"
+    __table_args__ = (
+        UniqueConstraint(
+            "season", "week", "game_id", "team",
+            name="uq_features_team_game_availability",
+        ),
+        Index("idx_features_team_game_availability_slice", "season", "week", "team"),
+    )
+
+    features_team_game_availability_id: Mapped[int] = mapped_column(
+        BIGINT_ID, primary_key=True, autoincrement=True
+    )
+    season: Mapped[int] = mapped_column(Integer, nullable=False)
+    week: Mapped[int] = mapped_column(Integer, nullable=False)
+    game_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    team: Mapped[str] = mapped_column(String(16), nullable=False)
+    opponent: Mapped[str] = mapped_column(String(16), nullable=False)
+    team_offense_missing_share_lag1: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    team_defense_missing_share_lag1: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    team_offense_missing_count_lag1: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    team_defense_missing_count_lag1: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    opponent_offense_missing_share_lag1: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    opponent_defense_missing_share_lag1: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    opponent_offense_missing_count_lag1: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    opponent_defense_missing_count_lag1: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    team_source_game_id: Mapped[str | None] = mapped_column(String(64))
+    team_source_week: Mapped[int | None] = mapped_column(Integer)
+    opponent_source_game_id: Mapped[str | None] = mapped_column(String(64))
+    opponent_source_week: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow_naive)
+
+
 class PlayerGameFeatureMatrix(Base):
     __tablename__ = "player_game_feature_matrix"
     __table_args__ = (
@@ -355,6 +495,10 @@ class PlayerGameFeatureMatrix(Base):
     player_injury_status: Mapped[str | None] = mapped_column(String(24))
     team_skill_out_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     team_position_out_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    team_offense_missing_share_lag1: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    team_defense_missing_share_lag1: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    opponent_offense_missing_share_lag1: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    opponent_defense_missing_share_lag1: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow_naive)
 
 

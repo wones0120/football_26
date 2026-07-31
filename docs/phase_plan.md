@@ -1,6 +1,6 @@
 # Phase Plan
 
-Last reviewed: 2026-07-30
+Last reviewed: 2026-07-31
 
 This is the executive roadmap. `docs/TODO.md` is the authoritative source for
 active task status, priority, dependencies, and acceptance checks.
@@ -17,6 +17,7 @@ active task status, priority, dependencies, and acceptance checks.
 8. Classic GPP exposes a persisted versioned strategy choice; the advanced slate-aware engine runs on exact live lineage without silent baseline fallback (`OPT-001`).
 9. Showdown cash and GPP have distinct versioned basic-captain contracts; completed lineups, normalized CPT/FLEX slots, failures, and exact run lineage persist and reload (`OPT-002`).
 10. Projection champions no longer change when a new run completes. Promotion and rollback require persisted evaluation windows, feature/code hashes, comparable gates, and named approvals (`MODEL-002`).
+11. The locked MODEL-001 opportunity/efficiency and DST ablation was rejected on its 2025 W12-W18 holdout; production remains unchanged and the next evaluation requires prospectively captured 2026 evidence.
 
 ## Execution Board
 
@@ -26,7 +27,7 @@ active task status, priority, dependencies, and acceptance checks.
 3. Keep classic and showdown benchmarks separate, track their declared quality metrics, and preserve current production defaults until a walk-forward acceptance gate beats them.
 
 ### Next
-1. Complete point-in-time Vegas, props, weather, depth-chart, injury, and role capture (`DATA-002`); explicit model-promotion governance is complete (`MODEL-002`).
+1. Capture the first prospective 2026 salary and approved external-source snapshots with provable observation time (`DATA-002`), then rerun the rejected MODEL-001 candidate contract on untouched weeks.
 2. Add lock-aware weekly refreshes after the point-in-time source contract is proven (`OPS-003`, `DATA-002`).
 
 ## Phase 1 (Now): Data Foundation

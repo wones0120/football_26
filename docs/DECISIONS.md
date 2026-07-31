@@ -2,6 +2,13 @@
 
 This log records decisions that affect reproducibility, production defaults, or historical-model acceptance. The operational backlog remains in `docs/TODO.md`.
 
+## 2026-07-31 — Reject the locked opportunity/efficiency projection candidate
+
+- Decision: retain the existing production projection model. Do not promote the per-position MODEL-001 opportunity/efficiency candidates or the DST defense-form/opponent-allowed groups. Preserve the content-addressed selection lock and holdout evidence, and repeat the contract only on a prospectively captured 2026 cohort.
+- Evidence: validation through 2025 W11 selected opportunity plus efficiency for QB/TE, efficiency for RB/WR, and the history baseline for DST. The locked 2,734-row W12-W18 holdout produced `2.978` MAE versus `2.976` for the history baseline, a `0.04%` regression. RB improved `0.35%`; QB, WR, and TE regressed `0.11%`, `0.19%`, and `0.19%`; DST additions had already reduced validation quality by `0.50%` to `1.85%`. Position and lagged-role interval coverage remain recorded in `docs/MODEL-001_HOLDOUT_EVIDENCE.md`.
+- Rationale: validation lift did not generalize, and several high-opportunity roles remain materially under-calibrated. The historical salary cohort also lacks preserved pre-lock observation timestamps, so it cannot authorize a production promotion even if aggregate error had improved.
+- Production impact: none. `model_001_opportunity_efficiency_ablation_v1` is research-only, the active projection pointer is unchanged, and any future 2026 challenger must pass the existing MODEL-002 evaluation and named-approval workflow.
+
 ## 2026-07-30 — Fail closed when snapshot observation time is not proven
 
 - Decision: expose an injury snapshot to simulations, optimizers, or symbolic rules only when both its `as_of` timestamp and the selected projection's `data_cutoff_at` exist and `as_of <= data_cutoff_at`. Do not backdate retrospective imports from season/week labels, file names, game dates, or undocumented assumptions.
