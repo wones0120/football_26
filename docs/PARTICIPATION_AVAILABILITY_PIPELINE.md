@@ -42,6 +42,11 @@ Silver table `curated_player_game_participation` resolves every included row to
 cannot resolve is added to `unresolved_player_queue`, never silently joined by display name or
 dropped as if resolved.
 
+An ID-less roster row may enter Silver only when normalized name, team, and position identify one
+and only one current master. This exact three-field fallback is never used for ambiguous rows, and
+raw display name alone is never sufficient. Snap-count rows require a native PFR alias or the
+audited PFR-to-GSIS registry chain described in `docs/PARTICIPATION_IDENTITY_REASSESSMENT.md`.
+
 Gold table `features_team_game_availability` stores one row per team-game with team and opponent
 values plus source-game lineage. The four model inputs also flow into
 `player_game_feature_matrix`:
@@ -87,23 +92,26 @@ These columns are now available to the guarded player-matchup model family and h
 matrix. Their presence does not promote a model: the existing time-split validation and model
 promotion governance still decide whether a trained candidate can become active.
 
-## Local audit after the initial load
+## Local audit after deterministic identity reassessment
 
 | Layer/status | Rows |
 |---|---:|
 | Raw weekly rosters | 906,378 |
 | Raw snap counts | 324,611 |
-| Curated player-game participation | 769,113 |
+| Curated player-game participation | 769,411 |
 | Gold team-game availability | 12,446 |
-| `played_confirmed` | 181,144 |
+| `played_confirmed` | 181,404 |
 | `played_inferred` | 175,917 |
-| `did_not_play` | 298,987 |
+| `did_not_play` | 299,025 |
 | `unknown` | 113,065 |
-| Open roster identities | 31 |
-| Open snap-count identities | 405 |
+| Open roster identities | 26 |
+| Open snap-count identities | 11 |
 
 Every snap-covered season has nonzero availability features. The early roster-only seasons remain
 useful for membership and box-score participation, but correctly have zero snap-loss features.
+The August 1, 2026 repair added 298 unique curated player-games while leaving the Gold team-game
+row count unchanged; the affected lagged values were rebuilt in place and the 16,985-row 2024–2025
+player feature matrix was refreshed across 88 slates with zero failures.
 
 ## Operations
 
@@ -113,6 +121,16 @@ Load or refresh all available history:
 python scripts/apply_migrations.py
 python scripts/load_nflreadpy_participation.py \
   --season-start 2002 \
+  --season-end 2025
+
+# Preview deterministic participation identity repairs. This is read-only.
+python scripts/reassess_participation_identities.py
+
+# Apply exactly the previewed native-ID and unique exact matches.
+python scripts/reassess_participation_identities.py --apply
+
+python scripts/build_player_game_feature_matrix.py \
+  --season-start 2024 \
   --season-end 2025
 ```
 
@@ -124,6 +142,7 @@ POST /api/ingest/nflreadpy/snap-counts
 ```
 
 Both accept `NflReadPySeasonRequest` with `season` and optional `weeks`. Coverage and freshness are
-visible through `GET /api/coverage/season` and `GET /api/coverage/freshness`. Resolve the 436 open
-identities through the existing unresolved-player workflow; a later rebuild will consume the
-persisted aliases.
+visible through `GET /api/coverage/season` and `GET /api/coverage/freshness`. The reassessment
+command records every automatic resolution in the existing queue and rebuilds each affected season.
+The 37 residual identities have no deterministic match under the current contract and remain
+available through the existing unresolved-player workflow.

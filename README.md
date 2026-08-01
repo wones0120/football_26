@@ -114,12 +114,21 @@ game itself. Load all available history and rebuild the standard player-game mat
 
 ```bash
 python scripts/load_nflreadpy_participation.py --season-start 2002 --season-end 2025
+python scripts/reassess_participation_identities.py
+python scripts/reassess_participation_identities.py --apply
 python scripts/build_player_game_feature_matrix.py --season-start 2024 --season-end 2025
 ```
 
+nflreadpy player-registry reassessment is dry-run by default. Apply mode accepts only an existing
+PFR alias, a unique PFR-to-GSIS registry chain ending at an existing canonical alias, or an exact
+unique name+team+position match for an ID-less roster row. Conflicting or ambiguous identities stay
+quarantined. The August 2026 audit resolved 399 queue rows, preserved the 125-row registry evidence
+subset as an immutable source snapshot, and left 37 nondeterministic rows open.
+
 nflverse weekly rosters cover 2002–2025; the snap-count endpoint begins with 2013. Exact schema,
-classification, lineage, feature definitions, and the local load audit are documented in
-`docs/PARTICIPATION_AVAILABILITY_PIPELINE.md`.
+classification, lineage, feature definitions, and local audits are documented in
+`docs/PARTICIPATION_AVAILABILITY_PIPELINE.md` and
+`docs/PARTICIPATION_IDENTITY_REASSESSMENT.md`.
 
 ## Point-In-Time Input Safety
 
@@ -134,6 +143,32 @@ as historical pre-lock inputs: they were loaded on February 25, 2026, and do not
 values were first available. DATA-002 remains blocked until a source supplies trustworthy observation
 timestamps or the platform begins prospective capture. See
 `docs/DATA-002_SOURCE_AVAILABILITY_AUDIT.md` for exact coverage and source decisions.
+
+Migration `0019` and `scripts/capture_prospective_sources.py` provide the prospective 2026 capture
+path. Every observation is copied before downstream use into the content-addressed directory set by
+`SOURCE_SNAPSHOT_ROOT`, accompanied by a canonical JSON manifest containing source, license,
+server receipt time, effective time, slate lock, SHA-256, byte/row counts, and source metadata.
+PostgreSQL rejects updates or deletes of snapshot rows. Repeated identical captures reuse the first
+artifact and manifest; changed content creates a new immutable version.
+
+For a weekly capture, rename a downloaded salary file to include the explicit season/week for safe
+directory discovery (for example `DKSalaries_2026_01_sunday_main.csv`) and run:
+
+```bash
+python scripts/capture_prospective_sources.py \
+  --season 2026 \
+  --week 1 \
+  --slate sunday_main \
+  --slate-lock-at 2026-09-13T13:00:00-04:00 \
+  --draftkings-directory ~/Downloads \
+  --nflreadpy-datasets schedules weekly_rosters injuries snap_counts
+```
+
+A generic `DKSalaries.csv` is accepted only with an explicit `--draftkings-path`, preventing a
+scheduled directory scan from labeling an old download as a new week. DraftKings salary ingestion
+reads the preserved copy and links its deterministic ingest run to the snapshot. A post-lock salary
+download is archived but receives no ingest run and is excluded from cutoff-scoped selection. See
+`docs/PROSPECTIVE_SOURCE_CAPTURE.md` for the contract, operations, and recovery checks.
 
 ## MODEL-001 Feature Ablation
 

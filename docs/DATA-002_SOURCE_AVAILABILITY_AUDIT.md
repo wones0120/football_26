@@ -4,13 +4,19 @@ Date: 2026-07-30
 
 ## Outcome
 
-DATA-002 remains incomplete and is now explicitly blocked. The repository and development database
+DATA-002 remains incomplete and explicitly blocked. The repository and development database
 do not contain an approved historical Vegas, props, weather, depth-chart, injury, or role feed that
 preserves when each value was observable before lock. No timestamps were inferred or backfilled.
 
 The bounded safe change is `point_in_time_cutoff_v1`: projection-linked consumers now ignore an
 injury snapshot unless both its `as_of` and the exact projection run's `data_cutoff_at` exist and the
 snapshot was observed at or before that cutoff.
+
+The prospective tooling is now ready through `prospective_source_snapshot_v1`. Migration `0019`
+stores append-only source manifests and ingest links, and `scripts/capture_prospective_sources.py`
+captures DraftKings salaries plus nflreadpy schedules, rosters, injuries, and snap counts using
+server receipt time. Real 2026 observations have not yet been collected, so this does not change the
+historical-source decision or unblock MODEL-001. See `docs/PROSPECTIVE_SOURCE_CAPTURE.md`.
 
 ## Local Evidence
 
@@ -64,8 +70,9 @@ DATA-002 can resume through either route:
 
 1. Select an authorized historical source that provides immutable observation timestamps and stable
    native IDs, then retain source payload, effective time, observed time, and ingest lineage.
-2. Begin prospective capture for the 2026 season, using server receipt time as the non-backdatable
-   observation time and source publication/effective time as separate metadata.
+2. Run the implemented prospective capture command for the 2026 season, using server receipt time
+   as the non-backdatable observation time and source publication/effective time as separate
+   metadata.
 
 Vegas, props, weather, depth-chart, injury, and role sources must be approved independently. One
 source's timestamp quality must not be generalized to another.

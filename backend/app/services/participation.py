@@ -11,13 +11,14 @@ from sqlalchemy.orm import Session
 from ..models import (
     CuratedPlayerGameParticipation,
     PlayerAlias,
+    PlayerMaster,
     RawNflSchedule,
     RawNflSnapCount,
     RawNflWeeklyRoster,
     RawNflWeeklyStat,
     TeamGameAvailabilityFeature,
 )
-from .matching import normalize_position, normalize_team
+from .matching import normalize_name, normalize_position, normalize_team
 
 
 INACTIVE_ROSTER_STATUSES = {
@@ -271,6 +272,20 @@ class ParticipationService:
         pfr_to_master = {
             row.source_key: row.player_master_id for row in alias_rows if row.source_system == "pfr"
         }
+        semantic_candidates: dict[tuple[str, str | None, str | None], set[str]] = defaultdict(set)
+        for master in self.session.execute(select(PlayerMaster)).scalars():
+            semantic_key = (
+                master.normalized_name or normalize_name(master.full_name),
+                normalize_team(master.primary_team),
+                normalize_position(master.position),
+            )
+            if all(semantic_key):
+                semantic_candidates[semantic_key].add(master.player_master_id)
+        semantic_to_master = {
+            key: next(iter(player_ids))
+            for key, player_ids in semantic_candidates.items()
+            if len(player_ids) == 1
+        }
 
         weekly_stats = self.session.execute(
             select(RawNflWeeklyStat).where(RawNflWeeklyStat.season == season)
@@ -329,6 +344,14 @@ class ParticipationService:
                 gsis_to_master.get(roster.gsis_id or "")
                 or pfr_to_master.get(roster.pfr_id or "")
             )
+            if not player_master_id:
+                player_master_id = semantic_to_master.get(
+                    (
+                        normalize_name(roster.player_name),
+                        normalize_team(roster.team),
+                        normalize_position(roster.position),
+                    )
+                )
             if not player_master_id:
                 continue
             snap = snap_by_player.get((roster.week, roster.team, roster.pfr_id or ""))

@@ -6,3 +6,4 @@ __pycache__/
 node_modules/
 ui/dist/
 artifacts/checkpoints/
+artifacts/source_snapshots/

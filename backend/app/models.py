@@ -51,6 +51,66 @@ class IngestRun(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime)
 
 
+class SourceSnapshot(Base):
+    """Content-addressed evidence captured at a trustworthy observation time."""
+
+    __tablename__ = "source_snapshot"
+    __table_args__ = (
+        Index(
+            "idx_source_snapshot_scope_observed",
+            "source_system",
+            "dataset",
+            "season",
+            "week",
+            "slate",
+            "observed_at",
+        ),
+        Index("idx_source_snapshot_content_sha256", "content_sha256"),
+    )
+
+    snapshot_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    source_system: Mapped[str] = mapped_column(String(32), nullable=False)
+    dataset: Mapped[str] = mapped_column(String(64), nullable=False)
+    season: Mapped[int] = mapped_column(Integer, nullable=False)
+    week: Mapped[int | None] = mapped_column(Integer)
+    slate: Mapped[str | None] = mapped_column(String(64))
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    effective_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    slate_lock_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    observation_basis: Mapped[str] = mapped_column(String(48), nullable=False)
+    content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    byte_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    row_count: Mapped[int | None] = mapped_column(Integer)
+    media_type: Mapped[str] = mapped_column(String(128), nullable=False)
+    artifact_path: Mapped[str] = mapped_column(Text, nullable=False)
+    manifest_path: Mapped[str] = mapped_column(Text, nullable=False)
+    original_path: Mapped[str | None] = mapped_column(Text)
+    source_uri: Mapped[str | None] = mapped_column(Text)
+    source_license: Mapped[str] = mapped_column(Text, nullable=False)
+    metadata_json: Mapped[dict] = mapped_column(JSON_DOCUMENT, nullable=False, default=dict)
+
+
+class SourceSnapshotIngestRun(Base):
+    """Append-only link from immutable source evidence to a downstream ingest run."""
+
+    __tablename__ = "source_snapshot_ingest_run"
+
+    snapshot_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("source_snapshot.snapshot_id"),
+        primary_key=True,
+    )
+    ingest_run_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("ingest_run.ingest_run_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    linked_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+
 class PlayerMaster(Base):
     __tablename__ = "player_master"
 

@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     matchup_outcome_model_path: str = "docs/matchup_outcome_intelligence_2024_2025.json"
     matchup_outcome_prior_strength: float = 0.15
     matchup_prior_gate_model_path: str = "docs/matchup_prior_gate_20slates_5000.json"
+    source_snapshot_root: str = "artifacts/source_snapshots"
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
 

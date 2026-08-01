@@ -1,6 +1,6 @@
 # Phase Plan
 
-Last reviewed: 2026-07-31
+Last reviewed: 2026-08-01
 
 This is the executive roadmap. `docs/TODO.md` is the authoritative source for
 active task status, priority, dependencies, and acceptance checks.
@@ -18,6 +18,8 @@ active task status, priority, dependencies, and acceptance checks.
 9. Showdown cash and GPP have distinct versioned basic-captain contracts; completed lineups, normalized CPT/FLEX slots, failures, and exact run lineage persist and reload (`OPT-002`).
 10. Projection champions no longer change when a new run completes. Promotion and rollback require persisted evaluation windows, feature/code hashes, comparable gates, and named approvals (`MODEL-002`).
 11. The locked MODEL-001 opportunity/efficiency and DST ablation was rejected on its 2025 W12-W18 holdout; production remains unchanged and the next evaluation requires prospectively captured 2026 evidence.
+12. `prospective_source_snapshot_v1` is ready to content-address 2026 DraftKings and nflreadpy observations, preserve server receipt/effective/lock metadata, ingest eligible salaries from the immutable copy, and exclude post-lock files. Real prospective weeks are still required.
+13. Participation identity reassessment resolved 399 of 436 roster/snap queue rows through native-ID or unique exact semantic evidence, rebuilt 2013–2025 Silver/Gold data, refreshed the 2024–2025 feature matrix, and retained 37 nondeterministic rows for review.
 
 ## Execution Board
 
