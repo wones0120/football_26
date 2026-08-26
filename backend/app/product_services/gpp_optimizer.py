@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import pandas as pd
@@ -889,8 +889,8 @@ def generate_portfolio(
         job_id=str(uuid.uuid4()),
         status=status,
         message=message,
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
         lineups=[[players[i] for i in idxs] for idxs in lineups],
         config=config,
         analysis=analysis,

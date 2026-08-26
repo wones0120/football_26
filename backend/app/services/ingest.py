@@ -15,6 +15,8 @@ from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
 from ..models import (
+    CuratedGameVenue,
+    CuratedGameWeather,
     CuratedInjury,
     CuratedSalary,
     IngestRun,
@@ -57,7 +59,12 @@ from .matching import (
     parse_opponent_from_game_info,
     upsert_alias,
 )
+from .historical_weather import (
+    apply_historical_weather_rebuild,
+    assess_historical_game_weather,
+)
 from .participation import ParticipationService
+from .venue_registry import apply_venue_registry, assess_venue_registry
 
 
 def utcnow_naive() -> datetime:
@@ -757,6 +764,20 @@ class IngestService:
         season: int,
         weeks: list[int] | None,
     ) -> None:
+        venue_query = self.session.query(CuratedGameVenue).filter(
+            CuratedGameVenue.season == season
+        )
+        if weeks:
+            venue_query = venue_query.filter(CuratedGameVenue.week.in_(weeks))
+        venue_query.delete(synchronize_session=False)
+
+        weather_query = self.session.query(CuratedGameWeather).filter(
+            CuratedGameWeather.season == season
+        )
+        if weeks:
+            weather_query = weather_query.filter(CuratedGameWeather.week.in_(weeks))
+        weather_query.delete(synchronize_session=False)
+
         query = self.session.query(RawNflSchedule).filter(
             and_(
                 RawNflSchedule.source_system == "nflreadpy",
@@ -1136,32 +1157,57 @@ class IngestService:
             rows=rows,
         )
 
-    def ingest_nflreadpy_schedules(self, request: NflReadPySeasonRequest) -> IngestResultResponse:
+    def ingest_nflreadpy_schedules(
+        self,
+        request: NflReadPySeasonRequest,
+        *,
+        source_frame: pd.DataFrame | None = None,
+        ingest_run_id: str | None = None,
+        source_path: str | None = None,
+    ) -> IngestResultResponse:
+        completed = self._completed_run(ingest_run_id)
+        if completed is not None:
+            return IngestResultResponse.model_validate(completed, from_attributes=True)
+
         run = self._new_run(
             source_system="nflreadpy",
             source_table="nfl_schedule",
-            source_path=None,
+            source_path=source_path,
             season=request.season,
             week=None,
             slate=None,
+            ingest_run_id=ingest_run_id,
         )
         rows_raw = 0
         rows_curated = 0
         rows_unresolved = 0
         try:
-            try:
-                import nflreadpy as nfl  # type: ignore
-            except ModuleNotFoundError as exc:
-                raise RuntimeError(
-                    "nflreadpy is not installed. Activate your virtualenv and run "
-                    "`pip install -r requirements.txt`, then restart the API."
-                ) from exc
+            if source_frame is None:
+                try:
+                    import nflreadpy as nfl  # type: ignore
+                except ModuleNotFoundError as exc:
+                    raise RuntimeError(
+                        "nflreadpy is not installed. Activate your virtualenv and run "
+                        "`pip install -r requirements.txt`, then restart the API."
+                    ) from exc
 
-            df = self._load_nflreadpy_schedules(
-                nfl_module=nfl,
-                season=request.season,
-                weeks=request.weeks,
-            )
+                df = self._load_nflreadpy_schedules(
+                    nfl_module=nfl,
+                    season=request.season,
+                    weeks=request.weeks,
+                )
+            else:
+                df = _coerce_dataframe(source_frame).copy()
+                if request.weeks:
+                    week_filter_col = next(
+                        (column for column in ("week", "game_week") if column in df.columns),
+                        None,
+                    )
+                    if week_filter_col is None:
+                        raise RuntimeError(
+                            "Could not find a usable week column in captured nflreadpy schedules."
+                        )
+                    df = df[df[week_filter_col].isin(request.weeks)]
             if df is None or getattr(df, "empty", True):
                 raise RuntimeError("nflreadpy schedules returned no records.")
 
@@ -1202,6 +1248,19 @@ class IngestService:
                 )
                 rows_curated += 1
 
+            self.session.flush()
+            venue_assessment = assess_venue_registry(
+                self.session,
+                season_start=request.season,
+                season_end=request.season,
+            )
+            apply_venue_registry(self.session, venue_assessment)
+            weather_assessment = assess_historical_game_weather(
+                self.session,
+                season_start=request.season,
+                season_end=request.season,
+            )
+            apply_historical_weather_rebuild(self.session, weather_assessment)
             self.session.commit()
             run = self._complete_run(
                 run_id=run.ingest_run_id,
@@ -1786,6 +1845,14 @@ class IngestService:
                         UNION ALL
                         SELECT 'features_team_game_availability' AS dataset, season, COUNT(*)::INT AS rows
                         FROM features_team_game_availability
+                        GROUP BY season
+                        UNION ALL
+                        SELECT 'curated_game_weather' AS dataset, season, COUNT(*)::INT AS rows
+                        FROM curated_game_weather
+                        GROUP BY season
+                        UNION ALL
+                        SELECT 'curated_game_venue' AS dataset, season, COUNT(*)::INT AS rows
+                        FROM curated_game_venue
                         GROUP BY season
                         UNION ALL
                         SELECT 'raw_salary_row' AS dataset, season, COUNT(*)::INT AS rows

@@ -4,6 +4,7 @@ import {
   fetchLatestOwnership,
   fetchLatestPredictions,
   fetchLatestSlateSimulation,
+  fetchSlateWeather,
   runNewsMonitor,
   type NewsMonitorHeadline,
   type NewsMonitorRunResponse,
@@ -12,7 +13,23 @@ import {
   type OwnershipProjectionRow,
   type PredictionRow,
   type SimulationPlayerRow,
+  type SlateWeatherResponse,
 } from "./api";
+import {
+  buildGameMatrixRows,
+  formatDateTime,
+  formatForecastSource,
+  formatForecastTimestamp,
+  formatFreshness,
+  formatPrecipitationMm,
+  formatRoof,
+  formatTemperatureC,
+  formatWeatherWarning,
+  formatWindMps,
+  shouldShowHistoricalActual,
+  weatherStateLabel,
+  weatherWarnings,
+} from "./weatherPresentation";
 import "./WarRoom.css";
 
 type WarRoomProps = {
@@ -130,15 +147,6 @@ const DECISION_BOARD_MODES: Array<{
   { id: "ceiling", label: "Ceiling", summary: "Highest modeled ceilings" },
   { id: "risk", label: "Risk", summary: "Widest modeled downside gaps" },
 ];
-
-type GameMatrixRow = {
-  key: string;
-  matchup: string;
-  pressure: string;
-  avgProjection: string;
-  affectedPlayers: number;
-  risk: string;
-};
 
 type DebateStance = "Core" | "Over" | "Under" | "Fade" | "Need more info";
 
@@ -294,65 +302,6 @@ function buildDecisionRows(
   });
 }
 
-function buildGameMatrixRows(
-  predictions: PredictionRow[],
-  signals: NewsMonitorSignal[]
-): GameMatrixRow[] {
-  const byGame = new Map<
-    string,
-    {
-      teams: [string, string];
-      projections: number[];
-    }
-  >();
-
-  predictions.forEach((prediction) => {
-    const team = prediction.recent_team || "";
-    const opponent = prediction.opponent_team || "";
-    if (!team || !opponent) {
-      return;
-    }
-    const teams = [team, opponent].sort() as [string, string];
-    const key = teams.join("|");
-    const entry = byGame.get(key) ?? { teams, projections: [] };
-    entry.projections.push(projectionValue(prediction));
-    byGame.set(key, entry);
-  });
-
-  return Array.from(byGame.entries())
-    .map(([key, game]) => {
-      const relatedSignals = signals.filter((signal) => {
-        const team = signal.team?.toUpperCase();
-        return team === game.teams[0] || team === game.teams[1];
-      });
-      const avgProjection =
-        game.projections.length === 0
-          ? 0
-          : game.projections.reduce((sum, current) => sum + current, 0) / game.projections.length;
-      const highSignalCount = relatedSignals.filter(
-        (signal) => signal.dfs_relevance?.toLowerCase() === "high"
-      ).length;
-
-      let pressure = "C";
-      if (avgProjection >= 14 || highSignalCount >= 2) {
-        pressure = "A";
-      } else if (avgProjection >= 10 || relatedSignals.length >= 1) {
-        pressure = "B";
-      }
-
-      return {
-        key,
-        matchup: `${game.teams[0]} vs ${game.teams[1]}`,
-        pressure,
-        avgProjection: avgProjection.toFixed(1),
-        affectedPlayers: relatedSignals.length,
-        risk: relatedSignals[0]?.signal_type ? titleCase(relatedSignals[0].signal_type) : "Stable",
-      };
-    })
-    .sort((left, right) => Number(right.avgProjection) - Number(left.avgProjection))
-    .slice(0, 8);
-}
-
 function optimizerPlayerTeam(player: OptimizerLineupPlayer) {
   return player.player_team || player.team || player.recent_team || "";
 }
@@ -498,6 +447,10 @@ export function WarRoom({
   const [decisionBoardMode, setDecisionBoardMode] = useState<DecisionBoardMode>("leverage");
   const [decisionLoading, setDecisionLoading] = useState(true);
   const [decisionError, setDecisionError] = useState<string | null>(null);
+  const [weatherReport, setWeatherReport] = useState<SlateWeatherResponse | null>(null);
+  const [weatherLoading, setWeatherLoading] = useState(true);
+  const [weatherError, setWeatherError] = useState<string | null>(null);
+  const [selectedGameKey, setSelectedGameKey] = useState("");
   const [selectedDebatePlayer, setSelectedDebatePlayer] = useState<string>("");
   const [debateStance, setDebateStance] = useState<DebateStance>("Need more info");
   const [debateNote, setDebateNote] = useState("");
@@ -565,10 +518,43 @@ export function WarRoom({
     }
   };
 
-  const liveSignals = buildSignalTape(newsReport);
-  const gameMatrixRows = buildGameMatrixRows(
-    projectionRows,
-    newsReport?.report.high_priority_signals ?? []
+  useEffect(() => {
+    let cancelled = false;
+
+    setWeatherLoading(true);
+    setWeatherError(null);
+    setWeatherReport(null);
+    fetchSlateWeather({ season, week, slate })
+      .then((response) => {
+        if (!cancelled) setWeatherReport(response);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setWeatherError(error instanceof Error ? error.message : String(error));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setWeatherLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [season, week, slate]);
+
+  const liveSignals = useMemo(() => buildSignalTape(newsReport), [newsReport]);
+  const matrixSignals = useMemo(
+    () => newsReport?.report.high_priority_signals ?? [],
+    [newsReport]
+  );
+  const gameMatrixRows = useMemo(
+    () => buildGameMatrixRows(
+      projectionRows,
+      matrixSignals,
+      weatherReport?.games ?? [],
+      weatherLoading ? "loading" : weatherError ? "error" : "missing"
+    ),
+    [matrixSignals, projectionRows, weatherError, weatherLoading, weatherReport]
   );
   const decisionRows = useMemo(
     () => buildDecisionRows(projectionRows, ownershipRows, simulationRows, decisionBoardMode),
@@ -624,6 +610,16 @@ export function WarRoom({
   }, [onProjectionRunChange, projectionRunId, season, week, slate]);
 
   useEffect(() => {
+    if (gameMatrixRows.length === 0) {
+      if (selectedGameKey) setSelectedGameKey("");
+      return;
+    }
+    if (!gameMatrixRows.some((row) => row.key === selectedGameKey)) {
+      setSelectedGameKey(gameMatrixRows[0].key);
+    }
+  }, [gameMatrixRows, selectedGameKey]);
+
+  useEffect(() => {
     if (decisionRows.length === 0) {
       if (selectedDebatePlayer) {
         setSelectedDebatePlayer("");
@@ -637,6 +633,10 @@ export function WarRoom({
 
   const selectedDecision =
     decisionRows.find((row) => row.player === selectedDebatePlayer) ?? decisionRows[0] ?? null;
+  const selectedGame =
+    gameMatrixRows.find((row) => row.key === selectedGameKey) ?? gameMatrixRows[0] ?? null;
+  const selectedWeather = selectedGame?.weather ?? null;
+  const selectedWeatherWarnings = selectedWeather ? weatherWarnings(selectedWeather) : [];
   const optimizerLineups = extractOptimizerLineups(optimizerStatus);
   const lineupCards = optimizerLineups.map((lineup, index) => buildLineupCard(lineup, index));
   const exposureRows = buildExposureRows(optimizerLineups);
@@ -900,49 +900,207 @@ export function WarRoom({
               <span>Game Pressure Matrix</span>
               <strong>Where the slate can break</strong>
             </div>
+            {weatherLoading && (
+              <div className="weather-banner" aria-live="polite">
+                Loading cutoff-safe weather for every slate matchup.
+              </div>
+            )}
+            {!weatherLoading && weatherError && (
+              <div className="weather-banner weather-banner-error" aria-live="polite">
+                Weather service unavailable: {weatherError}
+              </div>
+            )}
+            {!weatherLoading && !weatherError && weatherReport && weatherReport.quality_flags.length > 0 && (
+              <div className="weather-banner weather-banner-warning" aria-live="polite">
+                <strong>Slate weather warnings:</strong>{" "}
+                {weatherReport.quality_flags.map(formatWeatherWarning).join(" ")}
+              </div>
+            )}
             <div className="game-grid">
-              {!decisionLoading && !decisionError && gameMatrixRows.length === 0 && (
-                <article>
+              {!decisionLoading && !weatherLoading && gameMatrixRows.length === 0 && (
+                <article className="game-card-empty">
                   <span>No Active Games</span>
-                  <strong>--</strong>
-                  <dl>
-                    <div>
-                      <dt>Avg Proj</dt>
-                      <dd>--</dd>
-                    </div>
-                    <div>
-                      <dt>Signals</dt>
-                      <dd>0</dd>
-                    </div>
-                    <div>
-                      <dt>Risk</dt>
-                      <dd>Waiting</dd>
-                    </div>
-                  </dl>
+                  <p>No projection or canonical weather matchups are available for this slate.</p>
                 </article>
               )}
 
               {gameMatrixRows.map((game) => (
-                <article key={game.key}>
-                  <span>{game.matchup}</span>
-                  <strong>{game.pressure}</strong>
-                  <dl>
-                    <div>
-                      <dt>Avg Proj</dt>
-                      <dd>{game.avgProjection}</dd>
+                <article
+                  key={game.key}
+                  className={selectedGame?.key === game.key ? "selected" : ""}
+                >
+                  <button
+                    type="button"
+                    className="game-card-button"
+                    aria-pressed={selectedGame?.key === game.key}
+                    onClick={() => setSelectedGameKey(game.key)}
+                  >
+                    <div className="game-card-head">
+                      <span>{game.matchup}</span>
+                      <span className={`weather-state weather-state-${game.weatherState}`}>
+                        {weatherStateLabel(game.weatherState)}
+                      </span>
                     </div>
-                    <div>
-                      <dt>Signals</dt>
-                      <dd>{game.affectedPlayers}</dd>
+                    <div className="game-pressure-grade">
+                      <strong>{game.pressure}</strong>
+                      <span>Pressure</span>
                     </div>
-                    <div>
-                      <dt>Risk</dt>
-                      <dd>{game.risk}</dd>
+                    <dl>
+                      <div>
+                        <dt>Avg Proj</dt>
+                        <dd>{game.avgProjection}</dd>
+                      </div>
+                      <div>
+                        <dt>Signals</dt>
+                        <dd>{game.affectedPlayers}</dd>
+                      </div>
+                      <div>
+                        <dt>Risk</dt>
+                        <dd>{game.risk}</dd>
+                      </div>
+                    </dl>
+                    <div className="game-weather-quick">
+                      <span>{formatTemperatureC(game.weather?.forecast?.temperature_c)}</span>
+                      <span>{formatWindMps(game.weather?.forecast?.wind_speed_mps)} wind</span>
+                      <span>{formatPrecipitationMm(game.weather?.forecast?.precipitation_mm)} precip</span>
                     </div>
-                  </dl>
+                  </button>
                 </article>
               ))}
             </div>
+
+            {selectedGame && (
+              <section className="matchup-weather-detail" aria-label={`${selectedGame.matchup} weather detail`}>
+                <div className="matchup-weather-head">
+                  <div>
+                    <span>Matchup Weather Detail</span>
+                    <h3>{selectedGame.matchup}</h3>
+                    <p>
+                      {selectedGame.kickoffAt
+                        ? `Kickoff ${formatDateTime(selectedGame.kickoffAt)}`
+                        : "Kickoff unavailable"}
+                    </p>
+                  </div>
+                  <span className={`weather-state weather-state-${selectedGame.weatherState}`}>
+                    {weatherStateLabel(selectedGame.weatherState)}
+                  </span>
+                </div>
+
+                {!selectedWeather && (
+                  <div className="weather-detail-empty">
+                    {weatherLoading
+                      ? "Waiting for the canonical slate weather response."
+                      : weatherError
+                        ? "The weather request failed; this matchup is explicitly marked Error."
+                        : "No canonical weather row matched this projection matchup; it is explicitly marked Missing."}
+                  </div>
+                )}
+
+                {selectedWeather && (
+                  <>
+                    <div className="weather-metrics">
+                      <article>
+                        <span>Temperature</span>
+                        <strong>{formatTemperatureC(selectedWeather.forecast?.temperature_c)}</strong>
+                      </article>
+                      <article>
+                        <span>Wind</span>
+                        <strong>{formatWindMps(selectedWeather.forecast?.wind_speed_mps)}</strong>
+                      </article>
+                      <article>
+                        <span>Gusts</span>
+                        <strong>{formatWindMps(selectedWeather.forecast?.wind_gusts_mps)}</strong>
+                      </article>
+                      <article>
+                        <span>Precipitation</span>
+                        <strong>{formatPrecipitationMm(selectedWeather.forecast?.precipitation_mm)}</strong>
+                      </article>
+                      <article>
+                        <span>Roof</span>
+                        <strong>{formatRoof(selectedWeather.venue?.default_roof)}</strong>
+                        <small>Venue registry default</small>
+                      </article>
+                    </div>
+
+                    <div className="weather-lineage">
+                      <div>
+                        <span>Forecast Source</span>
+                        <strong>{formatForecastSource(selectedWeather)}</strong>
+                      </div>
+                      <div>
+                        <span>Forecast Timestamp</span>
+                        <strong>{formatForecastTimestamp(selectedWeather)}</strong>
+                      </div>
+                      <div>
+                        <span>Forecast Valid For</span>
+                        <strong>{formatDateTime(selectedWeather.forecast?.valid_at)}</strong>
+                      </div>
+                      <div>
+                        <span>Freshness</span>
+                        <strong>{formatFreshness(selectedWeather.forecast?.age_seconds)}</strong>
+                      </div>
+                      <div>
+                        <span>Venue</span>
+                        <strong>{selectedWeather.venue?.name ?? "Unknown venue"}</strong>
+                      </div>
+                    </div>
+
+                    <div className={`weather-warnings ${selectedWeatherWarnings.length > 0 ? "has-warnings" : ""}`}>
+                      <span>Warnings & Quality</span>
+                      {selectedWeatherWarnings.length === 0 ? (
+                        <p>No weather quality warnings.</p>
+                      ) : (
+                        <ul>
+                          {selectedWeatherWarnings.map((warning) => (
+                            <li key={warning}>{warning}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+
+                    {shouldShowHistoricalActual(weatherReport?.request_kind, selectedWeather) &&
+                      selectedWeather.actual && (
+                        <section className="historical-actual" aria-label="Historical actual weather">
+                          <div>
+                            <span>Historical Actual · Replay-Ineligible</span>
+                            <strong>{titleCase(selectedWeather.actual.weather_status)}</strong>
+                          </div>
+                          <p>
+                            Observed conditions are shown only for completed historical games and are never
+                            used as the forecast.
+                          </p>
+                          <dl>
+                            <div>
+                              <dt>Temperature</dt>
+                              <dd>
+                                {selectedWeather.actual.temperature_f === null
+                                  ? "--"
+                                  : `${Math.round(selectedWeather.actual.temperature_f)}°F`}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt>Wind</dt>
+                              <dd>
+                                {selectedWeather.actual.wind_mph === null
+                                  ? "--"
+                                  : `${Math.round(selectedWeather.actual.wind_mph)} mph`}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt>Roof</dt>
+                              <dd>{formatRoof(selectedWeather.actual.roof)}</dd>
+                            </div>
+                            <div>
+                              <dt>Source</dt>
+                              <dd>{selectedWeather.actual.source_system}</dd>
+                            </div>
+                          </dl>
+                        </section>
+                      )}
+                  </>
+                )}
+              </section>
+            )}
           </div>
         </section>
 

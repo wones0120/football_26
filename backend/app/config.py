@@ -30,6 +30,17 @@ class Settings(BaseSettings):
     matchup_outcome_prior_strength: float = 0.15
     matchup_prior_gate_model_path: str = "docs/matchup_prior_gate_20slates_5000.json"
     source_snapshot_root: str = "artifacts/source_snapshots"
+    weather_forecast_snapshot_root: str = "artifacts/weather_forecasts"
+    weather_forecast_provider: str = "open_meteo_previous_runs"
+    open_meteo_base_url: str = "https://previous-runs-api.open-meteo.com/v1/forecast"
+    current_weather_forecast_provider: str = "open_meteo_forecast"
+    open_meteo_forecast_base_url: str = "https://api.open-meteo.com/v1/forecast"
+    open_meteo_api_key: str | None = None
+    open_meteo_model: str = "ncep_gfs_seamless"
+    open_meteo_fixed_lead_hours: int = 24
+    open_meteo_min_request_interval_seconds: float = 0.11
+    weather_forecast_refresh_interval_minutes: int = 60
+    weather_forecast_stale_after_minutes: int = 120
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
 

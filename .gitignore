@@ -5,5 +5,7 @@ __pycache__/
 .pytest_cache/
 node_modules/
 ui/dist/
+*.tsbuildinfo
 artifacts/checkpoints/
 artifacts/source_snapshots/
+artifacts/weather_forecasts/

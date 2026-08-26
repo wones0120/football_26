@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 from ..config import get_settings
 from ..models import IngestRun, SourceSnapshot, SourceSnapshotIngestRun
 from ..product_services.point_in_time import snapshot_visible_at_cutoff
-from ..schemas import IngestResultResponse, SalaryIngestRequest
+from ..schemas import IngestResultResponse, NflReadPySeasonRequest, SalaryIngestRequest
 from .ingest import IngestService
 
 
@@ -42,6 +42,10 @@ NFLREADPY_LOADERS = {
     "injuries": "load_injuries",
     "snap_counts": "load_snap_counts",
 }
+DEFAULT_NFLREADPY_LICENSE = (
+    "nflverse data accessed through nflreadpy; downstream use remains subject "
+    "to the applicable upstream dataset terms."
+)
 
 
 class SnapshotIntegrityError(RuntimeError):
@@ -67,6 +71,12 @@ class SnapshotCaptureResult:
 
 @dataclass(frozen=True)
 class DraftKingsCaptureIngestResult:
+    capture: SnapshotCaptureResult
+    ingest: IngestResultResponse
+
+
+@dataclass(frozen=True)
+class NflReadPyScheduleCaptureIngestResult:
     capture: SnapshotCaptureResult
     ingest: IngestResultResponse
 
@@ -596,6 +606,65 @@ class SourceCaptureService:
         )
         self.link_ingest_run(capture.snapshot.snapshot_id, ingest.ingest_run_id)
         return DraftKingsCaptureIngestResult(capture=capture, ingest=ingest)
+
+    def capture_and_ingest_nflreadpy_schedules(
+        self,
+        request: NflReadPySeasonRequest,
+        *,
+        source_license: str = DEFAULT_NFLREADPY_LICENSE,
+        nfl_module: Any | None = None,
+    ) -> NflReadPyScheduleCaptureIngestResult:
+        """Capture the exact nflreadpy schedule payload before ingesting it."""
+        selected_weeks = sorted(set(request.weeks or []))
+        single_week = selected_weeks[0] if len(selected_weeks) == 1 else None
+        frame, version = fetch_nflreadpy_dataset(
+            "schedules",
+            season=request.season,
+            week=single_week,
+            nfl_module=nfl_module,
+        )
+        if len(selected_weeks) > 1:
+            if "week" not in frame.columns:
+                raise RuntimeError("nflreadpy schedules output has no week column")
+            frame = frame[
+                pd.to_numeric(frame["week"], errors="coerce").isin(selected_weeks)
+            ].reset_index(drop=True)
+        if frame.empty:
+            raise RuntimeError("nflreadpy schedules returned no records.")
+
+        scope_suffix = ""
+        if single_week is not None:
+            scope_suffix = f"_week_{single_week:02d}"
+        elif selected_weeks:
+            scope_suffix = "_weeks_" + "-".join(f"{week:02d}" for week in selected_weeks)
+        capture = self.capture_dataframe(
+            frame,
+            artifact_name=f"nflreadpy_schedules_{request.season}{scope_suffix}.csv",
+            source_system="nflreadpy",
+            dataset="schedules",
+            season=request.season,
+            week=single_week,
+            slate=None,
+            source_license=source_license,
+            source_uri=f"nflreadpy://schedules/{request.season}",
+            metadata={
+                "capture_mode": "nflreadpy_fetch",
+                "nflreadpy_version": version,
+                "selected_weeks": selected_weeks or None,
+            },
+        )
+        captured_frame = pd.read_csv(capture.snapshot.artifact_path)
+        ingest = IngestService(self.session).ingest_nflreadpy_schedules(
+            request,
+            source_frame=captured_frame,
+            source_path=capture.snapshot.artifact_path,
+            ingest_run_id=_ingest_run_id(capture.snapshot.snapshot_id),
+        )
+        self.link_ingest_run(capture.snapshot.snapshot_id, ingest.ingest_run_id)
+        return NflReadPyScheduleCaptureIngestResult(
+            capture=capture,
+            ingest=ingest,
+        )
 
     def eligible_snapshots(
         self,

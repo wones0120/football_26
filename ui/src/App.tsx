@@ -34,6 +34,7 @@ import {
   analyzePastSlate,
   buildFeatures,
   createWeeklyRun,
+  fetchCurrentContext,
   fetchLatestPredictions,
   fetchOperationalJobs,
   fetchWeeklyRuns,
@@ -91,8 +92,8 @@ const SLATE_OPTIONS = [
   "SUNDAY_MONDAY",
 ];
 
-const DEFAULT_SEASON = 2025;
-const DEFAULT_WEEK = 11;
+const FALLBACK_SEASON = 2026;
+const FALLBACK_WEEK = 1;
 type CashStackPolicyId =
   | "classic_cash_unconstrained_v1"
   | "classic_cash_qb_pair_v1"
@@ -263,8 +264,8 @@ function compactTelemetry(values: Record<string, unknown>) {
 
 function App() {
   const [viewMode, setViewMode] = useState<ViewMode>("digital-twin");
-  const [season, setSeason] = useState(DEFAULT_SEASON);
-  const [week, setWeek] = useState(DEFAULT_WEEK);
+  const [season, setSeason] = useState(FALLBACK_SEASON);
+  const [week, setWeek] = useState(FALLBACK_WEEK);
   const [slate, setSlate] = useState("THURSDAY_NIGHT");
   const [runSelections, setRunSelections] = useState<PersistedRunSelections>({});
   const activeContext = useMemo(
@@ -579,10 +580,23 @@ function App() {
   }, [season, week, slate]);
 
   useEffect(() => {
-    // Keep the UI pinned to the agreed replay workbench context unless the user changes it.
-    setSeason(DEFAULT_SEASON);
-    setWeek(DEFAULT_WEEK);
-    setFutureWeek(DEFAULT_WEEK);
+    let cancelled = false;
+    fetchCurrentContext()
+      .then((context) => {
+        if (cancelled) return;
+        setSeason(context.season);
+        setWeek(context.week);
+        setFutureWeek(context.week);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSeason(FALLBACK_SEASON);
+        setWeek(FALLBACK_WEEK);
+        setFutureWeek(FALLBACK_WEEK);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {

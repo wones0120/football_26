@@ -1,4 +1,5 @@
 import unittest
+from datetime import timedelta
 
 from backend.app.product_services.gpp_optimizer import (
     Player,
@@ -116,6 +117,8 @@ class GppTemplateScoringTests(unittest.TestCase):
 
         self.assertEqual(result.status, "completed")
         self.assertEqual(len(result.lineups), 1)
+        self.assertEqual(result.created_at.utcoffset(), timedelta(0))
+        self.assertEqual(result.updated_at.utcoffset(), timedelta(0))
         team_counts = {
             team: sum(player.team == team for player in result.lineups[0])
             for team in {player.team for player in result.lineups[0]}

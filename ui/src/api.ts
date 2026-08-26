@@ -64,6 +64,93 @@ export type SlateReadinessResponse = {
   checks: SlateReadinessCheck[];
 };
 
+export type SlateWeatherState = "available" | "indoor" | "stale" | "missing" | "error";
+
+export type SlateWeatherVenue = {
+  registry_record_id: string;
+  venue_id: string;
+  name: string;
+  timezone: string;
+  country_code: string;
+  default_roof: "outdoor" | "fixed_indoor" | "retractable";
+  roof_basis: "venue_registry_default";
+};
+
+export type SlateWeatherForecast = {
+  forecast_snapshot_id: string;
+  contract_id: string;
+  data_kind: "historical_fixed_lead_forecast" | "current_forecast_capture";
+  status: "available" | "partial" | "missing";
+  provider: string;
+  provider_model: string;
+  valid_at: string;
+  forecast_basis_at: string;
+  forecast_basis_kind: "provider_fixed_lead" | "server_received_at";
+  received_at: string;
+  age_seconds: number;
+  temperature_c: number | null;
+  relative_humidity_pct: number | null;
+  precipitation_mm: number | null;
+  wind_speed_mps: number | null;
+  wind_direction_degrees: number | null;
+  wind_gusts_mps: number | null;
+  units: Record<string, string | null>;
+  quality_flags: string[];
+};
+
+export type SlateWeatherActual = {
+  data_kind: string;
+  observation_basis: string;
+  replay_eligible: false;
+  effective_at: string | null;
+  weather_status: string;
+  stadium: string | null;
+  roof: string | null;
+  surface: string | null;
+  temperature_f: number | null;
+  wind_mph: number | null;
+  source_system: string;
+  quality_flags: string[];
+};
+
+export type SlateWeatherGame = {
+  game_id: string | null;
+  identity_status: "resolved" | "unresolved" | "ambiguous";
+  candidate_game_ids: string[];
+  home_team: string | null;
+  away_team: string | null;
+  kickoff_at: string | null;
+  schedule_status: string | null;
+  weather_state: SlateWeatherState;
+  venue: SlateWeatherVenue | null;
+  forecast: SlateWeatherForecast | null;
+  actual: SlateWeatherActual | null;
+  latest_capture_status: string | null;
+  latest_capture_reason: string | null;
+  quality_flags: string[];
+};
+
+export type SlateWeatherResponse = {
+  contract_id: "slate_game_weather_v1";
+  forecast_contract_id: string;
+  source_system: "draftkings" | "fanduel";
+  season: number;
+  week: number;
+  slate: string;
+  request_kind: "current" | "historical";
+  generated_at: string;
+  requested_cutoff_at: string | null;
+  cutoff_at: string;
+  slate_lock_at: string | null;
+  salary_rows: number;
+  games_expected: number;
+  games_resolved: number;
+  state_counts: Record<string, number>;
+  identity_counts: Record<string, number>;
+  quality_flags: string[];
+  games: SlateWeatherGame[];
+};
+
 export type DataQualityCheck = {
   quality_check_id: string;
   quality_run_id: string;
@@ -1056,6 +1143,23 @@ export function fetchSlateReadiness(params: {
   });
   if (params.record) query.set("record", "true");
   return getJson(`/slate/readiness?${query.toString()}`);
+}
+
+export function fetchSlateWeather(params: {
+  season: number;
+  week: number;
+  slate: string;
+  sourceSystem?: "draftkings" | "fanduel";
+  cutoffAt?: string;
+}): Promise<SlateWeatherResponse> {
+  const query = new URLSearchParams({
+    source_system: params.sourceSystem ?? "draftkings",
+    season: String(params.season),
+    week: String(params.week),
+    slate: params.slate,
+  });
+  if (params.cutoffAt) query.set("cutoff_at", params.cutoffAt);
+  return getJson(`/weather/slate?${query.toString()}`, 30_000);
 }
 
 export function fetchDataQualityHistory(params: {

@@ -1,6 +1,6 @@
 # football_26 Canonical Backlog
 
-Last reviewed: 2026-07-31
+Last reviewed: 2026-08-26
 
 This is the single source of truth for active product, data, modeling, simulation,
 and operational work in `football_26`. Completed implementation history belongs in
@@ -38,21 +38,21 @@ Status values:
 
 ## Verified Combined Baseline
 
-Application behavior was verified during consolidation on 2026-07-22; fresh-database
-schema parity was reverified on 2026-07-24:
+Application behavior was reverified during the 2026 preseason readiness pass on
+2026-08-26:
 
 - `football_26` is the canonical repository and application.
 - Digital Twin, Model Workbench, War Room, Research Lab, Contest Delivery,
   Intelligence, and Operations run in one Vite application.
-- One FastAPI process exposes 110 route contracts without method/path collisions.
-- All 14 numbered migrations apply to PostgreSQL with an exact
-  ledger and a no-op second pass; 19 ORM-managed `public` tables have zero drift,
-  and all 55 migration-owned `target` tables have a recorded compatibility contract.
-- `OPS-001` and `OPS-002` add contiguous migrations `0015` and `0016` plus three
-  ORM-managed `public` tables for durable jobs, weekly runs, and stage checkpoints;
-  focused metadata/migration tests pass, while the dated fresh-PostgreSQL baseline
-  above remains the last disposable-cluster proof.
-- The combined suite passes 353 Python tests and the production UI build passes.
+- One FastAPI process exposes 116 route contracts without method/path collisions.
+- The local PostgreSQL ledger contains all 23 numbered migrations through
+  `0023_current_weather_forecast.sql`; the schema-smoke workflow remains the
+  empty-PostgreSQL and no-op-second-pass gate.
+- The combined suite passes 433 Python tests, all 12 UI tests, and the production
+  UI type-check/build. Application CI now runs those checks for pushes and pull requests.
+- The first immutable 2026 schedule snapshot contains all 272 regular-season games.
+  The Week 1 current-weather preview resolves the canonical opener with no quarantine;
+  a real receipt and a source-authorized salary slate remain outstanding.
 - Development weekly run `aeb1e82f-ab0d-4ffe-a38b-88db355e7f3e` persisted six
   stages through optimization and stopped explicitly at the `CON-001` real-template
   validation gate; completed ingest/readiness writes were skipped on resume.
@@ -64,12 +64,14 @@ See `docs/CONSOLIDATION.md` for the complete contract and verification evidence.
 
 ## Execution Order
 
-1. Close the one-repository consolidation gates (`CON-*`).
-2. Make long-running and weekly workflows production-safe (`OPS-*`, `ENG-*`).
-3. Finish the live cash, GPP, and showdown engines (`OPT-*`).
-4. Strengthen point-in-time data, model governance, and correlated simulations
+1. Preserve the time-sensitive 2026 prospective cohort and close its live acceptance gates
+   (`WTHR-007`, `DATA-002`).
+2. Close the one-repository consolidation gates (`CON-*`).
+3. Make long-running and weekly workflows production-safe (`OPS-*`, `ENG-*`).
+4. Finish the live cash, GPP, and showdown engines (`OPT-*`).
+5. Strengthen point-in-time data, model governance, and correlated simulations
    (`DATA-*`, `MODEL-*`, `SIM-*`).
-5. Close the outcome and personal-learning loop (`LEARN-*`).
+6. Close the outcome and personal-learning loop (`LEARN-*`).
 
 ## P0 — Consolidation Closeout
 
@@ -82,6 +84,7 @@ See `docs/CONSOLIDATION.md` for the complete contract and verification evidence.
 
 | ID | Status | Work | Dependencies | Acceptance check |
 | --- | --- | --- | --- | --- |
+| ENG-003 | Ready | Establish a migration-clean sidecar development database and a non-destructive transition plan for the existing legacy public-schema drift. Preserve the current database and immutable artifacts until parity is proven; do not drop legacy tables in place. | None | All 23 migrations apply to the empty sidecar, the second pass is a no-op, public and target drift checks pass, required development evidence is replayed or linked, and rollback to the untouched current database is documented. |
 | OPS-003 | Blocked | Add lock-aware news, injury, ownership, projection, and lineup refreshes (`DT-802`). | DATA-002 | Each refresh creates a new cutoff-stamped run, preserves prior versions, and never changes a locked historical snapshot. |
 | OPS-004 | Blocked | Add pre-lock and post-result monitoring for data staleness, drift, calibration, failed jobs, and export readiness (`DT-804`). | LEARN-001 | Alerts identify an actionable owner, affected slate/run, threshold, and recovery step. |
 
@@ -98,8 +101,24 @@ See `docs/CONSOLIDATION.md` for the complete contract and verification evidence.
 | ID | Status | Work | Dependencies | Acceptance check |
 | --- | --- | --- | --- | --- |
 | DATA-001 | Blocked | Import verified historical cash contest files and real entry templates with contest metadata and payout tiers. | User-provided/source-authorized files | Files are content-addressed, identity-safe, cutoff-labeled, deduplicated, and sufficient for CON-001 plus OPT-004/005. |
-| DATA-002 (`DT-304`) | Blocked | Add point-in-time Vegas, props, weather, depth-chart, injury, and role snapshots. The first source audit found no approved historical feed with preserved observation time. `point_in_time_cutoff_v1` excludes retrospective injury rows; `prospective_source_snapshot_v1` now content-addresses 2026 DraftKings/nflreadpy observations, links eligible salary ingest, and rejects post-lock salary ingestion. | Real prospectively captured 2026 weeks or a timestamped/source-authorized historical feed; source-specific usage approval | Each record has source, observed-at, effective-at, ingest-run lineage, canonical identities, and a replay test proving post-lock data is excluded. Capture contract: `docs/PROSPECTIVE_SOURCE_CAPTURE.md`; source evidence: `docs/DATA-002_SOURCE_AVAILABILITY_AUDIT.md`. |
+| DATA-002 (`DT-304`) | Blocked | Add point-in-time Vegas, props, weather, depth-chart, injury, and role snapshots. `point_in_time_cutoff_v1` excludes retrospective injury rows; `prospective_source_snapshot_v1` captures 2026 inputs. Retrospective actual weather remains replay-ineligible. WTHR-003 supplies the 2024–2025 fixed-24-hour cohort, and WTHR-004 supplies append-only current forecast capture without fabricated provider timing. | Real prospectively captured 2026 weeks, or another timestamped/source-authorized feed for the remaining domains | Each pre-lock record has source, cutoff-safe timing semantics, ingest-run lineage, game identity, and a replay test proving post-lock data is excluded. Actual-weather contract: `docs/HISTORICAL_WEATHER_DATA.md`; venue registry: `docs/WEATHER_VENUE_REGISTRY.md`; historical forecast implementation: `docs/HISTORICAL_WEATHER_FORECASTS.md`; current forecast implementation: `docs/CURRENT_WEATHER_FORECASTS.md`; capture contract: `docs/PROSPECTIVE_SOURCE_CAPTURE.md`. |
 | DATA-003 | Done | Reassessed all 1,010 legacy unresolved salary identities against 10,972 current masters: zero became deterministic, while 979 `no_match` and 31 `ambiguous` decisions reproduced exactly and remain accepted quarantines. The read-only `salary_identity_audit_v1` command fails on new deterministic matches, reason drift, untracked rows, unexpected reasons, or unresolved DSTs. | None | Readiness reports resolved, ambiguous, no-match, accepted, unaccepted, and untracked counts; the development audit has zero blockers, and target snapshots plus optimizer/replay salary inputs require canonical IDs. Evidence: `docs/DATA-003_IDENTITY_REASSESSMENT.md`. |
+
+### Weather Data And Slate Visibility
+
+Complete these tasks in order unless a dependency explicitly allows parallel work. Retrospective
+actual conditions and pre-lock forecasts remain separate contracts throughout storage, API, UI,
+modeling, and replay.
+
+| ID | Status | Work | Dependencies | Acceptance check |
+| --- | --- | --- | --- | --- |
+| WTHR-001 | Done | Added `nfl_venue_registry_v1` with 37 versioned venue records, effective seasons, coordinates, IANA timezones, roof defaults, evidence, review notes, immutable-definition checks, and explicit unresolved/ambiguous mapping states. All 570 games from 2024–2025 resolve: 555 by PFR `stadium_id` and 15 by reviewed game-ID override. | Existing nflverse schedules | Zero unresolved, ambiguous, source-conflicting, or unreviewed-neutral games; display names are diagnostic only. Evidence: `docs/WEATHER_VENUE_REGISTRY.md`. |
+| WTHR-002 | Done | Approved `weather_forecast_source_contract_v1`: Open-Meteo Previous Runs, exact 24-hour `*_previous_day1`, pinned `ncep_gfs_seamless`, six core variables, Professional-or-higher production boundary, CC BY 4.0 attribution, immutable local retention, and direct NOAA HRRR CONUS fallback. | None | Costs, limits, licence, fallback, config, and production boundaries are explicit. Provider issued/availability times remain null because the fixed-lead API does not expose them; `forecast_basis_at` is derived and cannot be relabeled as observed. Evidence: `docs/WEATHER_FORECAST_SOURCE_CONTRACT.md`. |
+| WTHR-003 | Done | Migration `0022` and `weather_forecast_source_contract_v1` retain immutable 2024–2025 fixed-24-hour Open-Meteo forecasts, raw responses/manifests, resolved venue records, requested/returned coordinates, pinned model/variables, valid/received/basis times, null provider timing, units, redacted URIs, checksums, and per-run results. The acceptance cohort has 570/570 fully available forecasts and verified artifacts with zero issues; a rerun reuses natural-key snapshots without provider traffic. | WTHR-001, WTHR-002 | Leakage tests prove cutoff-basis behavior, missing/error reporting, timing non-fabrication, and no actual-weather substitution. Evidence: `docs/HISTORICAL_WEATHER_FORECASTS.md`. |
+| WTHR-004 | Done | Migration `0023` adds append-only current Forecast API versions using actual receipt-time cutoff semantics, explicit canonical game IDs, scheduled watch-mode refreshes, request spacing, freshness/stale/error reporting, immutable artifacts, and separate current-run lineage. Post-lock versions remain retained but cannot replace the as-of-lock selection. | WTHR-002, WTHR-003 | Focused tests retain multiple timestamped current-slate versions, reconstruct the exact pre-lock view, report stale/provider-failure states, enforce pinned/redacted requests, and verify request throttling. A real 2026 prospective slate remains part of DATA-002/WTHR-007 acceptance. Evidence: `docs/CURRENT_WEATHER_FORECASTS.md`. |
+| WTHR-005 | Done | Added typed `slate_game_weather_v1` through `GET /api/weather/slate`. It resolves salary team/opponent pairs to canonical schedule game IDs, unions canonical current-capture lineage, and returns every resolved, unresolved, or ambiguous matchup with kickoff, versioned venue/roof basis, cutoff-safe forecast source/age/values, explicit weather/quality states, and separately labeled historical actuals. | WTHR-003; WTHR-004 for live refresh behavior | Tests prove historical as-of-lock reconstruction, post-lock exclusion, current receipt-only selection, stale and indoor states, actual/forecast separation, timezone enforcement, alias reconciliation, and unresolved-matchup retention without display-name joins. Evidence: `docs/SLATE_GAME_WEATHER_API.md`. |
+| WTHR-006 | Done | The War Room now consumes `slate_game_weather_v1`, retains all canonical and unresolved API matchups in the Game Pressure Matrix, shows a five-state weather badge plus compact forecast conditions, and opens selectable detail for temperature, wind/gusts, precipitation, venue-registry roof default, source/timestamp, valid time, cutoff-age freshness, and quality warnings. Completed historical actuals render only in a separate replay-ineligible panel. | WTHR-005 | Focused tests cover canonical-ID-first association, alias fallback, non-truncation, five-state presentation, formatting, warnings, and the historical-only actual gate. All 12 UI tests and the production build pass; desktop and 390px fallback/error renders have no page overflow or browser diagnostics. Data-rich past/current rendering remains WTHR-007. Evidence: `docs/WAR_ROOM_WEATHER.md`. |
+| WTHR-007 | In progress | The real DraftKings 2025 Week 11 `SUNDAY_MAIN` database/API/UI run passes 11/11 games with 9 available, 2 indoor, 2 retractable venue defaults, zero cutoff violations, and zero replay-eligible actuals. The 2026 Week 1 schedule is now captured, and the `2026_01_NE_SEA` dry run resolves 1/1 expected games with no quarantine. Focused tests prove historical/current idempotency, append-only pre/post-lock selection, missing/unresolved retention, neutral/international overrides, indoor/retractable behavior, stale/error states, actual separation, and a weather-free projection/simulation/optimizer boundary. | A source-authorized 2026 salary slate plus scheduled real provider receipts | Close only after one real current slate passes reproducible data/API/UI checks with at least two pre-lock receipts and a retained post-lock version excluded from the lock view. Evidence: `docs/WTHR-007_ACCEPTANCE.md`. |
 
 ## P2 — Projection And Model Governance
 

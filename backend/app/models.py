@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     DateTime,
     Float,
     ForeignKey,
@@ -14,6 +15,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -337,6 +339,408 @@ class RawNflSchedule(Base):
     status: Mapped[str | None] = mapped_column(String(64))
     stadium: Mapped[str | None] = mapped_column(String(128))
     raw_row_json: Mapped[dict] = mapped_column(JSON_DOCUMENT, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow_naive)
+
+
+class VenueRegistryRecord(Base):
+    """Immutable version of a canonical venue identity and forecast coordinates."""
+
+    __tablename__ = "venue_registry_record"
+    __table_args__ = (
+        UniqueConstraint(
+            "venue_id",
+            "registry_version",
+            name="uq_venue_registry_record_version",
+        ),
+        CheckConstraint(
+            "registry_version >= 1",
+            name="ck_venue_registry_record_positive_version",
+        ),
+        CheckConstraint(
+            "effective_to_season IS NULL OR effective_to_season >= effective_from_season",
+            name="ck_venue_registry_record_effective_range",
+        ),
+        CheckConstraint(
+            "latitude BETWEEN -90 AND 90 AND longitude BETWEEN -180 AND 180",
+            name="ck_venue_registry_record_coordinates",
+        ),
+        CheckConstraint(
+            "default_roof IN ('outdoor', 'fixed_indoor', 'retractable')",
+            name="ck_venue_registry_record_default_roof",
+        ),
+        Index(
+            "idx_venue_registry_source_effective",
+            "source_system",
+            "source_venue_id",
+            "effective_from_season",
+            "effective_to_season",
+        ),
+    )
+
+    registry_record_id: Mapped[str] = mapped_column(String(96), primary_key=True)
+    venue_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    registry_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    canonical_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    effective_from_season: Mapped[int] = mapped_column(Integer, nullable=False)
+    effective_to_season: Mapped[int | None] = mapped_column(Integer)
+    latitude: Mapped[float] = mapped_column(Float, nullable=False)
+    longitude: Mapped[float] = mapped_column(Float, nullable=False)
+    timezone: Mapped[str] = mapped_column(String(64), nullable=False)
+    default_roof: Mapped[str] = mapped_column(String(24), nullable=False)
+    country_code: Mapped[str] = mapped_column(String(2), nullable=False)
+    source_system: Mapped[str | None] = mapped_column(String(32))
+    source_venue_id: Mapped[str | None] = mapped_column(String(64))
+    source_evidence_uri: Mapped[str | None] = mapped_column(Text)
+    coordinate_source_uri: Mapped[str] = mapped_column(Text, nullable=False)
+    review_notes: Mapped[str] = mapped_column(Text, nullable=False)
+    review_classifications_json: Mapped[list[str]] = mapped_column(
+        JSON_DOCUMENT,
+        nullable=False,
+        default=list,
+    )
+    definition_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow_naive)
+
+
+class VenueGameOverride(Base):
+    """Reviewed game-specific venue evidence for neutral or relocated games."""
+
+    __tablename__ = "venue_game_override"
+    __table_args__ = (
+        UniqueConstraint(
+            "game_id",
+            "decision_version",
+            name="uq_venue_game_override_version",
+        ),
+        CheckConstraint(
+            "decision_version >= 1",
+            name="ck_venue_game_override_positive_version",
+        ),
+        Index("idx_venue_game_override_game", "game_id", "decision_version"),
+    )
+
+    override_id: Mapped[str] = mapped_column(String(96), primary_key=True)
+    game_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    decision_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    registry_record_id: Mapped[str] = mapped_column(
+        String(96),
+        ForeignKey("venue_registry_record.registry_record_id"),
+        nullable=False,
+    )
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence_uri: Mapped[str] = mapped_column(Text, nullable=False)
+    definition_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow_naive)
+
+
+class CuratedGameVenue(Base):
+    """Deterministic game-to-venue result, including explicit quarantine states."""
+
+    __tablename__ = "curated_game_venue"
+    __table_args__ = (
+        CheckConstraint(
+            "mapping_status IN ('resolved', 'unresolved', 'ambiguous')",
+            name="ck_curated_game_venue_status",
+        ),
+        CheckConstraint(
+            "(mapping_status = 'resolved' AND registry_record_id IS NOT NULL) "
+            "OR (mapping_status <> 'resolved' AND registry_record_id IS NULL)",
+            name="ck_curated_game_venue_resolution",
+        ),
+        Index("idx_curated_game_venue_slice", "season", "week"),
+        Index("idx_curated_game_venue_status", "mapping_status"),
+    )
+
+    game_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    season: Mapped[int] = mapped_column(Integer, nullable=False)
+    week: Mapped[int] = mapped_column(Integer, nullable=False)
+    mapping_status: Mapped[str] = mapped_column(String(16), nullable=False)
+    mapping_method: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_venue_id: Mapped[str | None] = mapped_column(String(64))
+    registry_record_id: Mapped[str | None] = mapped_column(
+        String(96),
+        ForeignKey("venue_registry_record.registry_record_id"),
+    )
+    evidence_json: Mapped[dict] = mapped_column(JSON_DOCUMENT, nullable=False, default=dict)
+    candidate_registry_record_ids_json: Mapped[list[str]] = mapped_column(
+        JSON_DOCUMENT,
+        nullable=False,
+        default=list,
+    )
+    source_ingest_run_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("ingest_run.ingest_run_id"),
+        nullable=False,
+    )
+    raw_nfl_schedule_id: Mapped[int] = mapped_column(
+        BIGINT_ID,
+        ForeignKey("raw_nfl_schedule.raw_nfl_schedule_id"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow_naive)
+
+
+class WeatherForecastSnapshot(Base):
+    """Immutable historical or live forecast evidence, separate from actual weather."""
+
+    __tablename__ = "weather_forecast_snapshot"
+    __table_args__ = (
+        Index(
+            "uq_weather_forecast_snapshot_historical",
+            "contract_id",
+            "game_id",
+            "registry_record_id",
+            "provider_model",
+            "fixed_lead_hours",
+            "valid_at",
+            unique=True,
+            postgresql_where=text(
+                "data_kind = 'historical_fixed_lead_forecast'"
+            ),
+            sqlite_where=text(
+                "data_kind = 'historical_fixed_lead_forecast'"
+            ),
+        ),
+        Index(
+            "uq_weather_forecast_snapshot_current_receipt",
+            "contract_id",
+            "game_id",
+            "registry_record_id",
+            "provider_model",
+            "valid_at",
+            "received_at",
+            unique=True,
+            postgresql_where=text("data_kind = 'current_forecast_capture'"),
+            sqlite_where=text("data_kind = 'current_forecast_capture'"),
+        ),
+        CheckConstraint(
+            "data_kind IN ('historical_fixed_lead_forecast', 'current_forecast_capture')",
+            name="ck_weather_forecast_snapshot_data_kind",
+        ),
+        CheckConstraint(
+            "(data_kind = 'historical_fixed_lead_forecast' AND fixed_lead_hours = 24) "
+            "OR (data_kind = 'current_forecast_capture' AND fixed_lead_hours IS NULL)",
+            name="ck_weather_forecast_snapshot_fixed_lead",
+        ),
+        CheckConstraint(
+            "(data_kind = 'historical_fixed_lead_forecast' "
+            "AND forecast_basis_kind = 'provider_fixed_lead') "
+            "OR (data_kind = 'current_forecast_capture' "
+            "AND forecast_basis_kind = 'server_received_at' "
+            "AND forecast_basis_at = received_at)",
+            name="ck_weather_forecast_snapshot_basis_kind",
+        ),
+        CheckConstraint(
+            "provider_issued_at IS NULL AND provider_available_at IS NULL",
+            name="ck_weather_forecast_snapshot_provider_timing_null",
+        ),
+        CheckConstraint(
+            "status IN ('available', 'partial', 'missing')",
+            name="ck_weather_forecast_snapshot_status",
+        ),
+        CheckConstraint(
+            "requested_latitude BETWEEN -90 AND 90 "
+            "AND requested_longitude BETWEEN -180 AND 180",
+            name="ck_weather_forecast_snapshot_requested_coordinates",
+        ),
+        CheckConstraint(
+            "returned_latitude IS NULL OR returned_latitude BETWEEN -90 AND 90",
+            name="ck_weather_forecast_snapshot_returned_latitude",
+        ),
+        CheckConstraint(
+            "returned_longitude IS NULL OR returned_longitude BETWEEN -180 AND 180",
+            name="ck_weather_forecast_snapshot_returned_longitude",
+        ),
+        Index(
+            "idx_weather_forecast_snapshot_game_valid",
+            "game_id",
+            "valid_at",
+        ),
+        Index(
+            "idx_weather_forecast_snapshot_slice",
+            "season",
+            "week",
+        ),
+        Index(
+            "idx_weather_forecast_snapshot_current_game_received",
+            "game_id",
+            "received_at",
+            postgresql_where=text("data_kind = 'current_forecast_capture'"),
+            sqlite_where=text("data_kind = 'current_forecast_capture'"),
+        ),
+    )
+
+    forecast_snapshot_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    contract_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    data_kind: Mapped[str] = mapped_column(String(48), nullable=False)
+    game_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    season: Mapped[int] = mapped_column(Integer, nullable=False)
+    week: Mapped[int] = mapped_column(Integer, nullable=False)
+    registry_record_id: Mapped[str] = mapped_column(
+        String(96),
+        ForeignKey("venue_registry_record.registry_record_id"),
+        nullable=False,
+    )
+    provider: Mapped[str] = mapped_column(String(48), nullable=False)
+    provider_model: Mapped[str] = mapped_column(String(64), nullable=False)
+    variables_json: Mapped[list[str]] = mapped_column(
+        JSON_DOCUMENT,
+        nullable=False,
+        default=list,
+    )
+    valid_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    fixed_lead_hours: Mapped[int | None] = mapped_column(Integer)
+    forecast_basis_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    forecast_basis_kind: Mapped[str] = mapped_column(String(48), nullable=False)
+    provider_issued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    provider_available_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    requested_latitude: Mapped[float] = mapped_column(Float, nullable=False)
+    requested_longitude: Mapped[float] = mapped_column(Float, nullable=False)
+    returned_latitude: Mapped[float | None] = mapped_column(Float)
+    returned_longitude: Mapped[float | None] = mapped_column(Float)
+    returned_elevation_m: Mapped[float | None] = mapped_column(Float)
+    returned_timezone: Mapped[str | None] = mapped_column(String(64))
+    temperature_c: Mapped[float | None] = mapped_column(Float)
+    relative_humidity_pct: Mapped[float | None] = mapped_column(Float)
+    precipitation_mm: Mapped[float | None] = mapped_column(Float)
+    wind_speed_mps: Mapped[float | None] = mapped_column(Float)
+    wind_direction_degrees: Mapped[float | None] = mapped_column(Float)
+    wind_gusts_mps: Mapped[float | None] = mapped_column(Float)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    units_json: Mapped[dict] = mapped_column(JSON_DOCUMENT, nullable=False, default=dict)
+    quality_flags_json: Mapped[list[str]] = mapped_column(
+        JSON_DOCUMENT,
+        nullable=False,
+        default=list,
+    )
+    raw_artifact_path: Mapped[str] = mapped_column(Text, nullable=False)
+    manifest_path: Mapped[str] = mapped_column(Text, nullable=False)
+    source_uri_redacted: Mapped[str] = mapped_column(Text, nullable=False)
+    raw_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    byte_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+
+class WeatherForecastCaptureResult(Base):
+    """Append-only per-run coverage result for an expected forecast game."""
+
+    __tablename__ = "weather_forecast_capture_result"
+    __table_args__ = (
+        UniqueConstraint(
+            "ingest_run_id",
+            "game_id",
+            name="uq_weather_forecast_capture_result_run_game",
+        ),
+        CheckConstraint(
+            "status IN ('captured', 'reused', 'partial', 'missing', 'error', 'quarantined')",
+            name="ck_weather_forecast_capture_result_status",
+        ),
+        CheckConstraint(
+            "capture_kind IN ('historical_backfill', 'current_refresh')",
+            name="ck_weather_forecast_capture_result_kind",
+        ),
+        Index(
+            "idx_weather_forecast_capture_result_run_status",
+            "ingest_run_id",
+            "status",
+        ),
+        Index(
+            "idx_weather_forecast_capture_result_game",
+            "game_id",
+        ),
+        Index(
+            "idx_weather_forecast_capture_result_kind_game_attempted",
+            "capture_kind",
+            "game_id",
+            "attempted_at",
+        ),
+    )
+
+    capture_result_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    ingest_run_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("ingest_run.ingest_run_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    game_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    season: Mapped[int] = mapped_column(Integer, nullable=False)
+    week: Mapped[int | None] = mapped_column(Integer)
+    capture_kind: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="historical_backfill"
+    )
+    slate: Mapped[str | None] = mapped_column(String(64))
+    slate_lock_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    registry_record_id: Mapped[str | None] = mapped_column(
+        String(96),
+        ForeignKey("venue_registry_record.registry_record_id"),
+    )
+    forecast_snapshot_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("weather_forecast_snapshot.forecast_snapshot_id"),
+    )
+    valid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    reason: Mapped[str | None] = mapped_column(Text)
+    request_uri_redacted: Mapped[str | None] = mapped_column(Text)
+    attempted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+
+class CuratedGameWeather(Base):
+    """Retrospective game conditions; never a pre-lock forecast snapshot."""
+
+    __tablename__ = "curated_game_weather"
+    __table_args__ = (
+        CheckConstraint(
+            "replay_eligible = false AND observed_at IS NULL",
+            name="ck_curated_game_weather_retrospective_only",
+        ),
+        Index("idx_curated_game_weather_slice", "season", "week"),
+        Index("idx_curated_game_weather_status", "weather_status"),
+    )
+
+    game_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    season: Mapped[int] = mapped_column(Integer, nullable=False)
+    week: Mapped[int] = mapped_column(Integer, nullable=False)
+    game_type: Mapped[str | None] = mapped_column(String(16))
+    kickoff_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    home_team: Mapped[str | None] = mapped_column(String(16))
+    away_team: Mapped[str | None] = mapped_column(String(16))
+    stadium: Mapped[str | None] = mapped_column(String(128))
+    roof: Mapped[str | None] = mapped_column(String(16))
+    surface: Mapped[str | None] = mapped_column(String(64))
+    temperature_f: Mapped[float | None] = mapped_column(Float)
+    wind_mph: Mapped[float | None] = mapped_column(Float)
+    weather_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    data_kind: Mapped[str] = mapped_column(String(48), nullable=False)
+    observation_basis: Mapped[str] = mapped_column(String(64), nullable=False)
+    observed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    effective_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    replay_eligible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    quality_flags_json: Mapped[list[str]] = mapped_column(
+        JSON_DOCUMENT,
+        nullable=False,
+        default=list,
+    )
+    source_system: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_ingest_run_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("ingest_run.ingest_run_id"),
+        nullable=False,
+    )
+    raw_nfl_schedule_id: Mapped[int] = mapped_column(
+        BIGINT_ID,
+        ForeignKey("raw_nfl_schedule.raw_nfl_schedule_id"),
+        nullable=False,
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow_naive)
 
 

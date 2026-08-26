@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from uuid import uuid4
 
@@ -50,6 +50,7 @@ from ..schemas import (
     SalaryIngestRequest,
     SimulateWeekRequest,
     SimulationRunListResponse,
+    SlateWeatherResponse,
     SeasonCoverageResponse,
     UnresolvedListResponse,
     UnresolvedRowResponse,
@@ -74,6 +75,8 @@ from ..services.job_queue import (
 from ..services.ingest import IngestService
 from ..services.lineup_learning import LineupLearningService
 from ..services.simulation import SimulationService
+from ..services.slate_weather import SlateWeatherService
+from ..services.source_capture import SourceCaptureService
 from ..services.ultimate_lineup_runs import (
     UltimateLineupRunConflictError,
     UltimateLineupRunStateError,
@@ -101,6 +104,37 @@ def health() -> HealthResponse:
 def model_defaults() -> ModelDefaultsResponse:
     settings = get_settings()
     return ModelDefaultsResponse(**build_model_defaults_response(settings))
+
+
+@router.get("/weather/slate", response_model=SlateWeatherResponse)
+def slate_weather(
+    source_system: str = Query(
+        default="draftkings",
+        pattern="^(draftkings|fanduel)$",
+    ),
+    season: int = Query(..., ge=2000),
+    week: int = Query(..., ge=1, le=25),
+    slate: str = Query(..., min_length=1),
+    cutoff_at: datetime | None = Query(default=None),
+    session: Session = Depends(get_db_session),
+) -> SlateWeatherResponse:
+    settings = get_settings()
+    try:
+        report = SlateWeatherService(
+            session,
+            stale_after=timedelta(
+                minutes=settings.weather_forecast_stale_after_minutes
+            ),
+        ).report(
+            source_system=source_system,
+            season=season,
+            week=week,
+            slate=slate,
+            cutoff_at=cutoff_at,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return SlateWeatherResponse(**report)
 
 
 @router.get("/benchmarks/runs", response_model=BenchmarkRunListResponse)
@@ -229,8 +263,13 @@ def ingest_nflreadpy_schedules(
     request: NflReadPySeasonRequest,
     session: Session = Depends(get_db_session),
 ) -> IngestResultResponse:
-    service = IngestService(session)
-    result = service.ingest_nflreadpy_schedules(request)
+    try:
+        captured = SourceCaptureService(session).capture_and_ingest_nflreadpy_schedules(
+            request
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    result = captured.ingest
     if result.status == "failed":
         raise HTTPException(status_code=422, detail=result.error_message or "nflreadpy schedule ingest failed")
     return result

@@ -15,9 +15,11 @@ from backend.app.models import (
     Base,
     CuratedSalary,
     IngestRun,
+    RawNflSchedule,
     SourceSnapshot,
     SourceSnapshotIngestRun,
 )
+from backend.app.schemas import NflReadPySeasonRequest
 from backend.app.services.matching import create_player_master
 from backend.app.services.source_capture import (
     SNAPSHOT_CONTRACT_ID,
@@ -269,3 +271,74 @@ def test_nflreadpy_capture_filters_week_and_records_version(tmp_path: Path) -> N
     assert snapshot.metadata_json["nflreadpy_version"] == "test-version"
     captured_frame = pd.read_csv(snapshot.artifact_path)
     assert captured_frame["full_name"].tolist() == ["Player One"]
+
+
+def test_nflreadpy_schedule_capture_ingests_exact_artifact_and_links_lineage(
+    tmp_path: Path,
+) -> None:
+    session = _session()
+    schedule_rows = pd.DataFrame(
+        [
+            {
+                "season": 2025,
+                "week": 1,
+                "game_id": "2025_01_DAL_PHI",
+                "home_team": "PHI",
+                "away_team": "DAL",
+                "game_type": "REG",
+                "gameday": "2025-09-04",
+                "gametime": "20:20",
+                "stadium_id": "PHI00",
+                "stadium": "Lincoln Financial Field",
+                "location": "Home",
+                "roof": "outdoors",
+                "surface": "grass",
+                "temp": 75.0,
+                "wind": 11.0,
+            }
+        ]
+    )
+    fake_nflreadpy = SimpleNamespace(
+        __version__="test-version",
+        load_schedules=lambda seasons: schedule_rows,
+    )
+    service = SourceCaptureService(
+        session,
+        snapshot_root=tmp_path / "snapshots",
+        clock=lambda: datetime(2025, 8, 1, 12, 0, tzinfo=UTC),
+    )
+
+    first = service.capture_and_ingest_nflreadpy_schedules(
+        NflReadPySeasonRequest(season=2025),
+        source_license=LICENSE,
+        nfl_module=fake_nflreadpy,
+    )
+
+    assert first.capture.created is True
+    assert first.capture.snapshot.row_count == 1
+    assert first.ingest.status == "completed"
+    assert first.ingest.rows_raw == 1
+    run = session.get(IngestRun, first.ingest.ingest_run_id)
+    assert run is not None
+    assert run.source_path == first.capture.snapshot.artifact_path
+    assert run.source_checksum == first.capture.snapshot.content_sha256
+    assert session.get(
+        SourceSnapshotIngestRun,
+        {
+            "snapshot_id": first.capture.snapshot.snapshot_id,
+            "ingest_run_id": first.ingest.ingest_run_id,
+        },
+    ) is not None
+    assert session.query(RawNflSchedule).one().game_id == "2025_01_DAL_PHI"
+
+    second = service.capture_and_ingest_nflreadpy_schedules(
+        NflReadPySeasonRequest(season=2025),
+        source_license=LICENSE,
+        nfl_module=fake_nflreadpy,
+    )
+
+    assert second.capture.created is False
+    assert second.ingest.ingest_run_id == first.ingest.ingest_run_id
+    assert session.query(SourceSnapshot).count() == 1
+    assert session.query(SourceSnapshotIngestRun).count() == 1
+    assert session.query(RawNflSchedule).count() == 1

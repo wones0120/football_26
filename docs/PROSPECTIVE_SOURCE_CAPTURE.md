@@ -1,6 +1,6 @@
 # Prospective Source Capture
 
-Date: 2026-07-31
+Last validated: 2026-08-26
 
 Contract: `prospective_source_snapshot_v1`
 
@@ -8,9 +8,10 @@ Migration: `0019_prospective_source_snapshots.sql`
 
 ## Outcome
 
-The repository is ready to preserve the first 2026 observations before slate lock. This closes the
-capture-tooling portion of DATA-002; DATA-002 itself remains blocked until real prospective weeks
-and source-specific usage approvals exist.
+The repository has preserved the first full-season 2026 schedule observation before the season:
+272 regular-season games with 272 unique canonical game IDs. This closes the schedule portion of
+the capture-tooling gate. DATA-002 itself remains incomplete until source-authorized salary and
+other pre-lock observations are retained.
 
 The capture path supports:
 
@@ -62,10 +63,23 @@ Directory discovery deliberately ignores that generic name because a scheduled r
 which week an old generic file belongs to.
 
 `SOURCE_SNAPSHOT_ROOT` defaults to `artifacts/source_snapshots`, which is excluded from Git. Set it
-to durable local or mounted storage before the season if repository-local artifacts are not backed
-up. The command prints the absolute artifact/manifest paths, checksum, observation time, pre-lock
-decision, row counts, and ingest result as JSON. A nonzero exit means one or more requested sources
-failed or a salary observation arrived after lock.
+to an absolute path on backed-up durable local or mounted storage before the first live salary
+capture. Repository-local ignored files are not a backup. The command prints the absolute
+artifact/manifest paths, checksum, observation time, pre-lock decision, row counts, and ingest
+result as JSON. A nonzero exit means one or more requested sources failed or a salary observation
+arrived after lock.
+
+## UI Schedule Ingest
+
+In `Research Lab` > `Ingestion`, select the season and choose `Load Schedules`. The API fetches the
+nflreadpy schedule once, preserves the full selected season or week slice as an immutable CSV, then
+reads that captured artifact into `raw_nfl_schedule`. The ingest run stores the artifact path and
+checksum and receives a deterministic ID derived from the snapshot; `source_snapshot_ingest_run`
+links both records. An unchanged repeat reuses the verified snapshot and completed ingest run.
+
+This route intentionally has no slate lock because the NFL schedule is season-level fixture data,
+not a DFS salary observation. Any later upstream schedule change creates a new content-addressed
+snapshot and ingest run before replacing the selected database rows.
 
 ## DraftKings Ingest Safety
 
@@ -81,9 +95,10 @@ linked to an ingest run and is absent from `eligible_snapshots(cutoff_at=...)` f
 ## nflreadpy Boundaries
 
 The command captures exactly the tabular frame returned by the installed nflreadpy version after
-season/week filtering and records that package version. These are Bronze observations. Existing
-roster/snap ingestion and canonical identity rules remain the Silver/Gold path; this change does
-not treat current injury or schedule values as historical pre-lock evidence.
+season/week filtering and records that package version. These are Bronze observations. The UI
+schedule action ingests from those same captured bytes and records the snapshot-to-run link.
+Existing roster/snap ingestion and canonical identity rules remain the Silver/Gold path; this
+change does not treat current injury or schedule values as historical pre-lock evidence.
 
 The default license strings are provenance reminders, not a grant of rights. Replace them with an
 approved source-specific statement when required. Paid or separately licensed sources should use
@@ -97,10 +112,12 @@ Focused tests prove:
 2. modifying the original download does not alter preserved evidence;
 3. DraftKings ingestion uses the preserved checksum and resolves canonical identity normally;
 4. a post-lock salary capture creates no ingest run and is excluded by cutoff selection;
-5. nflreadpy frames are week-filtered and retain loader-version lineage.
+5. nflreadpy frames are week-filtered and retain loader-version lineage;
+6. UI schedule loads ingest from the captured artifact, record its checksum and lineage link, and
+   reuse an unchanged completed run.
 
 `verify_snapshot_artifact` re-hashes an artifact and validates its manifest. A missing or mismatched
 artifact is an integrity failure; the service will not silently reconstruct or overwrite it.
 
-Focused capture/CLI validation passes 6 tests, and the full Python suite passes 401 tests with two
-pre-existing `datetime.utcnow()` deprecation warnings.
+Focused source-capture, schedule-weather, and venue-registry validation passes 15 tests. The full
+backend suite passes 430 tests with two pre-existing `datetime.utcnow()` deprecation warnings.

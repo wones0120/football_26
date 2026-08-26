@@ -74,6 +74,11 @@ Season, week, and slate form one active shell context across these workspaces. P
 and optimizer run choices are retained per compatible slate, shown in the shell, and restored when returning to that
 slate; Research Lab converts the shared canonical slate ID to its lowercase API form at its boundary.
 
+At startup, the shared season and week default to the earliest locally ingested regular-season week
+that still has a future kickoff. The selection stays on the current week until its final scheduled
+game begins, then advances to the next week. If no future local schedule is available, the app falls
+back to the provider's current-season/current-week lookup and finally to its compiled fallback.
+
 ## CSV Validation Gates
 
 Salary and injury CSVs are validated before any existing curated slice is cleared or new raw/curated rows are written.
@@ -130,6 +135,131 @@ classification, lineage, feature definitions, and local audits are documented in
 `docs/PARTICIPATION_AVAILABILITY_PIPELINE.md` and
 `docs/PARTICIPATION_IDENTITY_REASSESSMENT.md`.
 
+## Historical Game Weather
+
+Migration `0020` standardizes the temperature, wind, roof, surface, stadium, and kickoff context
+already embedded in nflverse schedules. Preview and rebuild the curated 2000–2025 table with:
+
+```bash
+python scripts/build_historical_game_weather.py
+python scripts/build_historical_game_weather.py --apply
+```
+
+The local archive produces 7,017 game rows, including complete temperature and wind for 5,009
+games and 1,752 indoor games where those values are not applicable. These are retrospective
+game-result conditions, not archived pre-lock forecasts. A database constraint requires
+`observed_at IS NULL` and `replay_eligible = false`, so the table is available for descriptive
+analysis and forecast calibration but cannot silently enter historical projection or lineup
+replay. Source evaluation and the ranked pre-lock forecast plan are documented in
+`docs/HISTORICAL_WEATHER_DATA.md`.
+
+## Weather Venue Registry And Forecast Source
+
+Migration `0021` adds `nfl_venue_registry_v1`: 37 versioned physical venues with stable venue IDs,
+effective seasons, coordinates, IANA timezones, roof defaults, evidence, and review notes. It maps
+ordinary schedules by their PFR `stadium_id`, never by the stadium display name, and uses reviewed
+game-ID overrides for every neutral-site event. The 2024–2025 acceptance audit resolves all 570
+games: 555 by source ID and 15 by override, with no unresolved or ambiguous rows.
+
+Preview or persist the registry and mapping audit with:
+
+```bash
+python scripts/build_venue_registry.py
+python scripts/build_venue_registry.py --apply
+```
+
+Migration `0022` completes the 2024–2025 Open-Meteo Previous Runs backfill at the pinned 24-hour lead
+and model contract. The development cohort contains 570 immutable, fully available forecasts for
+570 expected games. Raw JSON and canonical manifests retain checksums, resolved venue records,
+requested/returned coordinates, units, values, redacted source URIs, and ingest-run lineage. The
+audit verifies all 570 artifacts with zero gaps or integrity issues.
+
+Preview coverage, apply local non-commercial evaluation, or verify retained evidence with:
+
+```bash
+.venv/bin/python scripts/backfill_historical_weather_forecasts.py
+.venv/bin/python scripts/backfill_historical_weather_forecasts.py \
+  --apply \
+  --allow-free-evaluation
+.venv/bin/python scripts/backfill_historical_weather_forecasts.py \
+  --verify-artifacts
+```
+
+The free endpoint is evaluation-only; production requires Professional-or-higher access, a customer
+endpoint, and `OPEN_METEO_API_KEY`. Previous Runs does not provide a historical publication
+timestamp, so every row preserves `provider_issued_at` and `provider_available_at` as null and labels
+`forecast_basis_at=valid_at-24h` only as a derived fixed-lead basis. Retrospective actual weather
+remains in a different table and cannot fill a forecast field. Registry details are in
+`docs/WEATHER_VENUE_REGISTRY.md`, implementation and recovery are in
+`docs/HISTORICAL_WEATHER_FORECASTS.md`, and the source, cost/licence, attribution, fallback, and
+leakage decisions are in `docs/WEATHER_FORECAST_SOURCE_CONTRACT.md`.
+
+## Current Weather Forecast Capture
+
+Migration `0023` extends the same immutable weather snapshot table for live Forecast API receipts.
+Every refresh appends a new `current_forecast_capture` version keyed by canonical game and venue
+identity plus its actual `received_at`; it never overwrites an earlier response. Live rows have no
+invented fixed lead or provider publication time: `fixed_lead_hours` remains null and
+`forecast_basis_at=received_at` is labeled `server_received_at`. Cutoff selection returns only the
+newest version actually received by the requested time, so a post-lock refresh is retained but
+cannot replace the pre-lock view.
+
+Preview one current slate with explicit canonical nflverse game IDs:
+
+```bash
+.venv/bin/python scripts/capture_current_weather_forecasts.py \
+  --season 2026 \
+  --week 1 \
+  --slate WEDNESDAY_NIGHT \
+  --slate-lock-at 2026-09-09T20:20:00-04:00 \
+  --game-id 2026_01_NE_SEA
+```
+
+Add `--apply --allow-free-evaluation` for a one-time local non-commercial capture, or add `--watch`
+to repeat complete-slate refreshes every `WEATHER_FORECAST_REFRESH_INTERVAL_MINUTES` until lock.
+Production requires `OPEN_METEO_API_KEY` and the customer Forecast API endpoint. Requests are spaced
+by `OPEN_METEO_MIN_REQUEST_INTERVAL_SECONDS`; freshness reports classify an otherwise available row
+as stale after `WEATHER_FORECAST_STALE_AFTER_MINUTES`. Every run records per-game success, partial,
+missing, quarantine, or provider-error evidence and prints both current and as-of-lock coverage.
+Operational details and recovery behavior are in `docs/CURRENT_WEATHER_FORECASTS.md`.
+
+Before the first live capture, set `SOURCE_SNAPSHOT_ROOT` and
+`WEATHER_FORECAST_SNAPSHOT_ROOT` in `.env` to absolute paths on backed-up durable storage. The
+repository-local defaults are suitable for development only; database checksums cannot reconstruct
+lost raw evidence.
+
+## Slate Game Weather API
+
+`GET /api/weather/slate` exposes `slate_game_weather_v1`, the read-only canonical matchup contract
+for WTHR-005. It resolves salary team/opponent pairs to nflverse `game_id`, unions canonically keyed
+current-capture lineage, and returns unresolved or ambiguous matchup rows explicitly instead of
+dropping them. Slate names are matched case-insensitively and no player display-name join is used.
+
+```bash
+curl --get http://127.0.0.1:8000/api/weather/slate \
+  --data-urlencode source_system=draftkings \
+  --data-urlencode season=2025 \
+  --data-urlencode week=11 \
+  --data-urlencode slate=sunday_main
+```
+
+The effective cutoff cannot exceed server time or the earliest slate kickoff. Current views expose
+only receipt-timed current captures eligible at that cutoff. Historical views reconstruct the
+newest cutoff-safe forecast as of lock and return retrospective actual conditions only in a
+separately labeled object that remains `replay_eligible=false`. Every game reports kickoff, venue,
+roof basis, forecast source/age/values, one of `available`, `indoor`, `stale`, `missing`,
+or `error`, and explicit quality flags. The full contract and acceptance evidence are in
+`docs/SLATE_GAME_WEATHER_API.md`.
+
+The War Room consumes the same contract in its `Game Pressure Matrix`. Every matchup card carries
+an explicit weather state and compact temperature, wind, and precipitation values. Selecting a card
+opens `Matchup Weather Detail` with gusts, the venue-registry roof default, forecast source and
+timestamp, cutoff-relative freshness, and readable warnings. For completed historical games,
+retrospective conditions appear only in a separate `Historical Actual · Replay-Ineligible` panel;
+they never replace a forecast value. UI behavior and validation evidence are in
+`docs/WAR_ROOM_WEATHER.md`. The real 2025 Week 11 historical acceptance run and the still-blocked
+prospective-current gate are recorded in `docs/WTHR-007_ACCEPTANCE.md`.
+
 ## Point-In-Time Input Safety
 
 Historical injury context uses the `point_in_time_cutoff_v1` contract. A snapshot is visible only
@@ -163,6 +293,12 @@ python scripts/capture_prospective_sources.py \
   --draftkings-directory ~/Downloads \
   --nflreadpy-datasets schedules weekly_rosters injuries snap_counts
 ```
+
+The Research Lab's `Load Schedules` action applies the same evidence contract to a full-season
+nflreadpy schedule refresh. It captures the fetched frame as an immutable CSV first, ingests from
+that exact artifact with a deterministic run ID, records the artifact checksum on the ingest run,
+and links the snapshot to the run. Repeating the action with unchanged upstream content reuses the
+existing snapshot and completed ingest instead of replacing rows without new lineage.
 
 A generic `DKSalaries.csv` is accepted only with an explicit `--draftkings-path`, preventing a
 scheduled directory scan from labeling an old download as a new week. DraftKings salary ingestion
@@ -198,6 +334,8 @@ The single FastAPI application exposes 116 non-conflicting route contracts. Prim
 - `/api/benchmarks` for reproducible classic/showdown model evaluation and artifact access.
 - `/api/jobs` for durable worker status, progress, results, errors, and retry.
 - `/api/weekly-runs` for resumable ingest-to-export workflow dispatch, stage inspection, and retry.
+- `/api/weather` for canonical slate-game weather, cutoff-safe forecast selection, and explicitly
+  separate replay-ineligible historical actuals.
 
 ## Classic GPP Optimizer Strategies
 

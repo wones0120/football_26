@@ -378,6 +378,100 @@ class DataFreshnessResponse(BaseModel):
     rows: list[DataFreshnessRowResponse]
 
 
+class SlateWeatherVenueResponse(BaseModel):
+    registry_record_id: str
+    venue_id: str
+    name: str
+    timezone: str
+    country_code: str
+    default_roof: Literal["outdoor", "fixed_indoor", "retractable"]
+    roof_basis: Literal["venue_registry_default"]
+
+
+class SlateWeatherForecastResponse(BaseModel):
+    forecast_snapshot_id: str
+    contract_id: str
+    data_kind: Literal[
+        "historical_fixed_lead_forecast",
+        "current_forecast_capture",
+    ]
+    status: Literal["available", "partial", "missing"]
+    provider: str
+    provider_model: str
+    valid_at: datetime
+    forecast_basis_at: datetime
+    forecast_basis_kind: Literal["provider_fixed_lead", "server_received_at"]
+    received_at: datetime
+    age_seconds: float = Field(..., ge=0)
+    temperature_c: float | None = None
+    relative_humidity_pct: float | None = None
+    precipitation_mm: float | None = None
+    wind_speed_mps: float | None = None
+    wind_direction_degrees: float | None = None
+    wind_gusts_mps: float | None = None
+    units: dict[str, str | None] = Field(default_factory=dict)
+    quality_flags: list[str] = Field(default_factory=list)
+
+
+class SlateWeatherActualResponse(BaseModel):
+    data_kind: str
+    observation_basis: str
+    replay_eligible: Literal[False]
+    effective_at: datetime | None = None
+    weather_status: str
+    stadium: str | None = None
+    roof: str | None = None
+    surface: str | None = None
+    temperature_f: float | None = None
+    wind_mph: float | None = None
+    source_system: str
+    quality_flags: list[str] = Field(default_factory=list)
+
+
+class SlateWeatherGameResponse(BaseModel):
+    game_id: str | None = None
+    identity_status: Literal["resolved", "unresolved", "ambiguous"]
+    candidate_game_ids: list[str] = Field(default_factory=list)
+    home_team: str | None = None
+    away_team: str | None = None
+    kickoff_at: datetime | None = None
+    schedule_status: str | None = None
+    weather_state: Literal[
+        "available",
+        "indoor",
+        "stale",
+        "missing",
+        "error",
+    ]
+    venue: SlateWeatherVenueResponse | None = None
+    forecast: SlateWeatherForecastResponse | None = None
+    actual: SlateWeatherActualResponse | None = None
+    latest_capture_status: str | None = None
+    latest_capture_reason: str | None = None
+    quality_flags: list[str] = Field(default_factory=list)
+
+
+class SlateWeatherResponse(BaseModel):
+    contract_id: Literal["slate_game_weather_v1"]
+    forecast_contract_id: str
+    source_system: Literal["draftkings", "fanduel"]
+    season: int
+    week: int
+    slate: str
+    request_kind: Literal["current", "historical"]
+    generated_at: datetime
+    requested_cutoff_at: datetime | None = None
+    cutoff_at: datetime
+    slate_lock_at: datetime | None = None
+    salary_rows: int = Field(..., ge=0)
+    games_expected: int = Field(..., ge=0)
+    games_resolved: int = Field(..., ge=0)
+    state_counts: dict[str, int] = Field(default_factory=dict)
+    identity_counts: dict[str, int] = Field(default_factory=dict)
+    quality_flags: list[str] = Field(default_factory=list)
+    games: list[SlateWeatherGameResponse] = Field(default_factory=list)
+
+
 class AutoDiscoveredFileResponse(BaseModel):
     file_name: str
     path: str

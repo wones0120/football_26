@@ -49,6 +49,7 @@ from ..services.job_queue import (
     enqueue_job,
     job_response,
 )
+from ..services.schedule_context import next_upcoming_schedule_context
 
 from ..product_dependencies import (
     get_ingestion_controller,
@@ -1866,7 +1867,15 @@ def import_news_monitor_history(
 @router.get("/meta/current")
 def get_current_context(
     data_source: NFLDataSource = Depends(get_data_source),
+    session: Session = Depends(get_db_session),
 ) -> dict:
+    upcoming = next_upcoming_schedule_context(session)
+    if upcoming is not None:
+        return {
+            "season": upcoming.season,
+            "week": upcoming.week,
+            "provider": "nflreadpy_schedule",
+        }
     try:
         context = data_source.get_current_context()
     except RuntimeError as exc:
