@@ -1,6 +1,6 @@
 # Prospective Source Capture
 
-Last validated: 2026-08-26
+Last validated: 2026-08-28
 
 Contract: `prospective_source_snapshot_v1`
 
@@ -8,10 +8,11 @@ Migration: `0019_prospective_source_snapshots.sql`
 
 ## Outcome
 
-The repository has preserved the first full-season 2026 schedule observation before the season:
-272 regular-season games with 272 unique canonical game IDs. This closes the schedule portion of
-the capture-tooling gate. DATA-002 itself remains incomplete until source-authorized salary and
-other pre-lock observations are retained.
+The repository has preserved the first full-season 2026 schedule observation and the first real
+DraftKings Week 1 `SUNDAY_MAIN` salary observation before their games: 272 regular-season games
+with 272 unique canonical game IDs, plus 719 salary rows covering all 12 Sunday Main games. This
+closes the schedule and salary portions of the capture-tooling gate. DATA-002 itself remains
+incomplete until the other approved pre-lock observations are retained.
 
 The capture path supports:
 
@@ -92,6 +93,27 @@ returns the same completed run.
 A post-lock download remains valuable audit evidence, so it is retained. It is intentionally not
 linked to an ingest run and is absent from `eligible_snapshots(cutoff_at=...)` for that lock.
 
+## Real Week 1 Salary Capture
+
+The source-authorized `DKSalaries_2026_1_SUNDAY_MAIN.csv` file was captured on 2026-08-28 at
+`07:37:56.614169-04:00`, before the declared 2026-09-13 `13:00:00-04:00` slate lock.
+
+| Check | Result |
+| --- | --- |
+| Snapshot ID | `d893bd08-475f-50b2-8b29-235670d3805d` |
+| SHA-256 | `39f7d4669ba4d45c711ae8b135468ce01180c5b181d1f77076c75258a72287a6` |
+| Ingest run ID | `ab38816d-9b5d-5f7e-8f24-ca60ee1d3f8d` |
+| Raw / curated rows | 719 / 719 |
+| Canonical games | 12 |
+| Resolved / unresolved player identities | 531 / 188 |
+| Unresolved DST identities | 0 |
+| Artifact verification | Passed at the configured durable snapshot root outside the repository |
+| Identical rerun | Reused the same snapshot and completed ingest run; no duplicate artifact or rows |
+
+The 188 unresolved player rows remain in the explicit review queue; none were silently dropped or
+joined by display name alone. Those identities must be resolved or accepted under the governed
+quarantine rules before the full salary pool can enter projections or optimization.
+
 ## nflreadpy Boundaries
 
 The command captures exactly the tabular frame returned by the installed nflreadpy version after
@@ -119,5 +141,5 @@ Focused tests prove:
 `verify_snapshot_artifact` re-hashes an artifact and validates its manifest. A missing or mismatched
 artifact is an integrity failure; the service will not silently reconstruct or overwrite it.
 
-Focused source-capture, schedule-weather, and venue-registry validation passes 15 tests. The full
-backend suite passes 430 tests with two pre-existing `datetime.utcnow()` deprecation warnings.
+Focused source-capture, current-weather, and slate-weather validation passes 15 tests. The full
+backend suite passes 433 tests without warnings; all 12 UI tests and the production UI build pass.

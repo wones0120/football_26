@@ -1,6 +1,6 @@
 # WTHR-007 Weather Acceptance
 
-Date: 2026-08-26
+Date: 2026-08-28
 
 Status: historical acceptance passed; prospective current acceptance in progress
 
@@ -11,12 +11,11 @@ the database, `slate_game_weather_v1`, and the War Room. The focused acceptance 
 the current-capture mechanics with deterministic fixtures, including same-receipt reuse, append-only
 versions, stale/error reporting, and post-lock exclusion.
 
-The full 2026 schedule is now retained as immutable prospective evidence. On 2026-08-26, a
-non-network preview of the September 9 opener resolved its canonical schedule and venue evidence
-without quarantine. WTHR-007 is therefore active rather than calendar-blocked, but it is not
-complete: the development database still has no real `current_forecast_capture` row and no 2026
-salary slate. A real response cannot be backdated or replaced with a fixture without violating the
-receipt-time contract.
+The full 2026 schedule and the real DraftKings Week 1 Sunday Main salary slate are now retained as
+immutable prospective evidence. All 12 salary matchups resolve to canonical schedule games without
+quarantine. WTHR-007 is therefore active rather than calendar-blocked, but it is not complete: the
+development database still has no successful real `current_forecast_capture` row. A real response
+cannot be backdated or replaced with a fixture without violating the receipt-time contract.
 
 ## Real 2026 preflight
 
@@ -43,6 +42,30 @@ Observed result:
 
 This proves the retained schedule, canonical game ID, venue mapping, kickoff, and capture contract
 are ready for a real receipt. It does not satisfy the prospective acceptance gate by itself.
+
+## Real 2026 Sunday Main salary and weather gate
+
+The source-authorized Week 1 Sunday Main salary file was captured at
+`2026-08-28T07:37:56.614169-04:00`, before the 2026-09-13 `13:00:00-04:00` lock.
+
+| Check | Result |
+| --- | --- |
+| Salary snapshot / ingest run | `d893bd08-475f-50b2-8b29-235670d3805d` / `ab38816d-9b5d-5f7e-8f24-ca60ee1d3f8d` |
+| Salary SHA-256 | `39f7d4669ba4d45c711ae8b135468ce01180c5b181d1f77076c75258a72287a6` |
+| Salary rows | 719 raw and 719 curated |
+| Player identities | 531 resolved; 188 retained in the review queue; 0 unresolved DSTs |
+| Expected / resolved games | 12 / 12 |
+| Weather dry-run eligibility | 12 eligible; 0 quarantined |
+| Pre-attempt API states | 4 indoor; 8 missing |
+| Artifact and retry checks | Salary artifact verified; identical rerun reused the same snapshot and ingest run |
+
+The first real provider attempt is retained under current-refresh ingest run
+`a7168ada-224a-4590-9f62-f9535131a255`. It made 12 requests, retained 12 error results, and created
+zero forecast snapshots. A direct diagnostic response identified the exact boundary: on August 28,
+the provider accepted `start_date` only through September 12, while every Sunday Main game is on
+September 13. The post-attempt API therefore truthfully reports 12 `error` states with
+`forecast_capture_error` and `forecast_missing`; no forecast values were fabricated. The earliest
+valid retry is August 29.
 
 ## Real historical acceptance slice
 
@@ -131,18 +154,24 @@ passed. The migration-owned `target` schema also passed at 57/57 tables with zer
 current development `public` schema has separate legacy drift tracked by `ENG-003`; none of the
 weather tables appeared in that drift report.
 
+On 2026-08-28, the focused source-capture, current-weather, and slate-weather suite passed 15 tests
+after the real salary capture and retained provider-horizon attempt.
+
 ## Remaining current-slate gate
 
-The 2026-08-26 development inventory is:
+The 2026-08-28 development inventory is:
 
 - `current_forecast_capture` snapshots: 0;
-- `current_refresh` capture results: 0;
-- 2026-or-later curated salary rows: 0;
+- `current_refresh` capture results: 12, all retained provider-horizon errors;
+- 2026 Week 1 Sunday Main curated salary rows: 719;
+- salary identity coverage: 531 resolved, 188 open review rows, 0 unresolved DSTs;
 - 2026 schedule rows: 272;
-- 2026 prospective source snapshots: 2 (`schedules` plus the retained player-registry crosswalk).
+- 2026 prospective source snapshots: 3 (`schedules`, the retained player-registry crosswalk, and
+  the Week 1 salary slate).
 
-To close WTHR-007, capture the first source-authorized 2026 salary slate and resolved canonical game
-set, start the current weather watcher while those kickoffs are inside the provider horizon, retain
-at least two pre-lock refreshes, and rerun the API/UI checks before lock. A post-lock refresh must
-then be retained and shown to be excluded from the reconstructed lock view. Until that evidence
-exists, the ticket remains in progress but incomplete.
+To close WTHR-007, retry the current weather capture once September 13 is inside the provider
+horizon, retain at least two successful pre-lock refreshes, and rerun the API/UI checks before
+lock. A post-lock refresh must then be retained and shown to be excluded from the reconstructed lock
+view. The 188 player-identity reviews are tracked separately because game-level salary identity is
+already 12/12; they remain required before complete projection and optimizer use. Until the weather
+evidence exists, the ticket remains in progress but incomplete.

@@ -1,6 +1,6 @@
 # Phase Plan
 
-Last reviewed: 2026-08-26
+Last reviewed: 2026-08-28
 
 This is the executive roadmap. `docs/TODO.md` is the authoritative source for
 active task status, priority, dependencies, and acceptance checks.
@@ -18,14 +18,14 @@ active task status, priority, dependencies, and acceptance checks.
 9. Showdown cash and GPP have distinct versioned basic-captain contracts; completed lineups, normalized CPT/FLEX slots, failures, and exact run lineage persist and reload (`OPT-002`).
 10. Projection champions no longer change when a new run completes. Promotion and rollback require persisted evaluation windows, feature/code hashes, comparable gates, and named approvals (`MODEL-002`).
 11. The locked MODEL-001 opportunity/efficiency and DST ablation was rejected on its 2025 W12-W18 holdout; production remains unchanged and the next evaluation requires prospectively captured 2026 evidence.
-12. `prospective_source_snapshot_v1` retained the first full 2026 schedule snapshot: 272 regular-season games with 272 unique canonical game IDs. A source-authorized 2026 DraftKings salary observation is still required.
+12. `prospective_source_snapshot_v1` retained the first full 2026 schedule snapshot and the real DraftKings Week 1 Sunday Main salary slate: 272 regular-season games plus 719 salary rows across 12/12 canonical games. Player identity resolved for 531 rows; 188 remain in governed review.
 13. Participation identity reassessment resolved 399 of 436 roster/snap queue rows through native-ID or unique exact semantic evidence, rebuilt 2013–2025 Silver/Gold data, refreshed the 2024–2025 feature matrix, and retained 37 nondeterministic rows for review.
-14. Retrospective nflverse game weather is standardized for 7,017 games from 2000–2025 with database-enforced replay exclusion. The versioned venue registry resolves all 570 games from 2024–2025, including 15 reviewed neutral-site overrides, WTHR-003 retains 570/570 verified Open-Meteo fixed-24-hour forecasts, WTHR-004 adds append-only receipt-timed current refreshes, WTHR-005 exposes complete cutoff-safe slate-game weather through a canonical API, and WTHR-006 presents it in the War Room with explicitly separate replay-ineligible actuals. WTHR-007's real 2025 Week 11 historical run passes, and its 2026 opener preview resolves 1/1 games; real current receipts and salary evidence remain.
+14. Retrospective nflverse game weather is standardized for 7,017 games from 2000–2025 with database-enforced replay exclusion. The versioned venue registry resolves all 570 games from 2024–2025, including 15 reviewed neutral-site overrides, WTHR-003 retains 570/570 verified Open-Meteo fixed-24-hour forecasts, WTHR-004 adds append-only receipt-timed current refreshes, WTHR-005 exposes complete cutoff-safe slate-game weather through a canonical API, and WTHR-006 presents it in the War Room with explicitly separate replay-ineligible actuals. WTHR-007's real 2025 Week 11 historical run passes; the 2026 Sunday Main salary/API gate resolves 12/12 games, and the first provider-horizon failure is retained without fabricated forecasts. Successful current receipts remain.
 
 ## Execution Board
 
 ### Now
-1. Finish the first 2026 live-slate evidence run: retain a source-authorized salary file, at least two real pre-lock weather receipts, and one post-lock receipt that is excluded from the lock view (`WTHR-007`, `DATA-002`).
+1. Finish the first 2026 live-slate evidence run: resolve or explicitly quarantine the 188 open salary identities, retain at least two real pre-lock weather receipts, and retain one post-lock receipt that is excluded from the lock view (`DATA-004`, `WTHR-007`, `DATA-002`).
 2. Close the remaining one-repository parity gate: the real DraftKings portfolio/export smoke test (`CON-001`). Workspace visual QA (`CON-002`) and fresh-database migration/drift proof (`CON-003`) are complete.
 3. Keep classic and showdown benchmarks separate, track their declared quality metrics, and preserve current production defaults until a walk-forward acceptance gate beats them.
 4. Build a migration-clean sidecar development database and prove a non-destructive transition from the legacy public-schema drift before changing the current database (`ENG-003`).

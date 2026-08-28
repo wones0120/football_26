@@ -1,6 +1,6 @@
 # DATA-002 Source Availability Audit
 
-Date: 2026-08-01
+Date: 2026-08-28
 
 ## Outcome
 
@@ -21,18 +21,24 @@ WTHR-005 now exposes those contracts through `slate_game_weather_v1`. The endpoi
 server time and slate lock, selects only receipt-eligible rows for current slates, reconstructs the
 newest eligible pre-lock evidence for historical slates, and returns retrospective actuals only as
 a separately labeled replay-ineligible object. Missing or ambiguous slate-game identity remains
-visible instead of being silently dropped. This closes the weather API layer but does not supply the
-real prospective 2026 evidence or non-weather sources required to unblock DATA-002.
+visible instead of being silently dropped. This closes the weather API layer but does not supply
+the remaining prospective weather receipts or non-weather sources required to unblock DATA-002.
 
 The bounded safe change is `point_in_time_cutoff_v1`: projection-linked consumers now ignore an
 injury snapshot unless both its `as_of` and the exact projection run's `data_cutoff_at` exist and the
 snapshot was observed at or before that cutoff.
 
-The prospective tooling is now ready through `prospective_source_snapshot_v1`. Migration `0019`
+The prospective tooling is now active through `prospective_source_snapshot_v1`. Migration `0019`
 stores append-only source manifests and ingest links, and `scripts/capture_prospective_sources.py`
 captures DraftKings salaries plus nflreadpy schedules, rosters, injuries, and snap counts using
-server receipt time. Real 2026 observations have not yet been collected, so this does not change the
-historical-source decision or unblock MODEL-001. See `docs/PROSPECTIVE_SOURCE_CAPTURE.md`.
+server receipt time. The first real 2026 schedule and salary observations are retained pre-lock:
+272 schedule games and a 719-row Week 1 Sunday Main salary slate covering 12 canonical games. The
+salary snapshot is `d893bd08-475f-50b2-8b29-235670d3805d`, with SHA-256
+`39f7d4669ba4d45c711ae8b135468ce01180c5b181d1f77076c75258a72287a6`; its artifact verifies and
+an identical rerun reused the same snapshot and ingest run. Of the 719 player rows, 531 resolved
+deterministically and 188 remain visible in the review queue. This supplies the first prospective
+cohort but does not yet provide enough completed weeks to unblock MODEL-001. See
+`docs/PROSPECTIVE_SOURCE_CAPTURE.md`.
 
 ## Local Evidence
 
@@ -44,6 +50,9 @@ historical-source decision or unblock MODEL-001. See `docs/PROSPECTIVE_SOURCE_CA
 | `raw_nfl_schedule` | 7,017, with total and spread values on every row | 2026-02-25 13:21:41–13:23:28 | None | Treat as historical/closing context, not cutoff-safe betting snapshots |
 | `curated_game_weather` | 7,017 games; 5,009 complete temperature/wind rows; 1,752 indoor-not-applicable | Rebuilt 2026-08-01 from versioned schedules | None; values describe game-result context | Retrospective analysis only; database requires null `observed_at` and false `replay_eligible` |
 | `weather_forecast_snapshot` | 570 fully available 2024–2025 game forecasts | Captured 2026-08-01 with raw response and manifest | Provider-defined exact 24-hour lead; provider issued/available times remain null | Eligible only through `provider_fixed_lead`; not relabeled as observed time |
+| 2026 schedule snapshot | 272 regular-season games | Captured 2026-08-22 | Server receipt before the season | Prospective fixture evidence with 272 unique canonical game IDs |
+| 2026 Week 1 DraftKings salaries | 719 rows across 12 Sunday Main games | Captured 2026-08-28 07:37:56 ET | Before the 2026-09-13 13:00 ET lock | Eligible; 531 player identities resolved and 188 retained for review |
+| 2026 Week 1 current weather attempt | 12 result rows; 0 forecast snapshots | Attempted 2026-08-28 | Provider horizon ended at 2026-09-12 | Retained error evidence; retry on or after 2026-08-29 without fabricating values |
 | Props and depth-chart snapshot tables | 0 local tables | N/A | N/A | Source required |
 | Role changes | Manual scenario support only | Explicit scenario time | Not an observed historical feed | Keep as scenario evidence, not historical fact |
 
@@ -109,13 +118,14 @@ slate kickoff or server current time.
 
 ## Unblocking Decision
 
-DATA-002 can resume through either route:
+DATA-002 can continue through either route:
 
 1. Select an authorized historical source that provides immutable observation timestamps and stable
    native IDs, then retain source payload, effective time, observed time, and ingest lineage.
 2. Run the implemented prospective capture command for the 2026 season, using server receipt time
    as the non-backdatable observation time and source publication/effective time as separate
-   metadata.
+   metadata. Schedule and Week 1 salary capture now satisfy this route for those datasets; weather,
+   Vegas, props, depth-chart, injury, and role evidence remain.
 
 Vegas, props, weather, depth-chart, injury, and role sources must be approved independently. One
 source's timestamp quality must not be generalized to another.
@@ -126,4 +136,4 @@ source's timestamp quality must not be generalized to another.
 - WTHR-003 audit: 570/570 available and registry-matched; 570/570 raw checksums and manifests
   verified; zero timing, variable, secret-URI, or artifact issues.
 - WTHR-005 focused slate/current/historical weather tests: 17 passed.
-- Full Python suite: 428 passed with two pre-existing `datetime.utcnow()` deprecation warnings.
+- Full Python suite: 433 passed without warnings; all 12 UI tests and the production UI build pass.
