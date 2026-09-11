@@ -2,19 +2,116 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Iterable, List, Optional
 import uuid
 
 import pandas as pd
-from sqlalchemy import create_engine, text
+from sqlalchemy import bindparam, create_engine, inspect, text
 
 from Database.curated_ingest import _norm_name, _strip_suffix
 from Database.config import get_connection_string
 
 
+@dataclass(frozen=True)
+class _ValidationTable:
+    name: str
+    schema: str | None = "public"
+    slate_column: str | None = None
+
+
+# Coverage is intentionally restricted to known relations. Besides preventing a
+# query-string value from becoming a SQL identifier, the aliases keep older UI
+# names working while the product migrates to the canonical public/target model.
+_VALIDATION_TABLES: dict[str, tuple[_ValidationTable, ...]] = {
+    "nfl_weekly_data_with_scores": (
+        _ValidationTable("nfl_weekly_data_with_scores"),
+        _ValidationTable("fact_player_game_actual", "target"),
+    ),
+    "raw_weekly_stats": (
+        _ValidationTable("raw_weekly_stats"),
+        _ValidationTable("raw_nfl_weekly_stat"),
+    ),
+    "raw_weekly_rosters": (
+        _ValidationTable("raw_weekly_rosters"),
+        _ValidationTable("raw_nfl_weekly_roster"),
+    ),
+    "raw_injuries": (
+        _ValidationTable("raw_injuries"),
+        _ValidationTable("raw_injury_row", slate_column="slate"),
+    ),
+    "curated_weekly_stats": (
+        _ValidationTable("curated_weekly_stats"),
+        _ValidationTable("fact_player_game_actual", "target"),
+    ),
+    "curated_weekly_rosters": (
+        _ValidationTable("curated_weekly_rosters"),
+        _ValidationTable("curated_player_game_participation"),
+    ),
+    "curated_injuries": (
+        _ValidationTable("curated_injuries", slate_column="slate"),
+        _ValidationTable("curated_injury", slate_column="slate"),
+    ),
+    "curated_salaries": (
+        _ValidationTable("curated_salaries", slate_column="slate"),
+        _ValidationTable("curated_salary", slate_column="slate"),
+        _ValidationTable("snapshot_salary", "target", "slate"),
+    ),
+    "predictive_features": (
+        _ValidationTable("predictive_features", slate_column="slate"),
+        _ValidationTable("player_game_feature_matrix", slate_column="slate"),
+        _ValidationTable("feature_player_game", "target"),
+    ),
+    "player_expected_points": (
+        _ValidationTable("player_expected_points", slate_column="slate"),
+        _ValidationTable("player_projection", "target", "slate_id"),
+    ),
+    "weekly_injuries": (
+        _ValidationTable("weekly_injuries", slate_column="slate"),
+        _ValidationTable("curated_injury", slate_column="slate"),
+    ),
+    "fact_player_game_actual": (_ValidationTable("fact_player_game_actual", "target"),),
+    "curated_salary": (_ValidationTable("curated_salary", slate_column="slate"),),
+    "player_game_feature_matrix": (
+        _ValidationTable("player_game_feature_matrix", slate_column="slate"),
+    ),
+    "player_projection": (_ValidationTable("player_projection", "target", "slate_id"),),
+}
+
+
+def _resolve_validation_table(connection, table_name: str) -> _ValidationTable | None:
+    candidates = _VALIDATION_TABLES.get(table_name)
+    if candidates is None:
+        raise ValueError(f"Unsupported validation table: {table_name}")
+
+    inspector = inspect(connection)
+    for candidate in candidates:
+        # SQLite has no public schema; omitting it keeps service tests portable.
+        schema = candidate.schema if connection.dialect.name != "sqlite" else None
+        if inspector.has_table(candidate.name, schema=schema):
+            return _ValidationTable(candidate.name, schema, candidate.slate_column)
+    return None
+
+
+def _missing_week(seasons: list[int], week: int | None) -> List[dict]:
+    if len(seasons) != 1 or week is None:
+        return []
+    return [
+        {
+            "season": int(seasons[0]),
+            "week": int(week),
+            "rows": 0,
+            "expected_rows": None,
+            "status": "missing",
+        }
+    ]
+
+
 def fetch_weekly_row_counts(
     table_name: str,
     seasons: Optional[Iterable[int]] = None,
+    week: int | None = None,
+    slate: str | None = None,
     connection_string: Optional[str] = None,
 ) -> List[dict]:
     """
@@ -26,23 +123,36 @@ def fetch_weekly_row_counts(
     conn_str = connection_string or get_connection_string()
     engine = create_engine(conn_str)
 
+    season_list = [int(season) for season in seasons] if seasons else []
     with engine.begin() as connection:
-        if seasons:
-            season_list = list(seasons)
-            base_query = text(
-                f"SELECT season, week, COUNT(*) AS rows "
-                f"FROM {table_name} "
-                "WHERE season = ANY(:seasons) "
-                "GROUP BY season, week"
-            )
-            counts = connection.execute(base_query, {"seasons": season_list}).fetchall()
-        else:
-            base_query = text(
-                f"SELECT season, week, COUNT(*) AS rows "
-                f"FROM {table_name} "
-                "GROUP BY season, week"
-            )
-            counts = connection.execute(base_query).fetchall()
+        table = _resolve_validation_table(connection, table_name)
+        if table is None:
+            return _missing_week(season_list, week)
+
+        relation = f'"{table.schema}"."{table.name}"' if table.schema else f'"{table.name}"'
+        filters: list[str] = []
+        params: dict[str, object] = {}
+        if season_list:
+            filters.append("season IN :seasons")
+            params["seasons"] = season_list
+        if week is not None:
+            filters.append("week = :week")
+            params["week"] = int(week)
+        if slate and table.slate_column:
+            filters.append(f'UPPER("{table.slate_column}") = UPPER(:slate)')
+            params["slate"] = slate
+
+        where_clause = f" WHERE {' AND '.join(filters)}" if filters else ""
+        base_query = text(
+            f"SELECT season, week, COUNT(*) AS rows FROM {relation}"
+            f"{where_clause} GROUP BY season, week"
+        )
+        if season_list:
+            base_query = base_query.bindparams(bindparam("seasons", expanding=True))
+        counts = connection.execute(base_query, params).fetchall()
+
+    if season_list and week is not None and not counts:
+        return _missing_week(season_list, week)
 
     by_season = {}
     for row in counts:
@@ -55,13 +165,14 @@ def fetch_weekly_row_counts(
     for season in sorted(by_season.keys()):
         if not by_season[season]:
             continue
-        max_week = max(by_season[season].keys())
+        min_week = week if week is not None else 1
+        max_week = week if week is not None else max(by_season[season].keys())
         non_zero_counts = [c for c in by_season[season].values() if c > 0]
         median_non_zero = (
             int(sorted(non_zero_counts)[len(non_zero_counts) // 2]) if non_zero_counts else 0
         )
-        for week in range(1, max_week + 1):
-            count = by_season[season].get(week, 0)
+        for week_number in range(min_week, max_week + 1):
+            count = by_season[season].get(week_number, 0)
             if count == 0:
                 status = "missing"
             elif median_non_zero > 0 and count < 0.8 * median_non_zero:
@@ -71,7 +182,7 @@ def fetch_weekly_row_counts(
             rows.append(
                 {
                     "season": int(season),
-                    "week": int(week),
+                    "week": int(week_number),
                     "rows": count,
                     "expected_rows": median_non_zero if median_non_zero else None,
                     "status": status,

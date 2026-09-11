@@ -9,6 +9,8 @@ import { ModelWorkbench } from "./ModelWorkbench";
 import { ResearchWorkspace } from "./ResearchWorkspace";
 import { WarRoom } from "./WarRoom";
 import {
+  DEFAULT_SLATE,
+  SLATE_OPTIONS,
   normalizeSlateId,
   slateContextKey,
   updateRunSelection,
@@ -16,10 +18,10 @@ import {
   type PersistedRunSelections,
 } from "./workspaceContext";
 import {
-  CLASSIC_GPP_BASELINE_STRATEGY_ID,
-  CLASSIC_GPP_STRATEGIES,
+  CLASSIC_CONTEST_STRATEGIES,
+  CLASSIC_LARGE_GPP_STRATEGY_ID,
   optimizerStrategyId,
-  type ClassicGppStrategyId,
+  type ClassicContestStrategyId,
 } from "./optimizerStrategy";
 import type {
   LoadSummary,
@@ -78,27 +80,9 @@ import {
   type WeeklyRun,
 } from "./api";
 import { fetchUnmatchedInjuries, type UnmatchedInjuryRow } from "./api";
-const SLATE_OPTIONS = [
-  "SUNDAY_MAIN",
-  "SUNDAY_EARLY",
-  "SUNDAY_LATE",
-  "MONDAY_NIGHT",
-  "TUESDAY_NIGHT",
-  "WEDNESDAY_NIGHT",
-  "THURSDAY_NIGHT",
-  "FRIDAY_NIGHT",
-  "SATURDAY_NIGHT",
-  "SUNDAY_NIGHT",
-  "SUNDAY_MONDAY",
-];
 
 const FALLBACK_SEASON = 2026;
 const FALLBACK_WEEK = 1;
-type CashStackPolicyId =
-  | "classic_cash_unconstrained_v1"
-  | "classic_cash_qb_pair_v1"
-  | "classic_cash_qb_pair_bringback_v1";
-
 type OwnershipOperationStatus = {
   message: string;
   rows_written: number;
@@ -266,7 +250,7 @@ function App() {
   const [viewMode, setViewMode] = useState<ViewMode>("digital-twin");
   const [season, setSeason] = useState(FALLBACK_SEASON);
   const [week, setWeek] = useState(FALLBACK_WEEK);
-  const [slate, setSlate] = useState("THURSDAY_NIGHT");
+  const [slate, setSlate] = useState(DEFAULT_SLATE);
   const [runSelections, setRunSelections] = useState<PersistedRunSelections>({});
   const activeContext = useMemo(
     () => ({ season, week, slate: normalizeSlateId(slate) }),
@@ -318,17 +302,24 @@ function App() {
   const [dataQualityHistory, setDataQualityHistory] = useState<DataQualityHistoryResponse | null>(null);
   const [dataQualityLoading, setDataQualityLoading] = useState(false);
   const [dataQualityError, setDataQualityError] = useState<string | null>(null);
-  const [numLineups, setNumLineups] = useState(1);
-  const [maxExposure, setMaxExposure] = useState(100);
+  const [numLineups, setNumLineups] = useState(20);
+  const [maxExposure, setMaxExposure] = useState(60);
   const [contestFormat, setContestFormat] = useState<"classic" | "showdown">("classic");
   const [optimizerObjective, setOptimizerObjective] = useState<"cash" | "gpp">("gpp");
-  const [classicGppStrategy, setClassicGppStrategy] =
-    useState<ClassicGppStrategyId>(CLASSIC_GPP_BASELINE_STRATEGY_ID);
-  const [cashStackPolicyId, setCashStackPolicyId] = useState<CashStackPolicyId>(
-    "classic_cash_unconstrained_v1"
-  );
+  const [classicContestStrategy, setClassicContestStrategy] =
+    useState<ClassicContestStrategyId>(CLASSIC_LARGE_GPP_STRATEGY_ID);
+  const [minimumUniqueness, setMinimumUniqueness] = useState(2);
+  const [maxPlayersPerTeam, setMaxPlayersPerTeam] = useState(4);
+  const [maxPlayersPerGame, setMaxPlayersPerGame] = useState(5);
   const [enforceSingleTE, setEnforceSingleTE] = useState(true);
   const [avoidDstOpponents, setAvoidDstOpponents] = useState(true);
+  const selectedClassicStrategy = CLASSIC_CONTEST_STRATEGIES.find(
+    (strategy) => strategy.id === classicContestStrategy
+  ) ?? CLASSIC_CONTEST_STRATEGIES[1];
+  const effectiveOptimizerObjective =
+    contestFormat === "classic"
+      ? selectedClassicStrategy.objective
+      : optimizerObjective;
   const [predictionStatuses, setPredictionStatuses] = useState<Record<string, PredictionOperationStatus>>({});
   const predictionStatus = predictionStatuses[activeContextKey] ?? null;
   const setPredictionStatus = useCallback((status: PredictionOperationStatus | null) => {
@@ -445,6 +436,8 @@ function App() {
     }));
   };
   const [excludePlayers, setExcludePlayers] = useState<string>("");
+  const [excludePlayerIds, setExcludePlayerIds] = useState<string>("");
+  const [lockedPlayerIds, setLockedPlayerIds] = useState<string>("");
   const [topLineups, setTopLineups] = useState<
     {
       rank: number;
@@ -669,18 +662,30 @@ function App() {
         slate,
         draftkings_directory: weeklyDirectory.trim() || undefined,
         contest_format: contestFormat,
-        objective: optimizerObjective,
-        strategy: optimizerStrategyId(contestFormat, optimizerObjective, classicGppStrategy),
+        objective: effectiveOptimizerObjective,
+        strategy: optimizerStrategyId(contestFormat, effectiveOptimizerObjective, classicContestStrategy),
         num_simulations: 1000,
         optimizer_params: {
           num_lineups: numLineups,
           max_exposure: maxExposure / 100,
           enforce_single_te: enforceSingleTE,
           avoid_dst_opponents: avoidDstOpponents,
-          ...(contestFormat === "classic" && optimizerObjective === "cash"
-            ? { stack_policy_id: cashStackPolicyId }
+          ...(contestFormat === "classic" && classicContestStrategy === CLASSIC_LARGE_GPP_STRATEGY_ID
+            ? {
+                minimum_uniqueness: minimumUniqueness,
+                max_players_per_team: maxPlayersPerTeam,
+                max_players_per_game: maxPlayersPerGame,
+              }
             : {}),
           exclude_players: excludePlayers
+            .split(",")
+            .map((value) => value.trim())
+            .filter(Boolean),
+          exclude_player_ids: excludePlayerIds
+            .split(",")
+            .map((value) => value.trim())
+            .filter(Boolean),
+          locked_player_ids: lockedPlayerIds
             .split(",")
             .map((value) => value.trim())
             .filter(Boolean),
@@ -814,7 +819,7 @@ function App() {
     try {
       const readiness = await fetchSlateReadiness({ season, week, slate, record: true });
       setSlateReadiness(readiness);
-      const gateKey = optimizerReadinessGateKey(contestFormat, optimizerObjective);
+      const gateKey = optimizerReadinessGateKey(contestFormat, effectiveOptimizerObjective);
       if (readiness.gates[gateKey].status === "fail") {
         throw new Error(`Optimizer blocked by slate readiness: ${readinessFailureMessage(readiness, gateKey)}`);
       }
@@ -823,22 +828,34 @@ function App() {
         season,
         week,
         slate,
-        strategy: optimizerStrategyId(contestFormat, optimizerObjective, classicGppStrategy),
+        strategy: optimizerStrategyId(contestFormat, effectiveOptimizerObjective, classicContestStrategy),
         contest_format: contestFormat,
-        objective: optimizerObjective,
+        objective: effectiveOptimizerObjective,
         projection_run_id: activeRunSelection.projectionRunId,
         params: {
           num_lineups: numLineups,
           max_exposure: maxExposure / 100,
           enforce_single_te: enforceSingleTE,
           avoid_dst_opponents: avoidDstOpponents,
-          ...(contestFormat === "classic" && optimizerObjective === "cash"
-            ? { stack_policy_id: cashStackPolicyId }
+          ...(contestFormat === "classic" && classicContestStrategy === CLASSIC_LARGE_GPP_STRATEGY_ID
+            ? {
+                minimum_uniqueness: minimumUniqueness,
+                max_players_per_team: maxPlayersPerTeam,
+                max_players_per_game: maxPlayersPerGame,
+              }
             : {}),
           exclude_players: excludePlayers
             .split(",")
             .map((s) => s.trim())
             .filter((s) => s.length > 0),
+          exclude_player_ids: excludePlayerIds
+            .split(",")
+            .map((value) => value.trim())
+            .filter(Boolean),
+          locked_player_ids: lockedPlayerIds
+            .split(",")
+            .map((value) => value.trim())
+            .filter(Boolean),
         },
       });
       setOptimizerStatus(response);
@@ -1273,13 +1290,13 @@ function App() {
 
   if (viewMode === "digital-twin") {
     return (
-      <AppShell activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onNavigate={setViewMode}>
+      <AppShell activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onSlateChange={setActiveSlate} onNavigate={setViewMode}>
         <DigitalTwin
           season={season}
           week={week}
           slate={slate}
           contestFormat={contestFormat}
-          optimizerObjective={optimizerObjective}
+          optimizerObjective={effectiveOptimizerObjective}
           optimizerStatus={optimizerStatus}
           projectionRunId={activeRunSelection.projectionRunId}
           onProjectionRunChange={setActiveProjectionRunId}
@@ -1291,7 +1308,7 @@ function App() {
 
   if (viewMode === "preview") {
     return (
-      <AppShell activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onNavigate={setViewMode}>
+      <AppShell activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onSlateChange={setActiveSlate} onNavigate={setViewMode}>
         <DesignPreview onBack={() => setViewMode("war-room")} />
       </AppShell>
     );
@@ -1299,7 +1316,7 @@ function App() {
 
   if (viewMode === "news-brief") {
     return (
-      <AppShell activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onNavigate={setViewMode}>
+      <AppShell activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onSlateChange={setActiveSlate} onNavigate={setViewMode}>
         <DailyNewsBrief onBack={() => setViewMode("war-room")} />
       </AppShell>
     );
@@ -1307,7 +1324,7 @@ function App() {
 
   if (viewMode === "contest-workflow") {
     return (
-      <AppShell activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onNavigate={setViewMode}>
+      <AppShell activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onSlateChange={setActiveSlate} onNavigate={setViewMode}>
         <ContestWorkflow
           season={season}
           week={week}
@@ -1327,7 +1344,7 @@ function App() {
 
   if (viewMode === "model-workbench") {
     return (
-      <AppShell activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onNavigate={setViewMode}>
+      <AppShell activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onSlateChange={setActiveSlate} onNavigate={setViewMode}>
         <ModelWorkbench
           season={season}
           week={week}
@@ -1348,7 +1365,7 @@ function App() {
 
   if (viewMode === "war-room") {
     return (
-      <AppShell activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onNavigate={setViewMode}>
+      <AppShell activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onSlateChange={setActiveSlate} onNavigate={setViewMode}>
         <WarRoom
           season={season}
           week={week}
@@ -1372,7 +1389,7 @@ function App() {
 
   if (viewMode === "research") {
     return (
-      <AppShell activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onNavigate={setViewMode}>
+      <AppShell activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onSlateChange={setActiveSlate} onNavigate={setViewMode}>
         <ResearchWorkspace
           season={season}
           week={week}
@@ -1391,7 +1408,7 @@ function App() {
   }
 
   return (
-    <AppShell activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onNavigate={setViewMode}>
+    <AppShell activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onSlateChange={setActiveSlate} onNavigate={setViewMode}>
       <div className="operations-workspace">
       <section className="operations-command" aria-labelledby="operations-command-title">
         <div className="operations-command-copy">
@@ -2213,69 +2230,70 @@ function App() {
                   <option value="showdown">Showdown</option>
                 </select>
               </label>
-              <label>
-                Objective
-                <select
-                  value={optimizerObjective}
-                  onChange={(event) => setOptimizerObjective(event.target.value as "cash" | "gpp")}
-                >
-                  <option value="gpp">GPP</option>
-                  <option value="cash">Cash</option>
-                </select>
-              </label>
+              {contestFormat === "showdown" && (
+                <label>
+                  Objective
+                  <select
+                    value={optimizerObjective}
+                    onChange={(event) => setOptimizerObjective(event.target.value as "cash" | "gpp")}
+                  >
+                    <option value="gpp">GPP</option>
+                    <option value="cash">Cash</option>
+                  </select>
+                </label>
+              )}
             </div>
-            {contestFormat === "classic" && optimizerObjective === "gpp" && (
+            {contestFormat === "classic" && (
               <div className="form-row">
                 <label>
-                  Classic GPP strategy
+                  Contest Strategy
                   <select
-                    value={classicGppStrategy}
-                    onChange={(event) =>
-                      setClassicGppStrategy(event.target.value as ClassicGppStrategyId)
-                    }
+                    value={classicContestStrategy}
+                    onChange={(event) => {
+                      const next = event.target.value as ClassicContestStrategyId;
+                      setClassicContestStrategy(next);
+                      if (next === CLASSIC_LARGE_GPP_STRATEGY_ID) {
+                        setNumLineups(20);
+                        setMaxExposure(60);
+                      } else {
+                        setNumLineups(6);
+                        setMaxExposure(100);
+                      }
+                    }}
                   >
-                    {CLASSIC_GPP_STRATEGIES.map((strategy) => (
+                    {CLASSIC_CONTEST_STRATEGIES.map((strategy) => (
                       <option key={strategy.id} value={strategy.id}>
                         {strategy.label}
                       </option>
                     ))}
                   </select>
                   <small>
-                    {CLASSIC_GPP_STRATEGIES.find(
-                      (strategy) => strategy.id === classicGppStrategy
-                    )?.detail}
+                    {selectedClassicStrategy.detail}
                   </small>
                 </label>
               </div>
             )}
-            {contestFormat === "classic" && optimizerObjective === "cash" && (
+            {contestFormat === "classic" && classicContestStrategy === CLASSIC_LARGE_GPP_STRATEGY_ID && (
               <div className="form-row">
                 <label>
-                  Cash Stacking Policy
-                  <select
-                    value={cashStackPolicyId}
-                    onChange={(event) =>
-                      setCashStackPolicyId(event.target.value as CashStackPolicyId)
-                    }
-                  >
-                    <option value="classic_cash_unconstrained_v1">
-                      Unconstrained replay baseline
-                    </option>
-                    <option value="classic_cash_qb_pair_v1">
-                      QB + pass catcher
-                    </option>
-                    <option value="classic_cash_qb_pair_bringback_v1">
-                      QB + pass catcher + bring-back
-                    </option>
-                  </select>
-                  <small>
-                    Candidate rules remain unvalidated until DT-402 walk-forward replay is complete.
-                  </small>
+                  Minimum uniqueness
+                  <input type="number" min={1} max={9} value={minimumUniqueness}
+                    onChange={(event) => setMinimumUniqueness(Number(event.target.value))} />
+                </label>
+                <label>
+                  Max players / team
+                  <input type="number" min={1} max={4} value={maxPlayersPerTeam}
+                    onChange={(event) => setMaxPlayersPerTeam(Number(event.target.value))} />
+                </label>
+                <label>
+                  Max players / game
+                  <input type="number" min={1} max={9} value={maxPlayersPerGame}
+                    onChange={(event) => setMaxPlayersPerGame(Number(event.target.value))} />
                 </label>
               </div>
             )}
             {slateReadiness && (() => {
-              const gateKey = optimizerReadinessGateKey(contestFormat, optimizerObjective);
+              const gateKey = optimizerReadinessGateKey(contestFormat, effectiveOptimizerObjective);
               const gate = slateReadiness.gates[gateKey];
               const attention = new Set(gate.attention_checks);
               const blocking = new Set(gate.blocking_checks);
@@ -2286,7 +2304,7 @@ function App() {
               return (
                 <div className={`readiness-preflight ${gate.status}`} role="status">
                   <div>
-                    <span>Slate preflight · {contestFormat} {optimizerObjective}</span>
+                    <span>Slate preflight · {contestFormat} {effectiveOptimizerObjective}</span>
                     <strong>{gate.status === "fail" ? "Blocked" : gate.status === "warn" ? "Ready with warnings" : "Ready"}</strong>
                     <small>{gate.score}/100 · {gate.message}</small>
                   </div>
@@ -2307,28 +2325,48 @@ function App() {
                 />
                 Enforce single TE (no double-TE lineups)
               </label>
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={avoidDstOpponents}
-                onChange={(event) => setAvoidDstOpponents(event.target.checked)}
-              />
-              No offense vs DST
-            </label>
-            <label className="text-label">
-              Exclude players (comma-separated names)
-              <input
-                type="text"
-                value={excludePlayers}
-                onChange={(event) => setExcludePlayers(event.target.value)}
-                placeholder="e.g. George Kittle, Skyy Moore"
-              />
-            </label>
-          </div>
-          <div className="button-row">
-            <button className="operations-primary-action" onClick={runOptimizerJob}>Run Optimizer</button>
-            <button onClick={refreshOptimizer} disabled={!optimizerStatus}>
-              Refresh Status
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={avoidDstOpponents}
+                  onChange={(event) => setAvoidDstOpponents(event.target.checked)}
+                />
+                No offense vs DST
+              </label>
+            </div>
+            <div className="form-row optimizer-player-controls">
+              <label className="text-label">
+                Exclude players (comma-separated names)
+                <input
+                  type="text"
+                  value={excludePlayers}
+                  onChange={(event) => setExcludePlayers(event.target.value)}
+                  placeholder="e.g. George Kittle, Skyy Moore"
+                />
+              </label>
+              <label className="text-label">
+                Exclude canonical player IDs
+                <input
+                  type="text"
+                  value={excludePlayerIds}
+                  onChange={(event) => setExcludePlayerIds(event.target.value)}
+                  placeholder="Comma-separated player_master_id values"
+                />
+              </label>
+              <label className="text-label">
+                Lock canonical player IDs
+                <input
+                  type="text"
+                  value={lockedPlayerIds}
+                  onChange={(event) => setLockedPlayerIds(event.target.value)}
+                  placeholder="Required in every lineup"
+                />
+              </label>
+            </div>
+            <div className="button-row">
+              <button className="operations-primary-action" onClick={runOptimizerJob}>Run Optimizer</button>
+              <button onClick={refreshOptimizer} disabled={!optimizerStatus}>
+                Refresh Status
               </button>
             </div>
           </div>
@@ -2424,7 +2462,11 @@ function App() {
           )}
           {optimizerStatus && (
             <div className="status-card">
-              <h3>Optimizer</h3>
+              <h3>
+                Optimizer · {CLASSIC_CONTEST_STRATEGIES.find(
+                  (strategy) => strategy.id === optimizerStatus.strategy
+                )?.label ?? optimizerStatus.strategy}
+              </h3>
               <p>Job ID: {optimizerStatus.job_id}</p>
               <p>Status: {optimizerStatus.status}</p>
               <p>Strategy: {optimizerStatus.strategy}</p>
@@ -2432,6 +2474,64 @@ function App() {
                 <p>{optimizerStatus.strategy_config.description}</p>
               )}
               <p>{optimizerStatus.message}</p>
+              {optimizerStatus.player_pool && (
+                <details className="optimizer-pool-details">
+                  <summary>
+                    Eligible players: {optimizerStatus.player_pool.eligible_count ?? optimizerStatus.player_pool.initial_count} · Included candidates: {optimizerStatus.player_pool.included_count} · Excluded candidates: {optimizerStatus.player_pool.candidate_excluded_count ?? optimizerStatus.player_pool.excluded_count} · Context warnings: {optimizerStatus.player_pool.warning_player_count ?? 0}
+                  </summary>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const blob = new Blob(
+                        [JSON.stringify(optimizerStatus.player_pool, null, 2)],
+                        { type: "application/json" },
+                      );
+                      const url = URL.createObjectURL(blob);
+                      const link = document.createElement("a");
+                      link.href = url;
+                      link.download = `optimizer-player-pool-${optimizerStatus.job_id}.json`;
+                      link.click();
+                      URL.revokeObjectURL(url);
+                    }}
+                  >
+                    Download full player pool JSON
+                  </button>
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Player</th>
+                          <th>Pos</th>
+                          <th>Team</th>
+                          <th>Salary</th>
+                          <th>Proj</th>
+                          <th>P90</th>
+                          <th>Pool status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {optimizerStatus.player_pool.rows.map((player) => (
+                          <tr key={player.player_id}>
+                            <td>{player.player_name}</td>
+                            <td>{player.position}</td>
+                            <td>{player.team}</td>
+                            <td>{Number(player.salary || 0).toLocaleString()}</td>
+                            <td>{Number(player.projection || 0).toFixed(2)}</td>
+                            <td>{Number(player.p90 || 0).toFixed(2)}</td>
+                            <td>
+                              {player.included
+                                ? player.warnings?.length
+                                  ? `Included · ${player.warnings.map((warning) => warning.reason_code).join(", ")}`
+                                  : "Included"
+                                : player.exclusion_reasons.join(", ") || "Excluded"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </details>
+              )}
               {Array.isArray(optimizerStatus.results) && optimizerStatus.results.length > 0 && (
                 <div className="lineups-grid">
                   {optimizerStatus.results.map((lineup, idx) => {
@@ -2444,6 +2544,15 @@ function App() {
                       (sum, player: any) => sum + (Number(player?.projection ?? player?.predicted_mean) || 0),
                       0
                     );
+                    const totalP90 = lineup.reduce(
+                      (sum, player: any) => sum + (Number(player?.predicted_p90 ?? player?.p90 ?? player?.projection) || 0),
+                      0
+                    );
+                    const totalFloor = lineup.reduce(
+                      (sum, player: any) => sum + (Number(player?.h2h_floor ?? player?.predicted_p10 ?? player?.projection) || 0),
+                      0
+                    );
+                    const stackSummary = lineup[0]?.lineup_stack_summary?.label;
                     const projVal = (p: any) =>
                       Number(p.projection ?? p.predicted_mean ?? p.p90 ?? 0);
                     const normalizePos = (p: any) =>
@@ -2518,13 +2627,18 @@ function App() {
                         <div className="lineup-header">
                           <strong>Lineup {idx + 1}</strong>
                           <span>Salary: {totalSalary.toLocaleString()}</span>
-                          <span>Proj: {totalProj.toFixed(2)}</span>
+                          <span>Mean: {totalProj.toFixed(2)}</span>
+                          <span>P90: {totalP90.toFixed(2)}</span>
+                          {optimizerStatus.strategy === "classic_head_to_head_v1" && (
+                            <span>Floor: {totalFloor.toFixed(2)} · Risk: {(totalProj - totalFloor).toFixed(2)}</span>
+                          )}
+                          {stackSummary && <span>Stack: {stackSummary}</span>}
                         </div>
                         <table className="compact-table">
                           <thead>
                             <tr>
                               <th>Player</th>
-                              <th>Pos</th>
+                              <th>Slot · Pos</th>
                               <th>Team</th>
                               <th>Salary</th>
                               <th>Proj</th>
@@ -2546,7 +2660,11 @@ function App() {
                               return (
                                 <tr key={`${idx}-${player.player_id}-${player.roster_position || player.position}`}>
                                   <td>{player.name || player.player_name || player.player_display_name || player.player_id}</td>
-                                  <td>{player.roster_position || player.position}</td>
+                                  <td>
+                                    {player.roster_position && player.position && player.roster_position !== player.position
+                                      ? `${player.roster_position} · ${player.position}`
+                                      : player.roster_position || player.position}
+                                  </td>
                                   <td>{player.player_team || player.team || player.recent_team}</td>
                                   <td>{Number(player.salary || 0).toLocaleString()}</td>
                                   <td>{(Number(player.projection ?? player.predicted_mean) || 0).toFixed(2)}</td>

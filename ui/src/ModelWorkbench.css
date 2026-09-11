@@ -440,6 +440,12 @@ body:has(.model-workbench) #root {
   color: var(--model-green);
 }
 
+.pipeline-stage-actions button:disabled {
+  cursor: wait;
+  opacity: 0.66;
+  transform: none;
+}
+
 .pipeline-stage-primary .pipeline-stage-actions button {
   border-color: rgba(105, 214, 154, 0.3);
   color: #f4faf7;
@@ -450,6 +456,74 @@ body:has(.model-workbench) #root {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
   margin-top: 12px;
+}
+
+.pipeline-result-card time {
+  display: block;
+  margin-top: 6px;
+  color: rgba(238, 244, 248, 0.72);
+  font-size: 0.72rem;
+}
+
+.pipeline-result-card.status-completed strong {
+  color: var(--model-green);
+}
+
+.pipeline-result-card.status-queued strong,
+.pipeline-result-card.status-running strong,
+.pipeline-result-card.status-interrupted strong {
+  color: var(--model-amber);
+}
+
+.pipeline-result-card.status-failed strong,
+.pipeline-result-card.status-unavailable strong {
+  color: var(--model-red);
+}
+
+.pipeline-result-card .pipeline-last-success,
+.pipeline-result-card .pipeline-selection,
+.pipeline-result-card .pipeline-result-meta {
+  padding-top: 6px;
+  border-top: 1px solid rgba(137, 155, 171, 0.15);
+}
+
+.pipeline-result-card .pipeline-last-success {
+  color: rgba(105, 214, 154, 0.8);
+}
+
+.pipeline-run-link {
+  margin-top: 9px;
+  padding: 0;
+  border: 0;
+  color: var(--model-blue);
+  background: transparent;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 750;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pipeline-run-link:hover,
+.pipeline-run-link:focus-visible {
+  color: var(--model-text);
+  text-decoration: underline;
+}
+
+.coverage-feedback {
+  margin-top: 10px;
+  padding: 9px 11px;
+  border: 1px solid rgba(105, 214, 154, 0.24);
+  border-radius: 7px;
+  color: rgba(238, 244, 248, 0.82);
+  background: rgba(105, 214, 154, 0.07);
+  font-size: 0.74rem;
+  line-height: 1.35;
+}
+
+.coverage-feedback.attention {
+  border-color: rgba(230, 186, 109, 0.3);
+  background: rgba(230, 186, 109, 0.08);
 }
 
 .calibration-diagnostics {
@@ -654,6 +728,159 @@ body:has(.model-workbench) #root {
   margin-top: 12px;
 }
 
+.pregame-context-editor {
+  margin-top: 12px;
+  border: 1px solid var(--model-line);
+  border-radius: 8px;
+  background: rgba(4, 8, 12, 0.48);
+}
+
+.pregame-context-editor > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.pregame-context-editor > summary::-webkit-details-marker {
+  display: none;
+}
+
+.pregame-context-editor > summary span,
+.pregame-context-editor > summary small {
+  display: block;
+}
+
+.pregame-context-editor > summary span {
+  color: var(--model-text);
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.pregame-context-editor > summary small {
+  margin-top: 3px;
+  color: var(--model-muted);
+  font-size: 0.68rem;
+  font-weight: 500;
+}
+
+.pregame-context-editor > summary b {
+  color: var(--model-amber);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+}
+
+.pregame-context-help {
+  margin: 0;
+  padding: 0 12px 10px;
+  color: rgba(238, 244, 248, 0.66);
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.pregame-context-meta {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.7fr) minmax(240px, 1fr) auto;
+  gap: 8px;
+  padding: 0 12px 4px;
+  align-items: end;
+}
+
+.pregame-context-meta label {
+  display: grid;
+  gap: 4px;
+  color: var(--model-muted);
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.pregame-context-meta input,
+.pregame-context-meta button,
+.pregame-context-table input,
+.pregame-context-table select {
+  min-height: 34px;
+  border: 1px solid var(--model-line);
+  border-radius: 6px;
+  color: var(--model-text);
+  background: #080c10;
+  font: inherit;
+}
+
+.pregame-context-meta input,
+.pregame-context-table input,
+.pregame-context-table select {
+  min-width: 0;
+  padding: 0 8px;
+}
+
+.pregame-context-meta button {
+  padding: 0 13px;
+  border-color: rgba(105, 214, 154, 0.35);
+  background: rgba(105, 214, 154, 0.12);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.pregame-context-notice {
+  margin: 8px 12px 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(105, 214, 154, 0.25);
+  border-radius: 6px;
+  color: var(--model-green);
+  background: rgba(105, 214, 154, 0.07);
+  font-size: 0.73rem;
+}
+
+.pregame-context-table {
+  max-height: 430px;
+  margin: 8px 0 0;
+  padding: 0 12px 12px;
+  overflow: auto;
+}
+
+.pregame-context-table table {
+  min-width: 980px;
+}
+
+.pregame-context-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #0b1117;
+}
+
+.pregame-context-table td:first-child strong,
+.pregame-context-table td:first-child small {
+  display: block;
+}
+
+.pregame-context-table td:first-child small {
+  margin-top: 2px;
+  color: var(--model-muted);
+  font-size: 0.65rem;
+}
+
+.pregame-context-table input[type="number"] {
+  width: 72px;
+}
+
+.pregame-context-table input:not([type="number"]) {
+  width: 138px;
+}
+
+.pregame-context-table select {
+  width: 118px;
+}
+
+.pregame-context-table input:disabled {
+  opacity: 0.28;
+}
+
 @media (max-width: 1180px) {
   .model-command,
   .model-layout {
@@ -708,5 +935,9 @@ body:has(.model-workbench) #root {
 
   .model-pending {
     text-align: left;
+  }
+
+  .pregame-context-meta {
+    grid-template-columns: 1fr;
   }
 }

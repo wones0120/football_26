@@ -2,12 +2,20 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  DEFAULT_SLATE,
+  SLATE_OPTIONS,
   normalizeSlateId,
   researchSlateId,
   slateContextKey,
   updateRunSelection,
   type PersistedRunSelections,
 } from "../src/workspaceContext.ts";
+
+test("starts the 2026 Week 1 slate menu with Wednesday night", () => {
+  assert.equal(DEFAULT_SLATE, "WEDNESDAY_NIGHT");
+  assert.equal(SLATE_OPTIONS[0], DEFAULT_SLATE);
+  assert.equal(new Set(SLATE_OPTIONS).size, SLATE_OPTIONS.length);
+});
 
 test("normalizes shell and research slate identifiers at the workspace boundary", () => {
   assert.equal(normalizeSlateId(" sunday main "), "SUNDAY_MAIN");

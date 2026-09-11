@@ -2,6 +2,111 @@
 
 ## Unreleased
 
+- Added the Phase 2 optimizer player-pool safety layer. Every Classic and
+  Showdown run now evaluates a versioned, explainable gate for canonical
+  identity, confirmed availability, current roster, slate membership,
+  backup-QB role, point-in-time context, and canonical-ID user exclusions
+  before solving. Structured audit details distinguish eligibility,
+  projection, strategy, and user exclusions; eligible players retain visible
+  freshness, injury, depth-chart, and role warnings. Canonical player locks now
+  work in both ILP modes and as exact 100% exposure controls in GPP portfolios,
+  while hard eligibility remains non-overridable. Migration `0027` and the
+  pregame API add expected snaps, routes, carries, targets, red-zone share, and
+  goal-line share to immutable projection lineage. Operations accepts canonical
+  lock/exclusion IDs, displays warning counts and codes, and retains the
+  complete JSON audit. Verification: 508 backend tests, 77 focused Phase 2 and
+  optimizer regression tests, 14 UI tests, and the production UI build pass.
+
+- Added the Phase 1 DFS rule-library foundation with typed hard exclusions, soft
+  boosts, soft penalties, warnings, declarative scoped conditions, per-profile
+  rule overrides, and complete score/exclusion explanations. Four versioned
+  Showdown/Classic × Head-to-Head/Large-GPP profiles now share one objective and
+  rule-evaluation contract, and resolved optimizer strategies persist the exact
+  profile metadata without changing established solver behavior. Focused rule
+  and optimizer tests cover profile resolution, divergent H2H/GPP rankings,
+  scoped and reclassified rules, explanations, and validation failures.
+
+- Split Classic optimization into explicit `Head-to-Head` and `Large GPP`
+  strategies while preserving the shared roster/injury/identity eligibility gate.
+  H2H now uses a broad candidate pool, a mean-dominant objective, no mandatory
+  stack, at least five alternates, and lineup mean/P90/floor/risk output. Large
+  GPP uses a ceiling-led normalized objective, zero fabricated ownership,
+  flexible QB+1/QB+2 and optional bring-back templates, lineup uniqueness,
+  exposure controls, and optional team/game caps. Operations now displays the
+  strategy prominently, shows eligible/included/excluded counts, and replaces
+  the generic candidate-filter label with concrete player-level reasons. The
+  same Sunday Main projection produced 331 H2H candidates versus 136 Large GPP
+  candidates; Omarion Hampton, Brian Thomas Jr., Rome Odunze, and Dalton Kincaid
+  all remain H2H-available. Verification: all 493 backend tests, 52 focused
+  backend tests, 14 UI tests, the production build, and rendered live H2H/GPP
+  runs pass.
+
+- Generalized `Load Starting QBs` to support multi-game Classic slates while retaining
+  the optimizer's strict two-team Showdown validation. Operators can submit one
+  source-backed canonical QB per slate team; incomplete, duplicate, cross-team, or
+  non-slate selections fail before the existing slice is replaced. Classic QB salary
+  rows are now accepted in addition to Showdown FLEX rows, and source URLs plus
+  observation timestamps persist in the evidence JSON.
+
+- Added the hard Showdown rule `showdown_qb_captain_same_team_wr_te_v1`: a QB
+  captain now requires at least one same-team WR or TE in FLEX. Both the ILP and the
+  independent post-solve validator enforce it. Operations and Models default to the
+  new versioned `showdown_cash_qb_captain_stack_v1` and
+  `showdown_gpp_captain_informed_v2` contracts, while explicit historical strategy
+  IDs retain their prior behavior. Enabled rules and validation results persist with
+  the optimizer run and each lineup. Live smoke run
+  `1639d836-427d-4c62-9ba2-6a7be5208f4d` completed with persisted rule and
+  validation lineage; 484 backend tests, 13 UI tests, and the production build pass.
+
+- Fixed Models feature-build actions calling the legacy weekly-stats pipeline. Current-slate builds now target the selected week and slate in `player_game_feature_matrix`; season builds cover all salary slates. Missing inputs and failed slices return explicit errors, while the legacy build API remains available.
+
+- Added an auditable Week 1 opportunity-context projection path without silently promoting a run.
+  Migration `0026` stores append-only, cutoff-safe player availability, starting-QB,
+  carry-share, target-share, role, injury, source, and evidence records by canonical player ID; the
+  Models workspace restores and edits those records and requires an explicit rerun. Scoring carries
+  prior-season opportunity into Week 1, preserves full prior team volume even when contributors are
+  absent from the current slate, and reallocates current opportunity before point scoring. Current
+  role evidence uses prior-trained position-specific isotonic opportunity anchors while historical
+  production inputs remain unchanged. The path zeros backup QBs, synchronizes canonical display
+  names, and exposes exact feature/context inputs
+  in raw projection JSON. Kicker rows are now included through an explicit prior-history anchor
+  pending a trained kicker model. Optimizer results persist and display the complete included and
+  excluded player pool with reasons and a JSON download. A selected projection's persisted zero
+  availability is now a hard optimizer exclusion even if the salary snapshot still says `Q`;
+  partial availability remains eligible and the audit includes the context run and source.
+  Immutable context run
+  `ccd0245f-4482-43f2-98c6-f03e3eaf7d1d` stores 33 resolved players from official depth-chart and
+  practice evidence plus explicitly labeled analyst shares. Challenger
+  `6dedb982-87a6-4530-a49d-fa839f08e99e` established the complete 37-player baseline. Final
+  Tuesday injury run `9378fdde-60a0-461d-aaa4-bf269cbe3fb4` records Henderson as `OUT` and Horton
+  as `QUESTIONABLE`; projection run `4dc8026d-071f-4c7b-86ec-14ecf1f30804` zeros Henderson and
+  redistributes his opportunity. Smoke run `6ad1c235-bed2-46cc-9f7a-26590a8b287e` passed with four
+  backup QBs plus Henderson explicitly excluded. Governance evaluation
+  `model-evaluation:681cc8903bf348b9bd298f54` and decision
+  `model-decision:3e4dfe4a924820ce7577c8c6` promoted the final run while retaining `6dedb982...`
+  as the immutable rollback target.
+  Pipeline status now merges direct persisted runs with queued-job attempts by status timestamp, so
+  the Models card identifies this run as both the latest attempt and latest success. A direct opportunity-feature
+  training candidate was rejected after worsening late-2025 overall MAE from 4.1530 to 4.1543 and
+  the $6,000-plus cohort from 6.6525 to 6.7065. Full verification: 484 backend tests, 13 UI tests,
+  and the production UI build pass. Evidence: `docs/PROJECTION_MODEL_V4_EVALUATION.md`.
+- Made newer DraftKings salary downloads safe to reload and use. The active curated
+  source/season/week/slate slice is replaced only after validation while every raw
+  import and ingest run remains retained; salary `Status` is now normalized and
+  persisted through `public.curated_salary` and `target.snapshot_salary`. Projection,
+  optimizer, and readiness inputs share one confirmed-unavailability gate for
+  `OUT`/`O`, `IR`, `PUP`, `NFI`, reserve, inactive, and suspended entries. Projection
+  scoring also requires current `ACT` weekly-roster evidence for non-DST players when that source
+  is available. Lineage records the exact excluded rows, player identities, source/roster
+  statuses, and ingest runs; blank, `Q`, and `D` remain eligible for later injury adjustment.
+- Repaired the active player point model for QB, RB, WR, TE, and DST. Canonical training now requires stored played evidence for historical skill-position labels while preserving real zero-point appearances, reducing the current historical zero-label rate from 59.3% to 26.2%. The v3 gradient-boosting contract includes explicit position indicators and a validated 80% raw-model / 20% prior-history blend instead of shrinking every player 40% toward the 3.78-point all-position mean. A strictly lagged three-game offensive snap share now identifies primary receivers, and all filter counts, weights, position baselines, features, and calibration metrics persist in run lineage. Overall MAE improved from 4.4805 to 4.3533 on 2025 Weeks 1–9 and from 4.2877 to 4.1530 on Weeks 10–18; the later window improved separately for every supported position. The new immutable 2026 Week 1 Wednesday-night run projects Jaxon Smith-Njigba at 14.33 mean / 25.43 P90 as a primary receiver rather than 9.44 / 15.41 as secondary. Evidence: `docs/PROJECTION_MODEL_V3_EVALUATION.md`.
+- Repaired Showdown lineup construction. Every Showdown pool now retains exactly one canonical QB per team using explicit QB1/stored evidence when available or an auditable unique-top-DraftKings-salary inference; missing or ambiguous evidence fails closed. Migration `0024` persists starter source and evidence tier. Showdown GPP uses the captain-informed strategy family with the validated `0.35` captain prior while preserving its earlier versions and the basic baseline for A/B use. Out-of-distribution captain inputs fall back visibly to the same study's historical winning-position mix. Optimizer lineage records all starter/captain decisions, independent validation rejects ineligible QBs, and the UI displays roster slot plus natural position.
+- Repaired queued projection jobs for the canonical database. The worker now reads `public.curated_salary` and `public.player_game_feature_matrix`, joins exclusively through `player_master_id`, preserves the queued cutoff and strict earlier-week training boundary, uses an explicit pregame feature allowlist, and records exact salary-ingest and feature-row lineage. Missing slate features fail visibly; unsupported positions and unresolved salary entries are disclosed in the job result. Legacy databases retain the existing `predictive_features` path.
+- Replaced the Models workspace's transient feature/projection/symbolic result cards with database-backed pipeline status. The cards restore on entry, reload, refresh, and slate changes; show persisted status timestamps in the user's timezone; distinguish loading/unavailable from not-run; poll queued, running, and interrupted jobs; explain when no worker has claimed a queue item; keep a failed latest attempt separate from the last usable result; and identify an explicitly selected older projection run. Feature-matrix and symbolic actions now have durable operational-job entry points, with season-wide feature builds checkpointing per-slate outcomes. This phase intentionally reports completion rather than claiming input freshness without lineage evidence.
+- Fixed the Models workspace `Check data coverage` control. It now queries the current public/target data layers, scopes salaries/features/projections to the active slate, reports unavailable layers as missing instead of returning server errors, shows an in-place checking/completion status, disables duplicate clicks in flight, and clears stale results when context changes. Wednesday Night now reports 136 salary rows ready while accurately flagging its unbuilt feature and projection layers. Added focused service coverage for legacy aliases, slate scoping, missing relations, and rejected table identifiers; all 3 tests pass, all 13 UI tests pass, and the production build passes.
+- Added an always-visible `Active slate` selector to the shared product header so Digital Twin, Models, War Room, Research Lab, Delivery, Intelligence, and Operations can switch slates without navigating elsewhere. The 2026 Week 1 menu now starts on `WEDNESDAY_NIGHT`, and the header typography/layout shrinks, truncates, or hides secondary copy before it can overlap the live context at zoomed, narrow, and mobile widths. All 13 UI tests and the production build pass; rendered 1280px, 960px, and 390px checks have no header overlap, page overflow, or browser diagnostics.
+- Captured and ingested the first 2026 Week 1 `WEDNESDAY_NIGHT` showdown slate for NE at SEA: 136 immutable pre-lock salary rows representing 68 logical players, with deterministic CPT/FLEX identity repair increasing slot coverage from 98 to 128 rows. The playable pool now selects the FLEX base salary, retains separate DraftKings CPT IDs, includes kickers and positive sub-$2,000 punts, and uses current weekly-roster evidence to exclude 31 cut, development, reserve, or roster-missing candidates while retaining team defenses. The resulting pool has 37/37 canonical identities and both site IDs for every eligible player. Projection lineage and coverage remain blocking, while the missing injury snapshot remains a warning. The focused showdown suite passes 48 tests and the full backend suite passes 440. Evidence: `docs/PROSPECTIVE_SOURCE_CAPTURE.md`.
+- Made 2026 pre-kickoff roster ingestion operational. When nflreadpy rejects exactly the next weekly-roster season before its regular-season calendar rollover, the capture service reads the canonical nflverse release CSV, records the fallback URI/version/error, preserves immutable evidence, and ingests only from that captured artifact with deterministic lineage. The standard weekly-roster API and prospective capture command now use this path. Slate freshness and slice replacement are case-insensitive, and canonical player fallback now requires exact normalized name, team, and position rather than accepting name-only or position-conflicting matches. The September 3 live run retained 2,902 Week 1 roster rows across 32 teams, resolved 2,901 roster identities, queued one ID-less row, and safely raised the stale Sunday Main salary identity coverage from 531/719 to 670/719; 49 unresolved rows, a fresh salary slate, injuries, and projections remain before play readiness can pass. The focused regression set passes 38 tests and the full backend suite passes 440. Evidence: `docs/PROSPECTIVE_SOURCE_CAPTURE.md`.
 - Captured the first real 2026 DraftKings Week 1 `SUNDAY_MAIN` salary slate as immutable pre-lock evidence: 719 raw/curated rows across 12/12 canonical games, with a verified SHA-256 artifact, deterministic snapshot/ingest lineage, and identical-retry reuse. Canonical player identity resolved for 531 rows; 188 remain visible in the review queue and no DST is unresolved. The first 12-game Open-Meteo attempt is also retained: all requests truthfully failed because September 13 was one day beyond the August 28 provider horizon, creating 12 error results and zero forecast snapshots. The retry gate is August 29; WTHR-007 still requires two successful pre-lock receipts and one retained post-lock receipt excluded from the lock view. Evidence: `docs/PROSPECTIVE_SOURCE_CAPTURE.md` and `docs/WTHR-007_ACCEPTANCE.md`.
 - Added preseason live-capture readiness safeguards. Application CI now runs Python compilation, the full backend suite, UI tests, and the UI type-check/build on pushes and pull requests; generated TypeScript build-info files are no longer tracked; GPP optimizer timestamps are timezone-aware; live evidence roots are documented as backed-up-storage requirements; and the real 2026 opener dry run resolves 1/1 canonical games from the retained 272-game schedule without quarantine. WTHR-007 is now active but remains incomplete until two real pre-lock forecast receipts and one excluded post-lock receipt are retained.
 - Changed the shared app season/week default from the fixed 2025 Week 11 replay context to the next upcoming locally ingested NFLverse regular-season week. `GET /api/meta/current` now selects the earliest week with a remaining future kickoff, keeps that week active through its last game, advances afterward, and falls back to the provider only when local future schedule evidence is unavailable. The UI applies that context at startup while preserving manual changes afterward. The full backend suite passes 433 tests; all 12 UI tests and the production UI build pass.

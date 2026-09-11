@@ -13,6 +13,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from backend.app.db import SessionLocal
+from backend.app.schemas import NflReadPySeasonRequest
 from backend.app.services.source_capture import (
     NFLREADPY_DATASETS,
     PostLockSnapshotError,
@@ -186,20 +187,41 @@ def main() -> None:
             except Exception as exc:  # noqa: BLE001
                 output["errors"].append(f"{path}: {exc}")
 
-        if args.nflreadpy_datasets:
+        for dataset in dict.fromkeys(args.nflreadpy_datasets):
             try:
-                captures = capture_nflreadpy_datasets(
-                    service,
-                    args.nflreadpy_datasets,
-                    season=args.season,
-                    week=args.week,
-                    slate=args.slate,
-                    slate_lock_at=args.slate_lock_at,
-                    source_license=args.nflreadpy_license,
-                )
-                output["nflreadpy"] = [_snapshot_payload(result) for result in captures]
+                if dataset == "weekly_rosters":
+                    result = service.capture_and_ingest_nflreadpy_weekly_rosters(
+                        NflReadPySeasonRequest(
+                            season=args.season,
+                            weeks=[args.week],
+                        ),
+                        source_license=args.nflreadpy_license,
+                        slate=args.slate,
+                        slate_lock_at=args.slate_lock_at,
+                    )
+                    payload = _snapshot_payload(result.capture)
+                    payload["ingest"] = result.ingest.model_dump(mode="json")
+                    output["nflreadpy"].append(payload)
+                    if result.ingest.status == "failed":
+                        output["errors"].append(
+                            result.ingest.error_message
+                            or "nflreadpy weekly-roster ingest failed"
+                        )
+                else:
+                    captures = capture_nflreadpy_datasets(
+                        service,
+                        [dataset],
+                        season=args.season,
+                        week=args.week,
+                        slate=args.slate,
+                        slate_lock_at=args.slate_lock_at,
+                        source_license=args.nflreadpy_license,
+                    )
+                    output["nflreadpy"].extend(
+                        _snapshot_payload(result) for result in captures
+                    )
             except Exception as exc:  # noqa: BLE001
-                output["errors"].append(f"nflreadpy: {exc}")
+                output["errors"].append(f"nflreadpy {dataset}: {exc}")
 
     output["status"] = "failed" if output["errors"] else "completed"
     print(json.dumps(output, indent=2, default=str))

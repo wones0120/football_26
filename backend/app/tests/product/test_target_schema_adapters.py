@@ -44,6 +44,7 @@ class TargetSchemaAdapterTests(unittest.TestCase):
         self.assertIn('"target".lineup_constraint_explanation', ddl)
         self.assertIn("contest_format TEXT NOT NULL", ddl)
         self.assertIn("objective TEXT NOT NULL", ddl)
+        self.assertIn("player_status TEXT", ddl)
         self.assertNotIn("public.player_alias", ddl)
 
     def test_adapter_sql_maps_core_legacy_tables(self):
@@ -67,6 +68,8 @@ class TargetSchemaAdapterTests(unittest.TestCase):
         self.assertIn("'DST'", sql["fact_dst_game_actual_compat"])
         self.assertIn("NOT EXISTS", sql["fact_dst_game_actual_compat_cleanup"])
         self.assertIn("schedule_games.game_id", sql["snapshot_salary"])
+        self.assertIn("salary.player_status", sql["snapshot_salary"])
+        self.assertIn("player_status = EXCLUDED.player_status", sql["snapshot_salary"])
         self.assertIn("schedule_games.game_id", sql["snapshot_injury_status"])
         self.assertIn('"public".dk_contest_entries', sql["dfs_contest_entry_result"])
         self.assertIn('"target".dfs_contest_entry_result', sql["dfs_contest_entry_result"])

@@ -14,6 +14,22 @@ export type PersistedRunSelection = {
 
 export type PersistedRunSelections = Record<string, PersistedRunSelection>;
 
+export const DEFAULT_SLATE = "WEDNESDAY_NIGHT";
+
+export const SLATE_OPTIONS = [
+  "WEDNESDAY_NIGHT",
+  "THURSDAY_NIGHT",
+  "FRIDAY_NIGHT",
+  "SATURDAY_NIGHT",
+  "SUNDAY_MAIN",
+  "SUNDAY_EARLY",
+  "SUNDAY_LATE",
+  "SUNDAY_NIGHT",
+  "SUNDAY_MONDAY",
+  "MONDAY_NIGHT",
+  "TUESDAY_NIGHT",
+];
+
 export function normalizeSlateId(slate: string) {
   return slate.trim().replaceAll(" ", "_").toUpperCase();
 }

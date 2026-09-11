@@ -235,6 +235,7 @@ def create_target_schema_sql(target_schema: str) -> list[str]:
             site_player_id TEXT,
             salary INT,
             roster_position TEXT,
+            player_status TEXT,
             team_id TEXT,
             opponent_team_id TEXT,
             game_id TEXT,
@@ -1383,7 +1384,7 @@ def adapter_sql(source_schema: str, target_schema: str) -> dict[str, str]:
         """,
         "snapshot_salary": f"""
             INSERT INTO {dst}.snapshot_salary
-            (slate_id, season, week, slate, player_id, site, site_player_id, salary, roster_position,
+            (slate_id, season, week, slate, player_id, site, site_player_id, salary, roster_position, player_status,
              team_id, opponent_team_id, game_id, as_of, source)
             WITH schedule_games AS (
                 SELECT DISTINCT ON (season, week, home_team, away_team)
@@ -1406,6 +1407,7 @@ def adapter_sql(source_schema: str, target_schema: str) -> dict[str, str]:
                 salary.source_player_key,
                 salary.salary,
                 salary.roster_position,
+                salary.player_status,
                 {canonical_team_sql('salary.team')},
                 {canonical_team_sql('salary.opponent')},
                 schedule_games.game_id,
@@ -1423,6 +1425,7 @@ def adapter_sql(source_schema: str, target_schema: str) -> dict[str, str]:
             ON CONFLICT (season, week, slate, player_id, site, roster_position) DO UPDATE SET
                 site_player_id = EXCLUDED.site_player_id,
                 salary = EXCLUDED.salary,
+                player_status = EXCLUDED.player_status,
                 team_id = EXCLUDED.team_id,
                 opponent_team_id = EXCLUDED.opponent_team_id,
                 game_id = EXCLUDED.game_id,

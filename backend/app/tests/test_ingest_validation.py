@@ -103,6 +103,61 @@ def test_invalid_salary_file_preserves_existing_slice(tmp_path: Path) -> None:
     assert session.query(RawSalaryRow).count() == 1
 
 
+def test_salary_reload_replaces_current_slice_but_retains_raw_history_and_status(
+    tmp_path: Path,
+) -> None:
+    session = _session()
+    service = IngestService(session)
+    first_path = tmp_path / "first.csv"
+    _write_csv(
+        first_path,
+        [
+            {
+                "ID": "101",
+                "Name": "Available Receiver",
+                "TeamAbbrev": "BUF",
+                "Position": "WR",
+                "Salary": 5500,
+                "Status": "",
+            },
+            {
+                "ID": "202",
+                "Name": "Removed Receiver",
+                "TeamAbbrev": "MIA",
+                "Position": "WR",
+                "Salary": 4800,
+                "Status": "",
+            },
+        ],
+    )
+    second_path = tmp_path / "second.csv"
+    _write_csv(
+        second_path,
+        [
+            {
+                "ID": "101",
+                "Name": "Available Receiver",
+                "TeamAbbrev": "BUF",
+                "Position": "WR",
+                "Salary": 5300,
+                "Status": "out",
+            }
+        ],
+    )
+
+    first = service.ingest_salaries(_salary_request(first_path))
+    second = service.ingest_salaries(_salary_request(second_path))
+
+    assert first.status == "completed"
+    assert second.status == "completed"
+    current = session.query(CuratedSalary).one()
+    assert current.source_player_key == "101"
+    assert current.salary == 5300
+    assert current.player_status == "OUT"
+    assert session.query(RawSalaryRow).count() == 3
+    assert session.query(IngestRun).count() == 2
+
+
 def test_salary_validation_reports_types_and_duplicate_identities(tmp_path: Path) -> None:
     session = _session()
     path = tmp_path / "invalid.csv"
@@ -548,3 +603,16 @@ def test_data_freshness_scopes_rows_and_classifies_age() -> None:
     assert rows["weekly_stats"].latest_loaded_at is None
     assert rows["weekly_rosters"].status == "missing"
     assert rows["snap_counts"].status == "missing"
+
+    uppercase_result = IngestService(session).get_data_freshness(
+        source_system="draftkings",
+        season=2025,
+        week=1,
+        slate="SUNDAY_MAIN",
+        checked_at=checked_at,
+    )
+    uppercase_rows = {row.dataset: row for row in uppercase_result.rows}
+    assert uppercase_rows["salaries"].rows == 1
+    assert uppercase_rows["salaries"].status == "fresh"
+    assert uppercase_rows["injuries"].rows == 1
+    assert uppercase_rows["injuries"].status == "stale"

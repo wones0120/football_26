@@ -164,3 +164,7 @@ Prioritize data that adds signal beyond current weekly aggregates:
 - Keep season/week/slate keys consistent across all new tables.
 - Backfill incrementally per season to avoid long blocking migrations.
 - Use `docs/target_data_model.md` as the schema contract and `scripts/inspect_schema_readiness.py` to classify each database as target-ready, legacy-mappable, or missing required learning tables.
+- The Model Workbench coverage control reads historical actuals from `target.fact_player_game_actual`
+  and scopes `public.curated_salary`, `public.player_game_feature_matrix`, and
+  `target.player_projection` to the active slate. The validation service maintains approved aliases
+  for legacy table names and returns explicit missing coverage when an expected layer is unavailable.

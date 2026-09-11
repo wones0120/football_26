@@ -1,14 +1,19 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  buildFeatures,
+  createPregameContext,
   fetchLatestPredictions,
+  fetchModelPipelineStatus,
+  fetchPregameContext,
   fetchSymbolicBacktest,
   fetchSymbolicRules,
   fetchValidation,
-  runAgent,
-  runPredictions,
-  type AgentRunResponse,
-  type BuildFeaturesResponse,
+  queueAgent,
+  queueFeatureMatrix,
+  queuePredictions,
+  type ModelPipelineSummary,
+  type PipelineOperationSummary,
+  type PregameContextCurrentResponse,
+  type PregamePlayerContextInput,
   type PredictionResponse,
   type PredictionRow,
   type SymbolicBacktestResponse,
@@ -34,19 +39,52 @@ type ModelWorkbenchProps = {
 
 type WorkbenchStatus = "idle" | "loading" | "ready" | "error";
 
+type PregameContextDraft = {
+  availability: string;
+  start: string;
+  carry: string;
+  target: string;
+  role: string;
+  injury: string;
+};
+
+const EMPTY_CONTEXT_DRAFT: PregameContextDraft = {
+  availability: "",
+  start: "",
+  carry: "",
+  target: "",
+  role: "",
+  injury: "",
+};
+
+function percentageDraft(value: number | null | undefined) {
+  return value === null || value === undefined ? "" : String(Number(value) * 100);
+}
+
 type CoverageState = {
   table: string;
+  label: string;
   status: WorkbenchStatus;
   response: ValidationResponse | null;
   error: string | null;
 };
 
-const COVERAGE_TABLES = [
-  "curated_weekly_stats",
-  "curated_salaries",
-  "predictive_features",
-  "player_expected_points",
-];
+const COVERAGE_DATASETS = [
+  { table: "fact_player_game_actual", label: "Historical actuals", scope: "history" },
+  { table: "curated_salary", label: "Slate salaries", scope: "slate" },
+  { table: "player_game_feature_matrix", label: "Slate features", scope: "slate" },
+  { table: "player_projection", label: "Slate projections", scope: "slate" },
+] as const;
+
+function initialCoverage(): CoverageState[] {
+  return COVERAGE_DATASETS.map(({ table, label }) => ({
+    table,
+    label,
+    status: "idle",
+    response: null,
+    error: null,
+  }));
+}
 
 function formatSlateName(value: string) {
   return value.replaceAll("_", " ");
@@ -73,7 +111,7 @@ function coverageSummary(state: CoverageState) {
   }
 
   const rows = state.response.results ?? [];
-  const current = rows[0];
+  const current = rows.at(-1);
   const missing = rows.filter((row) => row.status === "missing").length;
   const partial = rows.filter((row) => row.status === "partial").length;
   const ok = rows.filter((row) => row.status === "ok").length;
@@ -107,6 +145,132 @@ function coverageSummary(state: CoverageState) {
 
 function toError(error: unknown) {
   return error instanceof Error ? error.message : String(error);
+}
+
+function formatStatus(value: string) {
+  return value === "not_run"
+    ? "Not run"
+    : value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function formatStatusTime(value: string | null | undefined) {
+  if (!value) return null;
+  const timestamp = new Date(value);
+  if (Number.isNaN(timestamp.getTime())) return null;
+  return new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  }).format(timestamp);
+}
+
+function shortRunId(value: string) {
+  return value.length > 16 ? `${value.slice(0, 8)}…${value.slice(-4)}` : value;
+}
+
+function PipelineResultCard({
+  label,
+  summary,
+  loadState,
+  loadError,
+  selectedProjection,
+  onOpenOperations,
+}: {
+  label: string;
+  summary: PipelineOperationSummary | null;
+  loadState: "loading" | "ready" | "error";
+  loadError: string | null;
+  selectedProjection?: ModelPipelineSummary["selected_projection"];
+  onOpenOperations: () => void;
+}) {
+  if (loadState === "loading") {
+    return (
+      <article className="pipeline-result-card status-loading">
+        <span>{label}</span>
+        <strong>Loading</strong>
+        <small>Loading persisted status…</small>
+      </article>
+    );
+  }
+  if (loadState === "error" || !summary) {
+    return (
+      <article className="pipeline-result-card status-unavailable">
+        <span>{label}</span>
+        <strong>Status unavailable</strong>
+        <small>{loadError ?? "The stored pipeline history could not be loaded."}</small>
+      </article>
+    );
+  }
+
+  const attempt = summary.latest_attempt;
+  const reachedAt = formatStatusTime(summary.status_at);
+  const active = summary.status === "queued" || summary.status === "running";
+  const failed = summary.status === "failed";
+  const interrupted = summary.status === "interrupted";
+  const latestMessage = attempt?.error_message || attempt?.message;
+  const rows = attempt?.rows_written;
+  const lastSuccess = summary.last_success;
+  const showLastSuccess = Boolean(
+    lastSuccess && (summary.status !== "completed" || lastSuccess.run_id !== attempt?.run_id)
+  );
+
+  return (
+    <article className={`pipeline-result-card status-${summary.status}`}>
+      <span>{label}</span>
+      <strong>{formatStatus(summary.status)}</strong>
+      {reachedAt && <time dateTime={summary.status_at ?? undefined}>{reachedAt}</time>}
+      {summary.status === "not_run" ? (
+        <small>No stored attempt exists for this season, week, and slate.</small>
+      ) : (
+        <small>
+          {failed ? "Latest attempt failed. " : ""}
+          {interrupted ? "Latest attempt interrupted. " : ""}
+          {active && attempt ? `${Math.round(attempt.progress_percent)}% · ` : ""}
+          {rows !== null && rows !== undefined && summary.status === "completed"
+            ? `${rows.toLocaleString()} rows · `
+            : ""}
+          {latestMessage}
+        </small>
+      )}
+      {attempt?.scope === "season" && (
+        <small className="pipeline-result-meta">
+          Season-wide build
+          {attempt.slice_outcome
+            ? ` · selected slate ${String(attempt.slice_outcome.status ?? "recorded")}`
+            : " · selected-slate outcome pending"}
+        </small>
+      )}
+      {showLastSuccess && lastSuccess && (
+        <small className="pipeline-last-success">
+          Last usable result: {lastSuccess.rows_written?.toLocaleString() ?? "stored"} rows
+          {formatStatusTime(lastSuccess.status_at)
+            ? ` · ${formatStatusTime(lastSuccess.status_at)}`
+            : ""}
+        </small>
+      )}
+      {selectedProjection && (
+        <small className="pipeline-selection" title={selectedProjection.run_id}>
+          Selected run {shortRunId(selectedProjection.run_id)} · {formatStatus(selectedProjection.status)}
+          {!selectedProjection.is_latest_success && selectedProjection.status !== "not_run"
+            ? selectedProjection.status === "queued"
+              || selectedProjection.status === "running"
+              || selectedProjection.status === "interrupted"
+              ? " · still in progress"
+              : " · not the latest usable run"
+            : ""}
+          {selectedProjection.status === "not_run" ? " · unavailable for this slate" : ""}
+        </small>
+      )}
+      {attempt?.job_id && (
+        <button type="button" className="pipeline-run-link" onClick={onOpenOperations}>
+          View run details
+        </button>
+      )}
+    </article>
+  );
 }
 
 type CalibrationCoverageRow = {
@@ -164,19 +328,39 @@ export function ModelWorkbench({
   onOpenOperations,
   onOpenContestWorkflow,
 }: ModelWorkbenchProps) {
-  const [coverage, setCoverage] = useState<CoverageState[]>(
-    COVERAGE_TABLES.map((table) => ({ table, status: "idle", response: null, error: null }))
-  );
+  const [coverage, setCoverage] = useState<CoverageState[]>(initialCoverage);
+  const [coverageRunStatus, setCoverageRunStatus] = useState<"idle" | "loading" | "complete">("idle");
   const [projections, setProjections] = useState<PredictionRow[]>([]);
   const [projectionStatus, setProjectionStatus] = useState<WorkbenchStatus>("idle");
   const [projectionError, setProjectionError] = useState<string | null>(null);
-  const [featureResult, setFeatureResult] = useState<BuildFeaturesResponse | null>(null);
-  const [predictionRunResult, setPredictionRunResult] = useState<PredictionResponse | null>(null);
-  const [agentResult, setAgentResult] = useState<AgentRunResponse | null>(null);
+  const [pipelineSummary, setPipelineSummary] = useState<ModelPipelineSummary | null>(null);
+  const [pipelineStatus, setPipelineStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [pipelineError, setPipelineError] = useState<string | null>(null);
   const [backtest, setBacktest] = useState<SymbolicBacktestResponse | null>(null);
   const [rules, setRules] = useState<SymbolicRule[]>([]);
   const [actionStatus, setActionStatus] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [pregameContext, setPregameContext] = useState<PregameContextCurrentResponse | null>(null);
+  const [pregameStatus, setPregameStatus] = useState<WorkbenchStatus>("loading");
+  const [pregameError, setPregameError] = useState<string | null>(null);
+  const [pregameDrafts, setPregameDrafts] = useState<Record<string, PregameContextDraft>>({});
+  const [pregameSource, setPregameSource] = useState("manual_ui");
+  const [pregameNotes, setPregameNotes] = useState("");
+  const [pregameNotice, setPregameNotice] = useState<string | null>(null);
+  const pipelineRequestRef = useRef("");
+  const artifactRequestRef = useRef("");
+  const pipelineSummaryRef = useRef<ModelPipelineSummary | null>(null);
+
+  const contextPlayers = useMemo(
+    () => (pregameContext?.player_pool ?? [])
+      .filter((row) => ["QB", "RB", "WR", "TE"].includes(row.position))
+      .sort((left, right) => (
+        left.team.localeCompare(right.team)
+        || left.position.localeCompare(right.position)
+        || left.player_display_name.localeCompare(right.player_display_name)
+      )),
+    [pregameContext],
+  );
 
   const topProjections = useMemo(
     () => [...projections].sort((left, right) => projectionValue(right) - projectionValue(left)).slice(0, 12),
@@ -197,60 +381,194 @@ export function ModelWorkbench({
 
   const activeRules = rules.filter((rule) => rule.enabled).length;
   const backtestDelta = backtest?.overall?.mae_delta ?? null;
+  const predictionRunResult = (
+    pipelineSummary?.projections.last_success?.result ?? null
+  ) as PredictionResponse | null;
   const calibration = useMemo(() => calibrationReport(predictionRunResult), [predictionRunResult]);
-
-  useEffect(() => {
-    setProjections([]);
-    setProjectionStatus("idle");
-    setProjectionError(null);
-    setFeatureResult(null);
-    setPredictionRunResult(null);
-    setAgentResult(null);
-    setBacktest(null);
-    setActionStatus(null);
-    setActionError(null);
-  }, [season, slate, week]);
+  const coverageReady = coverage.filter((item) => coverageSummary(item).tone === "green").length;
+  const coverageNeedsAttention = coverage.filter((item) => {
+    const summary = coverageSummary(item);
+    return item.status !== "idle" && item.status !== "loading" && summary.tone !== "green";
+  }).length;
 
   const refreshCoverage = async () => {
+    setCoverageRunStatus("loading");
     setCoverage((current) =>
       current.map((item) => ({ ...item, status: "loading", error: null }))
     );
-    const results = await Promise.allSettled(COVERAGE_TABLES.map((table) => fetchValidation(table)));
+    const results = await Promise.allSettled(
+      COVERAGE_DATASETS.map((dataset) => fetchValidation(
+        dataset.table,
+        dataset.scope === "slate" ? { season, week, slate } : undefined,
+      ))
+    );
     setCoverage(
-      COVERAGE_TABLES.map((table, index) => {
+      COVERAGE_DATASETS.map(({ table, label }, index) => {
         const result = results[index];
         if (result.status === "fulfilled") {
-          return { table, status: "ready", response: result.value, error: null };
+          return { table, label, status: "ready", response: result.value, error: null };
         }
-        return { table, status: "error", response: null, error: toError(result.reason) };
+        return { table, label, status: "error", response: null, error: toError(result.reason) };
       })
     );
+    setCoverageRunStatus("complete");
+  };
+
+  const refreshModelArtifacts = async (
+    requestedRunId = projectionRunId,
+    showLoading = true,
+  ) => {
+    if (showLoading) {
+      setProjectionStatus("loading");
+      setProjectionError(null);
+    }
+    const requestKey = `${season}:${week}:${slate}:${requestedRunId ?? ""}`;
+    artifactRequestRef.current = requestKey;
+    const [predictionsResult, rulesResult] = await Promise.allSettled([
+      fetchLatestPredictions({
+        season,
+        week,
+        slate,
+        limit: 1000,
+        projectionRunId: requestedRunId,
+      }),
+      fetchSymbolicRules({ include_disabled: true }),
+    ]);
+    if (artifactRequestRef.current !== requestKey) return;
+
+    if (predictionsResult.status === "fulfilled") {
+      setProjections(predictionsResult.value.rows);
+      if (!requestedRunId && predictionsResult.value.projection_run_id) {
+        onProjectionRunChange(predictionsResult.value.projection_run_id);
+      }
+      setProjectionStatus("ready");
+    } else {
+      setProjections([]);
+      setProjectionError(toError(predictionsResult.reason));
+      setProjectionStatus("error");
+    }
+    if (rulesResult.status === "fulfilled") {
+      setRules(rulesResult.value.rows);
+    }
+  };
+
+  const refreshPregameContext = async (showLoading = true) => {
+    if (showLoading) setPregameStatus("loading");
+    setPregameError(null);
+    try {
+      const response = await fetchPregameContext({ season, week, slate });
+      setPregameContext(response);
+      const drafts = Object.fromEntries(response.rows.map((row) => [
+        row.player_master_id,
+        {
+          availability: percentageDraft(row.availability_probability),
+          start: percentageDraft(row.start_probability),
+          carry: percentageDraft(row.carry_share),
+          target: percentageDraft(row.target_share),
+          role: row.role_label ?? "",
+          injury: row.injury_status ?? "",
+        },
+      ]));
+      setPregameDrafts(drafts);
+      setPregameStatus("ready");
+    } catch (error) {
+      setPregameContext(null);
+      setPregameError(toError(error));
+      setPregameStatus("error");
+    }
+  };
+
+  const refreshPipelineStatus = async (
+    requestedRunId = projectionRunId,
+    showLoading = true,
+  ) => {
+    if (showLoading) setPipelineStatus("loading");
+    setPipelineError(null);
+    const requestKey = `${season}:${week}:${slate}:${requestedRunId ?? ""}`;
+    pipelineRequestRef.current = requestKey;
+    try {
+      const response = await fetchModelPipelineStatus({
+        season,
+        week,
+        slate,
+        selectedProjectionRunId: requestedRunId,
+      });
+      if (pipelineRequestRef.current !== requestKey) return null;
+      const previous = pipelineSummaryRef.current;
+      pipelineSummaryRef.current = response;
+      setPipelineSummary(response);
+      setPipelineStatus("ready");
+      const operationCompleted = (["features", "projections", "symbolic"] as const).some(
+        (key) => {
+          const before = previous?.[key].status;
+          const after = response[key].status;
+          return (
+            (before === "queued" || before === "running" || before === "interrupted")
+            && (after === "completed" || after === "failed")
+          );
+        },
+      );
+      return { response, operationCompleted };
+    } catch (error) {
+      if (pipelineRequestRef.current !== requestKey) return null;
+      setPipelineError(toError(error));
+      setPipelineStatus("error");
+      return null;
+    }
   };
 
   const refreshModelState = async (requestedRunId = projectionRunId) => {
+    await Promise.all([
+      refreshModelArtifacts(requestedRunId),
+      refreshPipelineStatus(requestedRunId),
+      refreshPregameContext(),
+    ]);
+  };
+
+  useEffect(() => {
+    setCoverage(initialCoverage());
+    setCoverageRunStatus("idle");
+    setProjections([]);
     setProjectionStatus("loading");
     setProjectionError(null);
-    try {
-      const [predictionResponse, rulesResponse] = await Promise.all([
-        fetchLatestPredictions({
-          season,
-          week,
-          slate,
-          limit: 1000,
-          projectionRunId: requestedRunId,
-        }),
-        fetchSymbolicRules({ include_disabled: true }),
-      ]);
-      setProjections(predictionResponse.rows);
-      onProjectionRunChange(predictionResponse.projection_run_id ?? null);
-      setRules(rulesResponse.rows);
-      setProjectionStatus("ready");
-    } catch (error) {
-      setProjections([]);
-      setProjectionError(toError(error));
-      setProjectionStatus("error");
-    }
-  };
+    setPipelineSummary(null);
+    pipelineSummaryRef.current = null;
+    setPipelineStatus("loading");
+    setPipelineError(null);
+    setBacktest(null);
+    setActionStatus(null);
+    setActionError(null);
+    setPregameContext(null);
+    setPregameStatus("loading");
+    setPregameError(null);
+    setPregameDrafts({});
+    setPregameNotice(null);
+    void refreshModelState(projectionRunId);
+    // Context changes are the restoration boundary; projection selection is passed explicitly.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [season, slate, week]);
+
+  useEffect(() => {
+    if (!pipelineSummary?.has_active_jobs) return undefined;
+    const timer = window.setInterval(() => {
+      void refreshPipelineStatus(projectionRunId, false).then((result) => {
+        if (result?.operationCompleted) {
+          void refreshModelArtifacts(projectionRunId, false);
+        }
+      });
+    }, 2_000);
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pipelineSummary?.has_active_jobs, projectionRunId, season, slate, week]);
+
+  useEffect(() => {
+    if (
+      !projectionRunId
+      || pipelineSummary?.selected_projection?.run_id === projectionRunId
+    ) return;
+    void refreshPipelineStatus(projectionRunId, false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectionRunId]);
 
   const runAction = async (label: string, action: () => Promise<void>) => {
     setActionStatus(label);
@@ -265,27 +583,26 @@ export function ModelWorkbench({
   };
 
   const handleBuildFeatures = (scope: "current" | "all") =>
-    runAction(scope === "current" ? "Building current-week features" : "Building season features", async () => {
-      const result = await buildFeatures({
+    runAction(scope === "current" ? "Queueing current-slate features" : "Queueing season features", async () => {
+      await queueFeatureMatrix({
         season,
         weeks: scope === "current" ? [week] : undefined,
+        slate: scope === "current" ? slate : undefined,
       });
-      setFeatureResult(result);
       await refreshModelState();
     });
 
   const handleRunPredictions = () =>
-    runAction("Running projection model", async () => {
-      const result = await runPredictions({ season, week, slate });
-      setPredictionRunResult(result);
-      onProjectionRunChange(result.projection_run_id ?? null);
-      await refreshModelState(result.projection_run_id ?? undefined);
+    runAction("Queueing projection model", async () => {
+      const queued = await queuePredictions({ season, week, slate });
+      const queuedRunId = queued.job.run_id ?? undefined;
+      if (queuedRunId) onProjectionRunChange(queuedRunId);
+      await refreshModelState(queuedRunId);
     });
 
   const handleRunAgent = () =>
-    runAction("Running symbolic adjustments", async () => {
-      const result = await runAgent(season, week, slate, projectionRunId);
-      setAgentResult(result);
+    runAction("Queueing symbolic adjustments", async () => {
+      await queueAgent(season, week, slate, projectionRunId);
       await refreshModelState();
     });
 
@@ -293,6 +610,82 @@ export function ModelWorkbench({
     runAction("Backtesting symbolic rules", async () => {
       const result = await fetchSymbolicBacktest({ season, week, slate });
       setBacktest(result);
+    });
+
+  const updatePregameDraft = (
+    playerId: string,
+    field: keyof PregameContextDraft,
+    value: string,
+  ) => {
+    setPregameDrafts((current) => ({
+      ...current,
+      [playerId]: {
+        ...(current[playerId] ?? EMPTY_CONTEXT_DRAFT),
+        [field]: value,
+      },
+    }));
+    setPregameNotice(null);
+  };
+
+  const handleSavePregameContext = () =>
+    runAction("Saving pregame context", async () => {
+      const probability = (value: string, label: string) => {
+        if (!value.trim()) return undefined;
+        const parsed = Number(value);
+        if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100) {
+          throw new Error(`${label} must be between 0 and 100.`);
+        }
+        return parsed / 100;
+      };
+      const players: PregamePlayerContextInput[] = contextPlayers.flatMap((player) => {
+        const draft = pregameDrafts[player.player_id];
+        if (!draft) return [];
+        const availability = probability(draft.availability, `${player.player_display_name} availability`);
+        const start = probability(draft.start, `${player.player_display_name} start probability`);
+        const carry = probability(draft.carry, `${player.player_display_name} carry share`);
+        const target = probability(draft.target, `${player.player_display_name} target share`);
+        const role = draft.role.trim() as PregamePlayerContextInput["role_label"];
+        const injury = draft.injury.trim();
+        if (
+          availability === undefined
+          && start === undefined
+          && carry === undefined
+          && target === undefined
+          && !role
+          && !injury
+        ) return [];
+        return [{
+          player_id: player.player_id,
+          team: player.team,
+          position: player.position,
+          availability_probability: availability,
+          start_probability: start,
+          carry_share: carry,
+          target_share: target,
+          role_label: role || undefined,
+          injury_status: injury || undefined,
+          evidence: {
+            entered_via: "model_workbench",
+            projection_run_id: projectionRunId ?? null,
+          },
+        }];
+      });
+      if (players.length === 0) {
+        throw new Error("Enter at least one availability, starter, role, carry, target, or injury value.");
+      }
+      const result = await createPregameContext({
+        season,
+        week,
+        slate,
+        source: pregameSource,
+        observed_at: new Date().toISOString(),
+        notes: pregameNotes || undefined,
+        players,
+      });
+      await refreshPregameContext(false);
+      setPregameNotice(
+        `Saved immutable context run ${shortRunId(result.context_run_id)}. Run projections to use it.`,
+      );
     });
 
   return (
@@ -353,6 +746,7 @@ export function ModelWorkbench({
 
       {actionError && <div className="model-banner error">{actionError}</div>}
       {projectionError && <div className="model-banner error">{projectionError}</div>}
+      {pipelineError && <div className="model-banner error">Pipeline status: {pipelineError}</div>}
 
       <section className="model-status-grid" aria-label="Model status">
         <article>
@@ -434,8 +828,13 @@ export function ModelWorkbench({
                 <button type="button" onClick={() => refreshModelState()}>
                   <span>Refresh model state</span><i aria-hidden="true">↗</i>
                 </button>
-                <button type="button" onClick={refreshCoverage}>
-                  <span>Check data coverage</span><i aria-hidden="true">↗</i>
+                <button
+                  type="button"
+                  onClick={refreshCoverage}
+                  disabled={coverageRunStatus === "loading"}
+                >
+                  <span>{coverageRunStatus === "loading" ? "Checking coverage…" : "Check data coverage"}</span>
+                  <i aria-hidden="true">↗</i>
                 </button>
               </div>
             </article>
@@ -483,23 +882,152 @@ export function ModelWorkbench({
             </article>
           </div>
 
+          {coverageRunStatus !== "idle" && (
+            <div
+              className={`coverage-feedback ${coverageRunStatus === "complete" && coverageNeedsAttention > 0 ? "attention" : ""}`}
+              role="status"
+              aria-live="polite"
+            >
+              {coverageRunStatus === "loading"
+                ? `Checking historical inputs and ${formatSlateName(slate)} slate data…`
+                : `Coverage check complete: ${coverageReady} ready, ${coverageNeedsAttention} need attention. Review the cards below.`}
+            </div>
+          )}
+
           <div className="model-result-grid">
-            <article>
-              <span>Features</span>
-              <strong>{featureResult ? featureResult.rows_written.toLocaleString() : "Not run"}</strong>
-              <small>{featureResult?.message ?? "Feature generation result will appear here."}</small>
-            </article>
-            <article>
-              <span>Prediction Run</span>
-              <strong>{predictionRunResult ? "Complete" : projectionRunId ? "Selected" : "Not run"}</strong>
-              <small>{predictionRunResult ? `${predictionRunResult.message} (${predictionRunResult.rows_written} rows)` : projectionRunId ? `Persisted run ${projectionRunId}` : "Run projections after features are current."}</small>
-            </article>
-            <article>
-              <span>Symbolic Run</span>
-              <strong>{agentResult ? agentResult.adjusted_rows.toLocaleString() : "Not run"}</strong>
-              <small>{agentResult ? `${agentResult.trace_rows} trace rows from ${agentResult.rule_run_id}` : "No symbolic run loaded."}</small>
-            </article>
+            <PipelineResultCard
+              label="Features"
+              summary={pipelineSummary?.features ?? null}
+              loadState={pipelineStatus}
+              loadError={pipelineError}
+              onOpenOperations={onOpenOperations}
+            />
+            <PipelineResultCard
+              label="Projections"
+              summary={pipelineSummary?.projections ?? null}
+              loadState={pipelineStatus}
+              loadError={pipelineError}
+              selectedProjection={pipelineSummary?.selected_projection}
+              onOpenOperations={onOpenOperations}
+            />
+            <PipelineResultCard
+              label="Symbolic Run"
+              summary={pipelineSummary?.symbolic ?? null}
+              loadState={pipelineStatus}
+              loadError={pipelineError}
+              onOpenOperations={onOpenOperations}
+            />
           </div>
+
+          <details className="pregame-context-editor">
+            <summary>
+              <span>
+                Pregame role &amp; availability
+                <small>
+                  {pregameStatus === "loading"
+                    ? "Loading persisted context…"
+                    : pregameStatus === "error"
+                      ? "Status unavailable"
+                      : `${pregameContext?.rows.length ?? 0} saved records · ${contextPlayers.length} editable players`}
+                </small>
+              </span>
+              <b>{pregameContext?.rows.length ? "Configured" : "Needs evidence"}</b>
+            </summary>
+            {pregameError && <div className="model-banner error">Pregame context: {pregameError}</div>}
+            <p className="pregame-context-help">
+              Enter sourced pregame facts as percentages. Carry share is the team RB workload;
+              target share is the team RB/WR/TE workload. Blank values are not inferred as facts.
+              Saving creates an immutable evidence run; projections do not change until you run them again.
+            </p>
+            <div className="pregame-context-meta">
+              <label>
+                Evidence source
+                <input
+                  value={pregameSource}
+                  onChange={(event) => setPregameSource(event.target.value)}
+                  placeholder="official_depth_chart"
+                />
+              </label>
+              <label>
+                Notes
+                <input
+                  value={pregameNotes}
+                  onChange={(event) => setPregameNotes(event.target.value)}
+                  placeholder="What changed and why"
+                />
+              </label>
+              <button type="button" onClick={handleSavePregameContext}>
+                Save context
+              </button>
+            </div>
+            {pregameNotice && <div className="pregame-context-notice" role="status">{pregameNotice}</div>}
+            <div className="model-table-wrap pregame-context-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Player</th>
+                    <th>Pos</th>
+                    <th>Avail %</th>
+                    <th>Start %</th>
+                    <th>Carry %</th>
+                    <th>Target %</th>
+                    <th>Role</th>
+                    <th>Injury/status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {contextPlayers.map((player) => {
+                    const draft = pregameDrafts[player.player_id] ?? EMPTY_CONTEXT_DRAFT;
+                    const percentInput = (
+                      field: "availability" | "start" | "carry" | "target",
+                      disabled = false,
+                    ) => (
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={1}
+                        value={draft[field]}
+                        disabled={disabled}
+                        onChange={(event) => updatePregameDraft(player.player_id, field, event.target.value)}
+                        aria-label={`${player.player_display_name} ${field} percent`}
+                      />
+                    );
+                    return (
+                      <tr key={player.player_id}>
+                        <td><strong>{player.player_display_name}</strong><small>{player.team}</small></td>
+                        <td>{player.position}</td>
+                        <td>{percentInput("availability")}</td>
+                        <td>{percentInput("start", player.position !== "QB")}</td>
+                        <td>{percentInput("carry", player.position !== "RB")}</td>
+                        <td>{percentInput("target", !["RB", "WR", "TE"].includes(player.position))}</td>
+                        <td>
+                          <select
+                            value={draft.role}
+                            onChange={(event) => updatePregameDraft(player.player_id, "role", event.target.value)}
+                            aria-label={`${player.player_display_name} role`}
+                          >
+                            <option value="">—</option>
+                            {(["STARTER", "BACKUP", "LEAD", "COMMITTEE", "PRIMARY", "SECONDARY", "ROTATION"] as const).map((role) => (
+                              <option key={role} value={role}>{role}</option>
+                            ))}
+                          </select>
+                        </td>
+                        <td>
+                          <input
+                            value={draft.injury}
+                            onChange={(event) => updatePregameDraft(player.player_id, "injury", event.target.value)}
+                            aria-label={`${player.player_display_name} injury status`}
+                            placeholder="Healthy / Q / Out"
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </details>
 
           {calibration.rows.length > 0 && (
             <div className="calibration-diagnostics">
@@ -536,8 +1064,8 @@ export function ModelWorkbench({
             {coverage.map((item) => {
               const summary = coverageSummary(item);
               return (
-                <article key={item.table} className={`coverage-card ${summary.tone}`}>
-                  <span>{item.table}</span>
+                <article key={item.table} className={`coverage-card ${summary.tone}`} title={item.table}>
+                  <span>{item.label}</span>
                   <strong>{summary.label}</strong>
                   <small>{summary.detail}</small>
                 </article>

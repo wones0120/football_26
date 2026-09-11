@@ -42,6 +42,14 @@ NFLREADPY_LOADERS = {
     "injuries": "load_injuries",
     "snap_counts": "load_snap_counts",
 }
+NFLVERSE_WEEKLY_ROSTER_CSV_URL = (
+    "https://github.com/nflverse/nflverse-data/releases/download/weekly_rosters/"
+    "roster_weekly_{season}.csv"
+)
+NFLREADPY_FETCH_METADATA_ATTR = "football_26_nflreadpy_fetch"
+NFLREADPY_SEASON_RANGE_RE = re.compile(
+    r"Season must be between \d+ and (?P<max_season>\d+)"
+)
 DEFAULT_NFLREADPY_LICENSE = (
     "nflverse data accessed through nflreadpy; downstream use remains subject "
     "to the applicable upstream dataset terms."
@@ -77,6 +85,12 @@ class DraftKingsCaptureIngestResult:
 
 @dataclass(frozen=True)
 class NflReadPyScheduleCaptureIngestResult:
+    capture: SnapshotCaptureResult
+    ingest: IngestResultResponse
+
+
+@dataclass(frozen=True)
+class NflReadPyRosterCaptureIngestResult:
     capture: SnapshotCaptureResult
     ingest: IngestResultResponse
 
@@ -666,6 +680,84 @@ class SourceCaptureService:
             ingest=ingest,
         )
 
+    def capture_and_ingest_nflreadpy_weekly_rosters(
+        self,
+        request: NflReadPySeasonRequest,
+        *,
+        source_license: str = DEFAULT_NFLREADPY_LICENSE,
+        nfl_module: Any | None = None,
+        slate: str | None = None,
+        slate_lock_at: datetime | None = None,
+    ) -> NflReadPyRosterCaptureIngestResult:
+        """Capture the exact weekly-roster payload before ingesting it."""
+        selected_weeks = sorted(set(request.weeks or []))
+        single_week = selected_weeks[0] if len(selected_weeks) == 1 else None
+        frame, version = fetch_nflreadpy_dataset(
+            "weekly_rosters",
+            season=request.season,
+            week=single_week,
+            nfl_module=nfl_module,
+        )
+        fetch_metadata = dict(frame.attrs.get(NFLREADPY_FETCH_METADATA_ATTR, {}))
+        if len(selected_weeks) > 1:
+            if "week" not in frame.columns:
+                raise RuntimeError("nflreadpy weekly-roster output has no week column")
+            frame = frame[
+                pd.to_numeric(frame["week"], errors="coerce").isin(selected_weeks)
+            ].reset_index(drop=True)
+        if frame.empty:
+            raise RuntimeError("nflreadpy weekly rosters returned no records.")
+
+        scope_suffix = ""
+        if single_week is not None:
+            scope_suffix = f"_week_{single_week:02d}"
+        elif selected_weeks:
+            scope_suffix = "_weeks_" + "-".join(f"{week:02d}" for week in selected_weeks)
+        capture = self.capture_dataframe(
+            frame,
+            artifact_name=(
+                f"nflreadpy_weekly_rosters_{request.season}{scope_suffix}.csv"
+            ),
+            source_system="nflreadpy",
+            dataset="weekly_rosters",
+            season=request.season,
+            week=single_week,
+            slate=slate,
+            source_license=source_license,
+            source_uri=fetch_metadata.get(
+                "source_uri",
+                NFLVERSE_WEEKLY_ROSTER_CSV_URL.format(season=request.season),
+            ),
+            slate_lock_at=slate_lock_at,
+            metadata={
+                "capture_mode": fetch_metadata.get(
+                    "capture_mode",
+                    "nflreadpy_fetch",
+                ),
+                "nflreadpy_version": version,
+                "selected_weeks": selected_weeks or None,
+                **(
+                    {"loader_error": fetch_metadata["loader_error"]}
+                    if fetch_metadata.get("loader_error")
+                    else {}
+                ),
+            },
+        )
+        if capture.pre_lock is False:
+            raise PostLockSnapshotError(capture)
+        captured_frame = pd.read_csv(capture.snapshot.artifact_path)
+        ingest = IngestService(self.session).ingest_nflreadpy_weekly_rosters(
+            request,
+            source_frame=captured_frame,
+            source_path=capture.snapshot.artifact_path,
+            ingest_run_id=_ingest_run_id(capture.snapshot.snapshot_id),
+        )
+        self.link_ingest_run(capture.snapshot.snapshot_id, ingest.ingest_run_id)
+        return NflReadPyRosterCaptureIngestResult(
+            capture=capture,
+            ingest=ingest,
+        )
+
     def eligible_snapshots(
         self,
         *,
@@ -726,7 +818,32 @@ def fetch_nflreadpy_dataset(
     loader = getattr(nfl_module, loader_name, None)
     if loader is None:
         raise RuntimeError(f"Installed nflreadpy does not provide {loader_name}")
-    frame = _coerce_dataframe(loader(seasons=[season]))
+    fetch_metadata = {
+        "capture_mode": "nflreadpy_fetch",
+        "source_uri": (
+            NFLVERSE_WEEKLY_ROSTER_CSV_URL.format(season=season)
+            if dataset == "weekly_rosters"
+            else f"nflreadpy://{dataset}/{season}"
+        ),
+    }
+    try:
+        frame = _coerce_dataframe(loader(seasons=[season]))
+    except ValueError as exc:
+        season_range = NFLREADPY_SEASON_RANGE_RE.search(str(exc))
+        allow_weekly_roster_fallback = (
+            dataset == "weekly_rosters"
+            and season_range is not None
+            and season == int(season_range.group("max_season")) + 1
+        )
+        if not allow_weekly_roster_fallback:
+            raise
+        source_uri = NFLVERSE_WEEKLY_ROSTER_CSV_URL.format(season=season)
+        frame = pd.read_csv(source_uri, low_memory=False)
+        fetch_metadata = {
+            "capture_mode": "nflverse_release_csv_fallback",
+            "source_uri": source_uri,
+            "loader_error": str(exc),
+        }
     season_column = "season" if "season" in frame.columns else None
     if season_column:
         frame = frame[pd.to_numeric(frame[season_column], errors="coerce") == season]
@@ -735,7 +852,9 @@ def fetch_nflreadpy_dataset(
             raise RuntimeError(f"nflreadpy {dataset} output has no week column")
         frame = frame[pd.to_numeric(frame["week"], errors="coerce") == week]
     version = str(getattr(nfl_module, "__version__", "unknown"))
-    return frame.reset_index(drop=True), version
+    frame = frame.reset_index(drop=True)
+    frame.attrs[NFLREADPY_FETCH_METADATA_ATTR] = fetch_metadata
+    return frame, version
 
 
 def capture_nflreadpy_datasets(
@@ -757,6 +876,7 @@ def capture_nflreadpy_datasets(
             week=week,
             nfl_module=nfl_module,
         )
+        fetch_metadata = dict(frame.attrs.get(NFLREADPY_FETCH_METADATA_ATTR, {}))
         artifact_name = f"nflreadpy_{dataset}_{season}"
         if week is not None:
             artifact_name += f"_week_{week:02d}"
@@ -771,11 +891,22 @@ def capture_nflreadpy_datasets(
                 week=week,
                 slate=slate,
                 source_license=source_license,
-                source_uri=f"nflreadpy://{dataset}/{season}",
+                source_uri=fetch_metadata.get(
+                    "source_uri",
+                    f"nflreadpy://{dataset}/{season}",
+                ),
                 slate_lock_at=slate_lock_at,
                 metadata={
-                    "capture_mode": "nflreadpy_fetch",
+                    "capture_mode": fetch_metadata.get(
+                        "capture_mode",
+                        "nflreadpy_fetch",
+                    ),
                     "nflreadpy_version": version,
+                    **(
+                        {"loader_error": fetch_metadata["loader_error"]}
+                        if fetch_metadata.get("loader_error")
+                        else {}
+                    ),
                 },
             )
         )

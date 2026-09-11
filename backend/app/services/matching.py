@@ -235,23 +235,17 @@ def find_player_master_id(
         if len(alias_exact) == 1:
             return alias_exact[0].player_master_id, "alias_name_team_position"
 
-    if norm_name and norm_team:
+    if norm_name and norm_team and norm_position:
         master_exact = session.execute(
             select(PlayerMaster).where(
                 and_(
                     PlayerMaster.normalized_name == norm_name,
                     PlayerMaster.primary_team == norm_team,
+                    PlayerMaster.position == norm_position,
                 )
             )
         ).scalars().all()
         if len(master_exact) == 1:
-            return master_exact[0].player_master_id, "master_name_team"
-
-    if norm_name:
-        master_name_only = session.execute(
-            select(PlayerMaster).where(PlayerMaster.normalized_name == norm_name)
-        ).scalars().all()
-        if len(master_name_only) == 1:
-            return master_name_only[0].player_master_id, "master_name_only"
+            return master_exact[0].player_master_id, "master_name_team_position"
 
     return None, "unresolved"

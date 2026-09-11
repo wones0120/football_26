@@ -3,25 +3,25 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
-from sqlalchemy import text
-
 from Database.config import get_connection_string
-from Database.features import build_player_features
-from Database.manager import NFLDatabaseManager
-from Database.scoring import build_weekly_scores
 
 from ..db import SessionLocal
 from ..models import UltimateLineupRun
 from ..product_schemas import (
+    AgentRunRequest,
+    BuildFeatureMatrixRequest,
+    BuildFeaturesResponse,
     PredictionRunRequest,
     PredictionRunResponse,
     SimulationRunRequest,
     SimulationRunResponse,
 )
+from ..product_services.agent import NewsMatchupAgent
+from ..product_services.data_quality import DataQualityService
 from ..product_services.predictions import PredictionsService
 from ..product_services.simulations import SimulationService as SlateSimulationService
 from ..schemas import (
@@ -37,17 +37,20 @@ from .benchmarks import (
 )
 from .job_queue import (
     BENCHMARK_JOB,
+    FEATURE_MATRIX_JOB,
     PROJECTION_JOB,
     RESEARCH_SIMULATION_JOB,
     SLATE_SIMULATION_JOB,
+    SYMBOLIC_JOB,
     ULTIMATE_LINEUP_JOB,
     WEEKLY_RUN_JOB,
     PermanentJobError,
 )
-from .weekly_orchestrator import WeeklyOrchestrator, WeeklyStageBlockedError
-from ..weekly_schemas import WeeklyRunRequest
+from .lineup_learning import LineupLearningService
 from .simulation import SimulationService as ResearchSimulationService
 from .ultimate_lineup_runs import execute_ultimate_lineup_run
+from .weekly_orchestrator import WeeklyOrchestrator, WeeklyStageBlockedError
+from ..weekly_schemas import WeeklyRunRequest
 
 
 class ExecutionContext(Protocol):
@@ -64,6 +67,164 @@ class ExecutionContext(Protocol):
         run_id: str | None = None,
         checkpoint: dict[str, Any] | None = None,
     ) -> None: ...
+
+
+def _feature_matrix_handler(
+    context: ExecutionContext,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    request = BuildFeatureMatrixRequest.model_validate(payload)
+    completed_rows: list[dict[str, Any]] = []
+    context.progress(
+        "feature_matrix",
+        0,
+        1,
+        "Discovering salary slates for the requested feature-matrix build.",
+        checkpoint={"rows": []},
+    )
+
+    def record_slice(current: int, total: int, row: dict[str, Any]) -> None:
+        persisted = dict(row)
+        persisted["completed_at"] = datetime.now(UTC).isoformat()
+        completed_rows.append(persisted)
+        outcome = str(row.get("status") or "unknown")
+        context.progress(
+            "feature_matrix",
+            current,
+            total,
+            (
+                f"{row.get('season')} W{int(row.get('week') or 0):02d} "
+                f"{row.get('slate')} {outcome}; "
+                f"{int(row.get('rows_written') or 0)} rows written."
+            ),
+            checkpoint={"rows": completed_rows},
+        )
+
+    with SessionLocal() as session:
+        summary = LineupLearningService(session).rebuild_player_game_feature_matrix(
+            source_system=request.source_system,
+            season_start=request.season,
+            season_end=request.season,
+            weeks=request.weeks,
+            slate=request.slate,
+            status_hook=record_slice,
+        )
+    summary["rows"] = completed_rows
+    if not summary["slates_total"]:
+        raise PermanentJobError(
+            "No curated salaries found for the selected season, weeks, and slate. "
+            "Load salaries first."
+        )
+    if summary["slates_failed"]:
+        raise PermanentJobError(
+            f"Feature build failed for {summary['slates_failed']} slate(s); "
+            f"{summary['slates_completed']} completed. Review the stored per-slate outcomes."
+        )
+
+    rows = int(summary["rows_written"])
+    message = (
+        f"Built {rows} feature rows for season {request.season} across "
+        f"{summary['slates_completed']} slate(s)."
+    )
+    try:
+        DataQualityService().record_load(
+            trigger="feature_build",
+            season=request.season,
+            week=(
+                request.weeks[0]
+                if request.weeks and len(request.weeks) == 1
+                else None
+            ),
+            slate=request.slate,
+            summaries=[
+                {
+                    "dataset": "player_game_feature_matrix",
+                    "rows_written": rows,
+                    "message": message,
+                }
+            ],
+            source_context=request.model_dump(mode="json"),
+        )
+    except Exception:  # noqa: BLE001 - telemetry cannot rewrite a successful build
+        logging.exception("Unable to persist data-quality history for feature_build")
+
+    return BuildFeaturesResponse(
+        season=request.season,
+        weeks=request.weeks,
+        rows_written=rows,
+        message=message,
+        source_system=request.source_system,
+        slates_total=int(summary["slates_total"]),
+        slates_completed=int(summary["slates_completed"]),
+        slates_failed=int(summary["slates_failed"]),
+        rows=completed_rows,
+    ).model_dump(mode="json")
+
+
+def _symbolic_handler(
+    context: ExecutionContext,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    request = AgentRunRequest.model_validate(payload)
+    service = NewsMatchupAgent()
+    if context.run_id:
+        existing = service.fetch_completed_run_summary(context.run_id)
+        if existing is not None:
+            context.progress(
+                "symbolic_rules",
+                1,
+                1,
+                "Recovered the already-persisted symbolic run.",
+            )
+            return {
+                "season": request.season,
+                "week": request.week,
+                "rule_run_id": context.run_id,
+                "projection_run_id": request.projection_run_id,
+                "target_persisted": True,
+                "adjusted_rows": existing["projections_adjusted"],
+                "adjustments": [],
+                "config": {"rules_loaded": existing["rules_loaded"]},
+                "trace_rows": existing["trace_rows"],
+                "traces": [],
+            }
+
+    context.progress(
+        "symbolic_rules",
+        0,
+        1,
+        "Loading persisted projections and evaluating symbolic rules.",
+    )
+    projections, adjustments, config, traces = service.run(
+        request.season,
+        request.week,
+        slate=request.slate,
+        projection_run_id=request.projection_run_id,
+        rule_run_id=context.run_id,
+    )
+    if projections.empty:
+        raise PermanentJobError(
+            "No persisted projections were available for the selected season, week, slate, "
+            "and projection run."
+        )
+    context.progress(
+        "symbolic_rules",
+        1,
+        1,
+        f"Persisted {len(traces)} symbolic trace rows.",
+    )
+    return {
+        "season": request.season,
+        "week": request.week,
+        "rule_run_id": config.rule_run_id,
+        "projection_run_id": config.projection_run_id,
+        "target_persisted": config.target_persisted,
+        "adjusted_rows": len(adjustments),
+        "adjustments": [adjustment.__dict__ for adjustment in adjustments],
+        "config": config.__dict__,
+        "trace_rows": len(traces),
+        "traces": [trace.__dict__ for trace in traces],
+    }
 
 
 def _benchmark_handler(
@@ -113,7 +274,6 @@ def _projection_handler(
 ) -> dict[str, Any]:
     request = PredictionRunRequest.model_validate(payload)
     connection_string = get_connection_string()
-    slate_for_prediction = request.slate
     prediction_service = PredictionsService(connection_string)
     if context.run_id:
         existing = prediction_service.fetch_completed_run_summary(context.run_id)
@@ -130,75 +290,8 @@ def _projection_handler(
         "input_validation",
         0,
         4,
-        "Checking salary coverage for the requested projection slice.",
+        "Loading canonical salary and feature coverage for the requested projection slice.",
     )
-    if request.slate:
-        db_manager = NFLDatabaseManager(connection_string)
-        with db_manager.engine.connect() as connection:
-            salary_count = connection.execute(
-                text(
-                    "SELECT COUNT(*) FROM curated_salaries "
-                    "WHERE season = :season AND week = :week AND slate = :slate"
-                ),
-                {
-                    "season": request.season,
-                    "week": request.week,
-                    "slate": request.slate,
-                },
-            ).scalar_one()
-        if salary_count == 0:
-            logging.warning(
-                "No curated_salaries found for season=%s week=%s slate=%s; "
-                "running projections without slate filter.",
-                request.season,
-                request.week,
-                request.slate,
-            )
-            slate_for_prediction = None
-
-    context.progress(
-        "weekly_scoring",
-        1,
-        4,
-        "Building time-safe weekly fantasy scores.",
-    )
-    scored_rows = build_weekly_scores(
-        season=request.season,
-        weeks=None,
-        connection_string=connection_string,
-    )
-    if scored_rows == 0:
-        raise PermanentJobError(
-            f"No weekly stats found for season {request.season}. "
-            "Load any completed week first."
-        )
-
-    context.progress(
-        "feature_build",
-        2,
-        4,
-        "Building point-in-time player features.",
-    )
-    feature_rows = build_player_features(
-        season=request.season,
-        weeks=None,
-        connection_string=connection_string,
-    )
-    if feature_rows == 0:
-        try:
-            feature_rows = build_player_features(
-                season=request.season,
-                weeks=None,
-                future_week=request.week,
-                connection_string=connection_string,
-            )
-        except Exception:  # noqa: BLE001
-            feature_rows = 0
-    if feature_rows == 0:
-        raise PermanentJobError(
-            f"No predictive features available for season {request.season} "
-            f"week {request.week}. Load stats and salaries, then retry."
-        )
 
     checkpoint = dict(context.checkpoint)
     data_cutoff_at = request.data_cutoff_at
@@ -215,7 +308,7 @@ def _projection_handler(
             season=request.season,
             week=request.week,
             positions=request.positions,
-            slate=slate_for_prediction,
+            slate=request.slate,
             data_cutoff_at=data_cutoff_at,
             feature_run_id=checkpoint.get("feature_run_id"),
             model_run_id=checkpoint.get("model_run_id"),
@@ -224,15 +317,19 @@ def _projection_handler(
     except ValueError as exc:
         raise PermanentJobError(str(exc)) from exc
 
+    coverage = (result.calibration_metrics or {}).get("input_coverage", {})
+    warnings = []
+    if coverage.get("excluded_positions"):
+        warnings.append("excluded positions: " + ", ".join(coverage["excluded_positions"]))
+    if coverage.get("unresolved_salary_source_keys"):
+        warnings.append(f"{len(coverage['unresolved_salary_source_keys'])} unresolved salary entries excluded")
+    if not result.records or not result.target_persisted:
+        raise PermanentJobError("No persisted projections were produced for the selected slate.")
     response = PredictionRunResponse(
         season=request.season,
         week=request.week,
         rows_written=len(result.records),
-        message=(
-            "Predictions generated"
-            if result.records
-            else "No predictions generated"
-        ),
+        message="Predictions generated" + ("; " + "; ".join(warnings) if warnings else ""),
         feature_run_id=result.feature_run_id,
         model_run_id=result.model_run_id,
         projection_run_id=result.projection_run_id,
@@ -358,9 +455,11 @@ def _weekly_run_handler(
 
 HANDLERS = {
     BENCHMARK_JOB: _benchmark_handler,
+    FEATURE_MATRIX_JOB: _feature_matrix_handler,
     PROJECTION_JOB: _projection_handler,
     RESEARCH_SIMULATION_JOB: _research_simulation_handler,
     SLATE_SIMULATION_JOB: _slate_simulation_handler,
+    SYMBOLIC_JOB: _symbolic_handler,
     ULTIMATE_LINEUP_JOB: _ultimate_lineup_handler,
     WEEKLY_RUN_JOB: _weekly_run_handler,
 }

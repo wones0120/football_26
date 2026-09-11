@@ -16,12 +16,15 @@ from backend.app.models import (
     CuratedSalary,
     IngestRun,
     RawNflSchedule,
+    RawNflWeeklyRoster,
     SourceSnapshot,
     SourceSnapshotIngestRun,
 )
 from backend.app.schemas import NflReadPySeasonRequest
 from backend.app.services.matching import create_player_master
 from backend.app.services.source_capture import (
+    NFLREADPY_FETCH_METADATA_ATTR,
+    NFLVERSE_WEEKLY_ROSTER_CSV_URL,
     SNAPSHOT_CONTRACT_ID,
     PostLockSnapshotError,
     SnapshotIntegrityError,
@@ -271,6 +274,152 @@ def test_nflreadpy_capture_filters_week_and_records_version(tmp_path: Path) -> N
     assert snapshot.metadata_json["nflreadpy_version"] == "test-version"
     captured_frame = pd.read_csv(snapshot.artifact_path)
     assert captured_frame["full_name"].tolist() == ["Player One"]
+
+
+def test_weekly_roster_fetch_uses_release_when_client_is_one_season_behind(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source_uri = NFLVERSE_WEEKLY_ROSTER_CSV_URL.format(season=2026)
+    fake_nflreadpy = SimpleNamespace(
+        __version__="0.1.5",
+        load_rosters_weekly=lambda seasons: (_ for _ in ()).throw(
+            ValueError("Season must be between 2002 and 2025")
+        ),
+    )
+
+    def fake_read_csv(path: str, **kwargs: object) -> pd.DataFrame:
+        assert path == source_uri
+        assert kwargs == {"low_memory": False}
+        return pd.DataFrame(
+            [
+                {
+                    "season": 2026,
+                    "week": 1,
+                    "full_name": "Player One",
+                    "team": "BUF",
+                    "position": "WR",
+                }
+            ]
+        )
+
+    monkeypatch.setattr(pd, "read_csv", fake_read_csv)
+    frame, version = fetch_nflreadpy_dataset(
+        "weekly_rosters",
+        season=2026,
+        week=1,
+        nfl_module=fake_nflreadpy,
+    )
+
+    assert version == "0.1.5"
+    assert frame["full_name"].tolist() == ["Player One"]
+    assert frame.attrs[NFLREADPY_FETCH_METADATA_ATTR] == {
+        "capture_mode": "nflverse_release_csv_fallback",
+        "source_uri": source_uri,
+        "loader_error": "Season must be between 2002 and 2025",
+    }
+
+
+@pytest.mark.parametrize(
+    ("season", "loader_error"),
+    [
+        (2027, "Season must be between 2002 and 2025"),
+        (2026, "Upstream roster service unavailable"),
+    ],
+)
+def test_weekly_roster_fetch_rejects_out_of_scope_fallbacks(
+    season: int,
+    loader_error: str,
+) -> None:
+    def fail_loader(*, seasons: list[int]) -> pd.DataFrame:
+        assert seasons == [season]
+        raise ValueError(loader_error)
+
+    fake_nflreadpy = SimpleNamespace(
+        __version__="0.1.5",
+        load_rosters_weekly=fail_loader,
+    )
+
+    with pytest.raises(ValueError, match=loader_error):
+        fetch_nflreadpy_dataset(
+            "weekly_rosters",
+            season=season,
+            week=1,
+            nfl_module=fake_nflreadpy,
+        )
+
+
+def test_weekly_roster_capture_ingests_exact_artifact_and_links_lineage(
+    tmp_path: Path,
+) -> None:
+    session = _session()
+    roster_rows = pd.DataFrame(
+        [
+            {
+                "season": 2026,
+                "week": 1,
+                "game_type": "REG",
+                "team": "BUF",
+                "position": "WR",
+                "depth_chart_position": "WR",
+                "status": "ACT",
+                "full_name": "Player One",
+                "gsis_id": "00-0000001",
+                "pfr_id": "PlayOn00",
+            }
+        ]
+    )
+    fake_nflreadpy = SimpleNamespace(
+        __version__="test-version",
+        load_rosters_weekly=lambda seasons: roster_rows,
+    )
+    service = SourceCaptureService(
+        session,
+        snapshot_root=tmp_path / "snapshots",
+        clock=lambda: datetime(2026, 9, 3, 12, 0, tzinfo=UTC),
+    )
+
+    first = service.capture_and_ingest_nflreadpy_weekly_rosters(
+        NflReadPySeasonRequest(season=2026, weeks=[1]),
+        source_license=LICENSE,
+        nfl_module=fake_nflreadpy,
+        slate="sunday_main",
+        slate_lock_at=datetime(2026, 9, 13, 17, 0, tzinfo=UTC),
+    )
+
+    assert first.capture.created is True
+    assert first.capture.snapshot.row_count == 1
+    assert first.capture.snapshot.source_uri == NFLVERSE_WEEKLY_ROSTER_CSV_URL.format(
+        season=2026
+    )
+    assert first.ingest.status == "completed"
+    assert first.ingest.rows_raw == 1
+    run = session.get(IngestRun, first.ingest.ingest_run_id)
+    assert run is not None
+    assert run.week == 1
+    assert run.source_path == first.capture.snapshot.artifact_path
+    assert run.source_checksum == first.capture.snapshot.content_sha256
+    assert session.get(
+        SourceSnapshotIngestRun,
+        {
+            "snapshot_id": first.capture.snapshot.snapshot_id,
+            "ingest_run_id": first.ingest.ingest_run_id,
+        },
+    ) is not None
+    assert session.query(RawNflWeeklyRoster).one().gsis_id == "00-0000001"
+
+    second = service.capture_and_ingest_nflreadpy_weekly_rosters(
+        NflReadPySeasonRequest(season=2026, weeks=[1]),
+        source_license=LICENSE,
+        nfl_module=fake_nflreadpy,
+        slate="sunday_main",
+        slate_lock_at=datetime(2026, 9, 13, 17, 0, tzinfo=UTC),
+    )
+
+    assert second.capture.created is False
+    assert second.ingest.ingest_run_id == first.ingest.ingest_run_id
+    assert session.query(SourceSnapshot).count() == 1
+    assert session.query(SourceSnapshotIngestRun).count() == 1
+    assert session.query(RawNflWeeklyRoster).count() == 1
 
 
 def test_nflreadpy_schedule_capture_ingests_exact_artifact_and_links_lineage(

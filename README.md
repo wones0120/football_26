@@ -35,8 +35,9 @@ python -m backend.app.worker
 ```
 
 The API only records long-running work. At least one worker must be running to execute queued
-benchmark, projection, research-simulation, slate-simulation, and ultimate-lineup jobs. Use
-`python -m backend.app.worker --help` for worker identity, polling, lease, and one-job options.
+benchmark, feature-matrix, projection, symbolic, research-simulation, slate-simulation, and
+ultimate-lineup jobs. Use `python -m backend.app.worker --help` for worker identity, polling,
+lease, and one-job options.
 
 Fresh database reset (recommended when coming from legacy schemas):
 
@@ -72,7 +73,74 @@ style boundary, preserving role/news/weather shocks, historical backtests, simul
 ultimate-lineup progress, and baseline-versus-shock portfolio comparison without leaking its CSS into the product shell.
 Season, week, and slate form one active shell context across these workspaces. Projection, simulation, baseline,
 and optimizer run choices are retained per compatible slate, shown in the shell, and restored when returning to that
-slate; Research Lab converts the shared canonical slate ID to its lowercase API form at its boundary.
+slate; Research Lab converts the shared canonical slate ID to its lowercase API form at its boundary. Use the
+always-visible `Active slate` selector in the top-right shell header to change that context from any workspace. The
+2026 Week 1 startup default is `WEDNESDAY_NIGHT`, matching the opening showdown slate.
+
+In the Models workspace, `Check data coverage` reports immediately beside the Projection pipeline
+and then updates four readiness cards. Historical actuals resolve from `target.fact_player_game_actual`;
+salary, feature, and projection checks use the active season/week/slate against `public.curated_salary`,
+`public.player_game_feature_matrix`, and `target.player_projection`. A known but unavailable layer is
+reported as `Missing` rather than causing the coverage request to fail.
+`Current slate features` queues a `player_game_feature_matrix` build for only the active season,
+week, and slate through `/api/features/matrix/jobs`; `Full-season features` queues all available
+salary slates in the selected season. Both use the canonical salary and historical context pipeline.
+The legacy synchronous `/api/features/matrix/build` endpoint remains available. Missing salary
+slices and failed builds return an explicit error instead of a generic server error.
+
+The `Features`, `Projections`, and `Symbolic Run` cards are restored from persisted run history for
+the active season, week, and slate. Each card reports `Not run`, `Queued`, `Running`, `Completed`,
+`Failed`, or recovered `Interrupted` state together with the UTC-backed timestamp rendered in the
+browser's timezone. `Loading` and `Status unavailable` remain distinct from `Not run`. Active jobs
+are polled automatically, and a queued item explicitly says when it is waiting for the standalone
+operational worker. A failed latest attempt retains the last usable completed result, while an
+explicitly selected older projection run remains identified. The Models actions enqueue durable
+projection, player-game feature-matrix, and symbolic jobs; full-season feature jobs checkpoint a
+separate stored outcome for every salary slate they process. These status cards report completion,
+not input freshness; lineage-based rebuild/freshness warnings remain a separate concern.
+
+Projection jobs use `public.curated_salary` and `public.player_game_feature_matrix` when the
+canonical data layer is installed. They match salary entries to features only through
+`player_master_id`, retain the queued job's UTC cutoff, train only on earlier season/week outcomes,
+and persist the exact salary-ingest and feature-row identifiers in target feature lineage.
+DraftKings salary status is canonical input: `OUT`, `O`, `IR`, `PUP`, `NFI`, reserve, inactive,
+and suspended entries are excluded before scoring and by the optimizer/readiness pool. The
+optimizer makes its final identity/status/roster/slate decision in a versioned player-pool safety
+gate so every rejected canonical candidate retains a categorized reason. Blank,
+`Q`, and `D` remain eligible until a separate point-in-time injury adjustment supplies stronger
+evidence. The optimizer also reads availability from the selected projection's immutable feature
+lineage: zero availability is a hard exclusion even when the older salary snapshot still says `Q`,
+while partial availability remains eligible and auditable. When current weekly-roster evidence
+exists, non-DST players must also have `ACT` roster
+status before projection scoring; DST remains eligible without a player roster record. Every
+projection run records salary-status and roster-status exclusions with exact rows, players,
+statuses, and ingest-run lineage. The
+current player-game feature contract supports QB, RB, WR, TE, K, and DST; excluded positions and
+unresolved salary identities are reported in the job result instead of being silently counted as
+projected players. The v3 point model removes skill-position rows with stored did-not-play evidence
+while retaining genuine zero-point games, adds explicit QB/RB/WR/TE/DST indicators, and blends 80%
+model output with a 20% prior-only player-history anchor (falling back to the position training mean
+for players with fewer than three games). A strictly lagged three-game offensive snap share informs
+receiver roles without using target-week participation. Exact filter counts, position baselines,
+weights, feature names, and walk-forward calibration results are stored with each model run. Legacy
+databases without the canonical tables continue to use the older `predictive_features` path.
+
+`POST /api/pregame-context/runs` stores append-only current availability, starting-QB,
+carry-share, target-share, expected snaps/routes/carries/targets, red-zone/goal-line usage,
+role, and injury evidence for canonical players. `GET
+/api/pregame-context/current` restores the newest cutoff-visible evidence for a slate. The Models
+workspace exposes the same contract under `Pregame role & availability`; saving creates an
+immutable evidence run and requires an explicit projection rerun. Week 1 opportunity features use
+strictly prior games, including the preceding season. Carry and target totals come from the full
+prior team—not only players who remain on the current salary slate—so removed workload does not
+disappear. Current context is applied through prior-trained, position-specific monotonic opportunity
+curves after the base point model; historical production and snap features are not rewritten as if
+they were current usage. If explicit shares are absent, lineage identifies the lagged-opportunity
+and salary fallback instead of presenting it as sourced current fact. Kicker projections currently
+require prior game history and use a disclosed 60/40 roll-three/roll-eight history anchor until the
+shared historical matrix has sufficient kicker rows for evaluated position calibration. See
+`docs/PROJECTION_MODEL_V4_EVALUATION.md`. The optimizer eligibility, freshness-warning, lock, and
+exclusion-audit contract is documented in `docs/PLAYER_POOL_SAFETY.md`.
 
 At startup, the shared season and week default to the earliest locally ingested regular-season week
 that still has a future kickoff. The selection stays on the current week until its final scheduled
@@ -84,6 +152,9 @@ back to the provider's current-season/current-week lookup and finally to its com
 Salary and injury CSVs are validated before any existing curated slice is cleared or new raw/curated rows are written.
 
 - Salary files require source player ID, player name, team, position, and a positive integer salary.
+- When present, DraftKings `Status` (or the supported player/injury-status aliases) is normalized
+  and persisted on the active curated salary row. A later valid import replaces only that current
+  source/season/week/slate slice; prior raw salary rows and ingest runs remain available for lineage.
 - Injury files require player name, team, position, and an injury-status column. Native player ID is used when present; otherwise identity validation uses normalized name plus team and position. Blank injury-status values are allowed for unlisted/healthy players.
 - Team defenses normalize `D`, `DEF`, `Defense`, `D/ST`, and `DST` to `DST`. After an exact native source-ID match, defenses resolve only through a unique same-source team-defense alias or unique team DST master; defense display names are never used as a fallback.
 - Duplicate player identities, missing required columns, blank required identity values, empty files, and invalid salaries fail the ingest with source CSV row numbers in the error.
@@ -101,6 +172,7 @@ Salary and injury CSVs are validated before any existing curated slice is cleare
 ## Data Freshness
 
 - `GET /api/coverage/freshness` checks the selected source, season, week, and slate for curated salaries/injuries plus nflreadpy schedules, weekly stats, weekly rosters, and snap counts.
+- Salary and injury slate keys are matched case-insensitively, so canonical shell values such as `SUNDAY_MAIN` read the same slice as stored `sunday_main` rows.
 - Each dataset reports its exact slice row count, latest load time, age in hours, staleness threshold, and `fresh`, `stale`, or `missing` status.
 - Thresholds are 24 hours for salaries, 12 hours for injuries, and 168 hours for schedules, weekly stats, weekly rosters, and snap counts.
 - The UI section `Data Freshness` refreshes when the selected slice changes and after ingest actions.
@@ -130,8 +202,11 @@ unique name+team+position match for an ID-less roster row. Conflicting or ambigu
 quarantined. The August 2026 audit resolved 399 queue rows, preserved the 125-row registry evidence
 subset as an immutable source snapshot, and left 37 nondeterministic rows open.
 
-nflverse weekly rosters cover 2002–2025; the snap-count endpoint begins with 2013. Exact schema,
-classification, lineage, feature definitions, and local audits are documented in
+nflverse weekly rosters cover 2002 through the current roster season; the snap-count endpoint
+begins with 2013. Before the regular-season date rollover, the capture path falls back from
+nflreadpy's one-season-behind validation to the canonical nflverse weekly-roster CSV only when the
+requested year is exactly the next season. Exact schema, classification, lineage, feature
+definitions, and local audits are documented in
 `docs/PARTICIPATION_AVAILABILITY_PIPELINE.md` and
 `docs/PARTICIPATION_IDENTITY_REASSESSMENT.md`.
 
@@ -279,7 +354,8 @@ path. Every observation is copied before downstream use into the content-address
 `SOURCE_SNAPSHOT_ROOT`, accompanied by a canonical JSON manifest containing source, license,
 server receipt time, effective time, slate lock, SHA-256, byte/row counts, and source metadata.
 PostgreSQL rejects updates or deletes of snapshot rows. Repeated identical captures reuse the first
-artifact and manifest; changed content creates a new immutable version.
+artifact and manifest; changed content creates a new immutable version. Weekly-roster observations
+are ingested only from the preserved CSV and linked to a deterministic ingest run.
 
 For a weekly capture, rename a downloaded salary file to include the explicit season/week for safe
 directory discovery (for example `DKSalaries_2026_01_sunday_main.csv`) and run:
@@ -299,6 +375,11 @@ nflreadpy schedule refresh. It captures the fetched frame as an immutable CSV fi
 that exact artifact with a deterministic run ID, records the artifact checksum on the ingest run,
 and links the snapshot to the run. Repeating the action with unchanged upstream content reuses the
 existing snapshot and completed ingest instead of replacing rows without new lineage.
+
+The `Load Weekly Rosters` action and the weekly capture command use the equivalent capture-first
+path for `weekly_rosters`. A current-season roster release can therefore be retained and ingested
+before nflreadpy's regular-season calendar rollover without bypassing source checksums or identity
+quarantine.
 
 A generic `DKSalaries.csv` is accepted only with an explicit `--draftkings-path`, preventing a
 scheduled directory scan from labeling an old download as a new week. DraftKings salary ingestion
@@ -337,30 +418,82 @@ The single FastAPI application exposes 116 non-conflicting route contracts. Prim
 - `/api/weather` for canonical slate-game weather, cutoff-safe forecast selection, and explicitly
   separate replay-ineligible historical actuals.
 
-## Classic GPP Optimizer Strategies
+## Rule Library
 
-Operations exposes `Classic GPP strategy` whenever the selected mode is classic
-GPP. `Legacy baseline · v1` (`classic_gpp_baseline_v1`) remains the default.
-`Slate-aware GPP · v1` (`classic_gpp_slate_aware_v1`) explicitly runs the
-advanced ownership-template, correlation, leverage, uniqueness, and exposure
-engine against the exact live projection pool. The selected version is returned
-by the optimizer API, stored on the optimizer run, included in each lineup's
-persisted explanation, and restored with persisted results. The advanced engine
-never silently falls back to the baseline when execution or lineup validation
-fails.
+The shared optimizer policy foundation is documented in
+[`docs/RULE_LIBRARY.md`](docs/RULE_LIBRARY.md). It defines explainable hard
+exclusions, soft boosts, soft penalties, and warnings plus four canonical,
+versioned Showdown/Classic × Head-to-Head/Large-GPP profiles. Resolved optimizer
+strategies now persist the selected rule profile with their existing run
+lineage; established solver behavior remains unchanged until domain rules are
+migrated onto the library in later phases.
+
+## Classic Contest Strategies
+
+Operations exposes one prominent `Contest Strategy` choice for Classic slates.
+`Head-to-Head` (`classic_head_to_head_v1`) keeps the broad post-eligibility pool,
+removes backup QBs and zero-opportunity rows with explicit reasons, and optimizes
+75% mean, 20% P90, and 5% P10 floor with only a soft correlation bonus. It does
+not require a stack or bring-back and always returns the best lineup plus at
+least five alternates.
+
+`Large GPP` (`classic_large_gpp_v1`) applies the more selective ceiling/value
+candidate policy and generates a portfolio using 35% normalized mean, 45% P90,
+15% correlation, and 5% leverage when ownership is real. Without ownership it
+uses 35% mean, 48% P90, 17% correlation, and zero leverage. Its portfolio cycles
+QB+1/QB+2 templates with optional bring-backs and supports maximum/minimum player
+exposure, lineup uniqueness, team/game caps, and caller-supplied stack templates.
+The UI shows eligible/included/excluded counts, player-level exclusion reasons,
+lineup mean/P90/floor where applicable, and realized stack structure.
+
+The historical `classic_gpp_baseline_v1` and `classic_gpp_slate_aware_v1`
+contracts remain callable for reproducible prior runs. Every selected version is
+returned by the API, persisted with its input lineage and explanations, and never
+silently falls back to a different engine.
+
+The remaining data-quality, backtest, and operational follow-ups are tracked in
+[`docs/CLASSIC_OPTIMIZER_CONTEST_STRATEGY_TODO.md`](docs/CLASSIC_OPTIMIZER_CONTEST_STRATEGY_TODO.md).
 
 ## Persistent Showdown Optimizer Modes
 
-Operations sends explicit `showdown_cash_baseline_v1` and
-`showdown_gpp_baseline_v1` strategy contracts for Showdown cash and GPP.
-Both currently use the declared basic P90 captain ILP: one CPT at 1.5x salary
-and P90 objective score plus five FLEX slots under the $50,000 salary cap and
-five-player team limit. Player mean and P90 values remain separate in the
+Operations and Models send `showdown_cash_qb_captain_stack_v1` for Showdown cash
+and `showdown_gpp_captain_informed_v2` for Showdown GPP. Both current strategies
+require at least one same-team WR or TE in FLEX whenever the captain is a QB. The
+solver encodes this as a hard constraint, and the independent result validator checks it
+again before persistence. Explicit requests for `showdown_cash_baseline_v1`,
+`showdown_gpp_baseline_v1`, and `showdown_gpp_captain_informed_v1` preserve those
+historical contracts for research and A/B comparisons.
+
+All versions use the declared P90 captain ILP: one CPT at 1.5x salary plus five FLEX
+slots under the $50,000 salary cap and five-player team limit. The informed GPP
+strategies apply the validated `0.35` captain-position prior from the 39-slate paired
+evaluation. When the matchup model receives a feature more than five training standard
+deviations out of range, it records the out-of-distribution fields and uses the historical
+winning captain-position mix from the same study instead of trusting the extrapolation.
+
+Before any Showdown solve, the pool is reduced to one QB per team. Explicit QB1 or
+stored confirmed `starting_qb_evidence` wins; otherwise, the unique highest DraftKings FLEX salary
+is recorded as an inference. Missing, tied, or conflicting evidence blocks the run rather
+than admitting backup quarterbacks. `Load Starting QBs` persists the canonical
+`player_master_id`, team, evidence source, and confirmed/inferred tier through migration
+`0024_starting_qb_evidence.sql`. The same loader supports multi-game Classic slates and validates
+that a source-backed confirmation payload covers every slate team exactly once; without confirmed
+inputs it records the unique highest active DraftKings QB salary as an inference. The Showdown
+optimizer independently retains its exact-two-team guard. The pool uses each player's FLEX salary
+as its base, retains the separate DraftKings CPT ID for upload, and accepts every positive showdown salary including
+$200 punts, and includes kickers. When current weekly-roster evidence exists, only `ACT`
+players plus team defenses enter the pool; cut, development, reserve, and roster-missing
+salary entries remain excluded. Player mean and P90 values remain separate in the
 persisted result. Before a run can complete, an independent validator checks canonical
-player IDs, slot shape, salary, team and exposure limits, and duplicate lineups.
-The optimizer persists successful lineups with normalized slot indexes and
-CPT/FLEX roles; failed status, messages, selected objective, strategy, projection
-and rule lineage, and cutoff also reload after an application restart. Separate
+player IDs, slot shape, salary, team and exposure limits, duplicate lineups, and every
+hard construction rule owned by the selected strategy version.
+The optimizer persists successful lineups with normalized slot indexes, CPT/FLEX roles,
+natural positions, starter selections, captain probabilities, model-input context, and
+fallback decisions. The result UI also exposes the complete initial player pool, included/excluded
+state, exclusion reasons, projections, P90, salaries, pregame availability/context lineage, and a
+JSON download. Failed status, messages,
+selected objective, strategy, projection, enabled optimizer rules, rule validation,
+input lineage, and cutoff also reload after an application restart. Separate
 cash-stability and GPP-payout optimization remains future `DT-605` research.
 
 ## Durable Operational Worker Queue
@@ -369,14 +502,16 @@ Migration `0015_operational_job_queue.sql` adds the `operational_job` table. Lon
 now return `202 Accepted` with a durable job instead of running CPU/database work in FastAPI:
 
 - `POST /api/benchmarks/run-suite`
+- `POST /api/features/matrix/jobs`
 - `POST /api/predict/run`
+- `POST /api/agent/jobs`
 - `POST /api/simulate/week`
 - `POST /api/simulations/run`
 - `POST /api/lineups/ultimate-runs` (the existing ultimate-run response contract is unchanged)
 
-The first four responses contain `created` and `job`; their unchanged former result payload is
-stored as `job.result` after completion. The application UI queues and polls automatically, so its
-completed benchmark, projection, and simulation views retain their existing result shapes.
+The standard queue responses contain `created` and `job`; each operation's result payload is stored
+as `job.result` after completion. The application UI queues and polls automatically, so completed
+benchmark, feature, projection, symbolic, and simulation views can restore persisted results.
 
 Callers that may retry a dispatch should send the same `Idempotency-Key` header. Reusing a key with
 the exact request returns the original job and stable underlying run ID; reusing it with different

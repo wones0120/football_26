@@ -22,6 +22,7 @@ from .product_services.digital_twin_variants import DigitalTwinVariantService
 from .product_services.thought_inbox import ThoughtInboxService
 from .product_services.starters import StartingQBService
 from .product_services.simulations import SimulationService
+from .product_services.pregame_context import PregameContextService
 
 
 @lru_cache()
@@ -97,6 +98,11 @@ def get_model_governance_service() -> ModelGovernanceService:
 @lru_cache()
 def get_starting_qb_service() -> StartingQBService:
     return StartingQBService()
+
+
+@lru_cache()
+def get_pregame_context_service() -> PregameContextService:
+    return PregameContextService()
 
 
 @lru_cache()

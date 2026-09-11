@@ -43,13 +43,18 @@ from sqlalchemy.orm import Session
 from ..db import get_db_session
 from ..job_schemas import OperationalJobCreateResponse
 from ..services.job_queue import (
+    FEATURE_MATRIX_JOB,
     PROJECTION_JOB,
     SLATE_SIMULATION_JOB,
+    SYMBOLIC_JOB,
     JobConflictError,
     enqueue_job,
     job_response,
 )
+from ..services.lineup_learning import LineupLearningService
+from ..services.model_pipeline_status import get_model_pipeline_summary
 from ..services.schedule_context import next_upcoming_schedule_context
+from ..product_schemas import BuildFeatureMatrixRequest
 
 from ..product_dependencies import (
     get_ingestion_controller,
@@ -68,6 +73,7 @@ from ..product_dependencies import (
     get_predictions_service,
     get_model_governance_service,
     get_starting_qb_service,
+    get_pregame_context_service,
     get_ownership_service,
     get_batch_import_service,
     get_portfolio_service,
@@ -78,6 +84,7 @@ from ..product_schemas import (
     LoadSummarySchema,
     BuildFeaturesRequest,
     BuildFeaturesResponse,
+    ModelPipelineSummaryResponse,
     OptimizerRunRequest,
     OptimizerStatusResponse,
     SimulationRunRequest,
@@ -130,6 +137,9 @@ from ..product_schemas import (
     PredictionListResponse,
     StartingQBRequest,
     StartingQBResponse,
+    PregameContextRunRequest,
+    PregameContextRunResponse,
+    PregameContextCurrentResponse,
     ValidationResponse,
     WeeklyValidationRow,
     UnmatchedSalaryResponse,
@@ -177,6 +187,7 @@ from ..product_services.validation import fetch_weekly_row_counts, fetch_unmatch
 from ..product_services.validation import process_unmatched_players
 from ..product_services.agent import NewsMatchupAgent
 from ..product_services.starters import StartingQBService
+from ..product_services.pregame_context import PregameContextService
 from ..product_services.model_governance import ModelGovernanceService
 
 router = APIRouter(prefix="/api")
@@ -1022,6 +1033,126 @@ def run_predictions(
     return OperationalJobCreateResponse(created=created, job=job_response(job))
 
 
+@router.get(
+    "/models/pipeline/status",
+    response_model=ModelPipelineSummaryResponse,
+)
+def model_pipeline_status(
+    season: int = Query(..., ge=2000),
+    week: int = Query(..., ge=1, le=25),
+    slate: str = Query(..., min_length=1),
+    selected_projection_run_id: str | None = Query(default=None),
+    session: Session = Depends(get_db_session),
+) -> ModelPipelineSummaryResponse:
+    return get_model_pipeline_summary(
+        session,
+        season=season,
+        week=week,
+        slate=slate,
+        selected_projection_run_id=selected_projection_run_id,
+    )
+
+
+@router.post(
+    "/features/matrix/jobs",
+    response_model=OperationalJobCreateResponse,
+    status_code=202,
+)
+def queue_feature_matrix_build(
+    request: BuildFeatureMatrixRequest,
+    idempotency_key: str | None = Header(
+        default=None,
+        alias="Idempotency-Key",
+        min_length=1,
+        max_length=255,
+    ),
+    session: Session = Depends(get_db_session),
+) -> OperationalJobCreateResponse:
+    try:
+        job, created = enqueue_job(
+            session,
+            job_type=FEATURE_MATRIX_JOB,
+            idempotency_key=idempotency_key or f"feature-matrix:{uuid4()}",
+            request_payload=request.model_dump(mode="json"),
+            run_id=str(uuid4()),
+            checkpoint={"rows": []},
+        )
+    except JobConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return OperationalJobCreateResponse(created=created, job=job_response(job))
+
+
+@router.post(
+    "/agent/jobs",
+    response_model=OperationalJobCreateResponse,
+    status_code=202,
+)
+def queue_symbolic_run(
+    request: AgentRunRequest,
+    idempotency_key: str | None = Header(
+        default=None,
+        alias="Idempotency-Key",
+        min_length=1,
+        max_length=255,
+    ),
+    session: Session = Depends(get_db_session),
+) -> OperationalJobCreateResponse:
+    try:
+        job, created = enqueue_job(
+            session,
+            job_type=SYMBOLIC_JOB,
+            idempotency_key=idempotency_key or f"symbolic:{uuid4()}",
+            request_payload=request.model_dump(mode="json"),
+            run_id=str(uuid4()),
+        )
+    except JobConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return OperationalJobCreateResponse(created=created, job=job_response(job))
+
+
+@router.post("/features/matrix/build", response_model=BuildFeaturesResponse)
+def build_feature_matrix(
+    request: BuildFeatureMatrixRequest,
+    session: Session = Depends(get_db_session),
+    quality_service: DataQualityService = Depends(get_data_quality_service),
+) -> BuildFeaturesResponse:
+    summary = LineupLearningService(session).rebuild_player_game_feature_matrix(
+        source_system=request.source_system,
+        season_start=request.season,
+        season_end=request.season,
+        weeks=request.weeks,
+        slate=request.slate,
+    )
+    if not summary["slates_total"]:
+        raise HTTPException(
+            status_code=422,
+            detail="No curated salaries found for the selected season, weeks, and slate. Load salaries first.",
+        )
+    if summary["slates_failed"]:
+        logging.error("Feature matrix build failed: %s", summary)
+        raise HTTPException(
+            status_code=422,
+            detail=f"Feature build failed for {summary['slates_failed']} slate(s); "
+            f"{summary['slates_completed']} completed. Check server logs for details.",
+        )
+    rows = summary["rows_written"]
+    message = f"Built {rows} feature rows for season {request.season} across {summary['slates_completed']} slate(s)."
+    _record_load_quality(
+        quality_service,
+        trigger="feature_build",
+        season=request.season,
+        week=request.weeks[0] if request.weeks and len(request.weeks) == 1 else None,
+        slate=request.slate,
+        summaries=[{"dataset": "player_game_feature_matrix", "rows_written": rows, "message": message}],
+        source_context=request.model_dump(),
+    )
+    return BuildFeaturesResponse(
+        season=request.season, weeks=request.weeks, rows_written=rows, message=message,
+    )
 
 
 @router.post("/features/build", response_model=BuildFeaturesResponse)
@@ -1362,11 +1493,24 @@ def process_unmatched_api(
 
 
 @router.get("/data/validate", response_model=ValidationResponse)
-def validate_weekly_data(table: str = "nfl_weekly_data_with_scores") -> ValidationResponse:
+def validate_weekly_data(
+    table: str = "nfl_weekly_data_with_scores",
+    season: int | None = Query(None, ge=2000),
+    week: int | None = Query(None, ge=1, le=25),
+    slate: str | None = Query(None, min_length=1),
+) -> ValidationResponse:
     """
     Return row counts per season/week (ascending) for a given table, filling missing weeks with zero.
     """
-    rows = fetch_weekly_row_counts(table_name=table)
+    try:
+        rows = fetch_weekly_row_counts(
+            table_name=table,
+            seasons=[season] if season is not None else None,
+            week=week,
+            slate=slate,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return ValidationResponse(
         table=table,
         results=[WeeklyValidationRow(**row) for row in rows],
@@ -1644,6 +1788,7 @@ def run_optimizer(
         lineage_persisted=job.lineage_persisted,
         message=job.message,
         results=job.results,
+        player_pool=job.params.get("strategy_runtime", {}).get("player_pool"),
         created_at=job.created_at,
         updated_at=job.updated_at,
     )
@@ -1744,6 +1889,7 @@ def get_optimizer_results(
         lineage_persisted=job.lineage_persisted,
         message=job.message,
         results=job.results,
+        player_pool=job.params.get("strategy_runtime", {}).get("player_pool"),
         created_at=job.created_at,
         updated_at=job.updated_at,
     )
@@ -1894,7 +2040,16 @@ def derive_starting_qbs(
 ) -> StartingQBResponse:
     """Derive starting QBs from rosters/injuries and persist to starting_qbs."""
     service = StartingQBService()
-    result = service.derive_starters(season=request.season, week=request.week, slate=request.slate)
+    result = service.derive_starters(
+        season=request.season,
+        week=request.week,
+        slate=request.slate,
+        confirmed_starters=(
+            [selection.model_dump(mode="json") for selection in request.starters]
+            if request.starters
+            else None
+        ),
+    )
     _record_load_quality(
         quality_service,
         trigger="starting_qb_load",
@@ -1923,6 +2078,11 @@ def load_starting_qbs(
         season=request.season,
         week=request.week,
         slate=request.slate,
+        confirmed_starters=(
+            [selection.model_dump(mode="json") for selection in request.starters]
+            if request.starters
+            else None
+        ),
     )
     _record_load_quality(
         quality_service,
@@ -1940,6 +2100,45 @@ def load_starting_qbs(
         message=result.message,
         completed_at=result.completed_at,
     )
+
+
+@router.post(
+    "/pregame-context/runs",
+    response_model=PregameContextRunResponse,
+    status_code=201,
+)
+def create_pregame_context_run(
+    request: PregameContextRunRequest,
+    service: PregameContextService = Depends(get_pregame_context_service),
+) -> PregameContextRunResponse:
+    try:
+        result = service.create_run(request.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return PregameContextRunResponse(**result)
+
+
+@router.get(
+    "/pregame-context/current",
+    response_model=PregameContextCurrentResponse,
+)
+def get_current_pregame_context(
+    season: int = Query(..., ge=2000),
+    week: int = Query(..., ge=1, le=25),
+    slate: str = Query(..., min_length=1),
+    cutoff: datetime | None = Query(default=None),
+    service: PregameContextService = Depends(get_pregame_context_service),
+) -> PregameContextCurrentResponse:
+    try:
+        result = service.current(
+            season=season,
+            week=week,
+            slate=slate,
+            cutoff=cutoff,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return PregameContextCurrentResponse(**result)
 
 
 @router.post("/utils/postgres/start", response_model=PostgresStartResponse)

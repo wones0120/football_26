@@ -27,6 +27,72 @@ class SlateRequest(BaseModel):
     slate: str = Field(..., min_length=1)
 
 
+class PregamePlayerContextInput(BaseModel):
+    player_id: str = Field(..., min_length=1, max_length=64)
+    team: Optional[str] = Field(default=None, max_length=16)
+    position: Optional[str] = Field(default=None, max_length=16)
+    availability_probability: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    start_probability: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    carry_share: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    target_share: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    expected_snaps: Optional[float] = Field(default=None, ge=0.0)
+    expected_routes: Optional[float] = Field(default=None, ge=0.0)
+    expected_carries: Optional[float] = Field(default=None, ge=0.0)
+    expected_targets: Optional[float] = Field(default=None, ge=0.0)
+    red_zone_share: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    goal_line_share: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    role_label: Optional[
+        Literal[
+            "STARTER",
+            "BACKUP",
+            "LEAD",
+            "COMMITTEE",
+            "PRIMARY",
+            "SECONDARY",
+            "ROTATION",
+        ]
+    ] = None
+    injury_status: Optional[str] = Field(default=None, max_length=64)
+    evidence: dict[str, Any] = Field(default_factory=dict)
+
+
+class PregameContextRunRequest(BaseModel):
+    season: int = Field(..., ge=2000)
+    week: int = Field(..., ge=1, le=25)
+    slate: str = Field(..., min_length=1, max_length=64)
+    source: str = Field(..., min_length=1, max_length=128)
+    source_uri: Optional[str] = None
+    observed_at: datetime
+    notes: Optional[str] = None
+    players: List[PregamePlayerContextInput] = Field(..., min_length=1)
+
+
+class PregameContextRunResponse(BaseModel):
+    context_run_id: str
+    season: int
+    week: int
+    slate: str
+    source: str
+    source_uri: Optional[str] = None
+    observed_at: datetime
+    received_at: datetime
+    notes: Optional[str] = None
+    content_hash: str
+    status: str
+    created_at: datetime
+    players: List[dict[str, Any]] = Field(default_factory=list)
+
+
+class PregameContextCurrentResponse(BaseModel):
+    season: int
+    week: int
+    slate: str
+    cutoff: datetime
+    context_run_ids: List[str] = Field(default_factory=list)
+    rows: List[dict[str, Any]] = Field(default_factory=list)
+    player_pool: List[dict[str, Any]] = Field(default_factory=list)
+
+
 class OptimizerRunRequest(BaseModel):
     season: int
     week: int
@@ -53,6 +119,7 @@ class OptimizerStatusResponse(BaseModel):
     lineage_persisted: bool = False
     message: Optional[str] = None
     results: Optional[list] = None
+    player_pool: Optional[dict[str, Any]] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -802,6 +869,73 @@ class BuildFeaturesResponse(BaseModel):
     weeks: Optional[List[int]] = None
     rows_written: int
     message: str
+    source_system: Optional[str] = None
+    slates_total: Optional[int] = None
+    slates_completed: Optional[int] = None
+    slates_failed: Optional[int] = None
+    rows: List[dict[str, Any]] = Field(default_factory=list)
+
+
+class BuildFeatureMatrixRequest(BaseModel):
+    season: int = Field(..., ge=2000)
+    weeks: Optional[List[int]] = None
+    slate: Optional[str] = None
+    source_system: Literal["draftkings", "fanduel"] = "draftkings"
+
+
+PipelineOperationStatus = Literal[
+    "not_run",
+    "queued",
+    "running",
+    "completed",
+    "failed",
+    "interrupted",
+]
+
+
+class PipelineOperationResult(BaseModel):
+    status: PipelineOperationStatus
+    status_at: Optional[datetime] = None
+    job_id: Optional[str] = None
+    run_id: Optional[str] = None
+    scope: Literal["slate", "season"] = "slate"
+    stage: Optional[str] = None
+    progress_current: int = 0
+    progress_total: int = 1
+    progress_percent: float = 0.0
+    message: Optional[str] = None
+    error_message: Optional[str] = None
+    rows_written: Optional[int] = None
+    slice_outcome: Optional[dict[str, Any]] = None
+    result: Optional[dict[str, Any]] = None
+
+
+class PipelineOperationSummary(BaseModel):
+    operation: Literal["features", "projections", "symbolic"]
+    status: PipelineOperationStatus
+    status_at: Optional[datetime] = None
+    latest_attempt: Optional[PipelineOperationResult] = None
+    last_success: Optional[PipelineOperationResult] = None
+
+
+class ProjectionSelectionSummary(BaseModel):
+    run_id: str
+    status: PipelineOperationStatus
+    status_at: Optional[datetime] = None
+    rows_written: Optional[int] = None
+    is_latest_success: bool = False
+
+
+class ModelPipelineSummaryResponse(BaseModel):
+    season: int
+    week: int
+    slate: str
+    generated_at: datetime
+    has_active_jobs: bool
+    features: PipelineOperationSummary
+    projections: PipelineOperationSummary
+    symbolic: PipelineOperationSummary
+    selected_projection: Optional[ProjectionSelectionSummary] = None
 
 
 class ProcessUnmatchedRequest(BaseModel):
@@ -842,6 +976,7 @@ class PredictionRow(BaseModel):
     calibration_position: str = ""
     calibration_role: str = ""
     calibration_sample_size: int = 0
+    feature_inputs: dict[str, Any] = Field(default_factory=dict)
     last3_points: List[float] = []
     last3_avg: float = 0.0
     recent_median: float = 0.0
@@ -874,10 +1009,19 @@ class ValidationResponse(BaseModel):
     results: List[WeeklyValidationRow]
 
 
+class StartingQBSelectionInput(BaseModel):
+    player_master_id: str = Field(..., min_length=1, max_length=36)
+    team: str = Field(..., min_length=2, max_length=16)
+    source: str = Field(..., min_length=1, max_length=64)
+    source_uri: Optional[str] = None
+    observed_at: datetime
+
+
 class StartingQBRequest(BaseModel):
     season: int
     week: int
     slate: str
+    starters: Optional[List[StartingQBSelectionInput]] = None
 
 
 class StartingQBResponse(BaseModel):

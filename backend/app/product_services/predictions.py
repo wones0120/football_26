@@ -18,6 +18,7 @@ from sqlalchemy import create_engine, text, inspect
 from sqlalchemy.exc import ProgrammingError
 
 from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.isotonic import IsotonicRegression
 
 from Database.config import get_connection_string
 from .optimizer import _normalize_alias
@@ -25,7 +26,14 @@ from .target_schema import validate_target_schema
 
 
 TARGET_COL = "label_dk_total_points"
-ACTIVE_MODEL_ID = "gradient_boosting_active_v2_position_calibrated"
+ACTIVE_MODEL_ID = "gradient_boosting_challenger_v4_1_team_opportunity_context"
+POINT_MODEL_RAW_WEIGHT = 0.80
+POINT_MODEL_HISTORY_WEIGHT = 0.20
+HISTORY_ROLL3_WEIGHT = 0.60
+HISTORY_ROLL8_WEIGHT = 0.40
+RB_TARGET_OPPORTUNITY_WEIGHT = 1.75
+VETERAN_OPPORTUNITY_ANCHOR_WEIGHT = 0.55
+LOW_HISTORY_OPPORTUNITY_ANCHOR_WEIGHT = 0.70
 CALIBRATION_QUANTILES = {
     "p10": 0.10,
     "p25": 0.25,
@@ -109,6 +117,224 @@ def derive_calibration_roles(frame: pd.DataFrame) -> pd.Series:
     return roles
 
 
+def blend_point_predictions(
+    raw_predictions: np.ndarray,
+    train_df: pd.DataFrame,
+    target_df: pd.DataFrame,
+) -> np.ndarray:
+    """Blend model output with prior-only player history or a position baseline."""
+    raw = np.asarray(raw_predictions, dtype=float)
+    if len(raw) != len(target_df):
+        raise ValueError("Point prediction count does not match the scoring rows.")
+
+    labels = pd.to_numeric(train_df[TARGET_COL], errors="coerce")
+    global_mean = float(labels.mean()) if labels.notna().any() else 0.0
+    train_positions = train_df.get(
+        "position", pd.Series("UNKNOWN", index=train_df.index)
+    ).fillna("UNKNOWN").astype(str).str.upper()
+    position_means = (
+        pd.DataFrame({"position": train_positions, "label": labels})
+        .dropna(subset=["label"])
+        .groupby("position")["label"]
+        .mean()
+        .to_dict()
+    )
+    target_positions = target_df.get(
+        "position", pd.Series("UNKNOWN", index=target_df.index)
+    ).fillna("UNKNOWN").astype(str).str.upper()
+    baselines = np.asarray(
+        [float(position_means.get(position, global_mean)) for position in target_positions],
+        dtype=float,
+    )
+
+    def numeric_column(name: str) -> np.ndarray:
+        values = (
+            target_df[name]
+            if name in target_df.columns
+            else pd.Series(0.0, index=target_df.index)
+        )
+        return pd.to_numeric(values, errors="coerce").fillna(0.0).to_numpy(dtype=float)
+
+    games_history = numeric_column("player_games_history")
+    roll3 = numeric_column("player_roll3_mean")
+    roll8 = numeric_column("player_roll8_mean")
+    history_anchor = (HISTORY_ROLL3_WEIGHT * roll3) + (
+        HISTORY_ROLL8_WEIGHT * roll8
+    )
+    history_anchor = np.where(games_history >= 3.0, history_anchor, baselines)
+    blended = (POINT_MODEL_RAW_WEIGHT * raw) + (
+        POINT_MODEL_HISTORY_WEIGHT * history_anchor
+    )
+    return np.maximum(0.0, blended)
+
+
+def _opportunity_units(frame: pd.DataFrame) -> pd.Series:
+    """Return role-volume units without using current-game outcomes."""
+    positions = frame.get(
+        "position", pd.Series("UNKNOWN", index=frame.index)
+    ).fillna("UNKNOWN").astype(str).str.upper()
+    carries = pd.to_numeric(
+        frame.get("carries_mean_3", pd.Series(0.0, index=frame.index)),
+        errors="coerce",
+    ).fillna(0.0).clip(lower=0.0)
+    targets = pd.to_numeric(
+        frame.get("targets_mean_3", pd.Series(0.0, index=frame.index)),
+        errors="coerce",
+    ).fillna(0.0).clip(lower=0.0)
+    units = pd.Series(0.0, index=frame.index, dtype=float)
+    running_backs = positions.eq("RB")
+    receivers = positions.isin({"WR", "TE"})
+    units.loc[running_backs] = (
+        carries.loc[running_backs]
+        + (RB_TARGET_OPPORTUNITY_WEIGHT * targets.loc[running_backs])
+    )
+    units.loc[receivers] = targets.loc[receivers]
+    return units
+
+
+def _fit_opportunity_anchor_models(
+    train_df: pd.DataFrame,
+) -> tuple[dict[str, IsotonicRegression], dict[str, Any]]:
+    """Fit monotonic role-volume response curves from prior training rows."""
+    labels = pd.to_numeric(train_df[TARGET_COL], errors="coerce")
+    positions = train_df.get(
+        "position", pd.Series("UNKNOWN", index=train_df.index)
+    ).fillna("UNKNOWN").astype(str).str.upper()
+    units = _opportunity_units(train_df)
+    evidence = pd.DataFrame(
+        {"position": positions, "label": labels, "units": units}
+    ).dropna(subset=["label"])
+    evidence = evidence.loc[
+        evidence["position"].isin({"RB", "WR", "TE"})
+        & evidence["units"].gt(0.0)
+    ].copy()
+    models: dict[str, IsotonicRegression] = {}
+    training_rows: dict[str, int] = {}
+    reference_points: dict[str, dict[str, float]] = {}
+    for position, position_rows in evidence.groupby("position"):
+        if len(position_rows) < 2 or position_rows["units"].nunique() < 2:
+            continue
+        model = IsotonicRegression(y_min=0.0, out_of_bounds="clip")
+        model.fit(
+            position_rows["units"].to_numpy(dtype=float),
+            position_rows["label"].to_numpy(dtype=float),
+        )
+        models[str(position)] = model
+        training_rows[str(position)] = int(len(position_rows))
+        examples = [1.0, 3.0, 5.0, 7.0, 10.0, 15.0]
+        reference_points[str(position)] = {
+            f"{units:g}": float(model.predict([units])[0])
+            for units in examples
+        }
+    return models, {
+        "method": "prior_training_position_isotonic_opportunity_curve",
+        "rb_target_opportunity_weight": RB_TARGET_OPPORTUNITY_WEIGHT,
+        "veteran_anchor_weight": VETERAN_OPPORTUNITY_ANCHOR_WEIGHT,
+        "low_history_anchor_weight": LOW_HISTORY_OPPORTUNITY_ANCHOR_WEIGHT,
+        "activation": (
+            "current carry/target share or availability evidence changes a team allocation"
+        ),
+        "position_training_rows": training_rows,
+        "position_reference_points": reference_points,
+    }
+
+
+def opportunity_point_contract(train_df: pd.DataFrame) -> dict[str, Any]:
+    """Describe prior-only position anchors used for current role evidence."""
+    _, contract = _fit_opportunity_anchor_models(train_df)
+    return contract
+
+
+def apply_opportunity_point_adjustment(
+    base_predictions: np.ndarray,
+    train_df: pd.DataFrame,
+    target_df: pd.DataFrame,
+) -> tuple[np.ndarray, pd.DataFrame]:
+    """Blend explicit current role evidence into otherwise historical means."""
+    base = np.asarray(base_predictions, dtype=float)
+    if len(base) != len(target_df):
+        raise ValueError("Point prediction count does not match the scoring rows.")
+    models, _ = _fit_opportunity_anchor_models(train_df)
+    positions = target_df.get(
+        "position", pd.Series("UNKNOWN", index=target_df.index)
+    ).fillna("UNKNOWN").astype(str).str.upper().reset_index(drop=True)
+    units = _opportunity_units(target_df).reset_index(drop=True)
+    history = pd.to_numeric(
+        target_df.get(
+            "player_games_history", pd.Series(0.0, index=target_df.index)
+        ),
+        errors="coerce",
+    ).fillna(0.0).reset_index(drop=True)
+    context_applied = target_df.get(
+        "pregame_opportunity_context_applied",
+        pd.Series(False, index=target_df.index),
+    ).fillna(False).astype(bool).reset_index(drop=True)
+
+    adjusted = base.copy()
+    anchors = np.full(len(base), np.nan, dtype=float)
+    weights = np.zeros(len(base), dtype=float)
+    for index in range(len(base)):
+        position = str(positions.iloc[index])
+        if not bool(context_applied.iloc[index]) or position not in models:
+            continue
+        anchor = max(
+            0.0,
+            float(models[position].predict([float(units.iloc[index])])[0]),
+        )
+        weight = (
+            LOW_HISTORY_OPPORTUNITY_ANCHOR_WEIGHT
+            if float(history.iloc[index]) < 3.0
+            else VETERAN_OPPORTUNITY_ANCHOR_WEIGHT
+        )
+        anchors[index] = anchor
+        weights[index] = weight
+        adjusted[index] = ((1.0 - weight) * base[index]) + (weight * anchor)
+
+    details = pd.DataFrame(
+        {
+            "pregame_point_mean_before_opportunity": base,
+            "pregame_opportunity_point_anchor": anchors,
+            "pregame_opportunity_point_weight": weights,
+            "pregame_point_mean_after_opportunity": adjusted,
+        }
+    )
+    return np.maximum(0.0, adjusted), details
+
+
+def point_estimate_contract(train_df: pd.DataFrame) -> dict[str, Any]:
+    """Return the persisted point-model contract and its training baselines."""
+    labels = pd.to_numeric(train_df[TARGET_COL], errors="coerce")
+    positions = train_df.get(
+        "position", pd.Series("UNKNOWN", index=train_df.index)
+    ).fillna("UNKNOWN").astype(str).str.upper()
+    summary = pd.DataFrame({"position": positions, "label": labels}).dropna(
+        subset=["label"]
+    )
+    return {
+        "model": "gradient_boosting_with_position_indicators",
+        "raw_model_weight": POINT_MODEL_RAW_WEIGHT,
+        "history_anchor_weight": POINT_MODEL_HISTORY_WEIGHT,
+        "history_anchor": (
+            f"{HISTORY_ROLL3_WEIGHT:.2f} * player_roll3_mean + "
+            f"{HISTORY_ROLL8_WEIGHT:.2f} * player_roll8_mean"
+        ),
+        "history_minimum_games": 3,
+        "history_fallback": "position_training_mean",
+        "position_training_rows": {
+            str(position): int(len(rows))
+            for position, rows in summary.groupby("position")
+        },
+        "position_training_means": {
+            str(position): float(rows["label"].mean())
+            for position, rows in summary.groupby("position")
+        },
+        "training_zero_rate": float((summary["label"] == 0).mean())
+        if not summary.empty
+        else 0.0,
+        "pregame_opportunity_adjustment": opportunity_point_contract(train_df),
+    }
+
+
 @dataclass(frozen=True)
 class ResidualCalibrationProfile:
     position: str
@@ -168,7 +394,11 @@ def generate_walk_forward_residuals(
         model = GradientBoostingRegressor(random_state=42)
         model.fit(X_train, y_train)
         raw_predictions = model.predict(X_validation)
-        point_predictions = 0.6 * raw_predictions + 0.4 * float(y_train.mean())
+        point_predictions = blend_point_predictions(
+            raw_predictions,
+            prior,
+            validation,
+        )
 
         residual_frame = validation[["season", "week", "position", "calibration_role"]].copy()
         if "player_id" in validation.columns:
@@ -451,7 +681,10 @@ class PredictionRunContext:
 
 def prediction_code_hash() -> str:
     """Hash the prediction implementation recorded by newly persisted model runs."""
-    return hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+    return hashlib.sha256(
+        Path(__file__).read_bytes()
+        + Path(__file__).with_name("canonical_projection_inputs.py").read_bytes()
+    ).hexdigest()
 
 
 def create_prediction_run_context(
@@ -529,7 +762,7 @@ class PredictionRunResult:
 
 
 class PredictionsService:
-    """Train per-position models and persist append-only target projection runs."""
+    """Train position-aware models and persist append-only target projection runs."""
 
     def __init__(self, connection_string: str | None = None) -> None:
         self.connection_string = connection_string or get_connection_string()
@@ -636,20 +869,25 @@ class PredictionsService:
     def _predict_point_estimates(
         self,
         model: GradientBoostingRegressor,
-        y_train: pd.Series,
-        X_pred: pd.DataFrame,
+        train_df: pd.DataFrame,
+        target_df: pd.DataFrame,
+        feature_cols: list[str],
     ) -> np.ndarray:
-        """Predict central estimates; uncertainty comes from walk-forward calibration."""
-        preds = model.predict(X_pred)
-        # Blend toward position mean to reduce spiky outputs
-        pos_mean = float(y_train.mean()) if len(y_train) else 0.0
-        preds = 0.6 * preds + 0.4 * pos_mean
+        """Predict position-aware means with a prior-only player-history anchor."""
+        raw_predictions = model.predict(target_df[feature_cols])
+        preds = blend_point_predictions(raw_predictions, train_df, target_df)
+        y_train = pd.to_numeric(train_df[TARGET_COL], errors="coerce")
         print(
             f"[predictions] train target stats min/med/mean/max="
             f"{y_train.min():.2f}/{y_train.median():.2f}/{y_train.mean():.2f}/{y_train.max():.2f}"
         )
         print(
             f"[predictions] raw model preds min/med/mean/max="
+            f"{raw_predictions.min():.2f}/{np.median(raw_predictions):.2f}/"
+            f"{raw_predictions.mean():.2f}/{raw_predictions.max():.2f}"
+        )
+        print(
+            f"[predictions] history-anchored preds min/med/mean/max="
             f"{preds.min():.2f}/{np.median(preds):.2f}/{preds.mean():.2f}/{preds.max():.2f}"
         )
         return preds
@@ -662,16 +900,19 @@ class PredictionsService:
         week: int,
         slate: str,
         feature_cols: list[str],
+        feature_lineage_cols: list[str] | None = None,
         train_df: pd.DataFrame,
         source_features: pd.DataFrame,
         projections: pd.DataFrame,
         calibration_metrics: dict[str, Any] | None = None,
+        source_versions: dict[str, Any] | None = None,
     ) -> bool:
         """Persist append-only active prediction lineage in the target schema."""
         validate_target_schema(
             self.engine,
             consumer=type(self).__name__,
             required_tables=(
+                "dim_player",
                 "feature_generation_run",
                 "feature_player_game",
                 "model_registry",
@@ -707,7 +948,7 @@ class PredictionsService:
                         "feature_run_id": context.feature_run_id,
                         "training_cutoff": context.data_cutoff_at,
                         "source_versions_json": json.dumps(
-                            {
+                            source_versions or {
                                 "source": "public.predictive_features",
                                 "target_season": season,
                                 "target_week": week,
@@ -725,7 +966,7 @@ class PredictionsService:
                             (model_id, model_name, model_version, trained_on_start,
                              trained_on_end, feature_set_hash, metrics_json, artifact_uri)
                         VALUES
-                            (:model_id, 'Active gradient boosting', 'v2-position-calibrated', :trained_on_start,
+                            (:model_id, 'Position-aware full-team opportunity-context gradient boosting', 'v4.1-team-opportunity-context', :trained_on_start,
                              :trained_on_end, :feature_set_hash, CAST(:metrics_json AS JSONB), NULL)
                         ON CONFLICT (model_id) DO UPDATE SET
                             trained_on_start = EXCLUDED.trained_on_start,
@@ -768,8 +1009,19 @@ class PredictionsService:
                                 "random_state": 42,
                                 "training_rows": len(train_df),
                                 "feature_columns": feature_cols,
+                                "feature_lineage_columns": feature_lineage_cols or [],
                                 "code_hash": context.code_hash,
-                                "uncertainty_model": "position-aware walk-forward residual quantiles",
+                                "point_estimate": point_estimate_contract(train_df),
+                                "training_filter": _json_safe(
+                                    (source_versions or {}).get("participation_filter", {})
+                                ),
+                                "opportunity_features": _json_safe(
+                                    (source_versions or {}).get("opportunity_features", {})
+                                ),
+                                "pregame_context": _json_safe(
+                                    (source_versions or {}).get("pregame_context", {})
+                                ),
+                                "uncertainty_model": "position-and-role-aware walk-forward residual quantiles",
                                 "calibration": _json_safe(calibration_metrics or {}),
                             },
                             sort_keys=True,
@@ -786,8 +1038,13 @@ class PredictionsService:
                     row_dict = projection.to_dict()
                     game_id = str(row_dict["game_id"])
                     player_id = str(row_dict["player_id"])
+                    persisted_feature_columns = list(
+                        dict.fromkeys([*feature_cols, *(feature_lineage_cols or [])])
+                    )
                     feature_payload = {
-                        col: _json_safe(source.get(col)) for col in feature_cols if col in source.index
+                        col: _json_safe(source.get(col))
+                        for col in persisted_feature_columns
+                        if col in source.index
                     }
                     feature_rows.append(
                         {
@@ -835,6 +1092,37 @@ class PredictionsService:
                     )
 
                 if feature_rows:
+                    connection.execute(
+                        text(
+                            """
+                            INSERT INTO target.dim_player
+                                (player_id, full_name, primary_position,
+                                 normalized_name, created_at, updated_at)
+                            SELECT player_master_id, full_name, position,
+                                   normalized_name, created_at, updated_at
+                            FROM public.player_master
+                            WHERE player_master_id = ANY(:player_ids)
+                            ON CONFLICT (player_id) DO UPDATE SET
+                                full_name = COALESCE(
+                                    NULLIF(EXCLUDED.full_name, ''),
+                                    target.dim_player.full_name
+                                ),
+                                primary_position = COALESCE(
+                                    NULLIF(EXCLUDED.primary_position, ''),
+                                    target.dim_player.primary_position
+                                ),
+                                normalized_name = COALESCE(
+                                    NULLIF(EXCLUDED.normalized_name, ''),
+                                    target.dim_player.normalized_name
+                                ),
+                                updated_at = GREATEST(
+                                    target.dim_player.updated_at,
+                                    EXCLUDED.updated_at
+                                )
+                            """
+                        ),
+                        {"player_ids": [row["player_id"] for row in feature_rows]},
+                    )
                     connection.execute(
                         text(
                             """
@@ -910,6 +1198,146 @@ class PredictionsService:
             logging.warning("Failed to persist target prediction lineage: %s", exc)
             return False
 
+    def _train_canonical(
+        self, *, season, week, positions, slate, data_cutoff_at,
+        feature_run_id, model_run_id, projection_run_id,
+    ) -> PredictionRunResult:
+        from .canonical_projection_inputs import (
+            FEATURE_COLUMNS,
+            PREGAME_LINEAGE_COLUMNS,
+            load_inputs,
+        )
+
+        context = create_prediction_run_context(
+            FEATURE_COLUMNS, data_cutoff_at=data_cutoff_at,
+            feature_run_id=feature_run_id, model_run_id=model_run_id,
+            projection_run_id=projection_run_id,
+        )
+        train, target, sources = load_inputs(
+            self.engine, season=season, week=week, slate=slate,
+            cutoff=context.data_cutoff_at, positions=list(positions) if positions else None,
+        )
+        residuals = generate_walk_forward_residuals(train, FEATURE_COLUMNS)
+        profiles, metrics = build_position_calibration(residuals, train)
+        metrics["input_coverage"] = {
+            "projected_players": len(target),
+            "unresolved_salary_source_keys": sources["unresolved_salary_source_keys"],
+            "excluded_positions": sources["excluded_positions"],
+        }
+        metrics["point_estimate"] = point_estimate_contract(train)
+        metrics["training_filter"] = sources.get("participation_filter", {})
+        metrics["salary_status_policy"] = sources.get("salary_status_policy", {})
+        metrics["opportunity_features"] = sources.get("opportunity_features", {})
+        metrics["pregame_context"] = sources.get("pregame_context", {})
+        kicker_rows = target["position"].astype(str).str.upper().eq("K")
+        if kicker_rows.any():
+            kicker_history = pd.to_numeric(
+                target.loc[kicker_rows, "player_games_history"], errors="coerce"
+            ).fillna(0.0)
+            if (kicker_history < 1).any():
+                missing_kickers = target.loc[
+                    kicker_rows
+                    & pd.to_numeric(
+                        target["player_games_history"], errors="coerce"
+                    ).fillna(0.0).lt(1),
+                    "player_display_name",
+                ].astype(str).tolist()
+                raise ValueError(
+                    "Kicker projections require prior canonical game history; missing: "
+                    + ", ".join(missing_kickers)
+                )
+            metrics["kicker_point_estimate"] = {
+                "model": "prior_game_history_anchor",
+                "roll3_weight": HISTORY_ROLL3_WEIGHT,
+                "roll8_weight": HISTORY_ROLL8_WEIGHT,
+                "reason": (
+                    "The shared gradient-boosting training matrix does not yet contain "
+                    "historical kickers; do not extrapolate the position model."
+                ),
+            }
+        model = self._train_model(train[FEATURE_COLUMNS], train[TARGET_COL])
+        means = self._predict_point_estimates(model, train, target, FEATURE_COLUMNS)
+        means, opportunity_details = apply_opportunity_point_adjustment(
+            means,
+            train,
+            target,
+        )
+        for column in opportunity_details.columns:
+            target[column] = opportunity_details[column].to_numpy()
+        roles = derive_calibration_roles(target)
+        records = []
+        for index, row in target.iterrows():
+            position = str(row["position"])
+            derived_role = str(roles.iloc[index])
+            explicit_role = str(row.get("pregame_role_label") or "").upper()
+            role = (
+                explicit_role
+                if explicit_role
+                in {"LEAD", "COMMITTEE", "PRIMARY", "SECONDARY", "ROTATION"}
+                else derived_role
+            )
+            profile = profiles.get(f"{position}|{role}", profiles.get(position, profiles["__ALL__"]))
+            availability_probability = float(
+                row.get("pregame_availability_probability", 1.0) or 0.0
+            )
+            start_probability = (
+                float(row.get("pregame_start_probability", 1.0) or 0.0)
+                if position == "QB"
+                else 1.0
+            )
+            participation_probability = (
+                availability_probability * start_probability
+                if position == "QB"
+                else availability_probability
+            )
+            conditional_mean = max(0.0, float(means[index]))
+            if position == "K":
+                conditional_mean = max(
+                    0.0,
+                    (HISTORY_ROLL3_WEIGHT * float(row["player_roll3_mean"]))
+                    + (HISTORY_ROLL8_WEIGHT * float(row["player_roll8_mean"])),
+                )
+            conditional_quantiles = apply_residual_calibration(
+                conditional_mean, profile
+            )
+            mean = conditional_mean * participation_probability
+            quantiles = {
+                key: value * participation_probability
+                for key, value in conditional_quantiles.items()
+            }
+            records.append(PredictionRecord(
+                player_id=str(row["player_id"]), player_master_id=str(row["player_id"]),
+                player_display_name=str(row["player_display_name"]), position=position,
+                recent_team=str(row["recent_team"] or ""),
+                opponent_team=str(row["opponent_team"] or ""), season=season, week=week,
+                predicted_mean=mean, adj_mean=mean,
+                predicted_p10=quantiles["p10"], predicted_p25=quantiles["p25"],
+                predicted_p50=quantiles["p50"], predicted_p75=quantiles["p75"],
+                predicted_p90=quantiles["p90"], model="GradientBoosting",
+                feature_run_id=context.feature_run_id, model_run_id=context.model_run_id,
+                projection_run_id=context.projection_run_id, data_cutoff_at=context.data_cutoff_at,
+                game_id=prediction_game_id(row.to_dict(), season=season, week=week),
+                team_implied_total=float(row["team_implied_total"]),
+                team_spread=float(row["team_spread_line"]), game_total=float(row["game_total_line"]),
+                calibration_method=profile.source, calibration_position=position,
+                calibration_role=role, calibration_sample_size=profile.sample_size,
+            ))
+        projections = pd.DataFrame([record.__dict__ for record in records])
+        if not self._persist_target_prediction_run(
+            context=context, season=season, week=week, slate=slate,
+            feature_cols=FEATURE_COLUMNS,
+            feature_lineage_cols=PREGAME_LINEAGE_COLUMNS,
+            train_df=train, source_features=target,
+            projections=projections, calibration_metrics=metrics, source_versions=sources,
+        ):
+            raise RuntimeError("Canonical projections could not be persisted; the run is not complete.")
+        return PredictionRunResult(
+            records=records, feature_run_id=context.feature_run_id,
+            model_run_id=context.model_run_id, projection_run_id=context.projection_run_id,
+            data_cutoff_at=context.data_cutoff_at, target_persisted=True,
+            calibration_metrics=metrics,
+        )
+
     def train_and_predict(
         self,
         season: int,
@@ -921,6 +1349,12 @@ class PredictionsService:
         model_run_id: str | None = None,
         projection_run_id: str | None = None,
     ) -> PredictionRunResult:
+        if inspect(self.engine).has_table("curated_salary"):
+            return self._train_canonical(
+                season=season, week=week, positions=positions, slate=slate,
+                data_cutoff_at=data_cutoff_at, feature_run_id=feature_run_id,
+                model_run_id=model_run_id, projection_run_id=projection_run_id,
+            )
         df = self._load_features(season)
         if df.empty:
             logging.warning("No predictive_features available for season %s", season)
@@ -1122,7 +1556,7 @@ class PredictionsService:
             train_df,
         )
         model = self._train_model(X_train, y_train)
-        preds = self._predict_point_estimates(model, y_train, X_pred)
+        preds = self._predict_point_estimates(model, train_df, pred_df, feature_cols)
         pred_df = pred_df.reset_index(drop=True)
         pred_df["calibration_role"] = derive_calibration_roles(pred_df)
 
@@ -1501,9 +1935,14 @@ class PredictionsService:
             column["name"]
             for column in db_inspector.get_columns("player_projection", schema="target")
         }
-        has_salary = db_inspector.has_table("snapshot_salary", schema="target")
+        has_public_salary = db_inspector.has_table("curated_salary", schema="public")
+        has_target_salary = db_inspector.has_table("snapshot_salary", schema="target")
+        has_salary = has_public_salary or has_target_salary
         has_player = db_inspector.has_table("dim_player", schema="target")
         has_model_run = db_inspector.has_table("model_run", schema="target")
+        has_feature_inputs = db_inspector.has_table(
+            "feature_player_game", schema="target"
+        ) and has_model_run
 
         params: dict[str, Any] = {
             "season": season,
@@ -1524,7 +1963,38 @@ class PredictionsService:
 
         salary_cte = ""
         salary_join = ""
-        if has_salary:
+        salary_has_player_name = False
+        salary_has_position = False
+        if has_public_salary:
+            salary_has_player_name = True
+            salary_has_position = True
+            salary_filter = ""
+            if slate:
+                salary_filter = "AND UPPER(slate) = UPPER(:slate)"
+            salary_cte = f""",
+            latest_salary AS (
+                SELECT DISTINCT ON (player_master_id)
+                    player_master_id AS player_id,
+                    player_name,
+                    position,
+                    salary,
+                    roster_position,
+                    team AS team_id,
+                    opponent AS opponent_team_id,
+                    NULL::TEXT AS game_id
+                FROM public.curated_salary
+                WHERE season = :season AND week = :week
+                  AND source_system = 'draftkings'
+                  AND player_master_id IS NOT NULL
+                  {salary_filter}
+                ORDER BY player_master_id,
+                    CASE WHEN UPPER(COALESCE(roster_position, '')) = 'FLEX' THEN 0 ELSE 1 END,
+                    created_at DESC,
+                    curated_salary_id DESC
+            )
+            """
+            salary_join = "LEFT JOIN latest_salary s ON s.player_id = p.player_id"
+        elif has_target_salary:
             salary_filter = ""
             if slate:
                 salary_filter = "AND UPPER(COALESCE(slate, slate_id, '')) = UPPER(:slate)"
@@ -1541,7 +2011,7 @@ class PredictionsService:
                     as_of DESC
             )
             """
-            salary_join = f"{'JOIN' if slate else 'LEFT JOIN'} latest_salary s ON s.player_id = p.player_id"
+            salary_join = "LEFT JOIN latest_salary s ON s.player_id = p.player_id"
 
         player_join = "LEFT JOIN target.dim_player d ON d.player_id = p.player_id" if has_player else ""
         model_run_join = (
@@ -1549,8 +2019,29 @@ class PredictionsService:
             if has_model_run
             else ""
         )
-        player_name = "COALESCE(NULLIF(d.full_name, ''), p.player_id)" if has_player else "p.player_id"
+        feature_join = (
+            "LEFT JOIN target.feature_player_game f "
+            "ON f.feature_run_id = mr.feature_run_id "
+            "AND f.season = p.season AND f.week = p.week "
+            "AND f.player_id = p.player_id AND f.game_id = p.game_id"
+            if has_feature_inputs
+            else ""
+        )
+        feature_inputs = (
+            "COALESCE(f.feature_json, '{}'::jsonb)"
+            if has_feature_inputs
+            else "'{}'::jsonb"
+        )
+        player_name_candidates = []
+        if has_player:
+            player_name_candidates.append("NULLIF(d.full_name, '')")
+        if salary_has_player_name:
+            player_name_candidates.append("NULLIF(s.player_name, '')")
+        player_name_candidates.append("p.player_id")
+        player_name = f"COALESCE({', '.join(player_name_candidates)})"
         position_candidates = []
+        if salary_has_position:
+            position_candidates.append("NULLIF(s.position, '')")
         if has_salary:
             position_candidates.append(
                 "NULLIF(CASE WHEN UPPER(COALESCE(s.roster_position, '')) IN ('FLEX', 'CPT') "
@@ -1628,6 +2119,7 @@ class PredictionsService:
                 {calibration_position} AS calibration_position,
                 {calibration_role} AS calibration_role,
                 {calibration_sample_size} AS calibration_sample_size,
+                {feature_inputs} AS feature_inputs,
                 COALESCE(p.mean, 0.0) AS adj_mean,
                 COALESCE(p.mean, 0.0) AS adj_mean_base,
                 1.0 AS matchup_factor,
@@ -1636,6 +2128,7 @@ class PredictionsService:
             {salary_join}
             {player_join}
             {model_run_join}
+            {feature_join}
             ORDER BY COALESCE(p.mean, 0.0) DESC
             LIMIT :limit
             """
@@ -1714,9 +2207,10 @@ class PredictionsService:
                 if use_legacy_schema and db_inspector.has_table("nfl_weekly_data_with_scores"):
                     actuals_df = pd.read_sql(
                         text(
-                            "SELECT player_id, week, dk_total_points "
+                            "SELECT player_id, season, week, dk_total_points "
                             "FROM nfl_weekly_data_with_scores "
-                            "WHERE season = :season AND week < :week AND player_id = ANY(:player_ids)"
+                            "WHERE (season < :season OR (season = :season AND week < :week)) "
+                            "AND player_id = ANY(:player_ids)"
                         ),
                         connection,
                         params={"season": season, "week": week, "player_ids": player_ids},
@@ -1729,7 +2223,7 @@ class PredictionsService:
                             "SUM(dk_total_points) AS total_points, "
                             "COUNT(DISTINCT week) AS games_played "
                             "FROM nfl_weekly_data_with_scores "
-                            "WHERE season = :season AND week < :week "
+                            "WHERE (season < :season OR (season = :season AND week < :week)) "
                             "GROUP BY COALESCE(recent_team, team), position"
                         ),
                         connection,
@@ -1738,9 +2232,10 @@ class PredictionsService:
                 elif db_inspector.has_table("fact_player_game_actual", schema="target"):
                     actuals_df = pd.read_sql(
                         text(
-                            "SELECT player_id, week, dk_points AS dk_total_points "
+                            "SELECT player_id, season, week, dk_points AS dk_total_points "
                             "FROM target.fact_player_game_actual "
-                            "WHERE season = :season AND week < :week AND player_id = ANY(:player_ids)"
+                            "WHERE (season < :season OR (season = :season AND week < :week)) "
+                            "AND player_id = ANY(:player_ids)"
                         ),
                         connection,
                         params={"season": season, "week": week, "player_ids": player_ids},
@@ -1751,7 +2246,7 @@ class PredictionsService:
                             "SUM(dk_points) AS total_points, "
                             "COUNT(DISTINCT week) AS games_played "
                             "FROM target.fact_player_game_actual "
-                            "WHERE season = :season AND week < :week "
+                            "WHERE (season < :season OR (season = :season AND week < :week)) "
                             "GROUP BY team_id, position"
                         ),
                         connection,
@@ -1861,7 +2356,13 @@ class PredictionsService:
 
         last3_map: dict[str, list[float]] = {}
         if not actuals_df.empty:
-            actuals_df = actuals_df.sort_values("week", ascending=False)
+            actual_sort_columns = [
+                column for column in ("season", "week") if column in actuals_df
+            ]
+            actuals_df = actuals_df.sort_values(
+                actual_sort_columns,
+                ascending=[False] * len(actual_sort_columns),
+            )
             for pid, group in actuals_df.groupby("player_id"):
                 vals = group["dk_total_points"].dropna().tolist()[:3]
                 last3_map[pid] = vals
@@ -1875,7 +2376,21 @@ class PredictionsService:
 
             pid = row_dict.get("player_id", "")
             l3 = last3_map.get(pid, [])
-            l3_avg = float(sum(l3) / len(l3)) if l3 else 0.0
+            feature_inputs = row_dict.get("feature_inputs") or {}
+            if isinstance(feature_inputs, str):
+                try:
+                    feature_inputs = json.loads(feature_inputs)
+                except json.JSONDecodeError:
+                    feature_inputs = {}
+            if not isinstance(feature_inputs, dict):
+                feature_inputs = {}
+            l3_avg = float(
+                feature_inputs.get(
+                    "player_roll3_mean",
+                    sum(l3) / len(l3) if l3 else 0.0,
+                )
+                or 0.0
+            )
             recent_median = float(row_dict.get("recent_median", np.median(l3) if l3 else 0.0))
             model_mean = float(row_dict.get("predicted_mean", 0.0))
             recent_team_val = row_dict.get("recent_team", "")
@@ -1929,6 +2444,7 @@ class PredictionsService:
                     "calibration_position": _str(row_dict.get("calibration_position", "")),
                     "calibration_role": _str(row_dict.get("calibration_role", "")),
                     "calibration_sample_size": int(row_dict.get("calibration_sample_size", 0) or 0),
+                    "feature_inputs": feature_inputs,
                     "last3_points": l3,
                     "last3_avg": l3_avg,
                     "recent_median": recent_median,

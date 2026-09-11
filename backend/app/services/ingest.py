@@ -538,7 +538,7 @@ class IngestService:
                 UnresolvedPlayerQueue.source_table == source_table,
                 UnresolvedPlayerQueue.season == season,
                 UnresolvedPlayerQueue.week == week,
-                UnresolvedPlayerQueue.slate == slate,
+                func.lower(UnresolvedPlayerQueue.slate) == slate.strip().lower(),
             )
         ).delete(synchronize_session=False)
 
@@ -548,7 +548,7 @@ class IngestService:
                     CuratedSalary.source_system == source_system,
                     CuratedSalary.season == season,
                     CuratedSalary.week == week,
-                    CuratedSalary.slate == slate,
+                    func.lower(CuratedSalary.slate) == slate.strip().lower(),
                 )
             ).delete(synchronize_session=False)
         elif source_table == "injury":
@@ -557,7 +557,7 @@ class IngestService:
                     CuratedInjury.source_system == source_system,
                     CuratedInjury.season == season,
                     CuratedInjury.week == week,
-                    CuratedInjury.slate == slate,
+                    func.lower(CuratedInjury.slate) == slate.strip().lower(),
                 )
             ).delete(synchronize_session=False)
 
@@ -570,6 +570,9 @@ class IngestService:
                 team = _safe_str(_column_map(row, ["TeamAbbrev", "Team", "team"]))
                 position = _safe_str(_column_map(row, ["Position", "position"]))
                 roster_position = _safe_str(_column_map(row, ["Roster Position", "RosterPosition"]))
+                player_status = _safe_str(
+                    _column_map(row, ["Status", "Player Status", "Injury Indicator", "status"])
+                )
                 salary_val = _column_map(row, ["Salary", "salary"])
                 game_info = _safe_str(_column_map(row, ["Game Info", "GameInfo", "game_info"]))
             else:
@@ -578,6 +581,9 @@ class IngestService:
                 team = _safe_str(_column_map(row, ["Team", "TeamAbbrev", "team"]))
                 position = _safe_str(_column_map(row, ["Position", "position"]))
                 roster_position = position
+                player_status = _safe_str(
+                    _column_map(row, ["Injury Indicator", "Status", "Player Status", "status"])
+                )
                 salary_val = _column_map(row, ["Salary", "salary"])
                 game_info = _safe_str(_column_map(row, ["Game", "Game Info", "game_info"]))
 
@@ -595,6 +601,7 @@ class IngestService:
                     "opponent": parse_opponent_from_game_info(game_info, norm_team),
                     "position": normalize_position(position),
                     "roster_position": normalize_position(roster_position) or normalize_position(position),
+                    "player_status": player_status.strip().upper() or None,
                     "salary": salary,
                     "game_info": game_info or None,
                     "raw_row_json": _row_json(row),
@@ -877,6 +884,7 @@ class IngestService:
                         opponent=row["opponent"],
                         position=row["position"],
                         roster_position=row["roster_position"],
+                        player_status=row["player_status"],
                         salary=row["salary"],
                         game_info=row["game_info"],
                     )
@@ -1376,32 +1384,57 @@ class IngestService:
             )
             return IngestResultResponse.model_validate(run, from_attributes=True)
 
-    def ingest_nflreadpy_weekly_rosters(self, request: NflReadPySeasonRequest) -> IngestResultResponse:
+    def ingest_nflreadpy_weekly_rosters(
+        self,
+        request: NflReadPySeasonRequest,
+        *,
+        source_frame: pd.DataFrame | None = None,
+        ingest_run_id: str | None = None,
+        source_path: str | None = None,
+    ) -> IngestResultResponse:
+        completed = self._completed_run(ingest_run_id)
+        if completed is not None:
+            return IngestResultResponse.model_validate(completed, from_attributes=True)
+
+        selected_weeks = sorted(set(request.weeks or []))
         run = self._new_run(
             source_system="nflreadpy",
             source_table="weekly_rosters",
-            source_path=None,
+            source_path=source_path,
             season=request.season,
-            week=None,
+            week=selected_weeks[0] if len(selected_weeks) == 1 else None,
             slate=None,
+            ingest_run_id=ingest_run_id,
         )
         rows_raw = 0
         rows_curated = 0
         rows_unresolved = 0
         try:
-            try:
-                import nflreadpy as nfl  # type: ignore
-            except ModuleNotFoundError as exc:
-                raise RuntimeError(
-                    "nflreadpy is not installed. Activate your virtualenv and run "
-                    "`pip install -r requirements.txt`, then restart the API."
-                ) from exc
+            if source_frame is None:
+                try:
+                    import nflreadpy as nfl  # type: ignore
+                except ModuleNotFoundError as exc:
+                    raise RuntimeError(
+                        "nflreadpy is not installed. Activate your virtualenv and run "
+                        "`pip install -r requirements.txt`, then restart the API."
+                    ) from exc
 
-            df = self._load_nflreadpy_weekly_rosters(
-                nfl_module=nfl,
-                season=request.season,
-                weeks=request.weeks,
-            )
+                df = self._load_nflreadpy_weekly_rosters(
+                    nfl_module=nfl,
+                    season=request.season,
+                    weeks=request.weeks,
+                )
+            else:
+                df = _coerce_dataframe(source_frame).copy()
+                if selected_weeks:
+                    if "week" not in df.columns:
+                        raise RuntimeError(
+                            "Could not find a usable week column in captured nflreadpy "
+                            "weekly rosters."
+                        )
+                    df = df[
+                        pd.to_numeric(df["week"], errors="coerce").isin(selected_weeks)
+                    ]
             if df.empty:
                 raise RuntimeError("nflreadpy weekly rosters returned no records.")
             if "week" not in df.columns:
@@ -1953,7 +1986,7 @@ class IngestService:
                     CuratedSalary.source_system == source_system,
                     CuratedSalary.season == season,
                     CuratedSalary.week == week,
-                    CuratedSalary.slate == slate,
+                    func.lower(CuratedSalary.slate) == slate.strip().lower(),
                 ),
             ),
             (
@@ -1966,7 +1999,7 @@ class IngestService:
                     CuratedInjury.source_system == source_system,
                     CuratedInjury.season == season,
                     CuratedInjury.week == week,
-                    CuratedInjury.slate == slate,
+                    func.lower(CuratedInjury.slate) == slate.strip().lower(),
                 ),
             ),
             (

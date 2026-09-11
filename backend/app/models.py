@@ -275,6 +275,7 @@ class CuratedSalary(Base):
     opponent: Mapped[str | None] = mapped_column(String(16))
     position: Mapped[str | None] = mapped_column(String(16))
     roster_position: Mapped[str | None] = mapped_column(String(16))
+    player_status: Mapped[str | None] = mapped_column(String(32))
     salary: Mapped[int | None] = mapped_column(Integer)
     game_info: Mapped[str | None] = mapped_column(String(128))
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow_naive)
@@ -875,6 +876,50 @@ class CuratedPlayerGameParticipation(Base):
     roster_ingest_run_id: Mapped[str | None] = mapped_column(String(36))
     snap_ingest_run_id: Mapped[str | None] = mapped_column(String(36))
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow_naive)
+
+
+class StartingQBEvidence(Base):
+    __tablename__ = "starting_qb_evidence"
+    __table_args__ = (
+        UniqueConstraint(
+            "season",
+            "week",
+            "slate",
+            "team",
+            name="uq_starting_qb_evidence_slate_team",
+        ),
+        Index(
+            "idx_starting_qb_evidence_player",
+            "player_master_id",
+            "season",
+            "week",
+        ),
+    )
+
+    starting_qb_id: Mapped[int] = mapped_column(
+        BIGINT_ID, primary_key=True, autoincrement=True
+    )
+    season: Mapped[int] = mapped_column(Integer, nullable=False)
+    week: Mapped[int] = mapped_column(Integer, nullable=False)
+    slate: Mapped[str] = mapped_column(String(64), nullable=False)
+    team: Mapped[str] = mapped_column(String(16), nullable=False)
+    player_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    player_master_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("player_master.player_master_id"), nullable=False
+    )
+    player_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False)
+    source: Mapped[str] = mapped_column(String(64), nullable=False)
+    evidence_tier: Mapped[str] = mapped_column(String(24), nullable=False)
+    evidence_json: Mapped[dict] = mapped_column(
+        JSON_DOCUMENT, nullable=False, default=dict
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow_naive
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow_naive, onupdate=utcnow_naive
+    )
 
 
 class TeamGameAvailabilityFeature(Base):

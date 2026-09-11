@@ -4,6 +4,7 @@ from datetime import timedelta
 from backend.app.product_services.gpp_optimizer import (
     Player,
     TagThresholds,
+    build_large_gpp_config,
     classic_template_score,
     generate_portfolio,
     ownership_bucket,
@@ -132,6 +133,55 @@ class GppTemplateScoringTests(unittest.TestCase):
             {player.player_id for player in result.lineups[0]}
             <= {player.player_id for player in players}
         )
+
+    def test_large_gpp_honors_requested_minimum_exposure(self):
+        players = [
+            Player("qb-a", "QB A", "A", "B", "QB", 5000, 20, 30, 0, game_id="A-B"),
+            Player("rb-a", "RB A", "A", "B", "RB", 5000, 18, 28, 0, game_id="A-B"),
+            Player("rb-b", "RB B", "B", "A", "RB", 5000, 17, 27, 0, game_id="A-B"),
+            Player("rb-c", "RB C", "C", "D", "RB", 5000, 16, 26, 0, game_id="C-D"),
+            Player("wr-a", "WR A", "A", "B", "WR", 5000, 15, 25, 0, game_id="A-B"),
+            Player("wr-b", "WR B", "B", "A", "WR", 5000, 14, 24, 0, game_id="A-B"),
+            Player("wr-c", "WR C", "C", "D", "WR", 5000, 13, 23, 0, game_id="C-D"),
+            Player("wr-d", "WR D", "D", "C", "WR", 5000, 12, 22, 0, game_id="C-D"),
+            Player("te-a", "TE A", "A", "B", "TE", 5000, 11, 21, 0, game_id="A-B"),
+            Player("te-b", "TE B", "B", "A", "TE", 4000, 5, 10, 0, game_id="A-B"),
+            Player("dst-c", "DST C", "C", "D", "DST", 3000, 9, 19, 0, game_id="C-D"),
+        ]
+
+        result = generate_portfolio(
+            season=2026,
+            week=1,
+            slate="SUNDAY_MAIN",
+            num_lineups=1,
+            engine=object(),
+            config_builder=build_large_gpp_config,
+            players=players,
+            ownership_available=False,
+            max_exposure=1.0,
+            minimum_exposure_by_player={"te-b": 1.0},
+        )
+
+        self.assertEqual(result.status, "completed")
+        self.assertIn("te-b", {player.player_id for player in result.lineups[0]})
+
+    def test_large_gpp_rejects_exposure_for_player_outside_candidate_pool(self):
+        players = [
+            Player("qb-a", "QB A", "A", "B", "QB", 5000, 20, 30, 0),
+        ]
+
+        with self.assertRaisesRegex(ValueError, "outside the candidate pool"):
+            generate_portfolio(
+                season=2026,
+                week=1,
+                slate="SUNDAY_MAIN",
+                num_lineups=1,
+                engine=object(),
+                config_builder=build_large_gpp_config,
+                players=players,
+                ownership_available=False,
+                minimum_exposure_by_player={"missing-player": 1.0},
+            )
 
 
 if __name__ == "__main__":

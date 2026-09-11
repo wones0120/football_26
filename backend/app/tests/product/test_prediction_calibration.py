@@ -4,7 +4,9 @@ import pandas as pd
 
 from backend.app.product_services.predictions import (
     TARGET_COL,
+    apply_opportunity_point_adjustment,
     apply_residual_calibration,
+    blend_point_predictions,
     build_position_calibration,
     derive_calibration_roles,
     generate_walk_forward_residuals,
@@ -12,6 +14,67 @@ from backend.app.product_services.predictions import (
 
 
 class PredictionCalibrationTests(unittest.TestCase):
+    def test_current_opportunity_evidence_moves_veterans_and_rookies(self):
+        train = pd.DataFrame(
+            {
+                "position": ["RB", "RB", "WR", "WR"],
+                "carries_mean_3": [10.0, 12.0, 0.0, 0.0],
+                "targets_mean_3": [2.0, 0.0, 5.0, 6.0],
+                TARGET_COL: [13.5, 12.0, 10.0, 12.0],
+            }
+        )
+        target = pd.DataFrame(
+            {
+                "position": ["RB", "WR", "WR"],
+                "player_games_history": [0, 10, 10],
+                "carries_mean_3": [10.0, 0.0, 0.0],
+                "targets_mean_3": [2.0, 6.0, 6.0],
+                "pregame_opportunity_context_applied": [True, True, False],
+            }
+        )
+
+        adjusted, details = apply_opportunity_point_adjustment(
+            base_predictions=pd.Series([5.0, 4.0, 4.0]).to_numpy(),
+            train_df=train,
+            target_df=target,
+        )
+
+        self.assertAlmostEqual(adjusted[0], 10.95)
+        self.assertAlmostEqual(adjusted[1], 8.4)
+        self.assertAlmostEqual(adjusted[2], 4.0)
+        self.assertEqual(
+            details["pregame_opportunity_point_weight"].tolist(),
+            [0.70, 0.55, 0.0],
+        )
+
+    def test_point_prediction_blend_is_position_aware_for_every_supported_position(self):
+        positions = ["QB", "RB", "WR", "TE", "DST"]
+        train = pd.DataFrame(
+            {
+                "position": positions,
+                TARGET_COL: [20.0, 12.0, 10.0, 8.0, 6.0],
+            }
+        )
+        target = pd.DataFrame(
+            {
+                "position": positions,
+                "player_games_history": [0, 0, 8, 0, 0],
+                "player_roll3_mean": [0.0, 0.0, 18.0, 0.0, 0.0],
+                "player_roll8_mean": [0.0, 0.0, 16.0, 0.0, 0.0],
+            }
+        )
+
+        predictions = blend_point_predictions(
+            raw_predictions=pd.Series([10.0] * 5).to_numpy(),
+            train_df=train,
+            target_df=target,
+        )
+
+        self.assertEqual(
+            predictions.tolist(),
+            [12.0, 10.4, 11.44, 9.6, 9.2],
+        )
+
     def test_role_groups_use_lagged_usage_features(self):
         rows = pd.DataFrame(
             [

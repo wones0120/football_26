@@ -12,6 +12,13 @@
     "model_top2_accuracy": 0.6060606060606061,
     "baseline_top1_accuracy": 0.24242424242424243,
     "top1_accuracy_lift": 0.12121212121212122,
+    "historical_captain_position_probabilities": {
+      "DST": 0.024390243902439025,
+      "QB": 0.24390243902439024,
+      "RB": 0.21951219512195122,
+      "TE": 0.0975609756097561,
+      "WR": 0.4146341463414634
+    },
     "classes": [
       "DST",
       "QB",

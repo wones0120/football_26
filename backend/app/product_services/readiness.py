@@ -13,6 +13,7 @@ from sqlalchemy import create_engine, inspect, text
 
 from Database.config import get_connection_string
 from .replay import parse_slate_lock
+from .salary_eligibility import is_salary_status_eligible, normalize_salary_status
 
 
 READINESS_CONTRACT_ID = "slate_readiness_v1"
@@ -30,12 +31,60 @@ SHOWDOWN_GATES = ("showdown_cash", "showdown_gpp")
 GPP_GATES = ("classic_gpp", "showdown_gpp")
 REQUIRED_CLASSIC_POSITIONS = {"QB": 1, "RB": 2, "WR": 3, "TE": 1, "DST": 1}
 ELIGIBLE_POSITIONS = frozenset(REQUIRED_CLASSIC_POSITIONS)
+SHOWDOWN_ELIGIBLE_POSITIONS = ELIGIBLE_POSITIONS | {"K"}
 ACCEPTED_IDENTITY_QUARANTINE_REASONS = frozenset({"ambiguous", "no_match"})
 
 
 def _normalized_position(value: object) -> str:
     position = str(value or "").strip().upper()
     return "DST" if position in {"D", "DEF"} else position
+
+
+def _eligible_salary_rows(
+    salary_rows: list[dict[str, Any]],
+    roster_position_counts: dict[str, int],
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """Select one playable salary row per player for the loaded contest format."""
+    is_showdown = {"CPT", "FLEX"}.issubset(roster_position_counts)
+    if is_showdown:
+        salary_rows = [
+            row
+            for row in salary_rows
+            if str(row.get("roster_position") or "").strip().upper() == "FLEX"
+        ]
+    eligible_positions = SHOWDOWN_ELIGIBLE_POSITIONS if is_showdown else ELIGIBLE_POSITIONS
+    position_eligible = [
+        row
+        for row in salary_rows
+        if _normalized_position(row.get("position")) in eligible_positions
+    ]
+    salary_status_eligible: list[dict[str, Any]] = []
+    excluded_statuses: Counter[str] = Counter()
+    for row in position_eligible:
+        if is_salary_status_eligible(row.get("player_status")):
+            salary_status_eligible.append(row)
+        else:
+            excluded_statuses[
+                f"SALARY_{normalize_salary_status(row.get('player_status'))}"
+            ] += 1
+
+    has_roster_evidence = any(
+        row.get("roster_status") is not None
+        for row in salary_status_eligible
+        if _normalized_position(row.get("position")) != "DST"
+    )
+    if not has_roster_evidence:
+        return salary_status_eligible, dict(sorted(excluded_statuses.items()))
+
+    included: list[dict[str, Any]] = []
+    for row in salary_status_eligible:
+        position = _normalized_position(row.get("position"))
+        status = str(row.get("roster_status") or "MISSING").strip().upper()
+        if position == "DST" or status == "ACT":
+            included.append(row)
+        else:
+            excluded_statuses[status] += 1
+    return included, dict(sorted(excluded_statuses.items()))
 
 
 def _iso(value: datetime | None) -> str | None:
@@ -70,6 +119,7 @@ class SlateReadinessMetrics:
     eligible_salary_rows: int = 0
     position_counts: dict[str, int] = field(default_factory=dict)
     roster_position_counts: dict[str, int] = field(default_factory=dict)
+    excluded_roster_status_counts: dict[str, int] = field(default_factory=dict)
     team_count: int = 0
     resolved_identity_rows: int = 0
     quarantined_identity_rows: int = 0
@@ -139,7 +189,19 @@ def evaluate_slate_readiness(metrics: SlateReadinessMetrics) -> dict[str, Any]:
             blocks=all_gates,
             value=eligible,
             threshold="> 0 eligible rows",
-            details={"positions": metrics.position_counts},
+            details={
+                "positions": metrics.position_counts,
+                "excluded_salary_statuses": {
+                    status.removeprefix("SALARY_"): count
+                    for status, count in metrics.excluded_roster_status_counts.items()
+                    if status.startswith("SALARY_")
+                },
+                "excluded_roster_statuses": {
+                    status: count
+                    for status, count in metrics.excluded_roster_status_counts.items()
+                    if not status.startswith("SALARY_")
+                },
+            },
         )
     )
 
@@ -589,26 +651,6 @@ class SlateReadinessService:
 
         with self.engine.begin() as connection:
             if metrics.salary_table_available:
-                salary_rows = [
-                    dict(row)
-                    for row in connection.execute(
-                        text(
-                            """
-                            SELECT DISTINCT ON (COALESCE(player_master_id, 'site:' || source_player_key))
-                                COALESCE(player_master_id, 'site:' || source_player_key) AS player_id,
-                                curated_salary_id::text AS source_record_key,
-                                player_master_id,
-                                COALESCE(NULLIF(position, ''), roster_position) AS position,
-                                team, opponent, game_info, salary, created_at
-                            FROM public.curated_salary
-                            WHERE season = :season AND week = :week
-                              AND UPPER(slate) = UPPER(:slate)
-                            ORDER BY COALESCE(player_master_id, 'site:' || source_player_key), created_at DESC
-                            """
-                        ),
-                        {"season": season, "week": week, "slate": slate},
-                    ).mappings()
-                ]
                 roster_position_rows = connection.execute(
                     text(
                         """
@@ -626,8 +668,66 @@ class SlateReadinessService:
                     for row in roster_position_rows
                     if row["roster_position"]
                 }
+                has_roster_participation = inspector.has_table(
+                    "curated_player_game_participation",
+                    schema="public",
+                )
+                roster_status_select = (
+                    "participation.roster_status"
+                    if has_roster_participation
+                    else "NULL::TEXT AS roster_status"
+                )
+                roster_status_join = (
+                    """
+                    LEFT JOIN public.curated_player_game_participation participation
+                      ON participation.season = salary.season
+                     AND participation.week = salary.week
+                     AND participation.player_master_id = salary.player_master_id
+                     AND participation.team = salary.team
+                    """
+                    if has_roster_participation
+                    else ""
+                )
+                salary_rows = [
+                    dict(row)
+                    for row in connection.execute(
+                        text(
+                            f"""
+                            SELECT
+                                COALESCE(
+                                    salary.player_master_id,
+                                    'site:' || salary.source_player_key
+                                ) AS player_id,
+                                salary.curated_salary_id::text AS source_record_key,
+                                salary.player_master_id,
+                                COALESCE(
+                                    NULLIF(salary.position, ''),
+                                    salary.roster_position
+                                ) AS position,
+                                salary.roster_position,
+                                salary.player_status,
+                                salary.team,
+                                salary.opponent,
+                                salary.game_info,
+                                salary.salary,
+                                salary.created_at,
+                                {roster_status_select}
+                            FROM public.curated_salary salary
+                            {roster_status_join}
+                            WHERE salary.season = :season AND salary.week = :week
+                              AND UPPER(salary.slate) = UPPER(:slate)
+                            ORDER BY salary.created_at DESC, salary.curated_salary_id DESC
+                            """
+                        ),
+                        {"season": season, "week": week, "slate": slate},
+                    ).mappings()
+                ]
 
-            eligible_rows = [row for row in salary_rows if _normalized_position(row["position"]) in ELIGIBLE_POSITIONS]
+            eligible_rows, excluded_roster_statuses = _eligible_salary_rows(
+                salary_rows,
+                metrics.roster_position_counts,
+            )
+            metrics.excluded_roster_status_counts = excluded_roster_statuses
             metrics.eligible_salary_rows = len(eligible_rows)
             metrics.position_counts = dict(Counter(_normalized_position(row["position"]) for row in eligible_rows))
             metrics.team_count = len({str(row["team"]).strip().upper() for row in eligible_rows if row.get("team")})

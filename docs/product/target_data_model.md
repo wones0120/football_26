@@ -152,6 +152,7 @@ Required columns:
 - `site_player_id`
 - `salary`
 - `roster_position`
+- `player_status`
 - `team_id`
 - `opponent_team_id`
 - `game_id`
@@ -287,6 +288,17 @@ Common snapshot columns:
 - `week`
 - `game_id`
 - `player_id` where applicable
+
+`snapshot_salary.player_status` preserves the normalized availability token from
+the salary feed. The current eligibility contract excludes confirmed-unavailable
+tokens (`OUT`/`O`, `IR`, `PUP`, `NFI`, reserve, inactive, and suspended) before
+projection scoring and optimization, while blank, questionable, and doubtful
+statuses remain eligible for a later point-in-time injury adjustment. Status
+exclusions are stored in projection lineage rather than inferred from missing
+rows. When current weekly-roster evidence is present, projection and optimizer
+inputs additionally require `ACT` for non-DST players; DST remains eligible
+without a player roster record. Those roster exclusions are stored separately
+in the projection input lineage.
 
 Replay visibility is fail closed: both observation time and the consuming run's cutoff must exist,
 and `observed_at <= data_cutoff_at`. A game date, report week, file name, or retrospective load time
@@ -468,7 +480,9 @@ Required columns:
 
 Append-only player-level output keyed by projection run. Re-running a slate creates a new `projection_run_id`; it does not update or delete earlier player projections. Default application reads use `active_projection_run`, while replay and inspection callers may request an exact run ID.
 
-The active v2 prediction path calibrates these quantiles from weekly walk-forward residuals by position and workload role. Roles such as mobile/pocket QB, lead/committee/receiving RB, and primary/secondary/rotation receiver are derived only from lagged usage features. Sparse roles shrink toward their position parent, and sparse positions shrink toward the global residual distribution. Calibration method, sample sizes, empirical quantile coverage, P10–P90 coverage, MAE, and diagnostic promotion checks are stored in `model_registry.metrics_json` and copied into `model_run.params_json` for the exact run.
+The active v3 point path trains only on rows earlier than the requested season/week. For QB, RB, WR, and TE, stored `played_confirmed` or `played_inferred` participation is required; known nonparticipants and unverified rows are excluded while real zero-point appearances remain valid labels. DST rows are retained without player-participation evidence. One gradient-boosting model receives explicit QB/RB/WR/TE/DST indicators and produces 80% of the mean; a prior-only 60/40 roll-three/roll-eight player-history anchor contributes 20%, with a position training mean fallback below three games. The exact participation counts, position row counts and baselines, weights, feature set, cutoff, and code hash are persisted with the model run.
+
+Quantiles are calibrated from weekly walk-forward residuals by position and workload role. A strictly prior-game three-week offensive snap-share average is part of the feature contract and identifies primary/secondary/rotation receivers without reading target-week snaps. Sparse roles shrink toward their position parent, and sparse positions shrink toward the global residual distribution. Calibration method, sample sizes, empirical quantile coverage, P10–P90 coverage, MAE, and diagnostic promotion checks are stored in `model_registry.metrics_json` and copied into `model_run.params_json` for the exact run.
 
 DST rows use the `dst_context_v1` component. It blends strictly prior eight-game defense production with what the opponent allowed to other DSTs, combines historical and market-implied points-allowed context, regresses rare return touchdowns and blocks, and shifts calibrated empirical ranges around the context mean. Current-game fantasy outcomes and components are never model inputs.
 
@@ -1066,7 +1080,11 @@ downloadable only when linked to a passed validation.
 
 ### `optimizer_run`
 
-One optimizer execution. For classic cash, `objective_config_json` stores the complete immutable `classic_cash_v1` weights, certainty scale, and fragility penalty rather than only the generic objective name. For classic GPP, `strategy` stores the canonical versioned engine ID (`classic_gpp_baseline_v1` or `classic_gpp_slate_aware_v1`), while `constraint_config_json` stores its declared strategy config plus the exact runtime slate, portfolio, and stack-policy evidence. Showdown uses distinct `showdown_cash_baseline_v1` and `showdown_gpp_baseline_v1` strategy IDs; its objective config declares the basic P90 score, 1.5x CPT multiplier, one-CPT/five-FLEX shape, salary cap, team limit, and evidence status. Completed and failed modes both retain status, message, strategy config, and projection/rule/cutoff lineage. Each persisted lineup also receives a dedicated `optimizer_strategy` explanation so reloaded results remain auditable.
+One optimizer execution. For classic cash, `objective_config_json` stores the complete immutable `classic_cash_v1` weights, certainty scale, and fragility penalty rather than only the generic objective name. For classic GPP, `strategy` stores the canonical versioned engine ID (`classic_gpp_baseline_v1` or `classic_gpp_slate_aware_v1`), while `constraint_config_json` stores its declared strategy config plus the exact runtime slate, portfolio, and stack-policy evidence. Showdown cash uses `showdown_cash_baseline_v1`; GPP retains `showdown_gpp_baseline_v1` for comparisons and uses `showdown_gpp_captain_informed_v1` in the UI. The informed objective config records the P90 score, 1.5x CPT multiplier, one-CPT/five-FLEX shape, salary cap, team limit, captain artifact, and `0.35` prior. Runtime constraints retain the exact two-QB eligibility decision by canonical ID, evidence source/tier, captain probabilities, context vector, out-of-distribution fields, and any historical-position-mix fallback. Completed and failed modes both retain status, message, strategy config, and projection/rule/cutoff lineage. Each persisted lineup also receives a dedicated `optimizer_strategy` explanation so reloaded results remain auditable.
+
+### `starting_qb_evidence`
+
+One canonical starting-QB selection per season/week/slate/team. Explicit depth-chart QB1 evidence is `confirmed`; a unique top DraftKings FLEX salary is `inferred` and is recalculated against the current salary slice before each solve. The record stores `player_master_id`, compatibility `player_id`, display name, source, tier, and the exact evidence payload. Ambiguous selection is never persisted and blocks Showdown optimization.
 
 Required columns:
 

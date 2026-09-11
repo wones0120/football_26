@@ -2,7 +2,11 @@ from datetime import datetime, timezone
 import unittest
 
 from backend.app.product_schemas import SlateReadinessResponse
-from backend.app.product_services.readiness import SlateReadinessMetrics, evaluate_slate_readiness
+from backend.app.product_services.readiness import (
+    SlateReadinessMetrics,
+    _eligible_salary_rows,
+    evaluate_slate_readiness,
+)
 
 
 def _complete_metrics() -> SlateReadinessMetrics:
@@ -47,6 +51,50 @@ def _complete_metrics() -> SlateReadinessMetrics:
 
 
 class SlateReadinessTests(unittest.TestCase):
+    def test_showdown_uses_flex_rows_kickers_and_active_roster_status(self) -> None:
+        salary_rows = [
+            {
+                "player_id": f"{name}-{role}",
+                "position": position,
+                "roster_position": role,
+                "roster_status": status,
+            }
+            for name, position, status in (
+                ("receiver", "WR", "ACT"),
+                ("kicker", "K", "ACT"),
+                ("practice-squad", "WR", "DEV"),
+                ("missing", "TE", None),
+                ("defense", "DST", None),
+                ("salary-out", "RB", "ACT"),
+            )
+            for role in ("CPT", "FLEX")
+        ]
+        for row in salary_rows:
+            row["player_status"] = "OUT" if row["player_id"].startswith("salary-out") else ""
+
+        eligible, excluded = _eligible_salary_rows(
+            salary_rows,
+            {"CPT": 6, "FLEX": 6},
+        )
+
+        self.assertEqual(
+            {row["player_id"] for row in eligible},
+            {"receiver-FLEX", "kicker-FLEX", "defense-FLEX"},
+        )
+        self.assertEqual(excluded, {"DEV": 1, "MISSING": 1, "SALARY_OUT": 1})
+
+        metrics = _complete_metrics()
+        metrics.excluded_roster_status_counts = excluded
+        report = evaluate_slate_readiness(metrics)
+        salary_pool = next(
+            check for check in report["checks"] if check["check_id"] == "salary_pool"
+        )
+        self.assertEqual(salary_pool["details"]["excluded_salary_statuses"], {"OUT": 1})
+        self.assertEqual(
+            salary_pool["details"]["excluded_roster_statuses"],
+            {"DEV": 1, "MISSING": 1},
+        )
+
     def test_complete_slate_passes_every_gate(self) -> None:
         report = evaluate_slate_readiness(_complete_metrics())
 

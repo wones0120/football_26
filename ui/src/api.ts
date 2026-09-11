@@ -204,6 +204,53 @@ export type OptimizerResponse = {
   lineage_persisted: boolean;
   message?: string;
   results?: unknown;
+  player_pool?: {
+    initial_count: number;
+    eligible_count?: number;
+    included_count: number;
+    excluded_count: number;
+    candidate_excluded_count?: number;
+    ineligible_count?: number;
+    warning_player_count?: number;
+    safety?: Record<string, unknown>;
+    rows: Array<{
+      player_id: string;
+      player_name: string;
+      position: string;
+      team: string;
+      opponent_team?: string | null;
+      salary: number;
+      projection: number;
+      p90: number;
+      included: boolean;
+      exclusion_reasons: string[];
+      exclusion_details?: Array<{
+        rule_id?: string | null;
+        reason_code: string;
+        description: string;
+        category: "eligibility" | "projection" | "strategy" | "user";
+      }>;
+      warnings?: Array<{
+        rule_id: string;
+        reason_code: string;
+        description: string;
+      }>;
+      pregame_context_observed_at?: string | null;
+      pregame_start_probability?: number | null;
+      pregame_carry_share?: number | null;
+      pregame_target_share?: number | null;
+      pregame_expected_snaps?: number | null;
+      pregame_expected_routes?: number | null;
+      pregame_expected_carries?: number | null;
+      pregame_expected_targets?: number | null;
+      pregame_red_zone_share?: number | null;
+      pregame_goal_line_share?: number | null;
+      pregame_role_label?: string | null;
+      pregame_injury_status?: string | null;
+      identity_resolved?: boolean;
+      rule_evaluation?: Record<string, unknown> | null;
+    }>;
+  } | null;
   created_at?: string;
   updated_at?: string;
 };
@@ -232,6 +279,57 @@ export type OperationalJob = {
 export type OperationalJobCreateResponse = {
   created: boolean;
   job: OperationalJob;
+};
+
+export type PipelineOperationStatus =
+  | "not_run"
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed"
+  | "interrupted";
+
+export type PipelineOperationResult = {
+  status: PipelineOperationStatus;
+  status_at?: string | null;
+  job_id?: string | null;
+  run_id?: string | null;
+  scope: "slate" | "season";
+  stage?: string | null;
+  progress_current: number;
+  progress_total: number;
+  progress_percent: number;
+  message?: string | null;
+  error_message?: string | null;
+  rows_written?: number | null;
+  slice_outcome?: Record<string, unknown> | null;
+  result?: Record<string, unknown> | null;
+};
+
+export type PipelineOperationSummary = {
+  operation: "features" | "projections" | "symbolic";
+  status: PipelineOperationStatus;
+  status_at?: string | null;
+  latest_attempt?: PipelineOperationResult | null;
+  last_success?: PipelineOperationResult | null;
+};
+
+export type ModelPipelineSummary = {
+  season: number;
+  week: number;
+  slate: string;
+  generated_at: string;
+  has_active_jobs: boolean;
+  features: PipelineOperationSummary;
+  projections: PipelineOperationSummary;
+  symbolic: PipelineOperationSummary;
+  selected_projection?: {
+    run_id: string;
+    status: PipelineOperationStatus;
+    status_at?: string | null;
+    rows_written?: number | null;
+    is_latest_success: boolean;
+  } | null;
 };
 
 export type WeeklyRunStage = {
@@ -318,6 +416,7 @@ export type PredictionRow = {
   calibration_position?: string;
   calibration_role?: string;
   calibration_sample_size?: number;
+  feature_inputs?: Record<string, unknown>;
   team_implied_total?: number;
   team_spread?: number;
   game_total?: number;
@@ -335,6 +434,65 @@ export type PredictionRow = {
   adj_mean_base: number;
   matchup_factor: number;
   adj_mean_final: number;
+};
+
+export type PregamePlayerContextInput = {
+  player_id: string;
+  team?: string;
+  position?: string;
+  availability_probability?: number;
+  start_probability?: number;
+  carry_share?: number;
+  target_share?: number;
+  expected_snaps?: number;
+  expected_routes?: number;
+  expected_carries?: number;
+  expected_targets?: number;
+  red_zone_share?: number;
+  goal_line_share?: number;
+  role_label?: "STARTER" | "BACKUP" | "LEAD" | "COMMITTEE" | "PRIMARY" | "SECONDARY" | "ROTATION";
+  injury_status?: string;
+  evidence?: Record<string, unknown>;
+};
+
+export type PregameContextRow = Omit<PregamePlayerContextInput, "player_id"> & {
+  player_master_id: string;
+  player_name: string;
+  context_run_id: string;
+  pregame_player_context_id: number;
+  source: string;
+  source_uri?: string | null;
+  observed_at: string;
+  received_at: string;
+};
+
+export type PregameContextCurrentResponse = {
+  season: number;
+  week: number;
+  slate: string;
+  cutoff: string;
+  context_run_ids: string[];
+  rows: PregameContextRow[];
+  player_pool: Array<{
+    player_id: string;
+    player_display_name: string;
+    team: string;
+    position: string;
+    player_status?: string | null;
+    roster_status?: string | null;
+  }>;
+};
+
+export type PregameContextRunResponse = {
+  context_run_id: string;
+  season: number;
+  week: number;
+  slate: string;
+  source: string;
+  observed_at: string;
+  received_at: string;
+  status: string;
+  players: PregamePlayerContextInput[];
 };
 
 export type PredictionListResponse = {
@@ -912,6 +1070,19 @@ async function enqueueAndWait<T>(
   return waitForOperationalJob<T>(queued.job.job_id);
 }
 
+async function enqueueOperationalJob(
+  path: string,
+  body: unknown,
+  jobType: string,
+): Promise<OperationalJobCreateResponse> {
+  return postJson(
+    path,
+    body,
+    30_000,
+    { "Idempotency-Key": newIdempotencyKey(jobType) },
+  );
+}
+
 export function fetchOperationalJobs(limit = 25): Promise<{ rows: OperationalJob[] }> {
   return getJson(`/jobs?limit=${encodeURIComponent(String(limit))}`, 30_000);
 }
@@ -1125,8 +1296,71 @@ export function runPredictions(payload: {
   return enqueueAndWait("/predict/run", payload, "projection");
 }
 
-export function fetchValidation(table?: string): Promise<ValidationResponse> {
-  const suffix = table ? `?table=${encodeURIComponent(table)}` : "";
+export function queuePredictions(payload: {
+  season: number;
+  week: number;
+  positions?: string[];
+  slate?: string;
+  data_cutoff_at?: string;
+}): Promise<OperationalJobCreateResponse> {
+  return enqueueOperationalJob("/predict/run", payload, "projection");
+}
+
+export function fetchModelPipelineStatus(params: {
+  season: number;
+  week: number;
+  slate: string;
+  selectedProjectionRunId?: string;
+}): Promise<ModelPipelineSummary> {
+  const query = new URLSearchParams({
+    season: String(params.season),
+    week: String(params.week),
+    slate: params.slate,
+  });
+  if (params.selectedProjectionRunId) {
+    query.set("selected_projection_run_id", params.selectedProjectionRunId);
+  }
+  return getJson(`/models/pipeline/status?${query.toString()}`, 30_000);
+}
+
+export function fetchPregameContext(params: {
+  season: number;
+  week: number;
+  slate: string;
+}): Promise<PregameContextCurrentResponse> {
+  const query = new URLSearchParams({
+    season: String(params.season),
+    week: String(params.week),
+    slate: params.slate,
+  });
+  return getJson(`/pregame-context/current?${query.toString()}`, 30_000);
+}
+
+export function createPregameContext(payload: {
+  season: number;
+  week: number;
+  slate: string;
+  source: string;
+  source_uri?: string;
+  observed_at: string;
+  notes?: string;
+  players: PregamePlayerContextInput[];
+}): Promise<PregameContextRunResponse> {
+  return postJson("/pregame-context/runs", payload, 30_000);
+}
+
+export function fetchValidation(
+  table?: string,
+  scope?: { season: number; week: number; slate?: string },
+): Promise<ValidationResponse> {
+  const query = new URLSearchParams();
+  if (table) query.set("table", table);
+  if (scope) {
+    query.set("season", String(scope.season));
+    query.set("week", String(scope.week));
+    if (scope.slate) query.set("slate", scope.slate);
+  }
+  const suffix = query.size > 0 ? `?${query.toString()}` : "";
   return getJson(`/data/validate${suffix}`);
 }
 
@@ -1254,6 +1488,23 @@ export function buildFeatures(payload: {
   future_week?: number;
 }): Promise<BuildFeaturesResponse> {
   return postJson("/features/build", payload);
+}
+
+export function buildFeatureMatrix(payload: {
+  season: number;
+  weeks?: number[];
+  slate?: string;
+}): Promise<BuildFeaturesResponse> {
+  return postJson("/features/matrix/build", payload);
+}
+
+export function queueFeatureMatrix(payload: {
+  season: number;
+  weeks?: number[];
+  slate?: string;
+  source_system?: "draftkings" | "fanduel";
+}): Promise<OperationalJobCreateResponse> {
+  return enqueueOperationalJob("/features/matrix/jobs", payload, "feature-matrix");
 }
 
 export function processUnmatchedToPlayerMaster(payload: {
@@ -1511,6 +1762,20 @@ export function runAgent(
     slate,
     projection_run_id: projectionRunId,
   });
+}
+
+export function queueAgent(
+  season: number,
+  week: number,
+  slate?: string,
+  projectionRunId?: string,
+): Promise<OperationalJobCreateResponse> {
+  return enqueueOperationalJob("/agent/jobs", {
+    season,
+    week,
+    slate,
+    projection_run_id: projectionRunId,
+  }, "symbolic");
 }
 
 export function fetchSymbolicRules(params?: {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import "./AppShell.css";
-import type { PersistedRunSelection } from "./workspaceContext";
+import { SLATE_OPTIONS, type PersistedRunSelection } from "./workspaceContext";
 
 export type ViewMode =
   | "digital-twin"
@@ -19,6 +19,7 @@ type AppShellProps = {
   slate: string;
   runSelection?: PersistedRunSelection;
   pendingAction?: string | null;
+  onSlateChange: (slate: string) => void;
   onNavigate: (view: ViewMode) => void;
   children: ReactNode;
 };
@@ -115,6 +116,7 @@ export function AppShell({
   slate,
   runSelection,
   pendingAction,
+  onSlateChange,
   onNavigate,
   children,
 }: AppShellProps) {
@@ -213,11 +215,19 @@ export function AppShell({
           </div>
           <div className="shell-top-actions">
             {pendingAction && <span className="shell-pending" aria-live="polite"><i />{pendingAction}</span>}
-            <div className="shell-slate-chip">
-              <span>Live context</span>
-              <strong>{contextLabel}</strong>
+            <label className="shell-slate-chip">
+              <span>Live context · {season} W{week}</span>
+              <select
+                aria-label="Active slate"
+                value={slate}
+                onChange={(event) => onSlateChange(event.target.value)}
+              >
+                {SLATE_OPTIONS.map((option) => (
+                  <option key={option} value={option}>{formatSlate(option)}</option>
+                ))}
+              </select>
               {runContextLabel && <small title={runContextLabel}>{runContextLabel}</small>}
-            </div>
+            </label>
             <button ref={commandTriggerRef} className="shell-command-trigger" type="button" onClick={() => setPaletteOpen(true)} aria-label="Open command palette">
               <Icon name="search" /><span>Jump to</span><kbd>⌘ K</kbd>
             </button>

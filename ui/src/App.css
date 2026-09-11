@@ -1068,6 +1068,11 @@ table tbody tr:last-child {
   margin-bottom: 12px;
 }
 
+.operations-workspace .optimizer-player-controls {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .operations-workspace .form-row label,
 .operations-workspace > label {
   gap: 6px;
@@ -1518,6 +1523,10 @@ table tbody tr:last-child {
   .operations-workspace .summary-header {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .operations-workspace .optimizer-player-controls {
+    grid-template-columns: 1fr;
   }
 
   .operations-workspace button {

@@ -292,8 +292,13 @@ def ingest_nflreadpy_weekly_rosters(
     request: NflReadPySeasonRequest,
     session: Session = Depends(get_db_session),
 ) -> IngestResultResponse:
-    service = IngestService(session)
-    result = service.ingest_nflreadpy_weekly_rosters(request)
+    try:
+        captured = SourceCaptureService(session).capture_and_ingest_nflreadpy_weekly_rosters(
+            request
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    result = captured.ingest
     if result.status == "failed":
         raise HTTPException(
             status_code=422,

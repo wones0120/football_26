@@ -1,6 +1,35 @@
 # DraftKings NFL Classic Optimizer Filters
 
-Practical, conservative filters that trim the player pool before PuLP runs while keeping common stack pieces and value outs. These defaults are implemented in `backend/services/optimizer.py` via `_apply_pool_filters`.
+The optimizer uses one shared, lineage-scoped eligibility pool and two explicit
+Classic contest strategies. Availability, active-roster, injury, identity,
+salary, and projection checks happen before either strategy diverges.
+
+## Head-to-Head (`classic_head_to_head_v1`)
+
+- Keeps every positive-projection, post-eligibility skill player and playable DST.
+- Keeps only QBs with stored starting-QB evidence; backups are labeled
+  `backup QB / zero expected snaps`.
+- Uses 75% mean + 20% P90 + 5% P10 floor, with a small fragile-punt penalty and
+  soft QB/receiver correlation bonus.
+- Requires no stack, bring-back, ownership, or complete salary spend.
+- Generates at least six lineups (best plus five alternates) and reports mean,
+  P90, P10 floor/risk, salary, and realized stack.
+
+## Large GPP (`classic_large_gpp_v1`)
+
+- Uses the GPP thresholds below, but preserves stack-safety candidates.
+- Uses normalized mean/P90/correlation/leverage weights. When ownership is absent,
+  leverage is exactly zero and its weight moves to P90/correlation.
+- Cycles QB+1/QB+2 templates with zero/one required bring-back, rather than
+  imposing one construction on the whole portfolio.
+- Supports requested lineup count, global and player-specific max exposure,
+  player-specific minimum exposure, minimum uniqueness, team/game caps, and
+  custom stack templates.
+- Persists concrete exclusion reasons such as position value/ceiling threshold,
+  positional cap, team cap, zero projection, and backup-QB status.
+
+The legacy filter details below remain relevant to the historical Classic cash
+and GPP strategy IDs.
 
 ## Cash defaults (projection-weighted)
 - QB: keep top 10 by projection; drop below 14 proj unless ceiling/$1k ≥ 2.6.
@@ -57,4 +86,4 @@ Current 2025 target actuals cover all nine classic roster spots, including DST. 
 - The exact objective configuration is stored in `target.optimizer_run.objective_config_json`, while the exact stack policy is stored in `constraint_config_json`; player terms and repeated lineup policy live in `lineup_player.player_json`, and lineup aggregates are stored in `target.lineup` plus `cash_objective` and `stack_policy` explanation rows.
 - In `football_26_dev`, the optimizer falls back to `public.curated_salary` for legal DraftKings positions/site IDs and `target.player_projection` for outcome distributions. Missing role/DST projection evidence remains zero and inspectable; it is not synthesized.
 - Value metrics use `p90` as ceiling and `salary`/1k for rate-of-return comparisons.
-- Filters run only for classic slates; stack preservation ensures viable QB + pass-catcher + bring-back combos remain.
+- Classic strategy filters run only for classic slates; stack preservation ensures viable QB + pass-catcher + bring-back combos remain. Showdown retains every positive FLEX base salary, including values below the classic $2,000 floor, preserves the paired CPT site ID, includes kickers, and excludes non-`ACT` or roster-missing players whenever current weekly-roster evidence is available. Team defenses remain eligible without a player-level roster row.

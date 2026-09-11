@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 import numpy as np
-from sqlalchemy import and_, delete, or_, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.orm import Session
 
 try:
@@ -920,7 +920,7 @@ class LineupLearningService:
             CuratedSalary.season <= season_end,
         ]
         if slate_filter:
-            filters.append(CuratedSalary.slate == slate_filter)
+            filters.append(func.lower(CuratedSalary.slate) == slate_filter.lower())
 
         rows = self.session.execute(
             select(CuratedSalary.season, CuratedSalary.week, CuratedSalary.slate)
@@ -4350,7 +4350,9 @@ class LineupLearningService:
         season_start: int,
         season_end: int,
         slate: str | None = None,
+        weeks: list[int] | None = None,
         progress_hook: Callable[[str], None] | None = None,
+        status_hook: Callable[[int, int, dict[str, Any]], None] | None = None,
     ) -> dict[str, Any]:
         start = min(season_start, season_end)
         end = max(season_start, season_end)
@@ -4360,6 +4362,8 @@ class LineupLearningService:
             season_end=end,
             slate_filter=slate,
         )
+        if weeks is not None:
+            slices = [item for item in slices if item[1] in weeks]
         if not slices:
             return {
                 "source_system": source_system,
@@ -4413,7 +4417,7 @@ class LineupLearningService:
 
                 slice_rows: list[dict[str, Any]] = []
                 for player in pool:
-                    if player.position not in {"QB", "RB", "WR", "TE", "DST"}:
+                    if player.position not in {"QB", "RB", "WR", "TE", "K", "DST"}:
                         continue
                     if player.position == "DST":
                         player_key = player.team or player.uid
@@ -4598,6 +4602,8 @@ class LineupLearningService:
                     "rows_written": len(insert_rows),
                 }
                 rows.append(row_summary)
+                if status_hook is not None:
+                    status_hook(index, len(slices), row_summary)
                 if progress_hook is not None:
                     progress_hook(
                         f"[feature_matrix] {index}/{len(slices)} {season} W{week:02d} {current_slate} "
@@ -4614,6 +4620,8 @@ class LineupLearningService:
                     "error_message": str(exc),
                 }
                 rows.append(row_summary)
+                if status_hook is not None:
+                    status_hook(index, len(slices), row_summary)
                 if progress_hook is not None:
                     progress_hook(
                         f"[feature_matrix] {index}/{len(slices)} {season} W{week:02d} {current_slate} "

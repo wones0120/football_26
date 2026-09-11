@@ -254,7 +254,8 @@ body:has(.product-shell) #root {
   position: sticky;
   top: 0;
   z-index: 25;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   min-height: var(--shell-topbar-height);
   align-items: center;
   justify-content: space-between;
@@ -267,9 +268,14 @@ body:has(.product-shell) #root {
 
 .shell-page-identity {
   display: flex;
+  flex: 1 1 auto;
   min-width: 0;
   align-items: center;
   gap: 15px;
+}
+
+.shell-page-identity > div {
+  min-width: 0;
 }
 
 .shell-page-identity > span {
@@ -292,17 +298,17 @@ body:has(.product-shell) #root {
 
 .shell-page-identity h1 {
   color: var(--shell-text);
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   font-weight: 720;
   letter-spacing: -0.01em;
 }
 
 .shell-page-identity p {
   overflow: hidden;
-  max-width: 46vw;
+  max-width: 100%;
   margin-top: 3px;
   color: var(--shell-muted);
-  font-size: 0.69rem;
+  font-size: 0.64rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -324,12 +330,14 @@ body:has(.product-shell) #root {
 }
 
 .shell-slate-chip {
-  padding: 7px 10px;
+  display: grid;
+  min-width: 174px;
+  gap: 2px;
+  padding: 6px 10px;
   border-left: 1px solid var(--shell-line-strong);
 }
 
 .shell-slate-chip span,
-.shell-slate-chip strong,
 .shell-slate-chip small {
   display: block;
 }
@@ -342,12 +350,24 @@ body:has(.product-shell) #root {
   text-transform: uppercase;
 }
 
-.shell-slate-chip strong {
-  margin-top: 2px;
+.shell-slate-chip select {
+  width: 100%;
+  min-width: 0;
+  padding: 1px 22px 1px 0;
+  border: 0;
+  color-scheme: dark;
   color: #d9e1e7;
+  background-color: transparent;
   font-size: 0.67rem;
   font-weight: 650;
   text-transform: capitalize;
+  cursor: pointer;
+}
+
+.shell-slate-chip select:focus-visible {
+  border-radius: 3px;
+  outline: 1px solid rgba(112, 225, 165, 0.58);
+  outline-offset: 2px;
 }
 
 .shell-slate-chip small {
@@ -572,7 +592,13 @@ body:has(.product-shell) #root {
   .shell-vision { display: grid; grid-template-columns: 1fr; place-items: center; padding: 10px; }
   .shell-nav button.active,
   .shell-vision.active { box-shadow: inset 0 -2px var(--shell-accent); }
-  .shell-page-identity p { max-width: 30vw; }
+  .shell-page-identity > span { display: none; }
+  .shell-page-identity p { max-width: 100%; }
+}
+
+@media (max-width: 880px) {
+  .shell-page-identity p,
+  .shell-command-trigger span { display: none; }
 }
 
 @media (max-width: 760px) {
@@ -583,10 +609,13 @@ body:has(.product-shell) #root {
   .shell-page-identity { gap: 0; }
   .shell-page-identity > span,
   .shell-page-identity p,
-  .shell-slate-chip,
   .shell-pending,
   .shell-command-trigger span { display: none; }
   .shell-page-identity h1 { font-size: 0.88rem; }
+  .shell-slate-chip { min-width: 128px; padding: 4px 8px; }
+  .shell-slate-chip > span,
+  .shell-slate-chip small { display: none; }
+  .shell-slate-chip select { font-size: 0.62rem; }
   .shell-command-trigger { padding: 8px; }
   .shell-command-trigger svg { width: 17px; }
   .shell-command-trigger kbd { display: none; }

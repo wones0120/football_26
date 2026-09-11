@@ -87,6 +87,49 @@ def test_create_master_then_alias_with_fk_enforced() -> None:
     session.commit()
 
 
+def test_master_fallback_requires_exact_name_team_and_position() -> None:
+    session = _session()
+    receiver = create_player_master(
+        session,
+        full_name="Shared Player",
+        team="BUF",
+        position="WR",
+    )
+    session.commit()
+
+    found_id, reason = find_player_master_id(
+        session=session,
+        source_system="draftkings",
+        source_key="new-source-key",
+        name="Shared Player",
+        team="BUF",
+        position="WR",
+    )
+    wrong_position_id, wrong_position_reason = find_player_master_id(
+        session=session,
+        source_system="draftkings",
+        source_key="other-source-key",
+        name="Shared Player",
+        team="BUF",
+        position="RB",
+    )
+    wrong_team_id, wrong_team_reason = find_player_master_id(
+        session=session,
+        source_system="draftkings",
+        source_key="third-source-key",
+        name="Shared Player",
+        team="MIA",
+        position="WR",
+    )
+
+    assert found_id == receiver.player_master_id
+    assert reason == "master_name_team_position"
+    assert wrong_position_id is None
+    assert wrong_position_reason == "unresolved"
+    assert wrong_team_id is None
+    assert wrong_team_reason == "unresolved"
+
+
 def test_upsert_alias_same_source_key_twice_same_transaction() -> None:
     session = _session()
     player = create_player_master(session, full_name="Tez Johnson", team="TB", position="WR")
