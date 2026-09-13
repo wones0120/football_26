@@ -29,7 +29,17 @@ from .player_pool_safety import (
     has_explicit_specialty_role,
     normalize_canonical_player_ids,
 )
-from .rule_library import resolve_strategy_profile
+from .player_context_scoring import score_player_context
+from .lineup_correlation_scoring import (
+    LINEUP_CORRELATION_LIBRARY_ID,
+    LINEUP_CORRELATION_LIBRARY_VERSION,
+    add_format_specific_objective,
+    add_lineup_correlation_objective,
+    build_format_specific_terms,
+    build_lineup_correlation_terms,
+    score_lineup_correlations,
+)
+from .rule_library import StrategyProfile, resolve_strategy_profile
 from .salary_eligibility import INELIGIBLE_SALARY_STATUSES_SQL
 from .simulations import SimulationService
 from .target_schema import validate_target_schema
@@ -743,20 +753,41 @@ def summarize_head_to_head_lineup(lineup: list[dict]) -> dict:
         _safe_float(row.get("h2h_floor", row.get("predicted_p10", row.get("projection"))))
         for row in lineup
     )
+    individual_ceiling_sum = sum(
+        _safe_float(row.get("h2h_ceiling", row.get("p90", row.get("projection"))))
+        for row in lineup
+    )
     return {
         "objective_id": CLASSIC_HEAD_TO_HEAD_STRATEGY_ID,
         "player_count": len(lineup),
         "projected_mean": projected_mean,
-        "projected_p90": sum(
-            _safe_float(row.get("h2h_ceiling", row.get("p90", row.get("projection"))))
-            for row in lineup
-        ),
+        # Compatibility alias: this is a sum of marginal player P90 values, not a
+        # jointly simulated lineup quantile.
+        "projected_p90": individual_ceiling_sum,
+        "projected_p90_is_joint_quantile": False,
+        "individual_ceiling_sum": individual_ceiling_sum,
         "projected_floor_p10": projected_floor,
         "downside_risk": max(0.0, projected_mean - projected_floor),
         "objective_score": sum(
             _safe_float(row.get("h2h_score", row.get("projection"))) for row in lineup
         ),
         "fragile_punt_count": sum(bool(row.get("h2h_fragile_punt")) for row in lineup),
+    }
+
+
+def summarize_individual_ceiling_sum(lineup: list[dict]) -> dict:
+    """Describe a summed player ceiling without calling it a lineup quantile."""
+
+    return {
+        "metric_id": "individual_ceiling_sum_v1",
+        "label": "Individual Ceiling Sum",
+        "value": sum(
+            _safe_float(row.get("p90", row.get("predicted_p90", row.get("projection"))))
+            for row in lineup
+        ),
+        "source_metric": "player_p90",
+        "is_joint_quantile": False,
+        "note": "Sum of player-level P90 values; not a simulated lineup P90.",
     }
 
 
@@ -1803,6 +1834,23 @@ class OptimizerService:
             "ownership": player.ownership,
             "optimal_lineup_probability": player.optimal_lineup_probability,
             "leverage": player.leverage,
+            "optimizer_context_adjustment": player.optimizer_context_adjustment,
+            "optimizer_context_rule_evaluation": (
+                player.optimizer_context_rule_evaluation
+            ),
+            "game_id": player.game_id,
+            "game_total_line": player.game_total,
+            "team_spread_line": player.spread,
+            "team_implied_total": player.team_total,
+            "market_context_point_in_time_safe": (
+                player.market_context_point_in_time_safe
+            ),
+            "optimizer_receiving_role_strength": (
+                player.optimizer_receiving_role_strength
+            ),
+            "optimizer_rushing_role_strength": (
+                player.optimizer_rushing_role_strength
+            ),
             "tags": list(player.tags),
         }
 
@@ -1820,6 +1868,17 @@ class OptimizerService:
                 None
                 if optimal_raw is None or pd.isna(optimal_raw)
                 else _safe_float(optimal_raw)
+            )
+            market_context_raw = row.get("market_context_point_in_time_safe")
+            market_context_safe = (
+                None
+                if market_context_raw is None or pd.isna(market_context_raw)
+                else (
+                    market_context_raw
+                    if isinstance(market_context_raw, bool)
+                    else str(market_context_raw).strip().lower()
+                    in {"1", "true", "t", "yes", "y"}
+                )
             )
             players.append(
                 GPPPlayer(
@@ -1853,19 +1912,42 @@ class OptimizerService:
                         else None
                     ),
                     spread=(
-                        _safe_float(row.get("spread"))
-                        if row.get("spread") is not None
+                        _safe_float(
+                            row.get("team_spread_line", row.get("spread"))
+                        )
+                        if row.get("team_spread_line", row.get("spread")) is not None
                         else None
                     ),
                     game_total=(
-                        _safe_float(row.get("game_total"))
-                        if row.get("game_total") is not None
+                        _safe_float(
+                            row.get("game_total_line", row.get("game_total"))
+                        )
+                        if row.get("game_total_line", row.get("game_total")) is not None
                         else None
                     ),
                     team_total=(
-                        _safe_float(row.get("team_total"))
-                        if row.get("team_total") is not None
+                        _safe_float(
+                            row.get("team_implied_total", row.get("team_total"))
+                        )
+                        if row.get("team_implied_total", row.get("team_total")) is not None
                         else None
+                    ),
+                    market_context_point_in_time_safe=market_context_safe,
+                    optimizer_context_adjustment=_safe_float(
+                        row.get("optimizer_context_adjustment")
+                    ),
+                    optimizer_context_rule_evaluation=(
+                        row.get("optimizer_context_rule_evaluation")
+                        if isinstance(
+                            row.get("optimizer_context_rule_evaluation"), dict
+                        )
+                        else None
+                    ),
+                    optimizer_receiving_role_strength=_safe_float(
+                        row.get("optimizer_receiving_role_strength")
+                    ),
+                    optimizer_rushing_role_strength=_safe_float(
+                        row.get("optimizer_rushing_role_strength")
                     ),
                 )
             )
@@ -2146,12 +2228,14 @@ class OptimizerService:
                 NULL::DOUBLE PRECISION AS game_total_line,
                 NULL::DOUBLE PRECISION AS team_spread_line,
                 NULL::DOUBLE PRECISION AS team_implied_total,
+                FALSE AS market_context_point_in_time_safe,
         """
         if has_feature_matrix:
             feature_select = """
                 feature.game_total_line,
                 feature.team_spread_line,
                 feature.team_implied_total,
+                FALSE AS market_context_point_in_time_safe,
             """
             feature_join = """
                 LEFT JOIN LATERAL (
@@ -2215,6 +2299,16 @@ class OptimizerService:
         """
         pregame_join = ""
         if has_projection_features:
+            feature_select = """
+                NULLIF(projection_feature.feature_json ->> 'game_total_line', '')::DOUBLE PRECISION
+                    AS game_total_line,
+                NULLIF(projection_feature.feature_json ->> 'team_spread_line', '')::DOUBLE PRECISION
+                    AS team_spread_line,
+                NULLIF(projection_feature.feature_json ->> 'team_implied_total', '')::DOUBLE PRECISION
+                    AS team_implied_total,
+                TRUE AS market_context_point_in_time_safe,
+            """
+            feature_join = ""
             pregame_select = """
                 NULLIF(
                     projection_feature.feature_json
@@ -3325,13 +3419,23 @@ class OptimizerService:
         df["salary"] = pd.to_numeric(df.get("salary", 0), errors="coerce").fillna(0)
         df["projection"] = pd.to_numeric(df.get("projection", 0), errors="coerce").fillna(0)
         df["p90"] = pd.to_numeric(df.get("p90", df["projection"]), errors="coerce").fillna(df["projection"])
+        df["strategy_projection_score"] = pd.to_numeric(
+            df.get("optimizer_context_mean_score", df["projection"]),
+            errors="coerce",
+        ).fillna(df["projection"])
+        df["strategy_p90_score"] = pd.to_numeric(
+            df.get("optimizer_context_ceiling_score", df["p90"]),
+            errors="coerce",
+        ).fillna(df["p90"])
         salary_k = (df["salary"] / 1000).replace(0, pd.NA)
-        df["ceil_per_k"] = (df["p90"] / salary_k).fillna(0)
+        df["ceil_per_k"] = (df["strategy_p90_score"] / salary_k).fillna(0)
 
         # Drop only the worst DSTs; always keep the top few to preserve feasibility
         dst_mask = df["position"].isin(["DST", "D", "DEF"])
         if dst_mask.any():
-            dst_sorted = df[dst_mask].sort_values("projection", ascending=False)
+            dst_sorted = df[dst_mask].sort_values(
+                "strategy_projection_score", ascending=False
+            )
             keep_dst = dst_sorted.head(max(6, len(dst_sorted)))
             df = pd.concat([df[~dst_mask], keep_dst])
 
@@ -3341,7 +3445,7 @@ class OptimizerService:
         df["player_id"] = df["player_id"].astype(str)
 
         cash_cfg = {
-            "score_field": "projection",
+            "score_field": "strategy_projection_score",
             "value_floor": {"default": 2.6, "WR": 2.8, "TE": 2.8, "DST": 0.0},
             "team_caps": {"WR": 3, "TE": 3, "RB": 3},
             "positions": {
@@ -3353,7 +3457,7 @@ class OptimizerService:
             },
         }
         gpp_cfg = {
-            "score_field": "p90",
+            "score_field": "strategy_p90_score",
             "value_floor": {"default": 3.0, "WR": 3.4, "TE": 3.4, "DST": 0.0},
             "team_caps": {"WR": 4, "TE": 3, "RB": 2},
             "positions": {
@@ -3394,7 +3498,11 @@ class OptimizerService:
 
         # Team caps per position
         def _cap_team(group: pd.DataFrame, cap: int) -> pd.DataFrame:
-            return group.sort_values("p90", ascending=False).groupby(team_field).head(cap)
+            return (
+                group.sort_values("strategy_p90_score", ascending=False)
+                .groupby(team_field)
+                .head(cap)
+            )
 
         for pos, cap in cfg["team_caps"].items():
             mask = filtered["position"] == pos
@@ -3403,12 +3511,16 @@ class OptimizerService:
         # Stack safety: ensure QBs, pass-catchers, bring-backs, and one cheap relief piece survive filters
         rows_to_add: list[pd.DataFrame] = []
         for team, team_df in df.groupby(team_field):
-            team_qb = team_df[team_df["position"] == "QB"].sort_values("p90", ascending=False)
+            team_qb = team_df[team_df["position"] == "QB"].sort_values(
+                "strategy_p90_score", ascending=False
+            )
             if not team_qb.empty and filtered[(filtered["position"] == "QB") & (filtered[team_field] == team)].empty:
                 rows_to_add.append(team_qb.head(1))
 
             pass_catchers = (
-                team_df[team_df["position"].isin(["WR", "TE"])].sort_values("p90", ascending=False).head(2)
+                team_df[team_df["position"].isin(["WR", "TE"])]
+                .sort_values("strategy_p90_score", ascending=False)
+                .head(2)
             )
             if not pass_catchers.empty:
                 rows_to_add.append(pass_catchers)
@@ -3418,7 +3530,7 @@ class OptimizerService:
                 opp_pool = df[
                     (df[team_field] == opp_team)
                     & (df["position"].isin(["WR", "TE", "RB"]))
-                ].sort_values("p90", ascending=False)
+                ].sort_values("strategy_p90_score", ascending=False)
                 if not opp_pool.empty:
                     rows_to_add.append(opp_pool.head(1))
 
@@ -3426,7 +3538,7 @@ class OptimizerService:
                 team_df[
                     team_df["position"].isin(["WR", "TE"]) & (team_df["salary"] <= 4000)
                 ]
-                .sort_values("p90", ascending=False)
+                .sort_values("strategy_p90_score", ascending=False)
                 .head(1)
             )
             if not cheap_pc.empty:
@@ -3517,7 +3629,13 @@ class OptimizerService:
             filtered = self._apply_pool_filters(working, contest_type="tournament")
             included_ids = set(filtered["player_id"].astype(str))
             salary_k = (working["salary"] / 1000.0).replace(0, pd.NA)
-            working["ceil_per_k"] = (working["p90"] / salary_k).fillna(0.0)
+            working["strategy_p90_score"] = pd.to_numeric(
+                working.get("optimizer_context_ceiling_score", working["p90"]),
+                errors="coerce",
+            ).fillna(working["p90"])
+            working["ceil_per_k"] = (
+                working["strategy_p90_score"] / salary_k
+            ).fillna(0.0)
             config = {
                 "QB": {"top": 14, "min_score": 17.0, "min_value": 3.0, "value": 3.0},
                 "RB": {"top": 20, "min_score": 11.0, "min_value": 3.0, "value": 3.0},
@@ -3532,7 +3650,7 @@ class OptimizerService:
                 position_config = config.get(position)
                 if position_config is None:
                     continue
-                ordered = group.sort_values("p90", ascending=False)
+                ordered = group.sort_values("strategy_p90_score", ascending=False)
                 position_rank = {
                     str(player_id): rank
                     for rank, player_id in enumerate(ordered["player_id"], start=1)
@@ -3540,7 +3658,9 @@ class OptimizerService:
                 team_rank: dict[str, int] = {}
                 for _team, team_group in group.groupby(team_field):
                     for rank, player_id in enumerate(
-                        team_group.sort_values("p90", ascending=False)["player_id"],
+                        team_group.sort_values(
+                            "strategy_p90_score", ascending=False
+                        )["player_id"],
                         start=1,
                     ):
                         team_rank[str(player_id)] = rank
@@ -3554,7 +3674,8 @@ class OptimizerService:
                             f"below GPP {position} value threshold"
                         )
                     if (
-                        float(row["p90"]) < position_config["min_score"]
+                        float(row["strategy_p90_score"])
+                        < position_config["min_score"]
                         and float(row["ceil_per_k"]) < position_config["min_value"]
                     ):
                         player_reasons.append(
@@ -3589,6 +3710,7 @@ class OptimizerService:
         contest_type: str = "classic",
         stack_params: dict | None = None,
         locked_player_ids: set[str] | None = None,
+        rule_profile: StrategyProfile | None = None,
     ) -> Optional[List[dict]]:
         if pool.empty:
             return None
@@ -3653,7 +3775,7 @@ class OptimizerService:
             flex_vars = pulp.LpVariable.dicts("flex", index_range, lowBound=0, upBound=1, cat="Binary")
 
             model = pulp.LpProblem("DK_Captain", pulp.LpMaximize)
-            model += pulp.lpSum(
+            objective_expression = pulp.lpSum(
                 1.5
                 * pool.loc[i, score_col]
                 * pool.loc[i, "captain_objective_multiplier"]
@@ -3661,6 +3783,32 @@ class OptimizerService:
                 + pool.loc[i, score_col] * flex_vars[i]
                 for i in index_range
             )
+            if rule_profile is not None:
+                rule_players = pool.to_dict(orient="records")
+                correlation_terms = build_lineup_correlation_terms(
+                    rule_players, profile=rule_profile
+                )
+                objective_expression += add_lineup_correlation_objective(
+                    model,
+                    correlation_terms,
+                    selected_vars={
+                        i: cap_vars[i] + flex_vars[i] for i in index_range
+                    },
+                    captain_vars=cap_vars,
+                    prefix="showdown_rule_correlation",
+                )
+                objective_expression += add_format_specific_objective(
+                    model,
+                    build_format_specific_terms(
+                        rule_players, profile=rule_profile
+                    ),
+                    selected_vars={
+                        i: cap_vars[i] + flex_vars[i] for i in index_range
+                    },
+                    captain_vars=cap_vars,
+                    prefix="showdown_format_rule",
+                )
+            model += objective_expression
 
             # Salary cap (captain costs 1.5x)
             model += pulp.lpSum(
@@ -3837,8 +3985,30 @@ class OptimizerService:
         objective_expression = pulp.lpSum(
             pool.loc[i, score_col] * x[i] for i in index_range
         )
-        correlation_bonus = float(params.get("correlation_bonus", 0.0) or 0.0)
-        if correlation_bonus > 0:
+        if rule_profile is not None:
+            rule_players = pool.to_dict(orient="records")
+            correlation_terms = build_lineup_correlation_terms(
+                rule_players, profile=rule_profile
+            )
+            objective_expression += add_lineup_correlation_objective(
+                model,
+                correlation_terms,
+                selected_vars=x,
+                prefix="classic_rule_correlation",
+            )
+            objective_expression += add_format_specific_objective(
+                model,
+                build_format_specific_terms(
+                    rule_players, profile=rule_profile
+                ),
+                selected_vars=x,
+                prefix="classic_format_rule",
+            )
+        else:
+            correlation_bonus = float(
+                params.get("correlation_bonus", 0.0) or 0.0
+            )
+        if rule_profile is None and correlation_bonus > 0:
             team_field = "player_team" if "player_team" in pool.columns else "team"
             for qb_index in [
                 i for i in index_range if str(pool.loc[i, "position"]).upper() == "QB"
@@ -4171,6 +4341,7 @@ class OptimizerService:
         exclusion_details: dict[str, list[dict]] = {}
         player_warnings: dict[str, list[dict]] = {}
         safety_audit_by_player: dict[str, dict] = {}
+        context_audit_by_player: dict[str, dict] = {}
         exclude_ids = normalize_canonical_player_ids(
             params.get("exclude_player_ids"),
             field_name="exclude_player_ids",
@@ -4206,6 +4377,14 @@ class OptimizerService:
             contest_format=contest_format,
             objective=objective,
         )
+        params.setdefault("strategy_runtime", {})["lineup_correlation"] = {
+            "library_id": LINEUP_CORRELATION_LIBRARY_ID,
+            "library_version": LINEUP_CORRELATION_LIBRARY_VERSION,
+            "profile_id": rule_profile.profile_id,
+            "profile_version": rule_profile.version,
+            "objective_multiplier": 1.0,
+            "evidence_status": "initial_policy_unvalidated",
+        }
         safety_result = evaluate_player_pool_safety(
             pool,
             profile=rule_profile,
@@ -4230,6 +4409,24 @@ class OptimizerService:
                 audit_row.get("exclusion_details") or []
             )
             player_warnings[player_id] = list(audit_row.get("warnings") or [])
+
+        context_result = score_player_context(pool, profile=rule_profile)
+        pool = context_result.scored_pool
+        params.setdefault("strategy_runtime", {})["context_scoring"] = (
+            context_result.summary
+        )
+        for audit_row in context_result.audit_rows:
+            player_id = str(audit_row.get("player_id") or "")
+            if not player_id:
+                continue
+            context_audit_by_player[player_id] = audit_row
+            warnings = player_warnings.setdefault(player_id, [])
+            for warning in audit_row.get("warnings") or []:
+                if not any(
+                    existing.get("reason_code") == warning.get("reason_code")
+                    for existing in warnings
+                ):
+                    warnings.append(warning)
 
         def record_pool_exclusions(
             before: pd.DataFrame,
@@ -4415,8 +4612,42 @@ class OptimizerService:
                 pool = pd.concat([pool, locked_rows], ignore_index=True)
         if not pool.empty and strategy == CLASSIC_HEAD_TO_HEAD_STRATEGY_ID:
             pool = build_head_to_head_objective(pool)
+            pool["h2h_score_before_context"] = pool["h2h_score"]
+            pool["h2h_score"] += pd.to_numeric(
+                pool.get("optimizer_context_adjustment", 0.0), errors="coerce"
+            ).fillna(0.0)
+            pool["h2h_objective_explanation"] = pool.apply(
+                lambda row: {
+                    **dict(row["h2h_objective_explanation"]),
+                    "context_adjustment": float(
+                        row["optimizer_context_adjustment"]
+                    ),
+                    "h2h_score_before_context": float(
+                        row["h2h_score_before_context"]
+                    ),
+                    "h2h_score": float(row["h2h_score"]),
+                },
+                axis=1,
+            )
         elif not pool.empty and contest_format == "classic" and objective == "cash":
             pool = build_classic_cash_objective(pool)
+            pool["cash_score_before_context"] = pool["cash_score"]
+            pool["cash_score"] += pd.to_numeric(
+                pool.get("optimizer_context_adjustment", 0.0), errors="coerce"
+            ).fillna(0.0)
+            pool["cash_objective_explanation"] = pool.apply(
+                lambda row: {
+                    **dict(row["cash_objective_explanation"]),
+                    "context_adjustment": float(
+                        row["optimizer_context_adjustment"]
+                    ),
+                    "cash_score_before_context": float(
+                        row["cash_score_before_context"]
+                    ),
+                    "cash_score": float(row["cash_score"]),
+                },
+                axis=1,
+            )
         params.setdefault("strategy_runtime", {})["player_controls"] = {
             "locked_player_ids": sorted(locked_ids),
             "excluded_player_ids": sorted(exclude_ids),
@@ -4442,11 +4673,17 @@ class OptimizerService:
             if max_exposure > 1.0:
                 max_exposure = max_exposure / 100.0
             max_exposure = max(0.01, min(1.0, max_exposure))
-            score_col = {"cash": "cash_score", "tournament": "p90", "captain": "p90"}.get(contest_type, "p90")
+            score_col = {
+                "cash": "cash_score",
+                "tournament": "optimizer_context_ceiling_score",
+                "captain": "optimizer_context_ceiling_score",
+            }.get(contest_type, "optimizer_context_ceiling_score")
             if strategy == CLASSIC_HEAD_TO_HEAD_STRATEGY_ID:
                 score_col = "h2h_score"
             if contest_format == "classic" and objective == "gpp":
-                pool["gpp_score"] = pd.to_numeric(pool["p90"], errors="coerce").fillna(0.0)
+                pool["gpp_score"] = pd.to_numeric(
+                    pool["optimizer_context_ceiling_score"], errors="coerce"
+                ).fillna(0.0)
                 if simulation_result is not None:
                     leverage_weight = float(params.get("leverage_weight", 0.25))
                     pool["gpp_score"] += leverage_weight * pd.to_numeric(
@@ -4481,6 +4718,7 @@ class OptimizerService:
                         contest_type=contest_type,
                         stack_params=stack_cfg,
                         locked_player_ids=locked_ids,
+                        rule_profile=rule_profile,
                     )
                     if not lineup:
                         break
@@ -4540,6 +4778,7 @@ class OptimizerService:
             status: str
             message: str
             uniqueness_overlap: int | None = None
+            correlation_objective_multiplier = 1.0
 
             use_gpp = (
                 strategy_config["engine"] in {"slate_aware_gpp", "large_gpp_portfolio"}
@@ -4598,6 +4837,13 @@ class OptimizerService:
                     ]
                     status = gpp_result.status
                     uniqueness_overlap = gpp_result.config.uniqueness_overlap
+                    correlation_objective_multiplier = (
+                        gpp_result.config.objective_weights.correlation
+                        * gpp_result.config.correlation_bonus
+                    )
+                    params["strategy_runtime"]["lineup_correlation"][
+                        "objective_multiplier"
+                    ] = correlation_objective_multiplier
                     message = (
                         f"{gpp_result.message}; strategy={strategy}; "
                         f"validation=slate-aware-config"
@@ -4753,6 +4999,46 @@ class OptimizerService:
                         if contest_format == "classic"
                         else {}
                     )
+                    ceiling_summary = summarize_individual_ceiling_sum(lineup)
+                    correlation_summary = score_lineup_correlations(
+                        lineup,
+                        profile=rule_profile,
+                        objective_multiplier=correlation_objective_multiplier,
+                    )
+                    context_rule_counts: dict[str, int] = {}
+                    for lineup_row in lineup:
+                        evaluation = lineup_row.get(
+                            "optimizer_context_rule_evaluation"
+                        )
+                        if not isinstance(evaluation, dict):
+                            continue
+                        for trigger in evaluation.get("triggered_rules") or []:
+                            reason_code = str(trigger.get("reason_code") or "")
+                            if reason_code:
+                                context_rule_counts[reason_code] = (
+                                    context_rule_counts.get(reason_code, 0) + 1
+                                )
+                    context_summary = {
+                        "library_id": context_result.summary["library_id"],
+                        "library_version": context_result.summary[
+                            "library_version"
+                        ],
+                        "total_adjustment": sum(
+                            _safe_float(
+                                lineup_row.get("optimizer_context_adjustment")
+                            )
+                            * (
+                                1.5
+                                if str(
+                                    lineup_row.get("roster_position") or ""
+                                ).upper()
+                                == "CPT"
+                                else 1.0
+                            )
+                            for lineup_row in lineup
+                        ),
+                        "trigger_counts": dict(sorted(context_rule_counts.items())),
+                    }
                     for row in lineup:
                         row["lineup_stack_policy"] = dict(stack_policy)
                         if stack_summary:
@@ -4761,6 +5047,9 @@ class OptimizerService:
                         row["lineup_optimizer_rules"] = [
                             dict(rule) for rule in optimizer_rules
                         ]
+                        row["lineup_context_summary"] = context_summary
+                        row["lineup_correlation_summary"] = correlation_summary
+                        row["lineup_ceiling_summary"] = ceiling_summary
                 if strategy == CLASSIC_HEAD_TO_HEAD_STRATEGY_ID:
                     for lineup in lineup_results:
                         lineup_summary = summarize_head_to_head_lineup(lineup)
@@ -4804,6 +5093,7 @@ class OptimizerService:
             ):
                 player_id = _safe_text(row.get("player_id"))
                 safety_audit = safety_audit_by_player.get(player_id, {})
+                context_audit = context_audit_by_player.get(player_id, {})
                 if not player_id and unresolved_safety_audits:
                     safety_audit = unresolved_safety_audits.pop(0)
                 safety_context = safety_audit.get("context") or {}
@@ -4832,6 +5122,14 @@ class OptimizerService:
                         ),
                         "p90": _safe_float(
                             row.get("p90", row.get("predicted_p90"))
+                        ),
+                        "optimizer_context_adjustment": (
+                            _safe_float(context_audit.get("adjustment"))
+                            if context_audit
+                            else None
+                        ),
+                        "optimizer_context_reason_codes": list(
+                            context_audit.get("reason_codes") or []
                         ),
                         "player_status": _json_safe(row.get("player_status")),
                         "pregame_availability_probability": _json_safe(
@@ -4893,6 +5191,9 @@ class OptimizerService:
                         "exclusion_details": exclusion_details.get(player_id, []),
                         "warnings": player_warnings.get(player_id, []),
                         "rule_evaluation": safety_audit.get("rule_evaluation"),
+                        "context_rule_evaluation": context_audit.get(
+                            "rule_evaluation"
+                        ),
                     }
                 )
         params.setdefault("strategy_runtime", {})["player_pool"] = {
@@ -4910,6 +5211,7 @@ class OptimizerService:
                 bool(row.get("warnings")) for row in player_pool_rows
             ),
             "safety": safety_result.summary,
+            "context_scoring": context_result.summary,
             "rows": player_pool_rows,
         }
 

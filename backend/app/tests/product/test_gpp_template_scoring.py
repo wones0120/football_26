@@ -165,6 +165,86 @@ class GppTemplateScoringTests(unittest.TestCase):
         self.assertEqual(result.status, "completed")
         self.assertIn("te-b", {player.player_id for player in result.lineups[0]})
 
+    def test_large_gpp_objective_consumes_context_adjustment_without_mutating_projection(self):
+        fixed_players = [
+            Player("qb-a", "QB A", "A", "B", "QB", 5000, 20, 30, 0, game_id="A-B"),
+            Player("rb-a", "RB A", "A", "B", "RB", 5000, 18, 28, 0, game_id="A-B"),
+            Player("rb-b", "RB B", "B", "A", "RB", 5000, 17, 27, 0, game_id="A-B"),
+            Player("rb-c", "RB C", "C", "D", "RB", 5000, 16, 26, 0, game_id="C-D"),
+            Player("wr-a", "WR A", "A", "B", "WR", 5000, 15, 25, 0, game_id="A-B"),
+            Player("wr-b", "WR B", "B", "A", "WR", 5000, 14, 24, 0, game_id="A-B"),
+            Player("wr-c", "WR C", "C", "D", "WR", 5000, 13, 23, 0, game_id="C-D"),
+            Player("dst-d", "DST D", "D", "C", "DST", 3000, 9, 19, 0, game_id="C-D"),
+        ]
+        raw_te = Player(
+            "te-raw", "TE Raw", "B", "A", "TE", 5000, 11.0, 21.0, 0, game_id="A-B"
+        )
+        contextual_te = Player(
+            "te-context",
+            "TE Context",
+            "B",
+            "A",
+            "TE",
+            5000,
+            10.9,
+            20.9,
+            0,
+            game_id="A-B",
+            optimizer_context_adjustment=1.0,
+        )
+
+        result = generate_portfolio(
+            season=2026,
+            week=1,
+            slate="SUNDAY_MAIN",
+            num_lineups=1,
+            engine=object(),
+            config_builder=build_large_gpp_config,
+            players=[*fixed_players, raw_te, contextual_te],
+            ownership_available=False,
+            max_exposure=1.0,
+        )
+
+        selected_ids = {player.player_id for player in result.lineups[0]}
+        self.assertIn("te-context", selected_ids)
+        self.assertNotIn("te-raw", selected_ids)
+        self.assertEqual(contextual_te.projection, 10.9)
+        self.assertEqual(contextual_te.ceiling, 20.9)
+
+    def test_large_gpp_objective_consumes_shared_correlation_rules(self):
+        fixed_players = [
+            Player("qb-a", "QB A", "A", "B", "QB", 5000, 20, 30, 0, game_id="A-B"),
+            Player("rb-a", "RB A", "A", "B", "RB", 5000, 18, 28, 0, game_id="A-B"),
+            Player("rb-b", "RB B", "B", "A", "RB", 5000, 17, 27, 0, game_id="A-B"),
+            Player("rb-c", "RB C", "C", "D", "RB", 5000, 16, 26, 0, game_id="C-D"),
+            Player("wr-a", "WR A", "A", "B", "WR", 5000, 15, 25, 0, game_id="A-B"),
+            Player("wr-b", "WR B", "B", "A", "WR", 5000, 14, 24, 0, game_id="A-B"),
+            Player("wr-c", "WR C", "C", "D", "WR", 5000, 13, 23, 0, game_id="C-D"),
+            Player("dst-d", "DST D", "D", "C", "DST", 3000, 9, 19, 0, game_id="C-D"),
+        ]
+        raw_te = Player(
+            "te-raw", "TE Raw", "B", "A", "TE", 5000, 11.0, 21.0, 0, game_id="A-B"
+        )
+        stack_te = Player(
+            "te-stack", "TE Stack", "A", "B", "TE", 5000, 10.9, 20.9, 0, game_id="A-B"
+        )
+
+        result = generate_portfolio(
+            season=2026,
+            week=1,
+            slate="SUNDAY_MAIN",
+            num_lineups=1,
+            engine=object(),
+            config_builder=build_large_gpp_config,
+            players=[*fixed_players, raw_te, stack_te],
+            ownership_available=False,
+            max_exposure=1.0,
+        )
+
+        selected_ids = {player.player_id for player in result.lineups[0]}
+        self.assertIn("te-stack", selected_ids)
+        self.assertNotIn("te-raw", selected_ids)
+
     def test_large_gpp_rejects_exposure_for_player_outside_candidate_pool(self):
         players = [
             Player("qb-a", "QB A", "A", "B", "QB", 5000, 20, 30, 0),

@@ -23,6 +23,10 @@ import {
   optimizerStrategyId,
   type ClassicContestStrategyId,
 } from "./optimizerStrategy";
+import {
+  contextReadinessLabel,
+  individualCeilingSummary,
+} from "./optimizerPresentation";
 import type {
   LoadSummary,
   DataQualityHistoryResponse,
@@ -2475,62 +2479,80 @@ function App() {
               )}
               <p>{optimizerStatus.message}</p>
               {optimizerStatus.player_pool && (
-                <details className="optimizer-pool-details">
-                  <summary>
-                    Eligible players: {optimizerStatus.player_pool.eligible_count ?? optimizerStatus.player_pool.initial_count} · Included candidates: {optimizerStatus.player_pool.included_count} · Excluded candidates: {optimizerStatus.player_pool.candidate_excluded_count ?? optimizerStatus.player_pool.excluded_count} · Context warnings: {optimizerStatus.player_pool.warning_player_count ?? 0}
-                  </summary>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const blob = new Blob(
-                        [JSON.stringify(optimizerStatus.player_pool, null, 2)],
-                        { type: "application/json" },
-                      );
-                      const url = URL.createObjectURL(blob);
-                      const link = document.createElement("a");
-                      link.href = url;
-                      link.download = `optimizer-player-pool-${optimizerStatus.job_id}.json`;
-                      link.click();
-                      URL.revokeObjectURL(url);
-                    }}
-                  >
-                    Download full player pool JSON
-                  </button>
-                  <div className="table-wrap">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Player</th>
-                          <th>Pos</th>
-                          <th>Team</th>
-                          <th>Salary</th>
-                          <th>Proj</th>
-                          <th>P90</th>
-                          <th>Pool status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {optimizerStatus.player_pool.rows.map((player) => (
-                          <tr key={player.player_id}>
-                            <td>{player.player_name}</td>
-                            <td>{player.position}</td>
-                            <td>{player.team}</td>
-                            <td>{Number(player.salary || 0).toLocaleString()}</td>
-                            <td>{Number(player.projection || 0).toFixed(2)}</td>
-                            <td>{Number(player.p90 || 0).toFixed(2)}</td>
-                            <td>
-                              {player.included
-                                ? player.warnings?.length
-                                  ? `Included · ${player.warnings.map((warning) => warning.reason_code).join(", ")}`
-                                  : "Included"
-                                : player.exclusion_reasons.join(", ") || "Excluded"}
-                            </td>
+                <>
+                  {optimizerStatus.player_pool.context_scoring?.gpp_context_warning && (
+                    <p className="warning-text">
+                      {optimizerStatus.player_pool.context_scoring.gpp_context_warning.message}
+                    </p>
+                  )}
+                  <details className="optimizer-pool-details">
+                    <summary>
+                      Eligible players: {optimizerStatus.player_pool.eligible_count ?? optimizerStatus.player_pool.initial_count} · Included candidates: {optimizerStatus.player_pool.included_count} · Excluded candidates: {optimizerStatus.player_pool.candidate_excluded_count ?? optimizerStatus.player_pool.excluded_count} · {contextReadinessLabel(optimizerStatus.player_pool.context_scoring)} · Pool warnings: {optimizerStatus.player_pool.warning_player_count ?? 0}
+                    </summary>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const blob = new Blob(
+                          [JSON.stringify(optimizerStatus.player_pool, null, 2)],
+                          { type: "application/json" },
+                        );
+                        const url = URL.createObjectURL(blob);
+                        const link = document.createElement("a");
+                        link.href = url;
+                        link.download = `optimizer-player-pool-${optimizerStatus.job_id}.json`;
+                        link.click();
+                        URL.revokeObjectURL(url);
+                      }}
+                    >
+                      Download full player pool JSON
+                    </button>
+                    <div className="table-wrap">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Player</th>
+                            <th>Pos</th>
+                            <th>Team</th>
+                            <th>Salary</th>
+                            <th>Proj</th>
+                            <th>P90</th>
+                            <th>Context</th>
+                            <th>Pool status</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </details>
+                        </thead>
+                        <tbody>
+                          {optimizerStatus.player_pool.rows.map((player) => (
+                            <tr key={player.player_id}>
+                              <td>{player.player_name}</td>
+                              <td>{player.position}</td>
+                              <td>{player.team}</td>
+                              <td>{Number(player.salary || 0).toLocaleString()}</td>
+                              <td>{Number(player.projection || 0).toFixed(2)}</td>
+                              <td>{Number(player.p90 || 0).toFixed(2)}</td>
+                              <td>
+                                {typeof player.optimizer_context_adjustment === "number" ? (
+                                  <span title={(player.optimizer_context_reason_codes ?? []).join(", ")}>
+                                    {player.optimizer_context_adjustment >= 0 ? "+" : ""}
+                                    {player.optimizer_context_adjustment.toFixed(2)}
+                                  </span>
+                                ) : (
+                                  "—"
+                                )}
+                              </td>
+                              <td>
+                                {player.included
+                                  ? player.warnings?.length
+                                    ? `Included · ${player.warnings.map((warning) => warning.reason_code).join(", ")}`
+                                    : "Included"
+                                  : player.exclusion_reasons.join(", ") || "Excluded"}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </details>
+                </>
               )}
               {Array.isArray(optimizerStatus.results) && optimizerStatus.results.length > 0 && (
                 <div className="lineups-grid">
@@ -2544,15 +2566,31 @@ function App() {
                       (sum, player: any) => sum + (Number(player?.projection ?? player?.predicted_mean) || 0),
                       0
                     );
-                    const totalP90 = lineup.reduce(
-                      (sum, player: any) => sum + (Number(player?.predicted_p90 ?? player?.p90 ?? player?.projection) || 0),
-                      0
-                    );
+                    const ceilingSummary = individualCeilingSummary(lineup);
                     const totalFloor = lineup.reduce(
                       (sum, player: any) => sum + (Number(player?.h2h_floor ?? player?.predicted_p10 ?? player?.projection) || 0),
                       0
                     );
+                    const totalContextAdjustment = Number(
+                      lineup[0]?.lineup_context_summary?.total_adjustment ??
+                        lineup.reduce(
+                          (sum, player: any) => sum + (Number(player?.optimizer_context_adjustment) || 0),
+                          0
+                        )
+                    );
+                    const hasContextScoring = lineup.some(
+                      (player: any) => typeof player?.optimizer_context_adjustment === "number"
+                    );
                     const stackSummary = lineup[0]?.lineup_stack_summary?.label;
+                    const correlationSummary = lineup[0]?.lineup_correlation_summary;
+                    const correlationAdjustment = Number(
+                      correlationSummary?.total_adjustment ?? 0
+                    );
+                    const correlationRules = Array.isArray(correlationSummary?.triggered_rules)
+                      ? correlationSummary.triggered_rules
+                      : [];
+                    const gameScript = correlationSummary?.implied_game_script?.label;
+                    const constructionLabel = correlationSummary?.construction_label;
                     const projVal = (p: any) =>
                       Number(p.projection ?? p.predicted_mean ?? p.p90 ?? 0);
                     const normalizePos = (p: any) =>
@@ -2628,12 +2666,55 @@ function App() {
                           <strong>Lineup {idx + 1}</strong>
                           <span>Salary: {totalSalary.toLocaleString()}</span>
                           <span>Mean: {totalProj.toFixed(2)}</span>
-                          <span>P90: {totalP90.toFixed(2)}</span>
+                          <span>{ceilingSummary.label}: {ceilingSummary.value.toFixed(2)}</span>
+                          {hasContextScoring && (
+                            <span>
+                              Context: {totalContextAdjustment >= 0 ? "+" : ""}
+                              {totalContextAdjustment.toFixed(2)}
+                            </span>
+                          )}
                           {optimizerStatus.strategy === "classic_head_to_head_v1" && (
                             <span>Floor: {totalFloor.toFixed(2)} · Risk: {(totalProj - totalFloor).toFixed(2)}</span>
                           )}
                           {stackSummary && <span>Stack: {stackSummary}</span>}
+                          {correlationSummary && (
+                            <span>
+                              Correlation: {correlationAdjustment >= 0 ? "+" : ""}
+                              {correlationAdjustment.toFixed(2)}
+                            </span>
+                          )}
+                          {gameScript && <span>Script: {gameScript}</span>}
+                          {!stackSummary && constructionLabel && (
+                            <span>Construction: {constructionLabel}</span>
+                          )}
                         </div>
+                        {correlationRules.length > 0 && (
+                          <details>
+                            <summary>
+                              Correlation rules ({correlationRules.length})
+                            </summary>
+                            <ul>
+                              {correlationRules.map((rule: any, ruleIdx: number) => {
+                                const contribution = Number(
+                                  rule.objective_contribution ?? rule.score_contribution ?? 0
+                                );
+                                const players = Array.isArray(rule.players)
+                                  ? rule.players
+                                      .map((player: any) => player.player_name || player.player_id)
+                                      .filter(Boolean)
+                                      .join(" + ")
+                                  : "";
+                                return (
+                                  <li key={`${rule.rule_id || rule.reason_code}-${ruleIdx}`}>
+                                    {contribution >= 0 ? "+" : ""}
+                                    {contribution.toFixed(2)} · {rule.description || rule.reason_code}
+                                    {players ? ` · ${players}` : ""}
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          </details>
+                        )}
                         <table className="compact-table">
                           <thead>
                             <tr>

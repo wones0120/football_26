@@ -236,3 +236,39 @@ def test_rule_library_rejects_duplicate_ids_and_invalid_condition_operator() -> 
         RuleLibrary("invalid", "v1", (rule, rule))
     with pytest.raises(ValueError, match="not a valid ConditionOperator"):
         RuleCondition("player.status", "approximately", "OUT")
+
+
+def test_soft_rule_magnitude_scales_and_caps_the_explained_contribution() -> None:
+    rule = RuleDefinition(
+        rule_id="environment.continuous_total_v1",
+        description="Scale a soft preference with normalized market strength.",
+        rule_type="soft_boost",
+        conditions=(RuleCondition("signals.total", "gt", 0.0),),
+        reason_code="continuous_total",
+        weight=2.0,
+        magnitude_field="signals.total",
+    )
+    engine = RuleEngine(RuleLibrary("continuous_rules", "v1", (rule,)))
+    profile = resolve_strategy_profile(contest_format="classic", objective="gpp")
+
+    partial = engine.evaluate({"signals": {"total": 0.25}}, profile)
+    capped = engine.evaluate({"signals": {"total": 4.0}}, profile)
+
+    assert partial.rule_adjustment == pytest.approx(0.5)
+    assert partial.triggered_rules[0].magnitude == pytest.approx(0.25)
+    assert partial.to_dict()["triggered_rules"][0]["magnitude"] == pytest.approx(
+        0.25
+    )
+    assert capped.rule_adjustment == pytest.approx(2.0)
+
+
+def test_magnitude_field_is_rejected_for_non_soft_rules() -> None:
+    with pytest.raises(ValueError, match="only valid for soft"):
+        RuleDefinition(
+            rule_id="invalid.warning_magnitude_v1",
+            description="Warnings do not score.",
+            rule_type="warning",
+            conditions=(),
+            reason_code="invalid_warning",
+            magnitude_field="signals.warning",
+        )

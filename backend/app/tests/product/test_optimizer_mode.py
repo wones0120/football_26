@@ -40,6 +40,7 @@ from backend.app.product_services.optimizer import (
     resolve_stacking_policy,
     showdown_optimizer_rules,
     summarize_head_to_head_lineup,
+    summarize_individual_ceiling_sum,
 )
 
 
@@ -73,7 +74,10 @@ class OptimizerModeTests(unittest.TestCase):
         self.assertIn("UPPER(salary.roster_position) = 'FLEX'", sql)
         self.assertIn("participation.roster_status", sql)
         self.assertIn("IN ('FLEX', 'CPT')", sql)
-        self.assertIn("player_game_feature_matrix", sql)
+        self.assertIn("projection_feature.feature_json ->> 'game_total_line'", sql)
+        self.assertIn("projection_model_run.feature_run_id", sql)
+        self.assertIn("TRUE AS market_context_point_in_time_safe", sql)
+        self.assertNotIn("player_game_feature_matrix", sql)
         self.assertIn("starting_qb_evidence", sql)
         self.assertIn("feature_player_game", sql)
         self.assertIn("pregame_availability_probability", sql)
@@ -312,6 +316,21 @@ class OptimizerModeTests(unittest.TestCase):
         self.assertEqual(summary["projected_mean"], 19.0)
         self.assertEqual(summary["projected_floor_p10"], 11.0)
         self.assertEqual(summary["downside_risk"], 8.0)
+        self.assertEqual(summary["individual_ceiling_sum"], 35.0)
+        self.assertFalse(summary["projected_p90_is_joint_quantile"])
+
+    def test_summed_player_p90_is_labeled_as_an_individual_ceiling_sum(self):
+        summary = summarize_individual_ceiling_sum(
+            [
+                {"player_id": "one", "p90": 21.0},
+                {"player_id": "two", "p90": 18.5},
+            ]
+        )
+
+        self.assertEqual(summary["metric_id"], "individual_ceiling_sum_v1")
+        self.assertEqual(summary["label"], "Individual Ceiling Sum")
+        self.assertEqual(summary["value"], 39.5)
+        self.assertFalse(summary["is_joint_quantile"])
 
     def test_large_gpp_config_redistributes_missing_ownership_weight(self):
         analysis = SlateAnalysis(game_count=12, chalk_concentration=0.0, feature_games=[])
@@ -689,6 +708,13 @@ class OptimizerModeTests(unittest.TestCase):
                     "p90": 20.0 + index,
                     "ownership": 5.0,
                     "optimal_lineup_probability": 8.0,
+                    "game_total_line": 50.0,
+                    "team_spread_line": -3.0 if team == "AAA" else 3.0,
+                    "team_implied_total": 27.0 if team == "AAA" else 23.0,
+                    "market_context_point_in_time_safe": True,
+                    "pregame_context_run_id": "context-run-1",
+                    "pregame_expected_snaps": 50.0,
+                    "pregame_expected_routes": 25.0,
                 }
                 for index, (position, team) in enumerate(zip(positions, teams))
             ]
@@ -751,6 +777,13 @@ class OptimizerModeTests(unittest.TestCase):
             job.results[0][0]["lineup_optimizer_strategy"]["strategy_id"],
             CLASSIC_GPP_ADVANCED_STRATEGY_ID,
         )
+        ceiling_summary = job.results[0][0]["lineup_ceiling_summary"]
+        self.assertEqual(ceiling_summary["label"], "Individual Ceiling Sum")
+        self.assertFalse(ceiling_summary["is_joint_quantile"])
+        self.assertEqual(
+            ceiling_summary["value"],
+            sum(row["p90"] for row in job.results[0]),
+        )
         self.assertEqual(
             job.params["stack_policy"]["stack_min"],
             config.stack_rules.min_pass_catchers,
@@ -769,6 +802,20 @@ class OptimizerModeTests(unittest.TestCase):
         self.assertEqual(
             {player.player_id for player in run_gpp.call_args.kwargs["players"]},
             set(pool["player_id"]),
+        )
+        scored_players = run_gpp.call_args.kwargs["players"]
+        self.assertTrue(
+            any(player.optimizer_context_adjustment > 0 for player in scored_players)
+        )
+        self.assertEqual(scored_players[0].game_total, 50.0)
+        self.assertEqual(scored_players[0].team_total, 27.0)
+        self.assertEqual(
+            job.params["strategy_runtime"]["context_scoring"]["library_id"],
+            "optimizer_player_context",
+        )
+        self.assertEqual(
+            job.params["strategy_runtime"]["lineup_correlation"]["library_id"],
+            "optimizer_lineup_correlation",
         )
         self.assertEqual(run_gpp.call_args.kwargs["max_exposure"], 0.75)
         service._solve_lineup.assert_not_called()

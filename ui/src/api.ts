@@ -213,6 +213,27 @@ export type OptimizerResponse = {
     ineligible_count?: number;
     warning_player_count?: number;
     safety?: Record<string, unknown>;
+    context_scoring?: {
+      library_id?: string;
+      library_version?: string;
+      processed_count?: number;
+      scored_count?: number;
+      context_evaluable_count?: number;
+      offensive_player_count?: number;
+      market_context_count?: number;
+      opportunity_context_count?: number;
+      fully_contextualized_count?: number;
+      adjusted_count?: number;
+      positive_adjustment_count?: number;
+      negative_adjustment_count?: number;
+      warning_player_count?: number;
+      evidence_status?: string;
+      status?: string;
+      gpp_context_warning?: {
+        reason_code: string;
+        message: string;
+      } | null;
+    };
     rows: Array<{
       player_id: string;
       player_name: string;
@@ -222,6 +243,8 @@ export type OptimizerResponse = {
       salary: number;
       projection: number;
       p90: number;
+      optimizer_context_adjustment?: number | null;
+      optimizer_context_reason_codes?: string[];
       included: boolean;
       exclusion_reasons: string[];
       exclusion_details?: Array<{
@@ -249,6 +272,7 @@ export type OptimizerResponse = {
       pregame_injury_status?: string | null;
       identity_resolved?: boolean;
       rule_evaluation?: Record<string, unknown> | null;
+      context_rule_evaluation?: Record<string, unknown> | null;
     }>;
   } | null;
   created_at?: string;

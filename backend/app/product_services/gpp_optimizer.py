@@ -15,6 +15,14 @@ from sqlalchemy.engine import Engine
 
 from Database.config import get_connection_string
 
+from .lineup_correlation_scoring import (
+    add_format_specific_objective,
+    add_lineup_correlation_objective,
+    build_format_specific_terms,
+    build_lineup_correlation_terms,
+)
+from .rule_library import resolve_strategy_profile
+
 
 Position = str
 
@@ -35,6 +43,11 @@ class Player:
     spread: float | None = None
     game_total: float | None = None
     team_total: float | None = None
+    market_context_point_in_time_safe: bool | None = None
+    optimizer_context_adjustment: float = 0.0
+    optimizer_context_rule_evaluation: dict | None = None
+    optimizer_receiving_role_strength: float = 0.0
+    optimizer_rushing_role_strength: float = 0.0
     tags: set[str] = field(default_factory=set)
     value_per_k: float = 0.0
     ceiling_per_k: float = 0.0
@@ -642,49 +655,6 @@ def _position_indices(players: List[Player], positions: Iterable[Position]) -> L
     return [i for i, p in enumerate(players) if p.position in allowed]
 
 
-def _add_stack_bonus_vars(model: pulp.LpProblem, x: dict, players: List[Player], weight: float) -> pulp.LpAffineExpression:
-    """Create pairwise QB-pass catcher variables for correlation bonus."""
-    bonus_terms: List[pulp.LpAffineExpression] = []
-    for i, qb in enumerate(players):
-        if qb.position != "QB":
-            continue
-        for j, pc in enumerate(players):
-            if i == j:
-                continue
-            if pc.position not in ("WR", "TE", "RB"):
-                continue
-            if qb.team != pc.team:
-                continue
-            y = pulp.LpVariable(f"stack_{i}_{j}", lowBound=0, upBound=1, cat="Binary")
-            model += y <= x[i]
-            model += y <= x[j]
-            model += y >= x[i] + x[j] - 1
-            bonus_terms.append(weight * y)
-    return pulp.lpSum(bonus_terms)
-
-
-def _add_rb_dst_bonus_vars(
-    model: pulp.LpProblem,
-    x: dict,
-    players: List[Player],
-    weight: float,
-) -> pulp.LpAffineExpression:
-    """Reward same-team RB/DST pairings without forcing them."""
-    bonus_terms: List[pulp.LpAffineExpression] = []
-    for i, rb in enumerate(players):
-        if rb.position != "RB":
-            continue
-        for j, dst in enumerate(players):
-            if dst.position not in {"DST", "D", "DEF"} or rb.team != dst.team:
-                continue
-            y = pulp.LpVariable(f"rb_dst_{i}_{j}", lowBound=0, upBound=1, cat="Binary")
-            model += y <= x[i]
-            model += y <= x[j]
-            model += y >= x[i] + x[j] - 1
-            bonus_terms.append(weight * y)
-    return pulp.lpSum(bonus_terms)
-
-
 def _build_lineup(
     players: List[Player],
     config: SlateConfig,
@@ -705,34 +675,58 @@ def _build_lineup(
 
     # Objective
     weights = config.objective_weights
+    adjusted_projections = [
+        player.projection + player.optimizer_context_adjustment
+        for player in players
+    ]
+    adjusted_ceilings = [
+        player.ceiling + player.optimizer_context_adjustment
+        for player in players
+    ]
     if config.normalize_objective:
-        max_projection = max(1.0, max(player.projection for player in players))
-        max_ceiling = max(1.0, max(player.ceiling for player in players))
+        max_projection = max(1.0, max(adjusted_projections))
+        max_ceiling = max(1.0, max(adjusted_ceilings))
         max_abs_leverage = max(
             1.0, max(abs(player.leverage) for player in players)
         )
         proj_term = pulp.lpSum(
-            (players[i].projection / max_projection) * x[i] for i in idx_range
+            (adjusted_projections[i] / max_projection) * x[i] for i in idx_range
         )
         ceiling_term = pulp.lpSum(
-            (players[i].ceiling / max_ceiling) * x[i] for i in idx_range
+            (adjusted_ceilings[i] / max_ceiling) * x[i] for i in idx_range
         )
         lev_term = pulp.lpSum(
             (players[i].leverage / max_abs_leverage) * x[i] for i in idx_range
         )
     else:
-        proj_term = pulp.lpSum(players[i].projection * x[i] for i in idx_range)
-        ceiling_term = pulp.lpSum(players[i].ceiling * x[i] for i in idx_range)
+        proj_term = pulp.lpSum(adjusted_projections[i] * x[i] for i in idx_range)
+        ceiling_term = pulp.lpSum(adjusted_ceilings[i] * x[i] for i in idx_range)
         lev_term = pulp.lpSum(players[i].leverage * x[i] for i in idx_range)
-    stack_bonus = _add_stack_bonus_vars(model, x, players, config.correlation_bonus)
-    rb_dst_bonus = _add_rb_dst_bonus_vars(
-        model, x, players, config.correlation_bonus * 0.5
+    correlation_profile = resolve_strategy_profile(
+        contest_format="classic", objective="gpp"
+    )
+    correlation_terms = build_lineup_correlation_terms(
+        players, profile=correlation_profile
+    )
+    correlation_score = add_lineup_correlation_objective(
+        model,
+        correlation_terms,
+        selected_vars=x,
+        prefix="gpp_rule_correlation",
+    )
+    format_score = add_format_specific_objective(
+        model,
+        build_format_specific_terms(players, profile=correlation_profile),
+        selected_vars=x,
+        prefix="gpp_format_rule",
     )
     model += (
         weights.projection * proj_term
         + weights.ceiling * ceiling_term
         + weights.leverage * lev_term
-        + weights.correlation * (stack_bonus + rb_dst_bonus)
+        + weights.correlation
+        * config.correlation_bonus
+        * (correlation_score + format_score)
     )
 
     # Salary + roster

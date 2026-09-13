@@ -68,6 +68,56 @@ to both Classic and Showdown solvers. Structured audit reasons distinguish
 eligibility, projection, strategy, and user exclusions. See
 `docs/PLAYER_POOL_SAFETY.md` for the runtime and API contract.
 
+## Phase 3 contextual scoring
+
+`backend/app/product_services/player_context_scoring.py` applies the shared
+`optimizer_player_context` v2 library to every player who passes Phase 2. It
+uses bounded continuous magnitudes for source-backed game total, implied team
+total, team-relative spread, current opportunity, red-zone/goal-line work, and
+role certainty. These rules are exclusively soft boosts, soft penalties, and
+warnings; the layer cannot exclude a player or make the solver infeasible.
+
+Raw projection mean and P90 remain immutable. The adapter writes separate
+context-adjusted objective columns for baseline solvers and supplies the same
+adjustment to portfolio GPP scoring. Each player and completed lineup retains
+the exact rule contributions. Missing market or opportunity evidence produces
+a warning and zero adjustment. Runtime counts distinguish context-ready rows
+from rows whose objective actually changed; a Large-GPP run with no safe market
+context is explicitly degraded. See `docs/PLAYER_CONTEXT_SCORING.md` for the
+formula, lineage, and operational contract.
+
+## Phase 4 lineup correlation
+
+`backend/app/product_services/lineup_correlation_scoring.py` applies
+`optimizer_lineup_correlation` v3 inside both the baseline ILP and advanced
+Classic GPP objective. It evaluates player pairs and Showdown Captain-specific
+relationships through the same four strategy profiles. All Phase 4 rules are
+soft boosts or soft penalties; the layer never excludes a player or restricts
+which otherwise legal lineups remain feasible. Binary helper constraints only
+linearize each objective contribution.
+
+Completed lineups retain the total correlation adjustment, every contributing
+pair, positive and negative reason codes, a construction label, and a
+descriptive Showdown game-script label. See
+`docs/LINEUP_CORRELATION_SCORING.md` for weights, lineage behavior, and current
+limits.
+
+## Phase 5 format-specific construction
+
+Phase 5 advanced `optimizer_lineup_correlation` from v1 to v2. Phase 5A
+advances it to v3 so positive stack terms are multiplied by cutoff-safe game
+environment and missing context contributes zero. The baseline Classic/Showdown
+solvers and advanced Classic GPP engine consume higher-order terms whose activation depends on
+Captain slot, teammate counts, team splits, or an explicitly absent partner.
+
+Classic covers naked pocket-QB penalties with a rushing-role exception, QB
+double stacks, competitive full-game stacks, and three-player skill clusters
+without the team's quarterback. Showdown covers Captain partner structure,
+favorite/underdog 5-1 builds, competitive 3-3 and 4-2 builds, favorite-RB
+Captain scripts, and fragile sub-$1,000 punts without current opportunity
+evidence. All remain soft boosts or penalties. See
+`docs/FORMAT_SPECIFIC_LINEUP_RULES.md` for the activation and audit contract.
+
 ## Adding a rule
 
 1. Add a versioned `RuleDefinition`; never silently change the meaning of a

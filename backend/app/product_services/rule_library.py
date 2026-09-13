@@ -149,6 +149,7 @@ class RuleDefinition:
     conditions: tuple[RuleCondition, ...]
     reason_code: str
     weight: float = 0.0
+    magnitude_field: str | None = None
     scope: RuleScope = field(default_factory=RuleScope)
     enabled: bool = True
     metadata: Mapping[str, Any] = field(default_factory=dict)
@@ -165,7 +166,17 @@ class RuleDefinition:
         object.__setattr__(self, "rule_id", rule_id)
         object.__setattr__(self, "description", description)
         object.__setattr__(self, "reason_code", reason_code)
-        object.__setattr__(self, "rule_type", RuleType(self.rule_type))
+        normalized_type = RuleType(self.rule_type)
+        magnitude_field = str(self.magnitude_field or "").strip() or None
+        if magnitude_field and normalized_type not in {
+            RuleType.SOFT_BOOST,
+            RuleType.SOFT_PENALTY,
+        }:
+            raise ValueError(
+                "rule magnitude_field is only valid for soft boosts and penalties"
+            )
+        object.__setattr__(self, "rule_type", normalized_type)
+        object.__setattr__(self, "magnitude_field", magnitude_field)
         conditions = tuple(
             condition
             if isinstance(condition, RuleCondition)
@@ -177,7 +188,7 @@ class RuleDefinition:
         object.__setattr__(self, "metadata", _frozen_mapping(self.metadata))
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "rule_id": self.rule_id,
             "description": self.description,
             "rule_type": self.rule_type.value,
@@ -188,6 +199,9 @@ class RuleDefinition:
             "enabled": self.enabled,
             "metadata": dict(self.metadata),
         }
+        if self.magnitude_field is not None:
+            payload["magnitude_field"] = self.magnitude_field
+        return payload
 
 
 @dataclass(frozen=True)
@@ -367,6 +381,7 @@ class RuleTrigger:
     reason_code: str
     description: str
     configured_weight: float
+    magnitude: float
     effective_weight: float
     score_contribution: float
 
@@ -377,6 +392,7 @@ class RuleTrigger:
             "reason_code": self.reason_code,
             "description": self.description,
             "configured_weight": self.configured_weight,
+            "magnitude": self.magnitude,
             "effective_weight": self.effective_weight,
             "score_contribution": self.score_contribution,
         }
@@ -525,11 +541,24 @@ class RuleEngine:
                 if override is None or override.weight is None
                 else override.weight
             )
+            magnitude = 1.0
+            if rule.magnitude_field is not None:
+                raw_magnitude = _lookup(context, rule.magnitude_field)
+                try:
+                    magnitude = float(raw_magnitude)
+                except (TypeError, ValueError):
+                    magnitude = 0.0
+                if not math.isfinite(magnitude):
+                    magnitude = 0.0
+                magnitude = min(1.0, max(0.0, magnitude))
+                if magnitude <= 0.0:
+                    continue
             override_multiplier = 1.0 if override is None else override.weight_multiplier
             effective_weight = (
                 configured_weight
                 * override_multiplier
                 * profile.rule_type_multipliers[resolved_type.value]
+                * magnitude
             )
             contribution = 0.0
             if resolved_type is RuleType.SOFT_BOOST:
@@ -546,6 +575,7 @@ class RuleEngine:
                     reason_code=rule.reason_code,
                     description=rule.description,
                     configured_weight=configured_weight,
+                    magnitude=magnitude,
                     effective_weight=effective_weight,
                     score_contribution=contribution,
                 )

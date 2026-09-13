@@ -424,9 +424,32 @@ The shared optimizer policy foundation is documented in
 [`docs/RULE_LIBRARY.md`](docs/RULE_LIBRARY.md). It defines explainable hard
 exclusions, soft boosts, soft penalties, and warnings plus four canonical,
 versioned Showdown/Classic × Head-to-Head/Large-GPP profiles. Resolved optimizer
-strategies now persist the selected rule profile with their existing run
-lineage; established solver behavior remains unchanged until domain rules are
-migrated onto the library in later phases.
+strategies persist the selected rule profile with their existing run lineage.
+Phase 2 applies the hard player-pool safety gate. Phase 3 adds conservative,
+continuous game-environment and role adjustments from the selected projection's
+immutable feature lineage while preserving the raw mean and P90. Missing market
+or opportunity context contributes zero, remains eligible, and is exposed as a
+warning. The v2 readiness audit separates context-ready, market-ready, and
+actually adjusted counts, and flags a Large-GPP run as degraded when no
+cutoff-safe market context exists. Operations shows each player's context
+adjustment and includes the
+complete rule evaluation in the downloadable player-pool JSON. See
+[`docs/PLAYER_CONTEXT_SCORING.md`](docs/PLAYER_CONTEXT_SCORING.md) for the
+scoring and fallback contract. Phase 4 applies one shared lineup-correlation
+library inside the baseline and advanced GPP objectives. It rewards coherent
+QB, pass-catcher, bring-back, RB/DST, and Captain constructions and penalizes
+contradictory DST pairings without making them impossible. Completed lineups
+show the total correlation adjustment, triggered positive and negative rules,
+and a descriptive Showdown game-script label. See
+[`docs/LINEUP_CORRELATION_SCORING.md`](docs/LINEUP_CORRELATION_SCORING.md).
+Phase 5 advanced that library to v2 with higher-order, format-specific scoring:
+Classic naked-pocket-QB, double-stack, full-game-stack, and unsupported skill
+cluster logic plus Showdown Captain-partner, 3-3/4-2/5-1, favorite-RB Captain,
+and fragile-punt logic. Phase 5A advances it to v3: every positive stack credit
+now requires cutoff-safe game context, structural stack floors are removed, and
+the summed player-ceiling display is explicitly named `Individual Ceiling Sum`
+rather than lineup P90. These construction rules remain soft and auditable. See
+[`docs/FORMAT_SPECIFIC_LINEUP_RULES.md`](docs/FORMAT_SPECIFIC_LINEUP_RULES.md).
 
 ## Classic Contest Strategies
 
@@ -444,7 +467,8 @@ uses 35% mean, 48% P90, 17% correlation, and zero leverage. Its portfolio cycles
 QB+1/QB+2 templates with optional bring-backs and supports maximum/minimum player
 exposure, lineup uniqueness, team/game caps, and caller-supplied stack templates.
 The UI shows eligible/included/excluded counts, player-level exclusion reasons,
-lineup mean/P90/floor where applicable, and realized stack structure.
+lineup mean, individual ceiling sum, floor where applicable, and realized stack
+structure.
 
 The historical `classic_gpp_baseline_v1` and `classic_gpp_slate_aware_v1`
 contracts remain callable for reproducible prior runs. Every selected version is

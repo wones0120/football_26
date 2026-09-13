@@ -2,6 +2,63 @@
 
 ## Unreleased
 
+- Corrected the Phase 5 optimizer feedback loop with
+  `optimizer_lineup_correlation` v3 and `optimizer_player_context` v2. Positive
+  QB stacks, QB+2 constructions, receiving-back stacks, RB/DST pairs, and
+  positive Showdown Captain pairings now scale with cutoff-safe game
+  environment or supported defense game script; missing context contributes
+  zero instead of receiving a structural correlation floor. Player-pool status
+  now reports context-ready, market-ready, and actually adjusted counts and
+  displays a non-blocking degraded GPP warning when no safe market context is
+  available. Completed lineups persist context evidence for triggered rules and
+  label the summed player P90 metric `Individual Ceiling Sum`, explicitly noting
+  that it is not a jointly simulated lineup quantile. Lineup legality, locks,
+  exposure controls, and all four strategy paths remain unchanged.
+  Verification: 545 backend tests, 97 focused optimizer/backend tests, 16 UI
+  tests, the production UI build, and an Operations workspace render.
+
+- Added Phase 5 higher-order format scoring through
+  `optimizer_lineup_correlation` v2. Classic GPP now distinguishes naked pocket
+  QBs from rushing-QB exceptions, rewards QB double stacks and cutoff-safe full
+  game stacks, and penalizes unsupported three-player skill clusters. Showdown
+  now scores QB-Captain double stacks, pass-catcher Captains without their QB,
+  favorite/underdog 5-1 scripts, competitive 3-3 and 4-2 builds, favorite-RB
+  Captains, and sub-$1,000 skill players without a current opportunity path.
+  Every preference is a soft objective term with exact persisted contributions;
+  legal unusual lineups and user locks remain feasible.
+  Verification: 539 backend tests, including exact negative-indicator parity and
+  explicit contradictory-script detection, and all four direct solver profiles;
+  14 UI tests; and the production UI build.
+
+- Added the Phase 4 shared lineup-correlation layer. Baseline Classic/Showdown
+  and advanced Classic GPP now consume the same versioned soft terms for QB
+  pairings, contextual bring-backs, RB/DST combinations, opposing
+  pass-catcher mini-correlations, DST conflicts, and Captain-specific partners.
+  The rules change objective scoring but add no blanket hard constraints;
+  explicitly locked unusual constructions remain solvable. Completed lineups
+  persist the exact positive and negative contributions, construction label,
+  and descriptive Showdown game-script label. Operations displays the total
+  adjustment and provides an expandable rule list. The weights remain an
+  `initial_policy_unvalidated` prior pending time-safe backtesting. Phase 5
+  retains v1 history and advances the active library to v2.
+  Verification: 530 backend tests, including baseline Classic, advanced GPP,
+  locked negative-correlation, and Showdown explanation acceptance cases; 14
+  UI tests; and the production UI build pass.
+
+- Added the Phase 3 shared player-context scoring layer. Classic and Showdown
+  now consume modest, continuous soft adjustments for game total, implied team
+  total, spread-sensitive RB and receiving roles, goal-line/red-zone work,
+  stable volume, and explicit role uncertainty. The source projection mean and
+  P90 remain unchanged; only optimizer objective and candidate-ranking columns
+  are adjusted. Portfolio GPP consumes the same adjustment without replacing
+  its raw player projections. Vegas inputs now come from the selected
+  projection's immutable feature run rather than the latest mutable feature
+  matrix. Missing evidence warns and scores zero instead of blocking a lineup.
+  Player-pool and lineup JSON retain the versioned evaluation, and Operations
+  shows the adjustment and reason codes. Verification: 517 backend tests,
+  including Classic and Showdown context-scored solve smoke tests; 14 UI tests;
+  and the production UI build pass.
+
 - Added the Phase 2 optimizer player-pool safety layer. Every Classic and
   Showdown run now evaluates a versioned, explainable gate for canonical
   identity, confirmed availability, current roster, slate membership,

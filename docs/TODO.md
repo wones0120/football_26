@@ -1,6 +1,6 @@
 # football_26 Canonical Backlog
 
-Last reviewed: 2026-08-28
+Last reviewed: 2026-09-12
 
 This is the single source of truth for active product, data, modeling, simulation,
 and operational work in `football_26`. Completed implementation history belongs in
@@ -97,6 +97,8 @@ See `docs/CONSOLIDATION.md` for the complete contract and verification evidence.
 | OPT-003 (`DT-404`) | Blocked | Add diversified cash portfolios and deterministic late-news replacement rules. | OPT-005 | Multiple legal cash lineups respect exposure/risk limits; replacements preserve locked players and produce an auditable before/after report. |
 | OPT-004 (`DT-402`) | Research | Complete promotion-grade classic cash stacking replay with proven pre-lock salary inputs and normalized cash outcome evidence. | DATA-001 | Walk-forward comparisons use complete actuals and defensible cash-line/field evidence; promoted policy beats the unconstrained baseline on declared downside and median gates. |
 | OPT-005 (`DT-403`) | Blocked | Complete cash contest evaluation with verified contest type, fees, field size, payout tiers, and real historical cash files. | DATA-001 | Reports include win/double-up rate, median and lower-tail margin, ROI only where payouts are exact, and uncertainty across slates. |
+| OPT-006 | Blocked | Extend the v3 context-weighted stack score with immutable pre-lock projected pass attempts/TDs, neutral pass rate, team play volume/pace, target concentration, and role-aware QB/RB interaction. Every optional component must abstain when its lineage is unavailable rather than falling back to a structural bonus. | DATA-002 | Each component has an explicit source/cutoff contract, appears in fired-rule evidence, scales continuously, scores zero when unsafe or missing, and passes walk-forward ablation before any promoted weight change. |
+| OPT-007 | Ready | Generate matched control lineups with all hard inputs held constant and optimizer context/correlation rules disabled, then report player swaps and opportunity-cost deltas for mean, individual ceiling sum, salary, ownership, leverage, and every rule contribution. | Existing optimizer run lineage | Every scored run can reproduce its control, identifies exactly which soft rules changed selection, never labels the ceiling sum as a lineup quantile, and exposes the comparison in API/UI JSON without changing lineup legality. |
 
 ## P2 — Data Quality And Point-In-Time Inputs
 
