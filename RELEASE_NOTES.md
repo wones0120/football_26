@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Replaced the single-entry contest cutoff with payout-ladder economics and a
+  contest-count comparison. Reports now show min cash, percentile payouts,
+  concentration, rake, near-lock overlay, and the best feasible subset at each
+  count. Auto may choose one contest with budget left. Single-contest reports omit
+  three-lineup diversification comparisons.
+
 - Added separate Showdown single-entry GPP and a single-entry contest portfolio
   with DraftKings URL preview, live payout ingestion, contest selection, optional
   budget and contest-count limits, and separate contest and lineup scoring. Live

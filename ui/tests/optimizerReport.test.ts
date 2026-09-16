@@ -223,6 +223,7 @@ test("single-entry report explains A/B/A and featured alternatives", () => {
       single_entry_report: {
         recommended_structure: "A / B / A", material_player_change_minimum: 2,
         selected_portfolio_comparison: comparison,
+        assignments: [{ contest: 1 }, { contest: 2 }, { contest: 3 }],
         portfolio_comparisons: {
           aaa: { structure: "A / A / A", candidate_ranks: [1, 1, 1], quality_loss_total: 0, diversification_credit_total: 0, heuristic_delta_vs_aaa: 0 },
           best_one_alternate: comparison,
@@ -240,4 +241,43 @@ test("single-entry report explains A/B/A and featured alternatives", () => {
   assert.match(html, /Jaccard/);
   assert.match(html, /B &lt;Captain&gt;/);
   assert.doesNotMatch(html, /B <Captain>/);
+});
+
+test("one selected contest omits diversification-combination language", () => {
+  const optimizer = {
+    job_id: "one-contest", status: "completed",
+    strategy: "showdown_single_entry_portfolio", strategy_config: {},
+    contest_format: "showdown", objective: "gpp", lineage_persisted: true,
+    results: [[{
+      player_id: "captain", name: "A", roster_position: "CPT",
+      position: "QB", player_team: "DET", salary: 12000,
+      projection: 20, p90: 35,
+      single_entry_report: {
+        recommended_structure: "A", assignments: [{ contest: 1 }],
+        selected_portfolio_comparison: { structure: "A", candidate_ranks: [1] },
+        portfolio_comparisons: {}, top_alternates: {},
+        candidates: [], selected_candidates: [],
+        contest_selection: {
+          mode: "auto", selected_count: 1, available_count: 1, total_entry_fees: 5,
+          note: "Payout proxy", selection_reason: "One contest has the highest value.",
+          search_method: "exhaustive_subsets", evaluated_subsets: 1,
+          selected_contest_ids: ["123"],
+          count_comparisons: [{ contest_count: 1, contest_ids: ["123"], total_entry_fees: 5, heuristic_value: .25, independent_rank_proxy: .25, shared_percentile_proxy: .25 }],
+          ranked_contests: [{ contest_id: "123", name: "Test contest", contest_score: .25, entry_fee: 5, capacity: 100, economics: {
+            paid_percentage: .25, minimum_cash: 8, minimum_cash_multiple: 1.6,
+            payout_at_field_percentiles: { "1": 50, "5": 8, "10": 8, "20": 8 }, median_paid_payout: 8,
+            first_place_share: .1, top_10_share: .4, payout_flatness: .6, full_field_rake: .1,
+            current_effective_rake: null,
+          } }],
+        },
+      },
+    }]],
+  } as OptimizerResponse;
+  const html = buildOptimizerReportHtml(optimizer, { season: 2026, week: 2, slate: "THURSDAY_NIGHT" });
+  assert.match(html, /One contest selected/);
+  assert.match(html, /Best subset/);
+  assert.match(html, /Min cash/);
+  assert.doesNotMatch(html, /A \/ A \/ A/);
+  assert.doesNotMatch(html, /Diversification benefit/);
+  assert.doesNotMatch(html, /candidate combinations with repetition/);
 });

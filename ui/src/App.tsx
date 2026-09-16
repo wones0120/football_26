@@ -2800,16 +2800,17 @@ function App() {
                 const formatDelta = (value: number) => `${value >= 0 ? "+" : ""}${value.toFixed(3)}`;
                 return <div>
                   <h4>Recommended portfolio: {report.recommended_structure ?? "A"}</h4>
-                  <p>Heuristic selection. Payout probabilities await field and contest simulation.</p>
+                  <p>Contest value is a payout-ladder proxy under stated rank assumptions. Lineup payout probabilities await field and contest simulation.</p>
                   {contestSelection && <div>
                     <p>Contest selection: {contestSelection.mode === "auto" ? "Auto" : "Enter all"} · {contestSelection.selected_count} of {contestSelection.available_count} contests · ${Number(contestSelection.total_entry_fees).toFixed(2)} total entry fees. {contestSelection.note}</p>
-                    <p>Score weights: rake 30%, overlay near lock 15%, field size 15%, paid places 15%, payout flatness 15%, entry fee 10%. Auto cutoff after the first contest: {contestSelection.auto_score_cutoff_after_first.toFixed(2)}.</p>
-                    <div className="table-wrap"><table><thead><tr><th>Selected</th><th>Contest</th><th>Score</th><th>Entry</th><th>Field</th><th>Paid</th><th>Rake</th><th>Potential overlay</th><th>Overlay scored</th><th>Flatness</th><th>Fee score</th></tr></thead><tbody>{contestSelection.ranked_contests.map((contest: any) => <tr key={contest.contest_id}>
-                      <td>{contestSelection.selected_contest_ids.includes(contest.contest_id) ? "Yes" : "No"}</td><td>{contest.name}</td><td>{contest.contest_score.toFixed(3)}</td><td>${contest.entry_fee}</td><td>{contest.capacity}</td><td>{contest.paid_places} ({(contest.contest_score_components.payout_percentage * 100).toFixed(1)}%)</td><td>{((1 - contest.contest_score_components.rake_score) * 100).toFixed(1)}%</td><td>{(contest.contest_score_components.potential_overlay * 100).toFixed(1)}%</td><td>{(contest.contest_score_components.overlay_score * 100).toFixed(1)}%</td><td>{contest.contest_score_components.payout_flatness.toFixed(2)}</td><td>{contest.contest_score_components.entry_fee_score.toFixed(2)}</td>
+                    <p>{contestSelection.selection_reason} Search: {contestSelection.search_method}; {contestSelection.evaluated_subsets} subsets evaluated.</p>
+                    <div className="table-wrap"><table><thead><tr><th>Contests</th><th>Best subset</th><th>Entry fees</th><th>Heuristic value</th><th>Independent ranks</th><th>Shared percentile</th></tr></thead><tbody>{contestSelection.count_comparisons.map((row: any) => <tr key={row.contest_count}><td>{row.contest_count}</td><td>{row.contest_ids.join(", ")}</td><td>${row.total_entry_fees.toFixed(2)}</td><td>{(row.heuristic_value * 100).toFixed(1)}%</td><td>{(row.independent_rank_proxy * 100).toFixed(1)}%</td><td>{(row.shared_percentile_proxy * 100).toFixed(1)}%</td></tr>)}</tbody></table></div>
+                    <div className="table-wrap"><table><thead><tr><th>Selected</th><th>Contest</th><th>Single-contest proxy</th><th>Entry</th><th>Field</th><th>Paid</th><th>Min cash</th><th>Top 1%</th><th>5%</th><th>10%</th><th>20%</th><th>Median paid</th><th>1st share</th><th>Top 10 share</th><th>Flatness</th><th>Full rake</th><th>Near-lock effective rake / overlay</th></tr></thead><tbody>{contestSelection.ranked_contests.map((contest: any) => <tr key={contest.contest_id}>
+                      <td>{contestSelection.selected_contest_ids.includes(contest.contest_id) ? "Yes" : "No"}</td><td>{contest.name}</td><td>{(contest.contest_score * 100).toFixed(1)}%</td><td>${contest.entry_fee}</td><td>{contest.capacity}</td><td>{(contest.economics.paid_percentage * 100).toFixed(1)}%</td><td>${contest.economics.minimum_cash} ({contest.economics.minimum_cash_multiple.toFixed(2)}×)</td><td>${contest.economics.payout_at_field_percentiles["1"]}</td><td>${contest.economics.payout_at_field_percentiles["5"]}</td><td>${contest.economics.payout_at_field_percentiles["10"]}</td><td>${contest.economics.payout_at_field_percentiles["20"]}</td><td>${contest.economics.median_paid_payout}</td><td>{(contest.economics.first_place_share * 100).toFixed(1)}%</td><td>{(contest.economics.top_10_share * 100).toFixed(1)}%</td><td>{contest.economics.payout_flatness.toFixed(3)}</td><td>{(contest.economics.full_field_rake * 100).toFixed(1)}%</td><td>{contest.economics.current_effective_rake == null ? "Too early" : `${(contest.economics.current_effective_rake * 100).toFixed(1)}% / $${contest.economics.current_overlay.toFixed(2)}`}</td>
                     </tr>)}</tbody></table></div>
                   </div>}
                   <p>Weights: mean {report.objective_weights.mean}, P90 {report.objective_weights.p90}, solver {report.objective_weights.solver}, correlation {report.objective_weights.correlation}, context {report.objective_weights.context}, chalk penalty {report.objective_weights.chalk_penalty}.</p>
-                  <p>{report.unique_lineups} unique lineups · {report.unique_captains} unique Captains · overlap: {report.pairwise_player_overlap.join(", ")} players</p>
+                  {report.assignments.length > 1 ? <p>{report.unique_lineups} unique lineups · {report.unique_captains} unique Captains · overlap: {report.pairwise_player_overlap.join(", ")} players</p> : <p>One contest selected; lineup A is the highest-ranked single-entry construction.</p>}
                   {report.evaluated_portfolio_count > 0 && <p>Compared {report.evaluated_portfolio_count} candidate combinations with repetition; the table shows the strongest in each structure.</p>}
                   {comparisons.aaa && <p>Letters name distinct lineups within each row; candidate ranks identify the exact lineups.</p>}
                   {selectedComparison && comparisons.aaa && <p>
@@ -2832,7 +2833,7 @@ function App() {
                   <ul>{report.assignments.map((assignment: any) =>
                     <li key={assignment.contest}>{assignment.contest_name ?? `Contest ${assignment.contest}`} {assignment.contest_id ? `(${assignment.contest_id})` : ""}: candidate #{assignment.candidate_rank}. {assignment.reason}</li>
                   )}</ul>
-                  {report.top_alternates && <div>
+                  {report.assignments.length > 1 && report.top_alternates && <div>
                     <h4>Closest construction alternatives</h4>
                     <p>“Materially different players” means at least {report.material_player_change_minimum} of six players change. These are candidates for review, not required portfolio slots.</p>
                     <ul>{[
@@ -2843,18 +2844,18 @@ function App() {
                       {label}: {candidate ? `#${candidate.rank} ${candidate.captain} · ${candidate.game_script.label} · quality loss ${candidate.quality_loss_vs_a.toFixed(3)} · benefit ${candidate.diversification_benefit_vs_a.toFixed(3)}` : "No qualifying candidate in the generated pool"}
                     </li>)}</ul>
                   </div>}
-                  <h4>Selected, top 10, and featured alternate lineups</h4>
+                  <h4>{report.assignments.length > 1 ? "Selected, top 10, and featured alternate lineups" : "Selected lineup and top candidates"}</h4>
                   <div className="table-wrap"><table><thead><tr>
-                    <th>Rank</th><th>Captain</th><th>Single-entry score</th><th>Mean</th><th>Sum of P90s</th><th>Solver</th><th>Ownership</th><th>Relative chalk</th><th>Correlation</th><th>Context</th><th>Script</th><th>Shared with A</th><th>Overlap</th><th>Jaccard</th><th>Quality loss</th><th>Diversification benefit</th><th>Players</th>
+                    <th>Rank</th><th>Captain</th><th>Single-entry score</th><th>Mean</th><th>Sum of P90s</th><th>Solver</th><th>Ownership</th><th>Relative chalk</th><th>Correlation</th><th>Context</th><th>Script</th>{report.assignments.length > 1 && <><th>Shared with A</th><th>Overlap</th><th>Jaccard</th><th>Quality loss</th><th>Diversification benefit</th></>}<th>Players</th>
                   </tr></thead><tbody>{comparisonRows.map((candidate: any) => <tr key={candidate.rank}>
                     <td>{candidate.rank}</td><td>{candidate.captain}</td><td>{candidate.single_entry_score.toFixed(3)}</td><td>{candidate.mean.toFixed(1)}</td><td>{candidate.p90.toFixed(1)}</td>
                     <td>{candidate.solver_objective.toFixed(1)}</td><td>{candidate.ownership_sum.toFixed(1)}</td>
                     <td>{candidate.relative_chalk == null ? "n/a" : candidate.relative_chalk.toFixed(1)}</td>
                     <td>{candidate.correlation_score.toFixed(2)}</td><td>{candidate.context_score.toFixed(2)}</td>
-                    <td>{candidate.game_script.label}</td><td>{candidate.shared_players_with_a ?? "—"}/6</td>
+                    <td>{candidate.game_script.label}</td>{report.assignments.length > 1 && <><td>{candidate.shared_players_with_a ?? "—"}/6</td>
                     <td>{candidate.overlap_percentage_vs_a == null ? "—" : `${candidate.overlap_percentage_vs_a.toFixed(1)}%`}</td>
                     <td>{candidate.jaccard_similarity_vs_a == null ? "—" : candidate.jaccard_similarity_vs_a.toFixed(3)}</td>
-                    <td>{candidate.quality_loss_vs_a.toFixed(3)}</td><td>{candidate.diversification_benefit_vs_a == null ? "—" : candidate.diversification_benefit_vs_a.toFixed(3)}</td>
+                    <td>{candidate.quality_loss_vs_a.toFixed(3)}</td><td>{candidate.diversification_benefit_vs_a == null ? "—" : candidate.diversification_benefit_vs_a.toFixed(3)}</td></>}
                     <td>{candidate.players.map((player: any) => `${player.slot} ${player.name}`).join(", ")}</td>
                   </tr>)}</tbody></table></div>
                 </div>;

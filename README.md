@@ -563,14 +563,23 @@ and relative chalk weights (`single_entry_objective_weights`). The portfolio
 selector may repeat a lineup or Captain; it does not apply cross-contest exposure
 caps. Paste one DraftKings contest URL per line and preview the live details. **Auto**
 or **Enter all** chooses from the available contest pool, with optional total entry
-budget and maximum contest count. Auto ranks single-entry contests with a separate
-heuristic score from prize pool versus full capacity, potential overlay within two
-hours of lock, field size, paid-place percentage, payout flatness, and entry fee.
-After the first contest it skips scores below 0.50. It supports 1–50 contest URLs.
+budget and maximum contest count. Auto evaluates budget-feasible subsets at each
+contest count and selects the count with the highest payout-ladder profit proxy;
+it can leave budget unused. The proxy blends equal-strength independent finishes
+and fully shared percentile finishes 50/50, asking whether total prizes exceed
+total entry fees. Counts 1–3 use exact rank distributions; larger counts use 2,048
+fixed rank scenarios. Searches are exhaustive for up to 10 contest URLs; larger
+pools use exact counts 1–3 and a beam search for higher counts. The report shows
+the best evaluated subset at each count and the search method. It supports 1–50 URLs.
 The optimizer refreshes contest details when it runs. Missing fields are shown in
 the preview and may be supplied as a JSON array keyed by `contest_id`; incomplete
 or multi-entry contests are rejected. All URLs must share a DraftKings draft group.
-Results include contest scores, a top-10 lineup candidate table, score components, assignment reasons,
+Results include paid-field percentage, min cash and its fee multiple, payouts at
+top 1/5/10/20% ranks, median paid payout, first-place and top-10 prize shares,
+top-1% concentration/flatness, and full-field rake. Guaranteed contests also show
+current effective rake and overlay within two hours of lock; current entries are
+used as the proxy field size then. Results include a top-10 lineup candidate table,
+assignment reasons,
 and player overlap. The three-contest report compares A / A / A, the best one-alternate
 and repeated-alternate portfolios, and the best A / B / C candidate under the same
 heuristic. Each candidate shows shared players with A, overlap percentage, Jaccard
@@ -581,8 +590,8 @@ game script, or states when no such candidate was generated. Candidate generatio
 includes Captain and script-constrained solves; those candidates are not forced into
 the recommendation. Legacy `num_single_entry_contests` requests remain supported;
 URL-driven runs select the count from the available contest pool. Current recommendations
-are heuristic; payout probabilities, expected profit, and ROI are unavailable until
-game and opponent-field simulation can apply actual contest payout tables.
+are heuristic; the profit proxy is not a calibrated lineup payout probability, and
+expected profit and ROI remain unavailable until game and opponent-field simulation.
 
 For exactly five GPP lineups, v3 targets two shootouts, one control script for each
 team, and one contrarian script. After the best lineup establishes the reference,

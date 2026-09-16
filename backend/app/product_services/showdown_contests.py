@@ -5,6 +5,10 @@ from __future__ import annotations
 import json
 import hashlib
 import re
+from itertools import chain, combinations
+from math import ceil
+from functools import lru_cache
+from random import Random
 from datetime import UTC, datetime
 from urllib.parse import urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener
@@ -36,10 +40,45 @@ def _embedded_json(html: str, name: str) -> dict:
     return value
 
 
+def _payout_at_rank(ladder: list[dict], rank: int) -> float:
+    return next((float(tier["cash"]) for tier in ladder
+                 if int(tier["from"]) <= rank <= int(tier["to"])), 0.0)
+
+
+def _ladder_is_complete(row: dict) -> bool:
+    ladder = row.get("payout_ladder") or []
+    if not isinstance(ladder, list) or not ladder or any(not isinstance(tier, dict) or any(tier.get(key) is None for key in ("from", "to", "cash")) for tier in ladder):
+        return False
+    try:
+        expected = 1
+        for tier in sorted(ladder, key=lambda item: int(item["from"])):
+            start, end, cash = int(tier["from"]), int(tier["to"]), float(tier["cash"])
+            if start != expected or end < start or cash < 0:
+                return False
+            expected = end + 1
+        if int(row.get("paid_places")) != expected - 1:
+            return False
+        cash_total = sum((int(tier["to"]) - int(tier["from"]) + 1) * float(tier["cash"]) for tier in ladder)
+        return row.get("prize_pool") is not None and abs(cash_total - float(row["prize_pool"])) <= max(.01, cash_total * .00001)
+    except (TypeError, ValueError, OverflowError):
+        return False
+
+
 def _unavailable_fields(row: dict) -> list[str]:
     missing = [field for field in REQUIRED_FIELDS if row.get(field) is None or row.get(field) == []]
+    for field in ("entry_fee", "capacity", "current_entries", "prize_pool", "paid_places", "maximum_entries"):
+        if field not in missing:
+            try:
+                float(row[field])
+            except (TypeError, ValueError, OverflowError):
+                missing.append(field)
+    if "lock_time" not in missing:
+        try:
+            datetime.fromisoformat(str(row["lock_time"]).replace("Z", "+00:00"))
+        except ValueError:
+            missing.append("lock_time")
     ladder = row.get("payout_ladder") or []
-    if ladder and any(tier.get("from") is None or tier.get("to") is None or tier.get("cash") is None for tier in ladder):
+    if ladder and not _ladder_is_complete(row):
         missing.append("payout_ladder")
     return sorted(set(missing))
 
@@ -79,18 +118,47 @@ def parse_contest_page(url: str, html: str, *, observed_at: str | None = None) -
 def _add_economics(row: dict) -> None:
     ladder = row.get("payout_ladder") or []
     row.pop("economics", None)
-    if all(row.get(field) is not None for field in ("entry_fee", "capacity", "current_entries", "prize_pool", "paid_places")):
+    if not any(field in _unavailable_fields(row) for field in ("entry_fee", "capacity", "current_entries", "prize_pool", "paid_places")):
         capacity, entries, fee, pool = (float(row[field]) for field in ("capacity", "current_entries", "entry_fee", "prize_pool"))
+        complete = _ladder_is_complete(row)
+        paid = int(row["paid_places"])
+        top_one_percent = max(1, ceil(capacity * .01))
+        top_one_percent_prizes = sum(
+            max(0, min(int(tier["to"]), top_one_percent) - int(tier["from"]) + 1) * float(tier["cash"])
+            for tier in ladder
+        ) if complete else None
+        minimum_cash = min((float(tier["cash"]) for tier in ladder), default=None) if complete else None
+        lock_time = row.get("lock_time")
+        hours_to_lock = ((datetime.fromisoformat(str(lock_time).replace("Z", "+00:00")).astimezone(UTC)
+                          - datetime.now(UTC)).total_seconds() / 3600) if lock_time and "lock_time" not in _unavailable_fields(row) else None
+        near_lock = hours_to_lock is not None and 0 <= hours_to_lock <= 2
         row["economics"] = {
             "gross_fees_at_capacity": capacity * fee,
-            "implied_rake_fraction": 1 - pool / (capacity * fee) if capacity * fee else None,
+            "full_field_rake": 1 - pool / (capacity * fee) if capacity * fee else None,
             "paid_percentage": float(row["paid_places"]) / capacity if capacity else None,
+            "minimum_cash": minimum_cash,
+            "minimum_cash_multiple": minimum_cash / fee if minimum_cash is not None and fee else None,
+            "payout_at_field_percentiles": {
+                str(percent): _payout_at_rank(ladder, max(1, ceil(capacity * percent / 100)))
+                for percent in (1, 5, 10, 20)
+            } if complete else None,
+            "median_paid_payout": (
+                (_payout_at_rank(ladder, (paid + 1) // 2) + _payout_at_rank(ladder, (paid + 2) // 2)) / 2
+            ) if paid and complete else None,
+            "first_place_share": _payout_at_rank(ladder, 1) / pool if pool and complete else None,
+            "top_10_share": sum(_payout_at_rank(ladder, rank) for rank in range(1, min(10, int(capacity)) + 1)) / pool if pool and complete else None,
+            "top_one_percent_share": top_one_percent_prizes / pool if pool and complete else None,
+            "payout_flatness": 1 - top_one_percent_prizes / pool if pool and complete else None,
             "unfilled_spots": max(0, int(capacity - entries)),
             "prize_pool_gap_at_current_entries": pool - entries * fee,
+            "current_effective_rake": 1 - pool / (entries * fee) if near_lock and row.get("guaranteed") is True and entries * fee else None,
+            "current_overlay": max(0.0, pool - entries * fee) if near_lock and row.get("guaranteed") is True else None,
+            "effective_field_size_used": max(1, int(entries)) if near_lock and row.get("guaranteed") is True else int(capacity),
+            "near_lock": near_lock,
             "cash_total_from_ladder": sum(
                 (int(tier["to"]) - int(tier["from"]) + 1) * float(tier["cash"] or 0)
                 for tier in ladder
-            ) if "payout_ladder" not in _unavailable_fields(row) else None,
+            ) if complete else None,
         }
 
 
@@ -125,6 +193,54 @@ def fetch_contests(urls: list[str], *, manual: list[dict] | None = None) -> list
     return rows
 
 
+def _payout_distribution(contest: dict) -> dict[int, float]:
+    field = int(contest["economics"]["effective_field_size_used"])
+    amounts: dict[int, float] = {}
+    covered = 0
+    for tier in contest["payout_ladder"]:
+        count = max(0, min(field, int(tier["to"])) - int(tier["from"]) + 1)
+        if count:
+            cents = round(float(tier["cash"]) * 100)
+            amounts[cents] = amounts.get(cents, 0.0) + count / field
+            covered += count
+    if covered < field:
+        amounts[0] = amounts.get(0, 0.0) + (field - covered) / field
+    return amounts
+
+
+def _profit_proxy(subset: tuple[dict, ...]) -> dict:
+    """Uniform-rank payout proxy; blend independent and shared-percentile finishes."""
+    fees = round(sum(float(row["entry_fee"]) for row in subset) * 100)
+    win = fees + 1
+    distribution = {0: 1.0}
+    for contest in subset:
+        next_distribution: dict[int, float] = {}
+        for subtotal, subtotal_probability in distribution.items():
+            for payout, payout_probability in _payout_distribution(contest).items():
+                total = min(win, subtotal + payout)
+                next_distribution[total] = next_distribution.get(total, 0.0) + subtotal_probability * payout_probability
+        distribution = next_distribution
+    independent = distribution.get(win, 0.0)
+
+    breakpoints = {0.0, 1.0}
+    for contest in subset:
+        field = int(contest["economics"]["effective_field_size_used"])
+        breakpoints.update(min(1.0, int(tier["to"]) / field) for tier in contest["payout_ladder"])
+    points = sorted(breakpoints)
+    aligned = 0.0
+    for left, right in zip(points, points[1:]):
+        percentile = (left + right) / 2
+        total = sum(
+            _payout_at_rank(contest["payout_ladder"], max(1, ceil(percentile * int(contest["economics"]["effective_field_size_used"]))))
+            for contest in subset
+        )
+        if round(total * 100) > fees:
+            aligned += right - left
+    return {"heuristic_value": (independent + aligned) / 2,
+            "independent_rank_proxy": independent, "shared_percentile_proxy": aligned,
+            "total_entry_fees": fees / 100, "calculation": "exact"}
+
+
 def select_contests(contests: list[dict], *, mode: str = "auto", budget: float | None = None, maximum: int | None = None) -> tuple[list[dict], dict]:
     if mode not in {"auto", "enter_all"}:
         raise ValueError("contest_selection must be auto or enter_all")
@@ -134,57 +250,99 @@ def select_contests(contests: list[dict], *, mode: str = "auto", budget: float |
         raise ValueError("maximum_contests_to_enter must be positive")
     scored = []
     for contest in contests:
-        if contest.get("unavailable_fields") or contest.get("single_entry") is not True:
-            raise ValueError(f"Contest {contest['contest_id']} needs verified single-entry economics; unavailable: {', '.join(contest.get('unavailable_fields', [])) or 'single-entry status'}")
+        if contest.get("unavailable_fields") or contest.get("single_entry") is not True or not _ladder_is_complete(contest):
+            raise ValueError(f"Contest {contest['contest_id']} needs verified single-entry economics; unavailable: {', '.join(contest.get('unavailable_fields', [])) or 'complete cash payout ladder or single-entry status'}")
         if contest.get("state") not in {None, "Upcoming"}:
             raise ValueError(f"Contest {contest['contest_id']} is no longer upcoming")
         fee, capacity, entries, pool = (float(contest[key]) for key in ("entry_fee", "capacity", "current_entries", "prize_pool"))
         if fee <= 0 or capacity <= 0 or entries < 0 or entries > capacity or pool <= 0:
             raise ValueError(f"Contest {contest['contest_id']} has invalid economics")
-        ladder = contest["payout_ladder"]
-        top_one_percent = max(1, int(capacity * .01))
-        prize_outside_top = sum(
-            max(0, int(tier["to"]) - max(int(tier["from"]) - 1, top_one_percent)) * float(tier["cash"] or 0)
-            for tier in ladder
-        )
-        flatness = min(1.0, prize_outside_top / pool)
-        lock_time = str(contest["lock_time"]).replace("Z", "+00:00")
-        hours_to_lock = (datetime.fromisoformat(lock_time).astimezone(UTC) - datetime.now(UTC)).total_seconds() / 3600
-        overlay = max(0.0, min(1.0, (pool - fee * entries) / pool)) if contest.get("guaranteed") is True else 0.0
-        components = {
-            "rake_score": max(0.0, min(1.0, pool / (fee * capacity))),
-            "potential_overlay": overlay,
-            "overlay_score": overlay if hours_to_lock <= 2 else 0.0,
-            "field_size_score": 1 / (1 + capacity / 1000),
-            "payout_percentage": min(1.0, float(contest["paid_places"]) / capacity),
-            "payout_flatness": flatness,
-            "entry_fee_score": 1 / (1 + fee / 10),
-        }
-        score = (.30 * components["rake_score"] + .15 * components["overlay_score"]
-                 + .15 * components["field_size_score"] + .15 * components["payout_percentage"]
-                 + .15 * components["payout_flatness"] + .10 * components["entry_fee_score"])
-        scored.append({**contest, "contest_score": score, "contest_score_components": components})
-    scored.sort(key=lambda row: (-row["contest_score"], row["contest_id"]))
-    selected = []
-    total_fee = 0.0
+        row = dict(contest)
+        _add_economics(row)
+        row["contest_score"] = _profit_proxy((row,))["heuristic_value"]
+        scored.append(row)
+    scored.sort(key=lambda row: row["contest_id"])
+    max_count = min(maximum or len(scored), len(scored))
+    best_by_count: dict[int, tuple[tuple[int, ...], dict]] = {}
+    beams: dict[int, list[tuple[tuple[int, ...], dict]]] = {}
+    evaluated = 0
+    exact = len(scored) <= 10
+    samples = 2048
+    sample_payouts = []
     for row in scored:
-        fee = float(row["entry_fee"])
-        if maximum is not None and len(selected) >= maximum:
-            break
-        if budget is not None and total_fee + fee > budget + 1e-9:
+        field = int(row["economics"]["effective_field_size_used"])
+        rng = Random(int(hashlib.sha256(row["contest_id"].encode()).hexdigest()[:16], 16))
+        sample_payouts.append((
+            [round(100 * _payout_at_rank(row["payout_ladder"], max(1, ceil(rng.random() * field)))) for _ in range(samples)],
+            [round(100 * _payout_at_rank(row["payout_ladder"], max(1, ceil((index + .5) * field / samples)))) for index in range(samples)],
+        ))
+
+    @lru_cache(maxsize=5000)
+    def sampled_vectors(indexes: tuple[int, ...]) -> tuple[tuple[int, ...], tuple[int, ...]]:
+        if not indexes:
+            return (0,) * samples, (0,) * samples
+        previous_independent, previous_aligned = sampled_vectors(indexes[:-1])
+        added_independent, added_aligned = sample_payouts[indexes[-1]]
+        return (tuple(a + b for a, b in zip(previous_independent, added_independent)),
+                tuple(a + b for a, b in zip(previous_aligned, added_aligned)))
+
+    def evaluate(indexes: tuple[int, ...], subset: tuple[dict, ...]) -> dict:
+        if len(indexes) <= 3:
+            return _profit_proxy(subset)
+        fees = round(sum(float(row["entry_fee"]) for row in subset) * 100)
+        independent, aligned = sampled_vectors(indexes)
+        independent_value = sum(value > fees for value in independent) / samples
+        aligned_value = sum(value > fees for value in aligned) / samples
+        return {"heuristic_value": (independent_value + aligned_value) / 2,
+                "independent_rank_proxy": independent_value, "shared_percentile_proxy": aligned_value,
+                "total_entry_fees": fees / 100, "calculation": f"sampled_{samples}"}
+    for count in range(1, max_count + 1):
+        if exact or count <= 3:
+            index_sets = combinations(range(len(scored)), count)
+        else:
+            cheapest = tuple(sorted(sorted(range(len(scored)), key=lambda index: (float(scored[index]["entry_fee"]), scored[index]["contest_id"]))[:count]))
+            index_sets = chain((cheapest,),
+                               (tuple(sorted((*prefix, index)))
+                                for prefix, _ in beams[count - 1]
+                                for index in range(prefix[-1] + 1, len(scored))))
+        candidates = []
+        seen = set()
+        for indexes in index_sets:
+            if indexes in seen:
+                continue
+            seen.add(indexes)
+            subset = tuple(scored[index] for index in indexes)
+            if budget is not None and sum(float(row["entry_fee"]) for row in subset) > budget + 1e-9:
+                continue
+            proxy = evaluate(indexes, subset)
+            evaluated += 1
+            candidates.append((indexes, proxy))
+        if not candidates:
+            if not exact:
+                break
             continue
-        # This is a contest-quality cutoff, not an estimated return or probability.
-        if mode == "auto" and selected and row["contest_score"] < 0.50:
-            continue
-        selected.append(row)
-        total_fee += fee
-    if not selected:
+        candidates.sort(key=lambda item: (-item[1]["heuristic_value"], item[1]["total_entry_fees"], item[0]))
+        best_by_count[count] = candidates[0]
+        beams[count] = candidates[:40] if not exact else []
+    if not best_by_count:
         raise ValueError("No contest fits the selection constraints")
-    report = {"method": "transparent_contest_heuristic_v1", "mode": mode,
-              "score_weights": {"rake_score": .30, "overlay_score": .15, "field_size_score": .15,
-                                "payout_percentage": .15, "payout_flatness": .15, "entry_fee_score": .10},
-              "auto_score_cutoff_after_first": .50, "available_count": len(scored),
-              "selected_count": len(selected), "total_entry_fees": total_fee,
-              "ranked_contests": scored, "selected_contest_ids": [row["contest_id"] for row in selected],
-              "note": "Potential overlay is a live upper bound, not projected ROI. It enters the score only within two hours of lock."}
+    chosen_count = max(best_by_count) if mode == "enter_all" else max(
+        best_by_count, key=lambda count: (best_by_count[count][1]["heuristic_value"], -count)
+    )
+    chosen_indexes, chosen_proxy = best_by_count[chosen_count]
+    selected = [scored[index] for index in chosen_indexes]
+    comparisons = [
+        {"contest_count": count, "contest_ids": [scored[index]["contest_id"] for index in indexes], **proxy}
+        for count, (indexes, proxy) in sorted(best_by_count.items())
+    ]
+    report = {"method": "payout_ladder_profit_proxy_v2", "mode": mode,
+              "search_method": "exhaustive_subsets" if exact else "exact_counts_1_to_3_then_beam_40",
+              "evaluated_subsets": evaluated, "available_count": len(scored),
+              "selected_count": chosen_count, "total_entry_fees": chosen_proxy["total_entry_fees"],
+              "ranked_contests": sorted(scored, key=lambda row: (-row["contest_score"], row["contest_id"])),
+              "selected_contest_ids": [row["contest_id"] for row in selected],
+              "count_comparisons": comparisons, "selected_heuristic_value": chosen_proxy["heuristic_value"],
+              "selection_reason": ("Enter all chose the largest budget-feasible count." if mode == "enter_all" else
+                                   f"Auto chose {chosen_count} contest(s) because its payout-based profit proxy was highest among feasible counts."),
+              "note": "Heuristic value blends equal-strength independent finishes and fully shared percentile finishes 50/50. Counts 1–3 use exact rank distributions; larger counts use 2,048 fixed rank scenarios. This is not a calibrated win probability; lineup skill, field behavior, and contest correlation await simulation. Near-lock guaranteed contests use current entries within two hours of lock."}
     return selected, report

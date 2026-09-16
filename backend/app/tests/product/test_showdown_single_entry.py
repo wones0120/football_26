@@ -98,3 +98,11 @@ def test_more_than_three_contests_can_repeat_lineup_and_keep_assignment_ids():
     assert len(selected) == 5
     assert report["recommended_structure"] == "A / A / A / A / A"
     assert [row["contest_id"] for row in report["assignments"]] == ["0", "1", "2", "3", "4"]
+
+
+def test_one_contest_has_no_diversification_comparison():
+    selected, report = select_single_entry_lineups([lineup(), lineup(captain="b")], num_contests=1)
+    assert len(selected) == 1
+    assert report["recommended_structure"] == "A"
+    assert report["portfolio_comparisons"] == {}
+    assert report["evaluated_portfolio_count"] == 0
