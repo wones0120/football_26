@@ -6637,6 +6637,9 @@ class OptimizerService:
                     candidates, num_contests=num_contests,
                     weights=params.get("single_entry_objective_weights"),
                     contest_metadata=contest_metadata,
+                    contest_proxy=(next((row for row in contest_selection_report["count_comparisons"]
+                                         if row["contest_count"] == num_contests), None)
+                                   if contest_selection_report else None),
                 )
                 if contest_selection_report:
                     single_entry_report["contest_selection"] = contest_selection_report

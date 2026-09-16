@@ -570,7 +570,16 @@ and fully shared percentile finishes 50/50, asking whether total prizes exceed
 total entry fees. Counts 1–3 use exact rank distributions; larger counts use 2,048
 fixed rank scenarios. Searches are exhaustive for up to 10 contest URLs; larger
 pools use exact counts 1–3 and a beam search for higher counts. The report shows
-the best evaluated subset at each count and the search method. It supports 1–50 URLs.
+the best evaluated subset at each count and the search method. A 0/25/50/75/100%
+shared-rank sensitivity grid, approximate count crossovers, and a ROBUST,
+SENSITIVE, or NEAR TIE stability label expose reliance on that assumption. The
+NEAR TIE threshold is 0.5 percentage points of the default payout proxy. For
+multi-contest selections, A/A and competitive alternate assignments are compared
+with a visible player/Captain/script/team similarity formula; an adaptive payout
+proxy and the existing lineup quality/diversification heuristic choose the lineup
+set. Field size × top-10 prize share breaks contest placement ties. These values
+are heuristic proxies, not measured correlation or calibrated probabilities. It
+supports 1–50 URLs.
 The optimizer refreshes contest details when it runs. Missing fields are shown in
 the preview and may be supplied as a JSON array keyed by `contest_id`; incomplete
 or multi-entry contests are rejected. All URLs must share a DraftKings draft group.

@@ -76,6 +76,13 @@ def test_auto_compares_all_counts_and_can_choose_one_with_budget_remaining():
     assert [row["contest_count"] for row in report["count_comparisons"]] == [1, 2, 3]
     assert report["count_comparisons"][0]["heuristic_value"] > report["count_comparisons"][1]["heuristic_value"]
     assert report["selected_heuristic_value"] == report["count_comparisons"][0]["heuristic_value"]
+    assert [row["shared_rank_weight"] for row in report["sensitivity"]] == [0, .25, .5, .75, 1]
+    assert all(len(row["by_count"]) == 3 for row in report["sensitivity"])
+    assert report["recommendation_status"] in {"ROBUST", "SENSITIVE", "NEAR TIE"}
+    for row in report["sensitivity"]:
+        assert row["recommended_count"] == min(
+            row["by_count"], key=lambda value: (-value["profitability_proxy"], value["contest_count"])
+        )["contest_count"]
 
 
 def test_incomplete_payout_ladder_is_explicitly_rejected():
@@ -89,11 +96,13 @@ def test_near_lock_guarantee_reports_current_effective_rake_and_overlay():
     row["payout_ladder"][0]["cash"] = 20
     row["guaranteed"] = True
     row["lock_time"] = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
-    selected, _ = select_contests([row])
+    selected, report = select_contests([row])
     economics = selected[0]["economics"]
     assert economics["current_overlay"] == 50
     assert economics["current_effective_rake"] == pytest.approx(1 - 500 / 450)
     assert economics["effective_field_size_used"] == 90
+    assert report["full_field_reference_count"] == 1
+    assert report["overlay_changed_recommendation"] is False
 
 
 def test_even_paid_field_uses_middle_two_payouts_for_median():

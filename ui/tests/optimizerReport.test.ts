@@ -263,6 +263,8 @@ test("one selected contest omits diversification-combination language", () => {
           search_method: "exhaustive_subsets", evaluated_subsets: 1,
           selected_contest_ids: ["123"],
           count_comparisons: [{ contest_count: 1, contest_ids: ["123"], total_entry_fees: 5, heuristic_value: .25, independent_rank_proxy: .25, shared_percentile_proxy: .25 }],
+          sensitivity: [{ shared_rank_weight: 0, by_count: [{ contest_count: 1, profitability_proxy: .25 }], recommended_count: 1 }],
+          crossovers: [], recommendation_status: "ROBUST", recommendation_status_reason: "One feasible count.",
           ranked_contests: [{ contest_id: "123", name: "Test contest", contest_score: .25, entry_fee: 5, capacity: 100, economics: {
             paid_percentage: .25, minimum_cash: 8, minimum_cash_multiple: 1.6,
             payout_at_field_percentiles: { "1": 50, "5": 8, "10": 8, "20": 8 }, median_paid_payout: 8,
@@ -275,6 +277,8 @@ test("one selected contest omits diversification-combination language", () => {
   } as OptimizerResponse;
   const html = buildOptimizerReportHtml(optimizer, { season: 2026, week: 2, slate: "THURSDAY_NIGHT" });
   assert.match(html, /One contest selected/);
+  assert.match(html, /Correlation sensitivity/);
+  assert.match(html, /Recommended count: 1 · ROBUST/);
   assert.match(html, /Best subset/);
   assert.match(html, /Min cash/);
   assert.doesNotMatch(html, /A \/ A \/ A/);

@@ -7,6 +7,36 @@ from copy import deepcopy
 from itertools import combinations, combinations_with_replacement
 
 
+def _pair_similarity(left: dict, right: dict) -> dict:
+    left_ids = {player_id for player_id, _ in left["signature"]}
+    right_ids = {player_id for player_id, _ in right["signature"]}
+    shared = len(left_ids & right_ids)
+    captain_match = left["captain_id"] == right["captain_id"]
+    script_match = left["game_script"]["script_id"] == right["game_script"]["script_id"]
+    team_match = left["team_emphasis"] == right["team_emphasis"]
+    proxy = .45 * shared / 6 + .25 * captain_match + .20 * script_match + .10 * team_match
+    return {"candidate_ranks": [left["rank"], right["rank"]], "shared_players": shared,
+            "overlap_percentage": 100 * shared / 6, "jaccard_similarity": shared / (12 - shared),
+            "same_captain": captain_match, "same_script": script_match,
+            "same_team_emphasis": team_match, "lineup_correlation_proxy": proxy}
+
+
+def _assignment_comparison(rows: list[dict], contest_proxy: dict) -> dict:
+    pairs = [_pair_similarity(left, right) for left, right in combinations(rows, 2)]
+    similarity = sum(pair["lineup_correlation_proxy"] for pair in pairs) / len(pairs) if pairs else 0.0
+    shared_weight = .25 + .75 * similarity if pairs else .5
+    independent = contest_proxy["independent_rank_proxy"]
+    shared = contest_proxy["shared_percentile_proxy"]
+    adaptive = (1 - shared_weight) * independent + shared_weight * shared
+    baseline = _portfolio_comparison(rows[0], tuple(rows[1:]))
+    return {**baseline, "pair_diagnostics": pairs, "lineup_correlation_proxy": similarity,
+            "adaptive_shared_rank_weight": shared_weight, "independent_rank_proxy": independent,
+            "shared_percentile_proxy": shared, "adaptive_profitability_proxy": adaptive,
+            "mean_by_entry": [row["mean"] for row in rows], "p90_by_entry": [row["p90"] for row in rows],
+            "relative_chalk_by_entry": [row["relative_chalk"] for row in rows],
+            "total_entry_fees": contest_proxy["total_entry_fees"]}
+
+
 DEFAULT_WEIGHTS = {
     "mean": 0.35,
     "p90": 0.30,
@@ -79,6 +109,7 @@ def select_single_entry_lineups(
     num_contests: int,
     weights: dict[str, float] | None = None,
     contest_metadata: list[dict] | None = None,
+    contest_proxy: dict | None = None,
 ) -> tuple[list[list[dict]], dict]:
     """Rank unique candidates and assign repeatable entries without exposure caps.
 
@@ -234,6 +265,63 @@ def select_single_entry_lineups(
         portfolio_comparisons = {}
         evaluated_portfolio_count = 0
 
+    assignment_comparisons = []
+    if contest_proxy and num_contests in {2, 3}:
+        if num_contests == 2:
+            rank_sets = [(1, row["rank"]) for row in records[:10]]
+        else:
+            rank_sets = [tuple(row["candidate_ranks"]) for row in comparisons]
+        repeat_rows = [best] * num_contests
+        repeat_adaptive = _assignment_comparison(repeat_rows, contest_proxy)["adaptive_profitability_proxy"]
+        for ranks in rank_sets:
+            rows = [records[rank - 1] for rank in ranks]
+            item = _assignment_comparison(rows, contest_proxy)
+            item["joint_heuristic_delta_vs_repeat_a"] = (
+                item["heuristic_delta_vs_aaa"] + item["adaptive_profitability_proxy"] - repeat_adaptive
+            )
+            assignment_comparisons.append(item)
+        selected_comparison = max(assignment_comparisons, key=lambda row: (
+            row["joint_heuristic_delta_vs_repeat_a"], -row["quality_loss_total"],
+            -len(set(row["candidate_ranks"])), tuple(-rank for rank in row["candidate_ranks"])
+        ))
+        selected = [records[rank - 1] for rank in selected_comparison["candidate_ranks"]]
+        if num_contests == 3:
+            def strongest(predicate):  # noqa: ANN001 - local report grouping
+                return max((row for row in assignment_comparisons if predicate(row["candidate_ranks"])),
+                           key=lambda row: row["joint_heuristic_delta_vs_repeat_a"], default=None)
+
+            portfolio_comparisons = {
+                "aaa": strongest(lambda ranks: ranks == [1, 1, 1]),
+                "best_one_alternate": strongest(lambda ranks: len(set(ranks)) == 2 and ranks.count(1) == 2),
+                "best_repeated_alternate": strongest(lambda ranks: len(set(ranks)) == 2 and ranks.count(1) == 1),
+                "best_two_alternates": strongest(lambda ranks: len(set(ranks)) == 3),
+            }
+
+    # Put the more differentiated construction into the contest with the
+    # stronger field-size/top-heaviness signal. This only resolves placement.
+    assignment_reasons = ["Strongest overall single-entry construction"] * num_contests
+    if contest_metadata and len(set(row["rank"] for row in selected)) > 1:
+        contest_order = sorted(range(num_contests), key=lambda index: (
+            float(contest_metadata[index].get("capacity") or 0)
+            * float((contest_metadata[index].get("economics") or {}).get("top_10_share") or 0), index
+        ))
+        lineup_order = sorted(selected, key=lambda row: (row["diversification_benefit_vs_a"] - row["quality_loss_vs_a"], row["rank"]))
+        placed = [None] * num_contests
+        for index, row in zip(contest_order, lineup_order):
+            placed[index] = row
+            assignment_reasons[index] = (
+                "Placement tie-break: larger field × top-10 prize share favors the more differentiated lineup; "
+                f"field {contest_metadata[index].get('capacity')}, top-10 share "
+                f"{float((contest_metadata[index].get('economics') or {}).get('top_10_share') or 0):.3f}."
+            )
+        selected = placed
+        if contest_proxy and selected_comparison:
+            selected_comparison = {**selected_comparison,
+                                   "candidate_ranks": [row["rank"] for row in selected],
+                                   "structure": " / ".join("A" if row["rank"] == 1 else
+                                                           chr(ord("B") + sorted({item["rank"] for item in selected if item["rank"] != 1}).index(row["rank"]))
+                                                           for row in selected)}
+
     assignments = []
     for contest_number, row in enumerate(selected, 1):
         if contest_number == 1:
@@ -248,7 +336,8 @@ def select_single_entry_lineups(
             )
         contest = (contest_metadata or [])[contest_number - 1] if contest_metadata else {}
         assignments.append({"contest": contest_number, "contest_id": contest.get("contest_id"),
-                            "contest_name": contest.get("name"), "candidate_rank": row["rank"], "reason": reason})
+                            "contest_name": contest.get("name"), "candidate_rank": row["rank"],
+                            "reason": assignment_reasons[contest_number - 1] if contest_proxy else reason})
     by_signature = {_signature(lineup): lineup for lineup in candidates}
     output = [deepcopy(by_signature[row["signature"]]) for row in selected]
     for lineup, assignment in zip(output, assignments):
@@ -271,6 +360,12 @@ def select_single_entry_lineups(
         "recommended_structure": selected_comparison["structure"],
         "selected_portfolio_comparison": selected_comparison,
         "portfolio_comparisons": portfolio_comparisons,
+        "assignment_comparisons": sorted(assignment_comparisons, key=lambda row: -row["joint_heuristic_delta_vs_repeat_a"])[:12],
+        "assignment_comparison_aa": next((row for row in assignment_comparisons if row["candidate_ranks"] == [1, 1]), None),
+        "assignment_comparison_ab": max((row for row in assignment_comparisons if len(set(row["candidate_ranks"])) == 2),
+                                         key=lambda row: row["joint_heuristic_delta_vs_repeat_a"], default=None)
+                                    if num_contests == 2 else None,
+        "lineup_correlation_formula": "Pair proxy = 0.45 × shared players / 6 + 0.25 × same Captain + 0.20 × same script + 0.10 × same team emphasis; assignment proxy is pair average. Adaptive shared-rank weight = 0.25 + 0.75 × assignment proxy. Joint heuristic delta = existing diversification credit − normalized quality loss + adaptive payout proxy change versus all A. These are heuristic scores, not measured correlation or calibrated probabilities.",
         "evaluated_portfolio_count": evaluated_portfolio_count,
         "unique_lineups": len({row["signature"] for row in selected}),
         "unique_captains": len({row["captain_id"] for row in selected}),

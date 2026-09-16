@@ -16,6 +16,13 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 REQUIRED_FIELDS = ("name", "slate", "draft_group_id", "entry_fee", "capacity", "current_entries", "prize_pool", "paid_places", "payout_ladder", "lock_time", "maximum_entries")
 _CONTEST_PATH = re.compile(r"^/draft/contest/(\d+)/?$")
+SHARED_RANK_WEIGHTS = (0.0, 0.25, 0.5, 0.75, 1.0)
+NEAR_TIE_THRESHOLD = 0.005  # Half a percentage point of the payout proxy.
+
+
+def blended_profit_proxy(proxy: dict, shared_weight: float) -> float:
+    return ((1 - shared_weight) * proxy["independent_rank_proxy"]
+            + shared_weight * proxy["shared_percentile_proxy"])
 
 
 class _DraftKingsRedirect(HTTPRedirectHandler):
@@ -264,6 +271,7 @@ def select_contests(contests: list[dict], *, mode: str = "auto", budget: float |
     scored.sort(key=lambda row: row["contest_id"])
     max_count = min(maximum or len(scored), len(scored))
     best_by_count: dict[int, tuple[tuple[int, ...], dict]] = {}
+    sensitivity_candidates: dict[int, list[tuple[tuple[int, ...], dict]]] = {}
     beams: dict[int, list[tuple[tuple[int, ...], dict]]] = {}
     evaluated = 0
     exact = len(scored) <= 10
@@ -323,6 +331,7 @@ def select_contests(contests: list[dict], *, mode: str = "auto", budget: float |
             continue
         candidates.sort(key=lambda item: (-item[1]["heuristic_value"], item[1]["total_entry_fees"], item[0]))
         best_by_count[count] = candidates[0]
+        sensitivity_candidates[count] = candidates
         beams[count] = candidates[:40] if not exact else []
     if not best_by_count:
         raise ValueError("No contest fits the selection constraints")
@@ -332,9 +341,87 @@ def select_contests(contests: list[dict], *, mode: str = "auto", budget: float |
     chosen_indexes, chosen_proxy = best_by_count[chosen_count]
     selected = [scored[index] for index in chosen_indexes]
     comparisons = [
-        {"contest_count": count, "contest_ids": [scored[index]["contest_id"] for index in indexes], **proxy}
+        {"contest_count": count, "contest_ids": [scored[index]["contest_id"] for index in indexes],
+         "contest_names": [scored[index]["name"] for index in indexes], **proxy}
         for count, (indexes, proxy) in sorted(best_by_count.items())
     ]
+    def best_at_weight(count: int, weight: float) -> tuple[tuple[int, ...], dict, float]:
+        indexes, proxy = min(sensitivity_candidates[count], key=lambda item: (
+            -blended_profit_proxy(item[1], weight), item[1]["total_entry_fees"], item[0]
+        ))
+        return indexes, proxy, blended_profit_proxy(proxy, weight)
+
+    def winner_at_weight(weight: float) -> int:
+        return min(best_by_count, key=lambda count: (-best_at_weight(count, weight)[2], count))
+
+    sensitivity = []
+    for weight in SHARED_RANK_WEIGHTS:
+        values = {count: best_at_weight(count, weight) for count in best_by_count}
+        sensitivity.append({"shared_rank_weight": weight,
+                            "by_count": [{"contest_count": count,
+                                          "contest_ids": [scored[index]["contest_id"] for index in indexes],
+                                          "profitability_proxy": value}
+                                         for count, (indexes, _, value) in sorted(values.items())],
+                            "recommended_count": winner_at_weight(weight)})
+    # Bracket changes in the upper envelope; a 0.1% weight step is more precise
+    # than the payout proxy itself and allows the best subset to vary by weight.
+    crossovers = []
+    previous_count = winner_at_weight(0.0)
+    for step in range(1, 1001):
+        weight = step / 1000
+        count = winner_at_weight(weight)
+        if count != previous_count:
+            crossovers.append({"shared_rank_weight_approx": weight,
+                               "from_count": previous_count, "to_count": count})
+            previous_count = count
+    baseline_values = sorted((row["heuristic_value"] for row in comparisons), reverse=True)
+    baseline_gap = baseline_values[0] - baseline_values[1] if len(baseline_values) > 1 else None
+    count_summary = "; ".join(
+        f"{row['contest_count']} contest(s): {', '.join(row['contest_names'])} at {row['heuristic_value']:.2%}"
+        for row in comparisons
+    )
+    status = ("ENTER ALL" if mode == "enter_all" else
+              "NEAR TIE" if baseline_gap is not None and baseline_gap <= NEAR_TIE_THRESHOLD else
+              "SENSITIVE" if any(row["recommended_count"] != chosen_count for row in sensitivity) else
+              "ROBUST")
+    if status == "ENTER ALL":
+        status_reason = "Enter all follows the requested budget-feasible contest count; the sensitivity table shows the Auto preference."
+    elif status == "NEAR TIE" and any(row["recommended_count"] != chosen_count for row in sensitivity):
+        status_reason = "The default margin is within 0.5 percentage points and the preferred count changes across the tested rank assumptions."
+    elif status == "NEAR TIE":
+        status_reason = "The default margin is within 0.5 percentage points."
+    elif status == "SENSITIVE":
+        status_reason = "The preferred count changes across the tested rank assumptions."
+    else:
+        status_reason = "The same count leads across all five tested rank assumptions by more than 0.5 percentage points at the default weight."
+    full_field_rows = []
+    for row in scored:
+        full = dict(row)
+        full["economics"] = {**row["economics"], "effective_field_size_used": int(row["capacity"])}
+        full_field_rows.append(full)
+    full_field_values = {}
+    if any(row["economics"]["near_lock"] for row in scored):
+        full_samples = []
+        for row in full_field_rows:
+            field = int(row["capacity"])
+            rng = Random(int(hashlib.sha256(row["contest_id"].encode()).hexdigest()[:16], 16))
+            full_samples.append((
+                [round(100 * _payout_at_rank(row["payout_ladder"], max(1, ceil(rng.random() * field)))) for _ in range(samples)],
+                [round(100 * _payout_at_rank(row["payout_ladder"], max(1, ceil((index + .5) * field / samples)))) for index in range(samples)],
+            ))
+
+        def full_field_proxy(indexes: tuple[int, ...]) -> float:
+            subset = tuple(full_field_rows[index] for index in indexes)
+            if len(indexes) <= 3:
+                return _profit_proxy(subset)["heuristic_value"]
+            fees = round(sum(float(row["entry_fee"]) for row in subset) * 100)
+            independent = sum(sum(full_samples[index][0][sample] for index in indexes) > fees for sample in range(samples)) / samples
+            shared = sum(sum(full_samples[index][1][sample] for index in indexes) > fees for sample in range(samples)) / samples
+            return (independent + shared) / 2
+
+        full_field_values = {count: max(full_field_proxy(indexes) for indexes, _ in candidates)
+                             for count, candidates in sensitivity_candidates.items()}
+    full_field_count = max(full_field_values, key=lambda count: (full_field_values[count], -count)) if full_field_values else None
     report = {"method": "payout_ladder_profit_proxy_v2", "mode": mode,
               "search_method": "exhaustive_subsets" if exact else "exact_counts_1_to_3_then_beam_40",
               "evaluated_subsets": evaluated, "available_count": len(scored),
@@ -342,7 +429,12 @@ def select_contests(contests: list[dict], *, mode: str = "auto", budget: float |
               "ranked_contests": sorted(scored, key=lambda row: (-row["contest_score"], row["contest_id"])),
               "selected_contest_ids": [row["contest_id"] for row in selected],
               "count_comparisons": comparisons, "selected_heuristic_value": chosen_proxy["heuristic_value"],
+              "sensitivity": sensitivity, "crossovers": crossovers,
+              "recommendation_status": status, "recommendation_status_reason": status_reason,
+              "near_tie_threshold": NEAR_TIE_THRESHOLD,
+              "full_field_reference_count": full_field_count,
+              "overlay_changed_recommendation": (full_field_count != chosen_count if full_field_count is not None and any(row["economics"]["near_lock"] for row in scored) else False),
               "selection_reason": ("Enter all chose the largest budget-feasible count." if mode == "enter_all" else
-                                   f"Auto chose {chosen_count} contest(s) because its payout-based profit proxy was highest among feasible counts."),
+                                   f"Auto chose {chosen_count} contest(s) because its {chosen_proxy['heuristic_value']:.2%} payout proxy led the feasible counts. {count_summary}."),
               "note": "Heuristic value blends equal-strength independent finishes and fully shared percentile finishes 50/50. Counts 1–3 use exact rank distributions; larger counts use 2,048 fixed rank scenarios. This is not a calibrated win probability; lineup skill, field behavior, and contest correlation await simulation. Near-lock guaranteed contests use current entries within two hours of lock."}
     return selected, report

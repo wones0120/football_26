@@ -106,3 +106,48 @@ def test_one_contest_has_no_diversification_comparison():
     assert report["recommended_structure"] == "A"
     assert report["portfolio_comparisons"] == {}
     assert report["evaluated_portfolio_count"] == 0
+
+
+def test_adaptive_assignment_compares_repeat_and_alternate_without_forcing_diversity():
+    metadata = [
+        {"contest_id": "small", "name": "Small", "maximum_entries": 1, "capacity": 100,
+         "economics": {"top_10_share": .1}},
+        {"contest_id": "large", "name": "Large", "maximum_entries": 1, "capacity": 1000,
+         "economics": {"top_10_share": .4}},
+    ]
+    proxy = {"independent_rank_proxy": .267, "shared_percentile_proxy": .256,
+             "total_entry_fees": 4.0}
+    _, report = select_single_entry_lineups(
+        [lineup(), lineup(captain="b", mean=99.8, solver=99.8)],
+        num_contests=2, contest_metadata=metadata, contest_proxy=proxy,
+    )
+    aa = report["assignment_comparison_aa"]
+    ab = report["assignment_comparison_ab"]
+    assert aa["pair_diagnostics"][0]["shared_players"] == 6
+    assert aa["lineup_correlation_proxy"] == pytest.approx(1)
+    assert ab["pair_diagnostics"][0]["same_captain"] is False
+    assert ab["adaptive_shared_rank_weight"] < aa["adaptive_shared_rank_weight"]
+    assert ab["adaptive_profitability_proxy"] > aa["adaptive_profitability_proxy"]
+    assert [row["contest_id"] for row in report["assignments"]] == ["small", "large"]
+    assert report["assignments"][1]["candidate_rank"] == 2
+
+    _, weak_report = select_single_entry_lineups(
+        [lineup(), lineup(captain="b", mean=70, solver=70)],
+        num_contests=2, contest_metadata=metadata, contest_proxy=proxy,
+    )
+    assert weak_report["recommended_structure"] == "A / A"
+
+
+def test_three_contest_adaptive_report_keeps_repeat_and_distinct_structures():
+    proxy = {"independent_rank_proxy": .27, "shared_percentile_proxy": .24,
+             "total_entry_fees": 9.0}
+    _, report = select_single_entry_lineups(
+        [lineup(captain="a"), lineup(captain="b", mean=99.8), lineup(captain="c", mean=99.5)],
+        num_contests=3, contest_proxy=proxy,
+    )
+    comparisons = report["portfolio_comparisons"]
+    assert comparisons["aaa"]["candidate_ranks"] == [1, 1, 1]
+    assert comparisons["best_one_alternate"] is not None
+    assert comparisons["best_repeated_alternate"] is not None
+    assert comparisons["best_two_alternates"] is not None
+    assert all("adaptive_profitability_proxy" in row for row in comparisons.values())

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Added shared-rank sensitivity for single-entry contest counts, approximate
+  crossovers, and a heuristic stability label. Multi-contest reports now compare
+  repeated and alternate lineups with explicit similarity diagnostics and an
+  adaptive payout proxy, then identify each contest's lineup placement. The
+  Thursday three-contest replay still chose two contests and flagged the small
+  default margin as NEAR TIE.
+
 - Replaced the single-entry contest cutoff with payout-ladder economics and a
   contest-count comparison. Reports now show min cash, percentile payouts,
   concentration, rake, near-lock overlay, and the best feasible subset at each
