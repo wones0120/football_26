@@ -22,7 +22,7 @@ from .rule_library import (
 
 
 LINEUP_CORRELATION_LIBRARY_ID = "optimizer_lineup_correlation"
-LINEUP_CORRELATION_LIBRARY_VERSION = "v3"
+LINEUP_CORRELATION_LIBRARY_VERSION = "v4"
 PASS_CATCHER_POSITIONS = frozenset({"WR", "TE"})
 OFFENSIVE_POSITIONS = frozenset({"QB", "RB", "WR", "TE", "K"})
 DST_POSITIONS = frozenset({"DST", "D", "DEF"})
@@ -374,6 +374,41 @@ LINEUP_CORRELATION_LIBRARY = RuleLibrary(
             magnitude_field="signals.stack_environment",
             contest_formats=("classic",),
             contest_styles=("large_gpp",),
+        ),
+        _rule(
+            "construction.classic_h2h_qb_multi_pass_catcher_v1",
+            (
+                "Apply a modest H2H variance penalty to a quarterback paired with "
+                "multiple same-team wide receivers or tight ends without banning "
+                "the construction."
+            ),
+            RuleType.SOFT_PENALTY,
+            (
+                RuleCondition(
+                    "evaluation.kind", "eq", "classic_h2h_qb_multi_pass_catchers"
+                ),
+            ),
+            "h2h_qb_multiple_pass_catchers_variance",
+            weight=0.85,
+            contest_formats=("classic",),
+            contest_styles=("head_to_head",),
+        ),
+        _rule(
+            "construction.classic_h2h_same_team_offense_v1",
+            (
+                "Apply a modest H2H variance penalty to three or more offensive "
+                "players from one team without making the combination infeasible."
+            ),
+            RuleType.SOFT_PENALTY,
+            (
+                RuleCondition(
+                    "evaluation.kind", "eq", "classic_h2h_same_team_offense"
+                ),
+            ),
+            "h2h_same_team_offense_concentration",
+            weight=0.55,
+            contest_formats=("classic",),
+            contest_styles=("head_to_head",),
         ),
         _rule(
             "construction.classic_skill_cluster_without_qb_v1",
@@ -947,8 +982,31 @@ def build_format_specific_terms(
                     },
                 )
             )
+            append(
+                _construction_term(
+                    engine,
+                    profile,
+                    kind="classic_h2h_qb_multi_pass_catchers",
+                    candidate_id=(
+                        "classic_h2h_qb_multi_pass_catchers:"
+                        f"{_player_id(quarterback)}"
+                    ),
+                    required_indexes=(qb_index,),
+                    count_conditions=((pass_catcher_indexes, 2, None),),
+                    evidence_indexes=(qb_index, *pass_catcher_indexes),
+                    evidence={
+                        "quarterback_team": team,
+                        "pass_catcher_count_threshold": 2,
+                    },
+                )
+            )
 
         for team, indexes in sorted(team_indexes.items()):
+            offense_indexes = [
+                index
+                for index in indexes
+                if _position(players[index]) in {"QB", "RB", "WR", "TE"}
+            ]
             skill_indexes = [
                 index
                 for index in indexes
@@ -967,6 +1025,21 @@ def build_format_specific_terms(
                     absent_indexes=quarterback_indexes,
                     evidence_indexes=skill_indexes,
                     evidence={"team": team},
+                )
+            )
+            append(
+                _construction_term(
+                    engine,
+                    profile,
+                    kind="classic_h2h_same_team_offense",
+                    candidate_id=f"classic_h2h_same_team_offense:{team}",
+                    count_conditions=((offense_indexes, 3, None),),
+                    evidence_indexes=offense_indexes,
+                    evidence={
+                        "team": team,
+                        "offense_count_threshold": 3,
+                        "positions": ["QB", "RB", "WR", "TE"],
+                    },
                 )
             )
 

@@ -1209,6 +1209,11 @@ table tbody tr:last-child {
   line-height: 1.5;
 }
 
+.operations-workspace .status-card li,
+.operations-workspace .status-card small {
+  overflow-wrap: anywhere;
+}
+
 .operations-workspace .contest-evidence-editor {
   border-radius: 10px;
   background:
@@ -1557,3 +1562,28 @@ table tbody tr:last-child {
     grid-template-columns: 1fr;
   }
 }
+.learning-interpretation ol,
+.learning-entry-results ul,
+.learning-decision-results ul {
+  margin: 8px 0 0;
+  padding-left: 22px;
+}
+
+.learning-interpretation li,
+.learning-entry-results li,
+.learning-decision-results li {
+  margin: 5px 0;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
+
+.learning-outcome-summary {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.learning-outcome-summary p { margin: 5px 0 0; }
+.learning-outcome-summary small { display: block; margin-top: 7px; }

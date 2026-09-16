@@ -1,0 +1,14 @@
+{
+  "plan_sha256": "ddfe633d3e6118059820bc60f7cc0986144671e655eccdcf7e63bfd50de6d76c",
+  "history": {
+    "missing": 156862,
+    "game_review": 1761,
+    "existing": 6997,
+    "existing_game_review": 2
+  },
+  "salary": {
+    "review": 53,
+    "resolved": 32
+  },
+  "applied": false
+}

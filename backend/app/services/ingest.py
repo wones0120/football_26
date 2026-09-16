@@ -115,6 +115,31 @@ def _synthetic_source_key(name: str, team: str, position: str) -> str:
     return f"synthetic-{digest[:24]}"
 
 
+def _propagate_salary_identity_to_exact_siblings(
+    rows: list[dict[str, Any]],
+    player_master_ids: list[str | None],
+) -> list[str | None]:
+    """Share an unambiguous canonical identity across exact salary-row siblings."""
+    resolved_by_identity: dict[tuple[str, str | None, str | None], set[str]] = {}
+    for row, player_master_id in zip(rows, player_master_ids, strict=True):
+        if not player_master_id:
+            continue
+        identity = (row["normalized_name"], row["team"], row["position"])
+        resolved_by_identity.setdefault(identity, set()).add(player_master_id)
+
+    propagated = list(player_master_ids)
+    for index, (row, player_master_id) in enumerate(
+        zip(rows, player_master_ids, strict=True)
+    ):
+        if player_master_id:
+            continue
+        identity = (row["normalized_name"], row["team"], row["position"])
+        sibling_ids = resolved_by_identity.get(identity, set())
+        if len(sibling_ids) == 1:
+            propagated[index] = next(iter(sibling_ids))
+    return propagated
+
+
 def _column_map(row: pd.Series, choices: list[str]) -> Any:
     for col in choices:
         if col in row.index:
@@ -639,7 +664,12 @@ class IngestService:
                         ],
                     )
                 )
-                injury_details = _safe_str(_column_map(row, ["Injury", "Notes", "injury_details"]))
+                injury_details = _safe_str(
+                    _column_map(
+                        row,
+                        ["Injury Details", "Injury", "Notes", "injury_details"],
+                    )
+                )
 
             if not source_player_key:
                 source_player_key = _synthetic_source_key(name, team, position)
@@ -849,7 +879,27 @@ class IngestService:
                 slate=request.slate,
             )
 
-            for row in normalized_rows:
+            player_master_ids = [
+                find_player_master_id(
+                    self.session,
+                    source_system=request.source_system,
+                    source_key=row["source_player_key"],
+                    name=row["player_name"],
+                    team=row["team"],
+                    position=row["position"],
+                )[0]
+                for row in normalized_rows
+            ]
+            player_master_ids = _propagate_salary_identity_to_exact_siblings(
+                normalized_rows,
+                player_master_ids,
+            )
+
+            for row, player_master_id in zip(
+                normalized_rows,
+                player_master_ids,
+                strict=True,
+            ):
                 self.session.add(
                     RawSalaryRow(
                         ingest_run_id=run.ingest_run_id,
@@ -860,14 +910,6 @@ class IngestService:
                         source_player_key=row["source_player_key"],
                         raw_row_json=row["raw_row_json"],
                     )
-                )
-                player_master_id, _reason = find_player_master_id(
-                    self.session,
-                    source_system=request.source_system,
-                    source_key=row["source_player_key"],
-                    name=row["player_name"],
-                    team=row["team"],
-                    position=row["position"],
                 )
                 self.session.add(
                     CuratedSalary(

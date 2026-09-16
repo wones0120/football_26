@@ -76,7 +76,8 @@ class OwnershipServiceTests(unittest.TestCase):
         ownership = self.service._build_ownership(rows)
 
         self.assertEqual(len(ownership), 1)
-        self.assertEqual(ownership.iloc[0]["projected_ownership"], 20.0)
+        self.assertTrue(pd.isna(ownership.iloc[0]["projected_ownership"]))
+        self.assertEqual(ownership.iloc[0]["actual_ownership"], 20.0)
         self.assertEqual(ownership.iloc[0]["entries_seen"], 2)
         self.assertEqual(ownership.iloc[0]["source"], "contest_standings")
 

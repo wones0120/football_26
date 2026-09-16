@@ -14,7 +14,10 @@ from backend.app.product_services.lineup_correlation_scoring import (
     build_lineup_correlation_terms,
     score_lineup_correlations,
 )
-from backend.app.product_services.optimizer import OptimizerService
+from backend.app.product_services.optimizer import (
+    OptimizerService,
+    build_head_to_head_objective,
+)
 from backend.app.product_services.rule_library import (
     RuleType,
     resolve_strategy_profile,
@@ -426,6 +429,128 @@ def test_classic_higher_order_stack_and_skill_cluster_rules_are_explained() -> N
         "same_team_skill_cluster_without_quarterback"
         in cluster_summary["negative_reason_codes"]
     )
+
+
+def test_classic_h2h_penalizes_qb_double_stack_and_team_concentration() -> None:
+    lineup = [
+        _player("qb-a", "QB", "AAA", "BBB"),
+        _player("wr-a", "WR", "AAA", "BBB"),
+        _player("te-a", "TE", "AAA", "BBB"),
+    ]
+    summary = score_lineup_correlations(
+        lineup,
+        profile=resolve_strategy_profile(
+            contest_format="classic", objective="cash"
+        ),
+    )
+
+    assert "qb_same_team_pass_catcher" in summary["positive_reason_codes"]
+    assert "h2h_qb_multiple_pass_catchers_variance" in summary[
+        "negative_reason_codes"
+    ]
+    assert "h2h_same_team_offense_concentration" in summary[
+        "negative_reason_codes"
+    ]
+    assert summary["total_adjustment"] < 0.0
+
+    gpp_summary = score_lineup_correlations(
+        lineup,
+        profile=resolve_strategy_profile(
+            contest_format="classic", objective="gpp"
+        ),
+    )
+    assert "h2h_qb_multiple_pass_catchers_variance" not in gpp_summary[
+        "negative_reason_codes"
+    ]
+    assert "h2h_same_team_offense_concentration" not in gpp_summary[
+        "negative_reason_codes"
+    ]
+
+
+def test_classic_h2h_preserves_rb_dst_benefit_without_team_penalty() -> None:
+    lineup = [
+        _player(
+            "rb-a",
+            "RB",
+            "AAA",
+            "BBB",
+            game_total_line=42.0,
+            team_spread_line=-9.0,
+        ),
+        _player("dst-a", "DST", "AAA", "BBB"),
+    ]
+    summary = score_lineup_correlations(
+        lineup,
+        profile=resolve_strategy_profile(
+            contest_format="classic", objective="cash"
+        ),
+    )
+
+    assert "same_team_running_back_dst" in summary["positive_reason_codes"]
+    assert "h2h_same_team_offense_concentration" not in summary[
+        "negative_reason_codes"
+    ]
+    assert summary["total_adjustment"] > 0.0
+
+
+def test_classic_h2h_diversifies_similar_means_but_keeps_material_edge() -> None:
+    fixed = [
+        _player("qb-a", "QB", "AAA", "BBB", projection=20.0),
+        _player("rb-b", "RB", "BBB", "AAA", projection=18.0),
+        _player("rb-c", "RB", "CCC", "DDD", projection=17.0),
+        _player("wr-a1", "WR", "AAA", "BBB", projection=16.0),
+        _player("wr-b", "WR", "BBB", "AAA", projection=15.0),
+        _player("wr-c", "WR", "CCC", "DDD", projection=14.0),
+        _player("te-e", "TE", "EEE", "FFF", projection=13.0),
+        _player("dst-f", "DST", "FFF", "EEE", projection=11.0),
+    ]
+    diversified = _player(
+        "diverse-wr", "WR", "DDD", "CCC", projection=10.0
+    )
+    same_team = _player(
+        "same-team-wr", "WR", "AAA", "BBB", projection=10.0
+    )
+    service = OptimizerService.__new__(OptimizerService)
+    profile = resolve_strategy_profile(
+        contest_format="classic", objective="cash"
+    )
+
+    similar_pool = build_head_to_head_objective(
+        pd.DataFrame([*fixed, diversified, same_team])
+    )
+    diversified_lineup = service._solve_lineup(
+        similar_pool,
+        score_col="h2h_score",
+        contest_type="cash",
+        stack_params={"enabled": False},
+        rule_profile=profile,
+    )
+
+    assert diversified_lineup is not None
+    assert "diverse-wr" in {row["player_id"] for row in diversified_lineup}
+    assert "same-team-wr" not in {
+        row["player_id"] for row in diversified_lineup
+    }
+
+    material_pool = build_head_to_head_objective(
+        pd.DataFrame(
+            [
+                *fixed,
+                diversified,
+                {**same_team, "projection": 11.5},
+            ]
+        )
+    )
+    material_lineup = service._solve_lineup(
+        material_pool,
+        score_col="h2h_score",
+        contest_type="cash",
+        stack_params={"enabled": False},
+        rule_profile=profile,
+    )
+
+    assert material_lineup is not None
+    assert "same-team-wr" in {row["player_id"] for row in material_lineup}
 
 
 def test_qb_double_stack_bonus_requires_cutoff_safe_environment() -> None:

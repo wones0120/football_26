@@ -23,7 +23,7 @@ from sklearn.ensemble import GradientBoostingRegressor
 from Database.config import get_connection_string
 from Database.operations import ensure_table_columns
 from .contest_evidence import classify_contest_type
-from .player_master import PlayerMasterResolver
+from .contest_ownership_identity import attach_salary_identities, persist_observations
 from .target_schema import validate_target_schema
 
 
@@ -422,7 +422,7 @@ class OwnershipService:
         with self.engine.begin() as conn:
             self._delete_contest(conn, self.RAW_TABLE, resolved_contest_id)
             self._delete_contest(conn, self.ENTRY_TABLE, resolved_contest_id)
-            if not ownership.empty and inspect(self.engine).has_table(self.OWNERSHIP_TABLE):
+            if inspect(self.engine).has_table(self.OWNERSHIP_TABLE):
                 self._delete_contest(conn, self.OWNERSHIP_TABLE, resolved_contest_id)
 
         self._append_table(self.RAW_TABLE, standings)
@@ -447,6 +447,9 @@ class OwnershipService:
             entries=entries,
         )
 
+        if target_persisted and not ownership_source.empty:
+            persist_observations(self.engine, ownership_source)
+
         return OwnershipLoadResult(
             season=season,
             week=week,
@@ -454,7 +457,8 @@ class OwnershipService:
             rows_written=len(ownership),
             message=(
                 f"Loaded {len(standings)} contest standings rows, {len(entries)} entries, "
-                f"and {len(ownership)} ownership rows from {source_path.name}"
+                f"and {len(ownership)} ownership rows from {source_path.name}; "
+                f"{len(ownership_source) - len(ownership_source.dropna(subset=['player_id'])) if not ownership_source.empty else 0} identity observations need review"
             ),
             contest_id=resolved_contest_id,
             source_file_id=source_info["source_file_id"],
@@ -826,7 +830,9 @@ class OwnershipService:
         ownership_run_id = str(uuid.uuid4())
         target_rows["player_master_id"] = target_rows["player_id"]
         target_rows["roster_position"] = target_rows["roster_slot"]
-        target_rows["actual_ownership"] = pd.NA
+        # Keep this nullable numeric column as float for PostgreSQL. ``pd.NA``
+        # coerces an all-missing slice to object, which pandas then binds as VARCHAR.
+        target_rows["actual_ownership"] = np.nan
         target_rows["source"] = OWNERSHIP_MODEL_ID
         target_rows["updated_at"] = _utcnow()
         target_rows["ownership_run_id"] = ownership_run_id
@@ -1310,10 +1316,7 @@ class OwnershipService:
         return float(pd.to_numeric(text_value, errors="coerce"))
 
     def _attach_player_ids(self, rows: pd.DataFrame) -> pd.DataFrame:
-        resolver = PlayerMasterResolver(connection_string=self.connection_string)
-        attached = resolver.attach_to_dataframe(rows, name_col="player_display_name", pos_col="roster_position")
-        attached["player_id"] = attached["player_master_id"].astype(str)
-        return attached
+        return attach_salary_identities(self.engine, rows)
 
     @staticmethod
     def _ownership_source_rows(standings: pd.DataFrame) -> pd.DataFrame:
@@ -1357,7 +1360,12 @@ class OwnershipService:
     def _build_ownership(self, rows: pd.DataFrame) -> pd.DataFrame:
         if rows.empty:
             return pd.DataFrame()
-        rows = rows.copy()
+        rows = rows.loc[rows["player_master_id"].notna()].copy()
+        if rows.empty:
+            return pd.DataFrame()
+        conflicts = rows.groupby(["contest_id", "player_id", "roster_position"], dropna=False)["pct_drafted"].nunique() if "contest_id" in rows else pd.Series(dtype=int)
+        if (conflicts > 1).any():
+            raise ValueError("Conflicting ownership percentages for the same contest/player/slot")
         for column in ("contest_id", "source_file_id"):
             if column not in rows.columns:
                 rows[column] = None
@@ -1372,11 +1380,11 @@ class OwnershipService:
                     "player_id",
                     "player_master_id",
                     "player_display_name",
+                    "roster_position",
                 ],
                 dropna=False,
             )
             .agg(
-                roster_position=("roster_position", self._mode_text),
                 projected_ownership=("pct_drafted", "max"),
                 actual_ownership=("pct_drafted", "max"),
                 rows_seen=("entry_id", "size"),
@@ -1384,6 +1392,8 @@ class OwnershipService:
             )
             .reset_index()
         )
+        # Post-contest labels must never masquerade as pregame projections.
+        grouped["projected_ownership"] = np.nan
         grouped["source"] = "contest_standings"
         grouped["updated_at"] = _utcnow()
         return grouped

@@ -1411,7 +1411,7 @@ def adapter_sql(source_schema: str, target_schema: str) -> dict[str, str]:
                 {canonical_team_sql('salary.team')},
                 {canonical_team_sql('salary.opponent')},
                 schedule_games.game_id,
-                COALESCE(salary.created_at, now()),
+                COALESCE(salary.created_at AT TIME ZONE 'UTC', now()),
                 salary.source_system
             FROM {src}.curated_salary salary
             LEFT JOIN schedule_games ON schedule_games.season = salary.season
@@ -1455,9 +1455,22 @@ def adapter_sql(source_schema: str, target_schema: str) -> dict[str, str]:
                 injury.position,
                 injury.injury_status,
                 injury.injury_details,
-                COALESCE(injury.created_at, now()),
+                COALESCE(
+                    captured_source.observed_at,
+                    injury.created_at AT TIME ZONE 'UTC',
+                    now()
+                ),
                 injury.source_system
             FROM {src}.curated_injury injury
+            LEFT JOIN LATERAL (
+                SELECT snapshot.observed_at
+                FROM {src}.source_snapshot_ingest_run snapshot_link
+                JOIN {src}.source_snapshot snapshot
+                  ON snapshot.snapshot_id = snapshot_link.snapshot_id
+                WHERE snapshot_link.ingest_run_id = injury.ingest_run_id
+                ORDER BY snapshot.observed_at DESC, snapshot.snapshot_id DESC
+                LIMIT 1
+            ) captured_source ON TRUE
             LEFT JOIN schedule_games ON schedule_games.season = injury.season
                 AND schedule_games.week = injury.week
                 AND (schedule_games.home_team = injury.team OR schedule_games.away_team = injury.team)
@@ -1520,7 +1533,12 @@ def required_source_tables() -> dict[str, list[str]]:
         "fact_dst_game_actual_compat_cleanup": [],
         "fact_player_game_actual_orphan_cleanup": [],
         "snapshot_salary": ["curated_salary", "raw_nfl_schedule"],
-        "snapshot_injury_status": ["curated_injury", "raw_nfl_schedule"],
+        "snapshot_injury_status": [
+            "curated_injury",
+            "raw_nfl_schedule",
+            "source_snapshot",
+            "source_snapshot_ingest_run",
+        ],
         "dfs_contest_entry_result": ["dk_contest_entries"],
     }
 

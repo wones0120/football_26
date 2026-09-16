@@ -4536,12 +4536,16 @@ class LineupLearningService:
                         }
                     )
 
-                unique_rows: dict[tuple[str, int, int, str | None, str, str], dict[str, Any]] = {}
+                unique_rows: dict[
+                    tuple[str, int, int, str, str | None, str, str],
+                    dict[str, Any],
+                ] = {}
                 for payload in slice_rows:
                     key = (
                         str(payload["source_system"]),
                         int(payload["season"]),
                         int(payload["week"]),
+                        str(payload.get("slate") or ""),
                         _safe_str(payload.get("game_id")),
                         str(payload["player_id"]),
                         str(payload["position"]),
@@ -4562,6 +4566,7 @@ class LineupLearningService:
 
                 existing_rows = self.session.execute(
                     select(
+                        PlayerGameFeatureMatrix.slate,
                         PlayerGameFeatureMatrix.game_id,
                         PlayerGameFeatureMatrix.player_id,
                         PlayerGameFeatureMatrix.position,
@@ -4574,14 +4579,20 @@ class LineupLearningService:
                     )
                 ).all()
                 existing_keys = {
-                    (_safe_str(game_id), str(player_id), str(position))
-                    for game_id, player_id, position in existing_rows
+                    (
+                        str(existing_slate or ""),
+                        _safe_str(game_id),
+                        str(player_id),
+                        str(position),
+                    )
+                    for existing_slate, game_id, player_id, position in existing_rows
                     if player_id and position
                 }
                 insert_rows = [
                     payload
                     for payload in payload_rows
                     if (
+                        str(payload.get("slate") or ""),
                         _safe_str(payload.get("game_id")),
                         str(payload.get("player_id")),
                         str(payload.get("position")),

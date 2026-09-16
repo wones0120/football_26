@@ -11,7 +11,8 @@ Last updated: 2026-09-10
   concrete reason.
 - [x] Use a mean-dominant H2H objective with secondary P90/P10 evidence, a
   fragile-punt penalty, and soft rather than mandatory correlation.
-- [x] Return a best H2H lineup plus at least five alternates.
+- [x] Return the requested number of H2H lineups; Operations may suggest six,
+  but an explicit caller count is authoritative.
 - [x] Add a ceiling-led Large GPP objective that assigns zero ownership/leverage
   weight when ownership evidence is absent.
 - [x] Diversify GPP portfolios with minimum uniqueness, max exposure, optional

@@ -1336,6 +1336,72 @@ Required columns:
 - `improved`
 - `delta_mae`
 
+### `slate_learning_report`
+
+One immutable, user-specific LEARN-001 review of normalized contest outcomes.
+The evidence hash covers contest source files, user entries, canonical ownership
+observations, saved optimizer lineups, symbolic applications, belief versions,
+portfolio assignments, exports, and payout evidence. Identical evidence reuses
+the same report ID; a changed evidence set creates a new row. `partial` means the
+report retained one or more named evidence gaps and did not infer the missing
+lineage.
+
+Required columns:
+
+- `report_id`
+- `contract_id`
+- `season`
+- `week`
+- `slate`
+- `entry_user`
+- `evidence_hash`
+- `status`
+- `source_file_ids_json`
+- `run_ids_json`
+- `report_json`
+- `created_at`
+
+### `agent_question`
+
+One immutable LEARN-002 prompt created by the versioned value-of-information
+policy from an exact DT-703 variant set. The evidence hash makes repeated
+generation idempotent and retains the trigger inputs and answer-specific proposed
+modifiers.
+
+Required columns:
+
+- `question_id`
+- `policy_id`
+- `variant_set_id`
+- `season`
+- `week`
+- `slate`
+- `trigger_type`
+- `priority`
+- `value_of_information_score`
+- `subject_player_id`
+- `subject_label`
+- `question_text`
+- `context_json`
+- `evidence_hash`
+- `created_at`
+
+### `agent_question_answer`
+
+The single immutable answer to an agent question. `no_change` is recorded like
+any other response. `resulting_modifier_json` is an inert proposal and cannot
+change the model or a Digital Twin variant without the normal preview and approval
+gates.
+
+Required columns:
+
+- `answer_id`
+- `question_id`
+- `answer`
+- `answer_text`
+- `resulting_modifier_json`
+- `created_at`
+
 ### `optimizer_evaluation`
 
 Lineup and portfolio quality.
@@ -1447,6 +1513,7 @@ Required columns:
 - `learning_run`
 - `projection_evaluation`
 - `rule_evaluation`
+- `slate_learning_report`
 
 6. Agent feedback loop:
 - `raw_thought_capture`
@@ -1516,8 +1583,8 @@ Example mappings:
 | `symbolic_adjusted_projection` | `player_expected_points_adjusted` |
 | `learning_run` | `symbolic_learning_runs` |
 | `rule_evaluation` | `symbolic_rule_evaluations` |
-| `agent_question` | future table; no current equivalent |
-| `human_feedback_event` | future table; no current equivalent |
+| `agent_question` | versioned LEARN-002 VOI questions from DT-703 bundles |
+| `agent_question_answer` | immutable answers, no-change responses, and inert proposed modifiers |
 | `best_ball_draft` | future table; no current equivalent |
 | `best_ball_pick` | future table; no current equivalent |
 | `adp_snapshot` | future table; no current equivalent |

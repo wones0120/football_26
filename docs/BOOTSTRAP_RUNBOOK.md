@@ -97,6 +97,11 @@ Start with dry, known source files and use the UI upload/discovery controls. Val
 Verify:
 
 - The salary slice appears in curated salary coverage.
+- Overlapping slates retain separate feature rows for the same player and game after migration
+  `0028_feature_matrix_slate_uniqueness.sql`.
+- FanDuel injury rows retain both `Injury Indicator` and `Injury Details`.
+- Prospectively captured injury runs publish the linked immutable snapshot's `observed_at` into
+  `target.snapshot_injury_status.as_of`.
 - Open identity failures appear in the unresolved queue.
 - DST rows resolve through team-defense identity rules, not display-name fallback.
 - Any manual resolution persists an alias and disappears from the open queue.

@@ -1,0 +1,2040 @@
+{
+  "job_id": "dd2018d6-4001-4731-909a-298a37d405d1",
+  "status": "completed",
+  "message": "Selected 3 single-entry contest lineup(s) from 30 candidates; showdown lineup validation=passed",
+  "report": {
+    "method": "heuristic_v1",
+    "material_player_change_minimum": 2,
+    "first_alternate_benefit_weight": 0.03,
+    "objective_weights": {
+      "mean": 0.35,
+      "p90": 0.3,
+      "solver": 0.2,
+      "correlation": 0.1,
+      "context": 0.05,
+      "chalk_penalty": 0.03
+    },
+    "payout_metrics_status": "unavailable_without_field_and_payout_simulation",
+    "primary_future_metric": "P(total payouts > total entry fees)",
+    "contest_metadata": [],
+    "candidates": [
+      {
+        "signature": [
+          [
+            "1ffe9287-283b-4e47-bcce-fd45d98cf24d",
+            "FLEX"
+          ],
+          [
+            "220c527d-9daf-4348-8f38-c244c8c512b3",
+            "FLEX"
+          ],
+          [
+            "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+            "FLEX"
+          ],
+          [
+            "af414768-0b49-4153-931b-0140a8198c5a",
+            "FLEX"
+          ],
+          [
+            "be56238b-7e9e-4d37-af84-1696c5b7f44a",
+            "CPT"
+          ],
+          [
+            "c23e5343-efb7-4ef5-b334-fbdf2212dff5",
+            "FLEX"
+          ]
+        ],
+        "captain_id": "be56238b-7e9e-4d37-af84-1696c5b7f44a",
+        "captain": "Josh Allen",
+        "players": [
+          {
+            "player_id": "1ffe9287-283b-4e47-bcce-fd45d98cf24d",
+            "name": "Sam LaPorta",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+            "name": "Amon-Ra St. Brown",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+            "name": "Jared Goff",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "af414768-0b49-4153-931b-0140a8198c5a",
+            "name": "Greg Dortch",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "be56238b-7e9e-4d37-af84-1696c5b7f44a",
+            "name": "Josh Allen",
+            "slot": "CPT"
+          },
+          {
+            "player_id": "c23e5343-efb7-4ef5-b334-fbdf2212dff5",
+            "name": "Khalil Shakir",
+            "slot": "FLEX"
+          }
+        ],
+        "game_script": {
+          "script_id": "shootout",
+          "kind": "shootout",
+          "label": "Shootout",
+          "reason_codes": [
+            "both_teams_qb_pass_catcher"
+          ],
+          "team_summaries": {
+            "BUF": {
+              "team": "BUF",
+              "players": 3,
+              "quarterbacks": 1,
+              "pass_catchers": 2,
+              "meaningful_rbs": 0,
+              "kickers": 0,
+              "defenses": 0
+            },
+            "DET": {
+              "team": "DET",
+              "players": 3,
+              "quarterbacks": 1,
+              "pass_catchers": 2,
+              "meaningful_rbs": 0,
+              "kickers": 0,
+              "defenses": 0
+            }
+          },
+          "explanation": "Both offenses include a quarterback with at least one pass catcher."
+        },
+        "team_emphasis": "BUF",
+        "mean": 95.55547762223962,
+        "p90": 160.18368518995794,
+        "solver_objective": 160.22347809812922,
+        "ownership_sum": 166.492136943111,
+        "relative_chalk": 51.65185408025865,
+        "correlation_score": 3.826214285714286,
+        "context_score": 5.932700892857143,
+        "score_components": {
+          "mean": 1.0,
+          "p90": 1.0,
+          "solver_objective": 0.9295391529398731,
+          "correlation_score": 1.0,
+          "context_score": 0.9068529607451763
+        },
+        "single_entry_score": 0.9657549224011558,
+        "rank": 1,
+        "quality_loss_vs_a": 0.0,
+        "shared_players_with_a": 6,
+        "player_changes_vs_a": 0,
+        "overlap_percentage_vs_a": 100.0,
+        "jaccard_similarity_vs_a": 1.0,
+        "diversity_score_vs_a": 0.0,
+        "diversification_benefit_vs_a": 0.0,
+        "diversity_reasons_vs_a": []
+      },
+      {
+        "signature": [
+          [
+            "1ffe9287-283b-4e47-bcce-fd45d98cf24d",
+            "FLEX"
+          ],
+          [
+            "220c527d-9daf-4348-8f38-c244c8c512b3",
+            "CPT"
+          ],
+          [
+            "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+            "FLEX"
+          ],
+          [
+            "af414768-0b49-4153-931b-0140a8198c5a",
+            "FLEX"
+          ],
+          [
+            "be56238b-7e9e-4d37-af84-1696c5b7f44a",
+            "FLEX"
+          ],
+          [
+            "c23e5343-efb7-4ef5-b334-fbdf2212dff5",
+            "FLEX"
+          ]
+        ],
+        "captain_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+        "captain": "Amon-Ra St. Brown",
+        "players": [
+          {
+            "player_id": "1ffe9287-283b-4e47-bcce-fd45d98cf24d",
+            "name": "Sam LaPorta",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+            "name": "Amon-Ra St. Brown",
+            "slot": "CPT"
+          },
+          {
+            "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+            "name": "Jared Goff",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "af414768-0b49-4153-931b-0140a8198c5a",
+            "name": "Greg Dortch",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "be56238b-7e9e-4d37-af84-1696c5b7f44a",
+            "name": "Josh Allen",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "c23e5343-efb7-4ef5-b334-fbdf2212dff5",
+            "name": "Khalil Shakir",
+            "slot": "FLEX"
+          }
+        ],
+        "game_script": {
+          "script_id": "shootout",
+          "kind": "shootout",
+          "label": "Shootout",
+          "reason_codes": [
+            "both_teams_qb_pass_catcher"
+          ],
+          "team_summaries": {
+            "BUF": {
+              "team": "BUF",
+              "players": 3,
+              "quarterbacks": 1,
+              "pass_catchers": 2,
+              "meaningful_rbs": 0,
+              "kickers": 0,
+              "defenses": 0
+            },
+            "DET": {
+              "team": "DET",
+              "players": 3,
+              "quarterbacks": 1,
+              "pass_catchers": 2,
+              "meaningful_rbs": 0,
+              "kickers": 0,
+              "defenses": 0
+            }
+          },
+          "explanation": "Both offenses include a quarterback with at least one pass catcher."
+        },
+        "team_emphasis": "BUF",
+        "mean": 94.23449391568846,
+        "p90": 159.46075104986852,
+        "solver_objective": 172.36872442799967,
+        "ownership_sum": 165.850340965874,
+        "relative_chalk": 50.85533404570343,
+        "correlation_score": 3.1975,
+        "context_score": 6.054575892857143,
+        "score_components": {
+          "mean": 0.9861757406333793,
+          "p90": 0.9954868428752147,
+          "solver_objective": 1.0,
+          "correlation_score": 0.83568241641309,
+          "context_score": 0.925482368596141
+        },
+        "single_entry_score": 0.9583933219416523,
+        "rank": 2,
+        "quality_loss_vs_a": 0.0073616004595035145,
+        "shared_players_with_a": 6,
+        "player_changes_vs_a": 0,
+        "overlap_percentage_vs_a": 100.0,
+        "jaccard_similarity_vs_a": 1.0,
+        "diversity_score_vs_a": 0.35,
+        "diversification_benefit_vs_a": 0.010499999999999999,
+        "diversity_reasons_vs_a": [
+          "different Captain"
+        ]
+      },
+      {
+        "signature": [
+          [
+            "1ffe9287-283b-4e47-bcce-fd45d98cf24d",
+            "FLEX"
+          ],
+          [
+            "220c527d-9daf-4348-8f38-c244c8c512b3",
+            "FLEX"
+          ],
+          [
+            "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+            "CPT"
+          ],
+          [
+            "900f1061-eb3e-4945-bed6-3a8186cd16aa",
+            "FLEX"
+          ],
+          [
+            "af414768-0b49-4153-931b-0140a8198c5a",
+            "FLEX"
+          ],
+          [
+            "be56238b-7e9e-4d37-af84-1696c5b7f44a",
+            "FLEX"
+          ]
+        ],
+        "captain_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+        "captain": "Jared Goff",
+        "players": [
+          {
+            "player_id": "1ffe9287-283b-4e47-bcce-fd45d98cf24d",
+            "name": "Sam LaPorta",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+            "name": "Amon-Ra St. Brown",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+            "name": "Jared Goff",
+            "slot": "CPT"
+          },
+          {
+            "player_id": "900f1061-eb3e-4945-bed6-3a8186cd16aa",
+            "name": "Jameson Williams",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "af414768-0b49-4153-931b-0140a8198c5a",
+            "name": "Greg Dortch",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "be56238b-7e9e-4d37-af84-1696c5b7f44a",
+            "name": "Josh Allen",
+            "slot": "FLEX"
+          }
+        ],
+        "game_script": {
+          "script_id": "shootout",
+          "kind": "shootout",
+          "label": "Shootout",
+          "reason_codes": [
+            "both_teams_qb_pass_catcher"
+          ],
+          "team_summaries": {
+            "BUF": {
+              "team": "BUF",
+              "players": 2,
+              "quarterbacks": 1,
+              "pass_catchers": 1,
+              "meaningful_rbs": 0,
+              "kickers": 0,
+              "defenses": 0
+            },
+            "DET": {
+              "team": "DET",
+              "players": 4,
+              "quarterbacks": 1,
+              "pass_catchers": 3,
+              "meaningful_rbs": 0,
+              "kickers": 0,
+              "defenses": 0
+            }
+          },
+          "explanation": "Both offenses include a quarterback with at least one pass catcher."
+        },
+        "team_emphasis": "DET",
+        "mean": 94.51516187651289,
+        "p90": 159.2957950730346,
+        "solver_objective": 158.86892938922261,
+        "ownership_sum": 170.71991079334833,
+        "relative_chalk": 59.131608048967486,
+        "correlation_score": 3.5887142857142855,
+        "context_score": 6.298325892857143,
+        "score_components": {
+          "mean": 0.989112965874762,
+          "p90": 0.994457050255334,
+          "solver_objective": 0.921680716246084,
+          "correlation_score": 0.937928202064704,
+          "context_score": 0.9627411842980704
+        },
+        "single_entry_score": 0.9530531933886673,
+        "rank": 3,
+        "quality_loss_vs_a": 0.01270172901248845,
+        "shared_players_with_a": 5,
+        "player_changes_vs_a": 1,
+        "overlap_percentage_vs_a": 83.33333333333333,
+        "jaccard_similarity_vs_a": 0.7142857142857143,
+        "diversity_score_vs_a": 0.5833333333333334,
+        "diversification_benefit_vs_a": 0.0175,
+        "diversity_reasons_vs_a": [
+          "different Captain",
+          "different team emphasis"
+        ]
+      },
+      {
+        "signature": [
+          [
+            "1ffe9287-283b-4e47-bcce-fd45d98cf24d",
+            "FLEX"
+          ],
+          [
+            "220c527d-9daf-4348-8f38-c244c8c512b3",
+            "CPT"
+          ],
+          [
+            "50dcb615-117f-4f8a-bbd6-7e57e71480d0",
+            "FLEX"
+          ],
+          [
+            "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+            "FLEX"
+          ],
+          [
+            "be56238b-7e9e-4d37-af84-1696c5b7f44a",
+            "FLEX"
+          ],
+          [
+            "c23e5343-efb7-4ef5-b334-fbdf2212dff5",
+            "FLEX"
+          ]
+        ],
+        "captain_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+        "captain": "Amon-Ra St. Brown",
+        "players": [
+          {
+            "player_id": "1ffe9287-283b-4e47-bcce-fd45d98cf24d",
+            "name": "Sam LaPorta",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+            "name": "Amon-Ra St. Brown",
+            "slot": "CPT"
+          },
+          {
+            "player_id": "50dcb615-117f-4f8a-bbd6-7e57e71480d0",
+            "name": "Tyler Conklin",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+            "name": "Jared Goff",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "be56238b-7e9e-4d37-af84-1696c5b7f44a",
+            "name": "Josh Allen",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "c23e5343-efb7-4ef5-b334-fbdf2212dff5",
+            "name": "Khalil Shakir",
+            "slot": "FLEX"
+          }
+        ],
+        "game_script": {
+          "script_id": "shootout",
+          "kind": "shootout",
+          "label": "Shootout",
+          "reason_codes": [
+            "both_teams_qb_pass_catcher"
+          ],
+          "team_summaries": {
+            "BUF": {
+              "team": "BUF",
+              "players": 2,
+              "quarterbacks": 1,
+              "pass_catchers": 1,
+              "meaningful_rbs": 0,
+              "kickers": 0,
+              "defenses": 0
+            },
+            "DET": {
+              "team": "DET",
+              "players": 4,
+              "quarterbacks": 1,
+              "pass_catchers": 3,
+              "meaningful_rbs": 0,
+              "kickers": 0,
+              "defenses": 0
+            }
+          },
+          "explanation": "Both offenses include a quarterback with at least one pass catcher."
+        },
+        "team_emphasis": "DET",
+        "mean": 91.28253756662633,
+        "p90": 152.75120442128414,
+        "solver_objective": 165.9719543100048,
+        "ownership_sum": 161.41608101207675,
+        "relative_chalk": 9.793442681721709,
+        "correlation_score": 2.911785714285714,
+        "context_score": 6.298325892857143,
+        "score_components": {
+          "mean": 0.9552831489942885,
+          "p90": 0.9536002635982572,
+          "solver_objective": 0.9628890325711793,
+          "correlation_score": 0.7610095767916815,
+          "context_score": 0.9627411842980704
+        },
+        "single_entry_score": 0.9343069718312691,
+        "rank": 4,
+        "quality_loss_vs_a": 0.031447950569886696,
+        "shared_players_with_a": 5,
+        "player_changes_vs_a": 1,
+        "overlap_percentage_vs_a": 83.33333333333333,
+        "jaccard_similarity_vs_a": 0.7142857142857143,
+        "diversity_score_vs_a": 0.5833333333333334,
+        "diversification_benefit_vs_a": 0.0175,
+        "diversity_reasons_vs_a": [
+          "different Captain",
+          "different team emphasis"
+        ]
+      },
+      {
+        "signature": [
+          [
+            "220c527d-9daf-4348-8f38-c244c8c512b3",
+            "FLEX"
+          ],
+          [
+            "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+            "FLEX"
+          ],
+          [
+            "900f1061-eb3e-4945-bed6-3a8186cd16aa",
+            "CPT"
+          ],
+          [
+            "af414768-0b49-4153-931b-0140a8198c5a",
+            "FLEX"
+          ],
+          [
+            "be56238b-7e9e-4d37-af84-1696c5b7f44a",
+            "FLEX"
+          ],
+          [
+            "c23e5343-efb7-4ef5-b334-fbdf2212dff5",
+            "FLEX"
+          ]
+        ],
+        "captain_id": "900f1061-eb3e-4945-bed6-3a8186cd16aa",
+        "captain": "Jameson Williams",
+        "players": [
+          {
+            "player_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+            "name": "Amon-Ra St. Brown",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+            "name": "Jared Goff",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "900f1061-eb3e-4945-bed6-3a8186cd16aa",
+            "name": "Jameson Williams",
+            "slot": "CPT"
+          },
+          {
+            "player_id": "af414768-0b49-4153-931b-0140a8198c5a",
+            "name": "Greg Dortch",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "be56238b-7e9e-4d37-af84-1696c5b7f44a",
+            "name": "Josh Allen",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "c23e5343-efb7-4ef5-b334-fbdf2212dff5",
+            "name": "Khalil Shakir",
+            "slot": "FLEX"
+          }
+        ],
+        "game_script": {
+          "script_id": "shootout",
+          "kind": "shootout",
+          "label": "Shootout",
+          "reason_codes": [
+            "both_teams_qb_pass_catcher"
+          ],
+          "team_summaries": {
+            "BUF": {
+              "team": "BUF",
+              "players": 3,
+              "quarterbacks": 1,
+              "pass_catchers": 2,
+              "meaningful_rbs": 0,
+              "kickers": 0,
+              "defenses": 0
+            },
+            "DET": {
+              "team": "DET",
+              "players": 3,
+              "quarterbacks": 1,
+              "pass_catchers": 2,
+              "meaningful_rbs": 0,
+              "kickers": 0,
+              "defenses": 0
+            }
+          },
+          "explanation": "Both offenses include a quarterback with at least one pass catcher."
+        },
+        "team_emphasis": "BUF",
+        "mean": 90.53408297416976,
+        "p90": 158.2795317013934,
+        "solver_objective": 167.20314569922147,
+        "ownership_sum": 177.1512147709643,
+        "relative_chalk": 80.2035553245125,
+        "correlation_score": 3.1975,
+        "context_score": 6.054575892857143,
+        "score_components": {
+          "mean": 0.9474504782664477,
+          "p90": 0.9881126877165646,
+          "solver_objective": 0.9700318097385705,
+          "correlation_score": 0.83568241641309,
+          "context_score": 0.925482368596141
+        },
+        "single_entry_score": 0.9278291291297024,
+        "rank": 5,
+        "quality_loss_vs_a": 0.0379257932714534,
+        "shared_players_with_a": 5,
+        "player_changes_vs_a": 1,
+        "overlap_percentage_vs_a": 83.33333333333333,
+        "jaccard_similarity_vs_a": 0.7142857142857143,
+        "diversity_score_vs_a": 0.4333333333333333,
+        "diversification_benefit_vs_a": 0.012999999999999998,
+        "diversity_reasons_vs_a": [
+          "different Captain"
+        ]
+      },
+      {
+        "signature": [
+          [
+            "1ffe9287-283b-4e47-bcce-fd45d98cf24d",
+            "FLEX"
+          ],
+          [
+            "220c527d-9daf-4348-8f38-c244c8c512b3",
+            "FLEX"
+          ],
+          [
+            "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+            "FLEX"
+          ],
+          [
+            "af414768-0b49-4153-931b-0140a8198c5a",
+            "FLEX"
+          ],
+          [
+            "be56238b-7e9e-4d37-af84-1696c5b7f44a",
+            "FLEX"
+          ],
+          [
+            "c23e5343-efb7-4ef5-b334-fbdf2212dff5",
+            "CPT"
+          ]
+        ],
+        "captain_id": "c23e5343-efb7-4ef5-b334-fbdf2212dff5",
+        "captain": "Khalil Shakir",
+        "players": [
+          {
+            "player_id": "1ffe9287-283b-4e47-bcce-fd45d98cf24d",
+            "name": "Sam LaPorta",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+            "name": "Amon-Ra St. Brown",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+            "name": "Jared Goff",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "af414768-0b49-4153-931b-0140a8198c5a",
+            "name": "Greg Dortch",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "be56238b-7e9e-4d37-af84-1696c5b7f44a",
+            "name": "Josh Allen",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "c23e5343-efb7-4ef5-b334-fbdf2212dff5",
+            "name": "Khalil Shakir",
+            "slot": "CPT"
+          }
+        ],
+        "game_script": {
+          "script_id": "shootout",
+          "kind": "shootout",
+          "label": "Shootout",
+          "reason_codes": [
+            "both_teams_qb_pass_catcher"
+          ],
+          "team_summaries": {
+            "BUF": {
+              "team": "BUF",
+              "players": 3,
+              "quarterbacks": 1,
+              "pass_catchers": 2,
+              "meaningful_rbs": 0,
+              "kickers": 0,
+              "defenses": 0
+            },
+            "DET": {
+              "team": "DET",
+              "players": 3,
+              "quarterbacks": 1,
+              "pass_catchers": 2,
+              "meaningful_rbs": 0,
+              "kickers": 0,
+              "defenses": 0
+            }
+          },
+          "explanation": "Both offenses include a quarterback with at least one pass catcher."
+        },
+        "team_emphasis": "BUF",
+        "mean": 91.32734886342061,
+        "p90": 156.55360599760064,
+        "solver_objective": 165.206771052614,
+        "ownership_sum": 174.84715189058625,
+        "relative_chalk": 71.76083593829169,
+        "correlation_score": 3.1975,
+        "context_score": 5.932700892857143,
+        "score_components": {
+          "mean": 0.9557521048083281,
+          "p90": 0.9773380217339083,
+          "solver_objective": 0.958449809272811,
+          "correlation_score": 0.83568241641309,
+          "context_score": 0.9068529607451763
+        },
+        "single_entry_score": 0.9267872439547299,
+        "rank": 6,
+        "quality_loss_vs_a": 0.0389676784464259,
+        "shared_players_with_a": 6,
+        "player_changes_vs_a": 0,
+        "overlap_percentage_vs_a": 100.0,
+        "jaccard_similarity_vs_a": 1.0,
+        "diversity_score_vs_a": 0.35,
+        "diversification_benefit_vs_a": 0.010499999999999999,
+        "diversity_reasons_vs_a": [
+          "different Captain"
+        ]
+      },
+      {
+        "signature": [
+          [
+            "220c527d-9daf-4348-8f38-c244c8c512b3",
+            "FLEX"
+          ],
+          [
+            "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+            "FLEX"
+          ],
+          [
+            "900f1061-eb3e-4945-bed6-3a8186cd16aa",
+            "FLEX"
+          ],
+          [
+            "af414768-0b49-4153-931b-0140a8198c5a",
+            "FLEX"
+          ],
+          [
+            "be56238b-7e9e-4d37-af84-1696c5b7f44a",
+            "FLEX"
+          ],
+          [
+            "c23e5343-efb7-4ef5-b334-fbdf2212dff5",
+            "CPT"
+          ]
+        ],
+        "captain_id": "c23e5343-efb7-4ef5-b334-fbdf2212dff5",
+        "captain": "Khalil Shakir",
+        "players": [
+          {
+            "player_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+            "name": "Amon-Ra St. Brown",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+            "name": "Jared Goff",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "900f1061-eb3e-4945-bed6-3a8186cd16aa",
+            "name": "Jameson Williams",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "af414768-0b49-4153-931b-0140a8198c5a",
+            "name": "Greg Dortch",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "be56238b-7e9e-4d37-af84-1696c5b7f44a",
+            "name": "Josh Allen",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "c23e5343-efb7-4ef5-b334-fbdf2212dff5",
+            "name": "Khalil Shakir",
+            "slot": "CPT"
+          }
+        ],
+        "game_script": {
+          "script_id": "shootout",
+          "kind": "shootout",
+          "label": "Shootout",
+          "reason_codes": [
+            "both_teams_qb_pass_catcher"
+          ],
+          "team_summaries": {
+            "BUF": {
+              "team": "BUF",
+              "players": 3,
+              "quarterbacks": 1,
+              "pass_catchers": 2,
+              "meaningful_rbs": 0,
+              "kickers": 0,
+              "defenses": 0
+            },
+            "DET": {
+              "team": "DET",
+              "players": 3,
+              "quarterbacks": 1,
+              "pass_catchers": 2,
+              "meaningful_rbs": 0,
+              "kickers": 0,
+              "defenses": 0
+            }
+          },
+          "explanation": "Both offenses include a quarterback with at least one pass catcher."
+        },
+        "team_emphasis": "BUF",
+        "mean": 90.36052814942855,
+        "p90": 158.1059768766522,
+        "solver_objective": 166.61425471361386,
+        "ownership_sum": 176.65824211623203,
+        "relative_chalk": 79.56727377493445,
+        "correlation_score": 3.1975,
+        "context_score": 5.932700892857143,
+        "score_components": {
+          "mean": 0.9456342053634191,
+          "p90": 0.9870292139249897,
+          "solver_objective": 0.966615348964948,
+          "correlation_score": 0.83568241641309,
+          "context_score": 0.9068529607451763
+        },
+        "single_entry_score": 0.9254445133937707,
+        "rank": 7,
+        "quality_loss_vs_a": 0.04031040900738514,
+        "shared_players_with_a": 5,
+        "player_changes_vs_a": 1,
+        "overlap_percentage_vs_a": 83.33333333333333,
+        "jaccard_similarity_vs_a": 0.7142857142857143,
+        "diversity_score_vs_a": 0.4333333333333333,
+        "diversification_benefit_vs_a": 0.012999999999999998,
+        "diversity_reasons_vs_a": [
+          "different Captain"
+        ]
+      },
+      {
+        "signature": [
+          [
+            "1ffe9287-283b-4e47-bcce-fd45d98cf24d",
+            "FLEX"
+          ],
+          [
+            "220c527d-9daf-4348-8f38-c244c8c512b3",
+            "FLEX"
+          ],
+          [
+            "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+            "FLEX"
+          ],
+          [
+            "900f1061-eb3e-4945-bed6-3a8186cd16aa",
+            "CPT"
+          ],
+          [
+            "af414768-0b49-4153-931b-0140a8198c5a",
+            "FLEX"
+          ],
+          [
+            "be56238b-7e9e-4d37-af84-1696c5b7f44a",
+            "FLEX"
+          ]
+        ],
+        "captain_id": "900f1061-eb3e-4945-bed6-3a8186cd16aa",
+        "captain": "Jameson Williams",
+        "players": [
+          {
+            "player_id": "1ffe9287-283b-4e47-bcce-fd45d98cf24d",
+            "name": "Sam LaPorta",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+            "name": "Amon-Ra St. Brown",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+            "name": "Jared Goff",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "900f1061-eb3e-4945-bed6-3a8186cd16aa",
+            "name": "Jameson Williams",
+            "slot": "CPT"
+          },
+          {
+            "player_id": "af414768-0b49-4153-931b-0140a8198c5a",
+            "name": "Greg Dortch",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "be56238b-7e9e-4d37-af84-1696c5b7f44a",
+            "name": "Josh Allen",
+            "slot": "FLEX"
+          }
+        ],
+        "game_script": {
+          "script_id": "shootout",
+          "kind": "shootout",
+          "label": "Shootout",
+          "reason_codes": [
+            "both_teams_qb_pass_catcher"
+          ],
+          "team_summaries": {
+            "BUF": {
+              "team": "BUF",
+              "players": 2,
+              "quarterbacks": 1,
+              "pass_catchers": 1,
+              "meaningful_rbs": 0,
+              "kickers": 0,
+              "defenses": 0
+            },
+            "DET": {
+              "team": "DET",
+              "players": 4,
+              "quarterbacks": 1,
+              "pass_catchers": 3,
+              "meaningful_rbs": 0,
+              "kickers": 0,
+              "defenses": 0
+            }
+          },
+          "explanation": "Both offenses include a quarterback with at least one pass catcher."
+        },
+        "team_emphasis": "DET",
+        "mean": 91.84801333764423,
+        "p90": 157.07427047182426,
+        "solver_objective": 166.01325611159697,
+        "ownership_sum": 176.43451567522777,
+        "relative_chalk": 76.89337896924954,
+        "correlation_score": 2.911785714285714,
+        "context_score": 6.298325892857143,
+        "score_components": {
+          "mean": 0.9612009235174132,
+          "p90": 0.980588443108633,
+          "solver_objective": 0.9631286456548709,
+          "correlation_score": 0.7610095767916815,
+          "context_score": 0.9627411842980704
+        },
+        "single_entry_score": 0.9243925884979556,
+        "rank": 8,
+        "quality_loss_vs_a": 0.04136233390320021,
+        "shared_players_with_a": 5,
+        "player_changes_vs_a": 1,
+        "overlap_percentage_vs_a": 83.33333333333333,
+        "jaccard_similarity_vs_a": 0.7142857142857143,
+        "diversity_score_vs_a": 0.5833333333333334,
+        "diversification_benefit_vs_a": 0.0175,
+        "diversity_reasons_vs_a": [
+          "different Captain",
+          "different team emphasis"
+        ]
+      },
+      {
+        "signature": [
+          [
+            "220c527d-9daf-4348-8f38-c244c8c512b3",
+            "CPT"
+          ],
+          [
+            "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+            "FLEX"
+          ],
+          [
+            "9f377a95-2fd8-4c47-9aca-18555093c535",
+            "FLEX"
+          ],
+          [
+            "af414768-0b49-4153-931b-0140a8198c5a",
+            "FLEX"
+          ],
+          [
+            "be56238b-7e9e-4d37-af84-1696c5b7f44a",
+            "FLEX"
+          ],
+          [
+            "c23e5343-efb7-4ef5-b334-fbdf2212dff5",
+            "FLEX"
+          ]
+        ],
+        "captain_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+        "captain": "Amon-Ra St. Brown",
+        "players": [
+          {
+            "player_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+            "name": "Amon-Ra St. Brown",
+            "slot": "CPT"
+          },
+          {
+            "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+            "name": "Jared Goff",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "9f377a95-2fd8-4c47-9aca-18555093c535",
+            "name": "Isaac TeSlaa",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "af414768-0b49-4153-931b-0140a8198c5a",
+            "name": "Greg Dortch",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "be56238b-7e9e-4d37-af84-1696c5b7f44a",
+            "name": "Josh Allen",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "c23e5343-efb7-4ef5-b334-fbdf2212dff5",
+            "name": "Khalil Shakir",
+            "slot": "FLEX"
+          }
+        ],
+        "game_script": {
+          "script_id": "shootout",
+          "kind": "shootout",
+          "label": "Shootout",
+          "reason_codes": [
+            "both_teams_qb_pass_catcher"
+          ],
+          "team_summaries": {
+            "BUF": {
+              "team": "BUF",
+              "players": 3,
+              "quarterbacks": 1,
+              "pass_catchers": 2,
+              "meaningful_rbs": 0,
+              "kickers": 0,
+              "defenses": 0
+            },
+            "DET": {
+              "team": "DET",
+              "players": 3,
+              "quarterbacks": 1,
+              "pass_catchers": 2,
+              "meaningful_rbs": 0,
+              "kickers": 0,
+              "defenses": 0
+            }
+          },
+          "explanation": "Both offenses include a quarterback with at least one pass catcher."
+        },
+        "team_emphasis": "BUF",
+        "mean": 87.7095972903473,
+        "p90": 150.99647388049542,
+        "solver_objective": 164.5639961189645,
+        "ownership_sum": 157.60598021165012,
+        "relative_chalk": 25.67167514278737,
+        "correlation_score": 3.1975,
+        "context_score": 6.054575892857143,
+        "score_components": {
+          "mean": 0.9178918830492427,
+          "p90": 0.9426457738279174,
+          "solver_objective": 0.9547207398851797,
+          "correlation_score": 0.83568241641309,
+          "context_score": 0.925482368596141
+        },
+        "single_entry_score": 0.917140896720926,
+        "rank": 9,
+        "quality_loss_vs_a": 0.04861402568022977,
+        "shared_players_with_a": 5,
+        "player_changes_vs_a": 1,
+        "overlap_percentage_vs_a": 83.33333333333333,
+        "jaccard_similarity_vs_a": 0.7142857142857143,
+        "diversity_score_vs_a": 0.4333333333333333,
+        "diversification_benefit_vs_a": 0.012999999999999998,
+        "diversity_reasons_vs_a": [
+          "different Captain"
+        ]
+      },
+      {
+        "signature": [
+          [
+            "1ffe9287-283b-4e47-bcce-fd45d98cf24d",
+            "FLEX"
+          ],
+          [
+            "693463af-73ba-41d5-889c-388c36703430",
+            "FLEX"
+          ],
+          [
+            "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+            "FLEX"
+          ],
+          [
+            "af414768-0b49-4153-931b-0140a8198c5a",
+            "FLEX"
+          ],
+          [
+            "be56238b-7e9e-4d37-af84-1696c5b7f44a",
+            "FLEX"
+          ],
+          [
+            "c23e5343-efb7-4ef5-b334-fbdf2212dff5",
+            "CPT"
+          ]
+        ],
+        "captain_id": "c23e5343-efb7-4ef5-b334-fbdf2212dff5",
+        "captain": "Khalil Shakir",
+        "players": [
+          {
+            "player_id": "1ffe9287-283b-4e47-bcce-fd45d98cf24d",
+            "name": "Sam LaPorta",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "693463af-73ba-41d5-889c-388c36703430",
+            "name": "Jahmyr Gibbs",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+            "name": "Jared Goff",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "af414768-0b49-4153-931b-0140a8198c5a",
+            "name": "Greg Dortch",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "be56238b-7e9e-4d37-af84-1696c5b7f44a",
+            "name": "Josh Allen",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "c23e5343-efb7-4ef5-b334-fbdf2212dff5",
+            "name": "Khalil Shakir",
+            "slot": "CPT"
+          }
+        ],
+        "game_script": {
+          "script_id": "shootout",
+          "kind": "shootout",
+          "label": "Shootout",
+          "reason_codes": [
+            "both_teams_qb_pass_catcher"
+          ],
+          "team_summaries": {
+            "BUF": {
+              "team": "BUF",
+              "players": 3,
+              "quarterbacks": 1,
+              "pass_catchers": 2,
+              "meaningful_rbs": 0,
+              "kickers": 0,
+              "defenses": 0
+            },
+            "DET": {
+              "team": "DET",
+              "players": 3,
+              "quarterbacks": 1,
+              "pass_catchers": 1,
+              "meaningful_rbs": 1,
+              "kickers": 0,
+              "defenses": 0
+            }
+          },
+          "explanation": "Both offenses include a quarterback with at least one pass catcher."
+        },
+        "team_emphasis": "BUF",
+        "mean": 90.98219383753312,
+        "p90": 156.6979915155702,
+        "solver_objective": 164.62042766977564,
+        "ownership_sum": 177.80269172211388,
+        "relative_chalk": 76.55735746424554,
+        "correlation_score": 2.8975,
+        "context_score": 5.738415178571429,
+        "score_components": {
+          "mean": 0.952140014382157,
+          "p90": 0.9782393964138474,
+          "solver_objective": 0.9550481284587067,
+          "correlation_score": 0.757275934810611,
+          "context_score": 0.877155091526349
+        },
+        "single_entry_score": 0.9143485904677553,
+        "rank": 10,
+        "quality_loss_vs_a": 0.051406331933400495,
+        "shared_players_with_a": 5,
+        "player_changes_vs_a": 1,
+        "overlap_percentage_vs_a": 83.33333333333333,
+        "jaccard_similarity_vs_a": 0.7142857142857143,
+        "diversity_score_vs_a": 0.4333333333333333,
+        "diversification_benefit_vs_a": 0.012999999999999998,
+        "diversity_reasons_vs_a": [
+          "different Captain"
+        ]
+      }
+    ],
+    "selected_candidates": [
+      {
+        "signature": [
+          [
+            "1ffe9287-283b-4e47-bcce-fd45d98cf24d",
+            "FLEX"
+          ],
+          [
+            "220c527d-9daf-4348-8f38-c244c8c512b3",
+            "FLEX"
+          ],
+          [
+            "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+            "FLEX"
+          ],
+          [
+            "af414768-0b49-4153-931b-0140a8198c5a",
+            "FLEX"
+          ],
+          [
+            "be56238b-7e9e-4d37-af84-1696c5b7f44a",
+            "CPT"
+          ],
+          [
+            "c23e5343-efb7-4ef5-b334-fbdf2212dff5",
+            "FLEX"
+          ]
+        ],
+        "captain_id": "be56238b-7e9e-4d37-af84-1696c5b7f44a",
+        "captain": "Josh Allen",
+        "players": [
+          {
+            "player_id": "1ffe9287-283b-4e47-bcce-fd45d98cf24d",
+            "name": "Sam LaPorta",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+            "name": "Amon-Ra St. Brown",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+            "name": "Jared Goff",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "af414768-0b49-4153-931b-0140a8198c5a",
+            "name": "Greg Dortch",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "be56238b-7e9e-4d37-af84-1696c5b7f44a",
+            "name": "Josh Allen",
+            "slot": "CPT"
+          },
+          {
+            "player_id": "c23e5343-efb7-4ef5-b334-fbdf2212dff5",
+            "name": "Khalil Shakir",
+            "slot": "FLEX"
+          }
+        ],
+        "game_script": {
+          "script_id": "shootout",
+          "kind": "shootout",
+          "label": "Shootout",
+          "reason_codes": [
+            "both_teams_qb_pass_catcher"
+          ],
+          "team_summaries": {
+            "BUF": {
+              "team": "BUF",
+              "players": 3,
+              "quarterbacks": 1,
+              "pass_catchers": 2,
+              "meaningful_rbs": 0,
+              "kickers": 0,
+              "defenses": 0
+            },
+            "DET": {
+              "team": "DET",
+              "players": 3,
+              "quarterbacks": 1,
+              "pass_catchers": 2,
+              "meaningful_rbs": 0,
+              "kickers": 0,
+              "defenses": 0
+            }
+          },
+          "explanation": "Both offenses include a quarterback with at least one pass catcher."
+        },
+        "team_emphasis": "BUF",
+        "mean": 95.55547762223962,
+        "p90": 160.18368518995794,
+        "solver_objective": 160.22347809812922,
+        "ownership_sum": 166.492136943111,
+        "relative_chalk": 51.65185408025865,
+        "correlation_score": 3.826214285714286,
+        "context_score": 5.932700892857143,
+        "score_components": {
+          "mean": 1.0,
+          "p90": 1.0,
+          "solver_objective": 0.9295391529398731,
+          "correlation_score": 1.0,
+          "context_score": 0.9068529607451763
+        },
+        "single_entry_score": 0.9657549224011558,
+        "rank": 1,
+        "quality_loss_vs_a": 0.0,
+        "shared_players_with_a": 6,
+        "player_changes_vs_a": 0,
+        "overlap_percentage_vs_a": 100.0,
+        "jaccard_similarity_vs_a": 1.0,
+        "diversity_score_vs_a": 0.0,
+        "diversification_benefit_vs_a": 0.0,
+        "diversity_reasons_vs_a": []
+      },
+      {
+        "signature": [
+          [
+            "1ffe9287-283b-4e47-bcce-fd45d98cf24d",
+            "FLEX"
+          ],
+          [
+            "220c527d-9daf-4348-8f38-c244c8c512b3",
+            "FLEX"
+          ],
+          [
+            "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+            "CPT"
+          ],
+          [
+            "900f1061-eb3e-4945-bed6-3a8186cd16aa",
+            "FLEX"
+          ],
+          [
+            "af414768-0b49-4153-931b-0140a8198c5a",
+            "FLEX"
+          ],
+          [
+            "be56238b-7e9e-4d37-af84-1696c5b7f44a",
+            "FLEX"
+          ]
+        ],
+        "captain_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+        "captain": "Jared Goff",
+        "players": [
+          {
+            "player_id": "1ffe9287-283b-4e47-bcce-fd45d98cf24d",
+            "name": "Sam LaPorta",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+            "name": "Amon-Ra St. Brown",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+            "name": "Jared Goff",
+            "slot": "CPT"
+          },
+          {
+            "player_id": "900f1061-eb3e-4945-bed6-3a8186cd16aa",
+            "name": "Jameson Williams",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "af414768-0b49-4153-931b-0140a8198c5a",
+            "name": "Greg Dortch",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "be56238b-7e9e-4d37-af84-1696c5b7f44a",
+            "name": "Josh Allen",
+            "slot": "FLEX"
+          }
+        ],
+        "game_script": {
+          "script_id": "shootout",
+          "kind": "shootout",
+          "label": "Shootout",
+          "reason_codes": [
+            "both_teams_qb_pass_catcher"
+          ],
+          "team_summaries": {
+            "BUF": {
+              "team": "BUF",
+              "players": 2,
+              "quarterbacks": 1,
+              "pass_catchers": 1,
+              "meaningful_rbs": 0,
+              "kickers": 0,
+              "defenses": 0
+            },
+            "DET": {
+              "team": "DET",
+              "players": 4,
+              "quarterbacks": 1,
+              "pass_catchers": 3,
+              "meaningful_rbs": 0,
+              "kickers": 0,
+              "defenses": 0
+            }
+          },
+          "explanation": "Both offenses include a quarterback with at least one pass catcher."
+        },
+        "team_emphasis": "DET",
+        "mean": 94.51516187651289,
+        "p90": 159.2957950730346,
+        "solver_objective": 158.86892938922261,
+        "ownership_sum": 170.71991079334833,
+        "relative_chalk": 59.131608048967486,
+        "correlation_score": 3.5887142857142855,
+        "context_score": 6.298325892857143,
+        "score_components": {
+          "mean": 0.989112965874762,
+          "p90": 0.994457050255334,
+          "solver_objective": 0.921680716246084,
+          "correlation_score": 0.937928202064704,
+          "context_score": 0.9627411842980704
+        },
+        "single_entry_score": 0.9530531933886673,
+        "rank": 3,
+        "quality_loss_vs_a": 0.01270172901248845,
+        "shared_players_with_a": 5,
+        "player_changes_vs_a": 1,
+        "overlap_percentage_vs_a": 83.33333333333333,
+        "jaccard_similarity_vs_a": 0.7142857142857143,
+        "diversity_score_vs_a": 0.5833333333333334,
+        "diversification_benefit_vs_a": 0.0175,
+        "diversity_reasons_vs_a": [
+          "different Captain",
+          "different team emphasis"
+        ]
+      }
+    ],
+    "top_alternates": {
+      "different_captain_only": {
+        "signature": [
+          [
+            "1ffe9287-283b-4e47-bcce-fd45d98cf24d",
+            "FLEX"
+          ],
+          [
+            "220c527d-9daf-4348-8f38-c244c8c512b3",
+            "CPT"
+          ],
+          [
+            "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+            "FLEX"
+          ],
+          [
+            "af414768-0b49-4153-931b-0140a8198c5a",
+            "FLEX"
+          ],
+          [
+            "be56238b-7e9e-4d37-af84-1696c5b7f44a",
+            "FLEX"
+          ],
+          [
+            "c23e5343-efb7-4ef5-b334-fbdf2212dff5",
+            "FLEX"
+          ]
+        ],
+        "captain_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+        "captain": "Amon-Ra St. Brown",
+        "players": [
+          {
+            "player_id": "1ffe9287-283b-4e47-bcce-fd45d98cf24d",
+            "name": "Sam LaPorta",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+            "name": "Amon-Ra St. Brown",
+            "slot": "CPT"
+          },
+          {
+            "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+            "name": "Jared Goff",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "af414768-0b49-4153-931b-0140a8198c5a",
+            "name": "Greg Dortch",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "be56238b-7e9e-4d37-af84-1696c5b7f44a",
+            "name": "Josh Allen",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "c23e5343-efb7-4ef5-b334-fbdf2212dff5",
+            "name": "Khalil Shakir",
+            "slot": "FLEX"
+          }
+        ],
+        "game_script": {
+          "script_id": "shootout",
+          "kind": "shootout",
+          "label": "Shootout",
+          "reason_codes": [
+            "both_teams_qb_pass_catcher"
+          ],
+          "team_summaries": {
+            "BUF": {
+              "team": "BUF",
+              "players": 3,
+              "quarterbacks": 1,
+              "pass_catchers": 2,
+              "meaningful_rbs": 0,
+              "kickers": 0,
+              "defenses": 0
+            },
+            "DET": {
+              "team": "DET",
+              "players": 3,
+              "quarterbacks": 1,
+              "pass_catchers": 2,
+              "meaningful_rbs": 0,
+              "kickers": 0,
+              "defenses": 0
+            }
+          },
+          "explanation": "Both offenses include a quarterback with at least one pass catcher."
+        },
+        "team_emphasis": "BUF",
+        "mean": 94.23449391568846,
+        "p90": 159.46075104986852,
+        "solver_objective": 172.36872442799967,
+        "ownership_sum": 165.850340965874,
+        "relative_chalk": 50.85533404570343,
+        "correlation_score": 3.1975,
+        "context_score": 6.054575892857143,
+        "score_components": {
+          "mean": 0.9861757406333793,
+          "p90": 0.9954868428752147,
+          "solver_objective": 1.0,
+          "correlation_score": 0.83568241641309,
+          "context_score": 0.925482368596141
+        },
+        "single_entry_score": 0.9583933219416523,
+        "rank": 2,
+        "quality_loss_vs_a": 0.0073616004595035145,
+        "shared_players_with_a": 6,
+        "player_changes_vs_a": 0,
+        "overlap_percentage_vs_a": 100.0,
+        "jaccard_similarity_vs_a": 1.0,
+        "diversity_score_vs_a": 0.35,
+        "diversification_benefit_vs_a": 0.010499999999999999,
+        "diversity_reasons_vs_a": [
+          "different Captain"
+        ]
+      },
+      "different_captain_material_players": {
+        "signature": [
+          [
+            "220c527d-9daf-4348-8f38-c244c8c512b3",
+            "CPT"
+          ],
+          [
+            "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+            "FLEX"
+          ],
+          [
+            "900f1061-eb3e-4945-bed6-3a8186cd16aa",
+            "FLEX"
+          ],
+          [
+            "9f377a95-2fd8-4c47-9aca-18555093c535",
+            "FLEX"
+          ],
+          [
+            "af414768-0b49-4153-931b-0140a8198c5a",
+            "FLEX"
+          ],
+          [
+            "be56238b-7e9e-4d37-af84-1696c5b7f44a",
+            "FLEX"
+          ]
+        ],
+        "captain_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+        "captain": "Amon-Ra St. Brown",
+        "players": [
+          {
+            "player_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+            "name": "Amon-Ra St. Brown",
+            "slot": "CPT"
+          },
+          {
+            "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+            "name": "Jared Goff",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "900f1061-eb3e-4945-bed6-3a8186cd16aa",
+            "name": "Jameson Williams",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "9f377a95-2fd8-4c47-9aca-18555093c535",
+            "name": "Isaac TeSlaa",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "af414768-0b49-4153-931b-0140a8198c5a",
+            "name": "Greg Dortch",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "be56238b-7e9e-4d37-af84-1696c5b7f44a",
+            "name": "Josh Allen",
+            "slot": "FLEX"
+          }
+        ],
+        "game_script": {
+          "script_id": "shootout",
+          "kind": "shootout",
+          "label": "Shootout",
+          "reason_codes": [
+            "both_teams_qb_pass_catcher"
+          ],
+          "team_summaries": {
+            "BUF": {
+              "team": "BUF",
+              "players": 2,
+              "quarterbacks": 1,
+              "pass_catchers": 1,
+              "meaningful_rbs": 0,
+              "kickers": 0,
+              "defenses": 0
+            },
+            "DET": {
+              "team": "DET",
+              "players": 4,
+              "quarterbacks": 1,
+              "pass_catchers": 3,
+              "meaningful_rbs": 0,
+              "kickers": 0,
+              "defenses": 0
+            }
+          },
+          "explanation": "Both offenses include a quarterback with at least one pass catcher."
+        },
+        "team_emphasis": "DET",
+        "mean": 88.05670693982972,
+        "p90": 151.34358352997782,
+        "solver_objective": 164.78159019233988,
+        "ownership_sum": 158.70037134155942,
+        "relative_chalk": 27.28955932141944,
+        "correlation_score": 2.911785714285714,
+        "context_score": 6.298325892857143,
+        "score_components": {
+          "mean": 0.9215244288552995,
+          "p90": 0.9448127214110672,
+          "solver_objective": 0.9559831154936171,
+          "correlation_score": 0.7610095767916815,
+          "context_score": 0.9627411842980704
+        },
+        "single_entry_score": 0.9132251387190442,
+        "rank": 12,
+        "quality_loss_vs_a": 0.052529783682111586,
+        "shared_players_with_a": 4,
+        "player_changes_vs_a": 2,
+        "overlap_percentage_vs_a": 66.66666666666667,
+        "jaccard_similarity_vs_a": 0.5,
+        "diversity_score_vs_a": 0.6666666666666666,
+        "diversification_benefit_vs_a": 0.019999999999999997,
+        "diversity_reasons_vs_a": [
+          "different Captain",
+          "different team emphasis",
+          "2 different players"
+        ]
+      },
+      "different_game_script": {
+        "signature": [
+          [
+            "1ffe9287-283b-4e47-bcce-fd45d98cf24d",
+            "FLEX"
+          ],
+          [
+            "220c527d-9daf-4348-8f38-c244c8c512b3",
+            "CPT"
+          ],
+          [
+            "6f850ea0-0cce-4457-9878-c8f19404907c",
+            "FLEX"
+          ],
+          [
+            "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+            "FLEX"
+          ],
+          [
+            "900f1061-eb3e-4945-bed6-3a8186cd16aa",
+            "FLEX"
+          ],
+          [
+            "c23e5343-efb7-4ef5-b334-fbdf2212dff5",
+            "FLEX"
+          ]
+        ],
+        "captain_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+        "captain": "Amon-Ra St. Brown",
+        "players": [
+          {
+            "player_id": "1ffe9287-283b-4e47-bcce-fd45d98cf24d",
+            "name": "Sam LaPorta",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+            "name": "Amon-Ra St. Brown",
+            "slot": "CPT"
+          },
+          {
+            "player_id": "6f850ea0-0cce-4457-9878-c8f19404907c",
+            "name": "Tyler Bass",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+            "name": "Jared Goff",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "900f1061-eb3e-4945-bed6-3a8186cd16aa",
+            "name": "Jameson Williams",
+            "slot": "FLEX"
+          },
+          {
+            "player_id": "c23e5343-efb7-4ef5-b334-fbdf2212dff5",
+            "name": "Khalil Shakir",
+            "slot": "FLEX"
+          }
+        ],
+        "game_script": {
+          "script_id": "DET_pass_led",
+          "kind": "pass_led",
+          "team": "DET",
+          "label": "DET pass-led",
+          "reason_codes": [
+            "starting_qb",
+            "multiple_pass_catchers",
+            "pass_over_run_concentration"
+          ],
+          "team_summaries": {
+            "BUF": {
+              "team": "BUF",
+              "players": 2,
+              "quarterbacks": 0,
+              "pass_catchers": 1,
+              "meaningful_rbs": 0,
+              "kickers": 1,
+              "defenses": 0
+            },
+            "DET": {
+              "team": "DET",
+              "players": 4,
+              "quarterbacks": 1,
+              "pass_catchers": 3,
+              "meaningful_rbs": 0,
+              "kickers": 0,
+              "defenses": 0
+            }
+          },
+          "explanation": "DET includes its quarterback and 3 WR/TE, exceeding its 0 meaningful RB selections."
+        },
+        "team_emphasis": "DET",
+        "mean": 89.99124871167889,
+        "p90": 156.83960166204795,
+        "solver_objective": 168.8859777731843,
+        "ownership_sum": 152.96796305330946,
+        "relative_chalk": 70.59506300929252,
+        "correlation_score": 1.8617857142857142,
+        "context_score": 5.498102678571429,
+        "score_components": {
+          "mean": 0.9417696499560407,
+          "p90": 0.9791234449129802,
+          "solver_objective": 0.9797947877935933,
+          "correlation_score": 0.4865868911830044,
+          "context_score": 0.8404217206612415
+        },
+        "single_entry_score": 0.8888166247658017,
+        "rank": 20,
+        "quality_loss_vs_a": 0.07693829763535409,
+        "shared_players_with_a": 4,
+        "player_changes_vs_a": 2,
+        "overlap_percentage_vs_a": 66.66666666666667,
+        "jaccard_similarity_vs_a": 0.5,
+        "diversity_score_vs_a": 0.9166666666666666,
+        "diversification_benefit_vs_a": 0.027499999999999997,
+        "diversity_reasons_vs_a": [
+          "different Captain",
+          "different game script",
+          "different team emphasis",
+          "2 different players"
+        ]
+      }
+    },
+    "assignments": [
+      {
+        "contest": 1,
+        "candidate_rank": 1,
+        "reason": "Strongest overall single-entry construction"
+      },
+      {
+        "contest": 2,
+        "candidate_rank": 3,
+        "reason": "Diversification credit 0.018 versus A and quality loss 0.013; different Captain, different team emphasis"
+      },
+      {
+        "contest": 3,
+        "candidate_rank": 1,
+        "reason": "No additional distinct candidate improved the portfolio heuristic enough to replace A"
+      }
+    ],
+    "recommended_structure": "A / B / A",
+    "selected_portfolio_comparison": {
+      "structure": "A / B / A",
+      "candidate_ranks": [
+        1,
+        3,
+        1
+      ],
+      "quality_loss_total": 0.01270172901248845,
+      "diversification_credit_total": 0.0175,
+      "heuristic_delta_vs_aaa": 0.004798270987511552
+    },
+    "portfolio_comparisons": {
+      "aaa": {
+        "structure": "A / A / A",
+        "candidate_ranks": [
+          1,
+          1,
+          1
+        ],
+        "quality_loss_total": 0.0,
+        "diversification_credit_total": 0,
+        "heuristic_delta_vs_aaa": 0.0
+      },
+      "best_one_alternate": {
+        "structure": "A / B / A",
+        "candidate_ranks": [
+          1,
+          3,
+          1
+        ],
+        "quality_loss_total": 0.01270172901248845,
+        "diversification_credit_total": 0.0175,
+        "heuristic_delta_vs_aaa": 0.004798270987511552
+      },
+      "best_repeated_alternate": {
+        "structure": "A / B / B",
+        "candidate_ranks": [
+          1,
+          2,
+          2
+        ],
+        "quality_loss_total": 0.014723200919007029,
+        "diversification_credit_total": 0.010499999999999999,
+        "heuristic_delta_vs_aaa": -0.00422320091900703
+      },
+      "best_two_alternates": {
+        "structure": "A / B / C",
+        "candidate_ranks": [
+          1,
+          3,
+          2
+        ],
+        "quality_loss_total": 0.020063329471991964,
+        "diversification_credit_total": 0.02275,
+        "heuristic_delta_vs_aaa": 0.0026866705280080352
+      }
+    },
+    "evaluated_portfolio_count": 465,
+    "unique_lineups": 2,
+    "unique_captains": 2,
+    "pairwise_player_overlap": [
+      5,
+      6,
+      5
+    ]
+  },
+  "lineups": [
+    [
+      {
+        "slot": "CPT",
+        "name": "Josh Allen",
+        "player_id": "be56238b-7e9e-4d37-af84-1696c5b7f44a",
+        "salary": 17100.0,
+        "mean": 30.310031771374874,
+        "p90": 45.66004488872954
+      },
+      {
+        "slot": "FLEX",
+        "name": "Sam LaPorta",
+        "player_id": "1ffe9287-283b-4e47-bcce-fd45d98cf24d",
+        "salary": 5400.0,
+        "mean": 13.064360693419692,
+        "p90": 21.974610311535976
+      },
+      {
+        "slot": "FLEX",
+        "name": "Amon-Ra St. Brown",
+        "player_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+        "salary": 10400.0,
+        "mean": 17.56472043448093,
+        "p90": 28.99416164564082
+      },
+      {
+        "slot": "FLEX",
+        "name": "Jared Goff",
+        "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+        "salary": 9600.0,
+        "mean": 17.43183705716496,
+        "p90": 27.97003039300819
+      },
+      {
+        "slot": "FLEX",
+        "name": "Greg Dortch",
+        "player_id": "af414768-0b49-4153-931b-0140a8198c5a",
+        "salary": 1000.0,
+        "mean": 5.434097335853957,
+        "p90": 12.40496640993831
+      },
+      {
+        "slot": "FLEX",
+        "name": "Khalil Shakir",
+        "player_id": "c23e5343-efb7-4ef5-b334-fbdf2212dff5",
+        "salary": 6400.0,
+        "mean": 11.750430329945218,
+        "p90": 23.179871541105108
+      }
+    ],
+    [
+      {
+        "slot": "CPT",
+        "name": "Jared Goff",
+        "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+        "salary": 14400.0,
+        "mean": 26.14775558574744,
+        "p90": 41.95504558951229
+      },
+      {
+        "slot": "FLEX",
+        "name": "Sam LaPorta",
+        "player_id": "1ffe9287-283b-4e47-bcce-fd45d98cf24d",
+        "salary": 5400.0,
+        "mean": 13.064360693419692,
+        "p90": 21.974610311535976
+      },
+      {
+        "slot": "FLEX",
+        "name": "Amon-Ra St. Brown",
+        "player_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+        "salary": 10400.0,
+        "mean": 17.56472043448093,
+        "p90": 28.99416164564082
+      },
+      {
+        "slot": "FLEX",
+        "name": "Jameson Williams",
+        "player_id": "900f1061-eb3e-4945-bed6-3a8186cd16aa",
+        "salary": 7400.0,
+        "mean": 12.09753997942763,
+        "p90": 23.52698119058752
+      },
+      {
+        "slot": "FLEX",
+        "name": "Greg Dortch",
+        "player_id": "af414768-0b49-4153-931b-0140a8198c5a",
+        "salary": 1000.0,
+        "mean": 5.434097335853957,
+        "p90": 12.40496640993831
+      },
+      {
+        "slot": "FLEX",
+        "name": "Josh Allen",
+        "player_id": "be56238b-7e9e-4d37-af84-1696c5b7f44a",
+        "salary": 11400.0,
+        "mean": 20.20668784758325,
+        "p90": 30.44002992581969
+      }
+    ],
+    [
+      {
+        "slot": "CPT",
+        "name": "Josh Allen",
+        "player_id": "be56238b-7e9e-4d37-af84-1696c5b7f44a",
+        "salary": 17100.0,
+        "mean": 30.310031771374874,
+        "p90": 45.66004488872954
+      },
+      {
+        "slot": "FLEX",
+        "name": "Sam LaPorta",
+        "player_id": "1ffe9287-283b-4e47-bcce-fd45d98cf24d",
+        "salary": 5400.0,
+        "mean": 13.064360693419692,
+        "p90": 21.974610311535976
+      },
+      {
+        "slot": "FLEX",
+        "name": "Amon-Ra St. Brown",
+        "player_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+        "salary": 10400.0,
+        "mean": 17.56472043448093,
+        "p90": 28.99416164564082
+      },
+      {
+        "slot": "FLEX",
+        "name": "Jared Goff",
+        "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+        "salary": 9600.0,
+        "mean": 17.43183705716496,
+        "p90": 27.97003039300819
+      },
+      {
+        "slot": "FLEX",
+        "name": "Greg Dortch",
+        "player_id": "af414768-0b49-4153-931b-0140a8198c5a",
+        "salary": 1000.0,
+        "mean": 5.434097335853957,
+        "p90": 12.40496640993831
+      },
+      {
+        "slot": "FLEX",
+        "name": "Khalil Shakir",
+        "player_id": "c23e5343-efb7-4ef5-b334-fbdf2212dff5",
+        "salary": 6400.0,
+        "mean": 11.750430329945218,
+        "p90": 23.179871541105108
+      }
+    ]
+  ]
+}

@@ -1,0 +1,185 @@
+{
+  "lamb_last3": [
+    {
+      "season": 2025,
+      "week": 18,
+      "game_id": "2025_18_DAL_NYG",
+      "dk_points": 1.4
+    },
+    {
+      "season": 2025,
+      "week": 17,
+      "game_id": "2025_17_DAL_WAS",
+      "dk_points": 9.600000000000001
+    },
+    {
+      "season": 2025,
+      "week": 16,
+      "game_id": "2025_16_LAC_DAL",
+      "dk_points": 11.100000000000001
+    }
+  ],
+  "coverage": [
+    {
+      "season": 2000,
+      "n": 5993,
+      "players": 572
+    },
+    {
+      "season": 2001,
+      "n": 6133,
+      "players": 571
+    },
+    {
+      "season": 2002,
+      "n": 6355,
+      "players": 592
+    },
+    {
+      "season": 2003,
+      "n": 6020,
+      "players": 594
+    },
+    {
+      "season": 2004,
+      "n": 6048,
+      "players": 600
+    },
+    {
+      "season": 2005,
+      "n": 5961,
+      "players": 589
+    },
+    {
+      "season": 2006,
+      "n": 5873,
+      "players": 579
+    },
+    {
+      "season": 2007,
+      "n": 5906,
+      "players": 577
+    },
+    {
+      "season": 2008,
+      "n": 5843,
+      "players": 579
+    },
+    {
+      "season": 2009,
+      "n": 6160,
+      "players": 571
+    },
+    {
+      "season": 2010,
+      "n": 6153,
+      "players": 586
+    },
+    {
+      "season": 2011,
+      "n": 6146,
+      "players": 586
+    },
+    {
+      "season": 2012,
+      "n": 6216,
+      "players": 600
+    },
+    {
+      "season": 2013,
+      "n": 6144,
+      "players": 586
+    },
+    {
+      "season": 2014,
+      "n": 6281,
+      "players": 594
+    },
+    {
+      "season": 2015,
+      "n": 6218,
+      "players": 600
+    },
+    {
+      "season": 2016,
+      "n": 6167,
+      "players": 600
+    },
+    {
+      "season": 2017,
+      "n": 6275,
+      "players": 604
+    },
+    {
+      "season": 2018,
+      "n": 6145,
+      "players": 624
+    },
+    {
+      "season": 2019,
+      "n": 6199,
+      "players": 618
+    },
+    {
+      "season": 2020,
+      "n": 6367,
+      "players": 652
+    },
+    {
+      "season": 2021,
+      "n": 6744,
+      "players": 685
+    },
+    {
+      "season": 2022,
+      "n": 6699,
+      "players": 656
+    },
+    {
+      "season": 2023,
+      "n": 6698,
+      "players": 623
+    },
+    {
+      "season": 2024,
+      "n": 10566,
+      "players": 787
+    },
+    {
+      "season": 2025,
+      "n": 9930,
+      "players": 801
+    }
+  ],
+  "ownership": [
+    {
+      "contest_id": "193028191",
+      "n": 397,
+      "projected_labels": 0
+    },
+    {
+      "contest_id": "193028206",
+      "n": 1049,
+      "projected_labels": 0
+    },
+    {
+      "contest_id": "193391018",
+      "n": 105,
+      "projected_labels": 0
+    }
+  ],
+  "standings": [
+    {
+      "contest_id": "193028191",
+      "n": 9195
+    },
+    {
+      "contest_id": "193028206",
+      "n": 832342
+    },
+    {
+      "contest_id": "193391018",
+      "n": 95124
+    }
+  ]
+}

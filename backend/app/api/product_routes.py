@@ -78,6 +78,8 @@ from ..product_dependencies import (
     get_batch_import_service,
     get_portfolio_service,
     get_draftkings_export_service,
+    get_slate_learning_service,
+    get_agent_question_service,
 )
 from ..product_schemas import (
     LoadResponse,
@@ -86,8 +88,10 @@ from ..product_schemas import (
     BuildFeaturesResponse,
     ModelPipelineSummaryResponse,
     OptimizerRunRequest,
+    ContestPreviewRequest,
     OptimizerStatusResponse,
     SimulationRunRequest,
+    JointResearchRequest,
     SimulationRunResponse,
     ClassicCashStackReplayRequest,
     ClassicCashStackReplayResponse,
@@ -134,6 +138,12 @@ from ..product_schemas import (
     ExportValidationResponse,
     PastSlateAnalysisRequest,
     PastSlateAnalysisResponse,
+    SlateLearningReportRequest,
+    SlateLearningReportResponse,
+    AgentQuestionGenerateRequest,
+    AgentQuestionAnswerRequest,
+    AgentQuestionResponse,
+    AgentQuestionListResponse,
     PredictionListResponse,
     StartingQBRequest,
     StartingQBResponse,
@@ -189,6 +199,8 @@ from ..product_services.agent import NewsMatchupAgent
 from ..product_services.starters import StartingQBService
 from ..product_services.pregame_context import PregameContextService
 from ..product_services.model_governance import ModelGovernanceService
+from ..product_services.slate_learning import SlateLearningService
+from ..product_services.agent_questions import AgentQuestionService
 
 router = APIRouter(prefix="/api")
 agent = NewsMatchupAgent()
@@ -828,7 +840,8 @@ def load_ownership(
         summaries=[{"dataset": "ownership", **result.__dict__}],
         source_context={"path": request.path},
     )
-    return OwnershipRunResponse(**result.__dict__)
+    payload = {**result.__dict__, "model_metrics": result.model_metrics or {}}
+    return OwnershipRunResponse(**payload)
 
 
 @router.post("/imports/draftkings/batch", response_model=DraftKingsBatchImportResponse)
@@ -993,6 +1006,84 @@ def analyze_past_ownership(
     except (FileNotFoundError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return PastSlateAnalysisResponse(**result)
+
+
+@router.post("/learning/reports", response_model=SlateLearningReportResponse)
+def generate_slate_learning_report(
+    request: SlateLearningReportRequest,
+    service: SlateLearningService = Depends(get_slate_learning_service),
+) -> SlateLearningReportResponse:
+    try:
+        result = service.generate(
+            season=request.season,
+            week=request.week,
+            slate=request.slate,
+            entry_user=request.entry_user,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return SlateLearningReportResponse(**result)
+
+
+@router.get("/learning/reports/latest", response_model=SlateLearningReportResponse)
+def get_latest_slate_learning_report(
+    season: int,
+    week: int,
+    slate: str,
+    entry_user: str,
+    service: SlateLearningService = Depends(get_slate_learning_service),
+) -> SlateLearningReportResponse:
+    result = service.latest(
+        season=season,
+        week=week,
+        slate=slate,
+        entry_user=entry_user,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="Slate learning report not found")
+    return SlateLearningReportResponse(**result)
+
+
+@router.post("/digital-twin/questions/generate", response_model=AgentQuestionListResponse)
+def generate_agent_questions(
+    request: AgentQuestionGenerateRequest,
+    service: AgentQuestionService = Depends(get_agent_question_service),
+) -> AgentQuestionListResponse:
+    try:
+        result = service.generate(**request.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return AgentQuestionListResponse(**result)
+
+
+@router.get("/digital-twin/questions", response_model=AgentQuestionListResponse)
+def get_agent_questions(
+    season: int = Query(..., ge=2000),
+    week: int = Query(..., ge=1, le=25),
+    slate: str = Query(..., min_length=1),
+    variant_set_id: str | None = Query(None, min_length=1),
+    service: AgentQuestionService = Depends(get_agent_question_service),
+) -> AgentQuestionListResponse:
+    return AgentQuestionListResponse(**service.list(
+        season=season, week=week, slate=slate, variant_set_id=variant_set_id
+    ))
+
+
+@router.post(
+    "/digital-twin/questions/{question_id}/answer",
+    response_model=AgentQuestionResponse,
+)
+def answer_agent_question(
+    question_id: str,
+    request: AgentQuestionAnswerRequest,
+    service: AgentQuestionService = Depends(get_agent_question_service),
+) -> AgentQuestionResponse:
+    try:
+        result = service.answer(question_id, request.answer, request.answer_text)
+    except ValueError as exc:
+        status = 404 if str(exc).startswith("Agent question not found:") else 422
+        raise HTTPException(status_code=status, detail=str(exc)) from exc
+    return AgentQuestionResponse(**result)
 
 
 @router.post(
@@ -1755,6 +1846,17 @@ def replay_digital_twin_variant_set(
     return DigitalTwinVariantReplayResponse(**result)
 
 
+@router.post("/optimizer/contests/preview")
+def preview_optimizer_contests(request: ContestPreviewRequest) -> dict:
+    from ..product_services.showdown_contests import fetch_contests
+
+    try:
+        rows = fetch_contests(request.urls, manual=request.manual_contest_metadata)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"contests": rows, "refreshed_at": datetime.now(UTC).isoformat()}
+
+
 @router.post("/optimizer/run", response_model=OptimizerStatusResponse)
 def run_optimizer(
     request: OptimizerRunRequest,
@@ -1822,6 +1924,22 @@ def run_slate_simulation(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return OperationalJobCreateResponse(created=created, job=job_response(job))
+
+
+@router.post("/simulations/joint-research")
+def run_joint_simulation_research(
+    request: JointResearchRequest,
+    simulation_service: SimulationService = Depends(get_simulation_service),
+    optimizer_service: OptimizerService = Depends(get_optimizer_service),
+) -> dict:
+    from ..product_services.joint_simulations import run_joint_research
+
+    try:
+        return run_joint_research(
+            simulation_service, optimizer_service, **request.model_dump()
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/simulations/latest", response_model=SimulationRunResponse)
@@ -1893,6 +2011,27 @@ def get_optimizer_results(
         created_at=job.created_at,
         updated_at=job.updated_at,
     )
+
+
+@router.get("/optimizer/results/{job_id}/draftkings/download")
+def download_optimizer_lineups(
+    job_id: str,
+    service: OptimizerService = Depends(get_optimizer_service),
+) -> Response:
+    job = service.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Optimizer run not found")
+    if job.status != "completed":
+        raise HTTPException(status_code=409, detail="Export requires a completed optimizer run")
+    try:
+        filename, media_type, content = DraftKingsExportService.build_lineup_download(
+            contest_format=job.contest_format, lineups=job.results or [], run_id=job.job_id,
+            allow_duplicate_lineups=getattr(job, "strategy", None) == "showdown_single_entry_portfolio",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return Response(content=content, media_type=media_type,
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 
 @router.post("/news-monitor/run", response_model=NewsMonitorRunResponse)

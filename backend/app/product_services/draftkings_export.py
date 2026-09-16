@@ -9,6 +9,7 @@ import json
 import math
 import re
 import uuid
+import zipfile
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -184,6 +185,8 @@ class DraftKingsExportService:
         expected_entry_count: int,
         max_exposure: float = 1.0,
         validation_id: str | None = None,
+        require_entry_mapping: bool = True,
+        allow_duplicate_lineups: bool = False,
     ) -> ExportValidationResult:
         validation_id = validation_id or str(uuid.uuid4())
         errors: list[ExportValidationIssue] = []
@@ -198,12 +201,12 @@ class DraftKingsExportService:
         except ValueError as exc:
             errors.append(ExportValidationIssue("template_slot_shape", str(exc)))
 
-        seen_signatures: dict[tuple[str, ...], int] = {}
+        seen_signatures: dict[tuple[str, ...], tuple[int, str]] = {}
         exposure_counts: dict[str, int] = {}
         for lineup_number, row in enumerate(rows, start=1):
             entry_id = cls._id_text(row.get("entry_id"))
             contest_id = cls._id_text(row.get("contest_id"))
-            if not entry_id or not contest_id:
+            if require_entry_mapping and (not entry_id or not contest_id):
                 errors.append(ExportValidationIssue(
                     "entry_mapping",
                     "Entry assignment requires both entry_id and contest_id",
@@ -243,14 +246,18 @@ class DraftKingsExportService:
                 ))
             else:
                 signature = tuple(sorted(site_ids))
-            if signature in seen_signatures:
+            repeated_in_same_contest = (
+                require_entry_mapping and signature in seen_signatures
+                and seen_signatures[signature][1] == contest_id
+            )
+            if signature in seen_signatures and (not allow_duplicate_lineups or repeated_in_same_contest):
                 errors.append(ExportValidationIssue(
                     "duplicate_lineup",
-                    f"Lineup duplicates portfolio lineup {seen_signatures[signature]}",
+                    f"Lineup duplicates portfolio lineup {seen_signatures[signature][0]}",
                     lineup_number=lineup_number,
                 ))
             elif signature:
-                seen_signatures[signature] = lineup_number
+                seen_signatures[signature] = (lineup_number, contest_id)
             salary = sum(cls._number(player.get("salary")) for player in players)
             if any(cls._number(player.get("salary")) <= 0 for player in players):
                 errors.append(ExportValidationIssue(
@@ -291,6 +298,64 @@ class DraftKingsExportService:
             errors=errors,
             warnings=warnings,
         )
+
+    @classmethod
+    def build_lineup_download(
+        cls, *, contest_format: str, lineups: list[list[dict[str, Any]]], run_id: str,
+        allow_duplicate_lineups: bool = False,
+    ) -> tuple[str, str, bytes]:
+        """Export every saved lineup without requiring contest-entry assignments."""
+        if contest_format not in {"classic", "showdown"}:
+            raise ValueError("Only Classic and Showdown DraftKings exports are supported")
+        if not lineups:
+            raise ValueError("Optimizer run has no lineups to export")
+        rows = []
+        for number, lineup in enumerate(lineups, 1):
+            players = []
+            identities = []
+            for original in lineup:
+                payload = dict(original)
+                identity = cls._id_text(payload.get("player_id"))
+                if not identity:
+                    raise ValueError(f"Lineup {number} has a player without a canonical identity")
+                identities.append(identity)
+                role = str(payload.get("roster_position") or payload.get("position") or "").upper()
+                if contest_format == "showdown" and role == "CPT":
+                    captain_id = cls._id_text(payload.get("dk_captain_id"))
+                    if not captain_id.isdigit():
+                        raise ValueError(f"Lineup {number}: Captain is missing a DraftKings Captain ID; regenerate the run")
+                    payload["dk_player_id"] = captain_id
+                player = {**payload, "player_json": payload}
+                if not cls._site_player_id(player).isdigit():
+                    raise ValueError(f"Lineup {number} contains an invalid DraftKings player ID")
+                salary = cls._number(player.get("salary"))
+                if not math.isfinite(salary) or salary <= 0:
+                    raise ValueError(f"Lineup {number} contains an invalid salary")
+                players.append(player)
+            if len(identities) != len(set(identities)):
+                raise ValueError(f"Lineup {number} contains the same player more than once")
+            rows.append({"players": players})
+        columns = SHOWDOWN_SLOTS if contest_format == "showdown" else CLASSIC_SLOTS
+        validation = cls.validate_rows(
+            portfolio_id=run_id, contest_format=contest_format, template_columns=columns,
+            rows=rows, expected_entry_count=len(rows), require_entry_mapping=False,
+            allow_duplicate_lineups=allow_duplicate_lineups,
+        )
+        if validation.errors:
+            raise ValueError("Export validation failed: " + "; ".join(
+                f"Lineup {issue.lineup_number}: {issue.message}" if issue.lineup_number else issue.message
+                for issue in validation.errors[:5]
+            ))
+        stem = "draftkings_" + contest_format + "_" + re.sub(r"[^A-Za-z0-9_-]", "_", run_id)
+        parts = [cls.build_csv(contest_format=contest_format, template_columns=columns, rows=rows[i:i + 500])
+                 for i in range(0, len(rows), 500)]
+        if len(parts) == 1:
+            return f"{stem}.csv", "text/csv", parts[0].encode("utf-8")
+        output = io.BytesIO()
+        with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            for number, content in enumerate(parts, 1):
+                archive.writestr(f"{stem}_part_{number}.csv", content)
+        return f"{stem}.zip", "application/zip", output.getvalue()
 
     def _ensure_schema(self) -> None:
         validate_target_schema(
@@ -387,6 +452,9 @@ class DraftKingsExportService:
             max_exposure = float(config.get("max_exposure", 1.0))
         except (TypeError, ValueError):
             max_exposure = 1.0
+        single_entry_portfolio = config.get("strategy_config", {}).get("strategy_id") == "showdown_single_entry_portfolio"
+        if single_entry_portfolio:
+            max_exposure = 1.0
         result = self.validate_rows(
             portfolio_id=portfolio_id,
             contest_format=str(context["contest_format"]),
@@ -394,6 +462,7 @@ class DraftKingsExportService:
             rows=rows,
             expected_entry_count=int(context["row_count"]),
             max_exposure=max_exposure,
+            allow_duplicate_lineups=single_entry_portfolio,
             validation_id=validation_id,
         )
         with self.engine.begin() as conn:

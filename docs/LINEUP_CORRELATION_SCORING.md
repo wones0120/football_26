@@ -6,7 +6,10 @@ Phase 4 introduced `optimizer_lineup_correlation` v1 for Classic and Showdown
 Head-to-Head and Large-GPP strategies. Phase 5 advanced the active library to
 v2 with format-specific higher-order terms. The Phase 5A correction advances
 the active library to v3 and removes isolated positive stack credit. The
-baseline ILP and advanced Classic GPP engine use the same rule evaluations. The
+Classic H2H variance update advances the active library to v4 with soft
+penalties for QB plus multiple pass catchers and three or more same-team
+offensive players. The baseline ILP and advanced Classic GPP engine use the
+same rule evaluations. The
 library changes objective score only: it does not change raw projections,
 roster legality, user locks, exposure controls, or the explicit stack policy
 selected for a run.
@@ -49,6 +52,19 @@ The canonical Head-to-Head profile applies its existing `0.50` boost and `0.65`
 penalty multipliers. Large-GPP uses the configured contribution. The advanced
 GPP engine then applies its declared correlation objective weight, just as it
 does for mean, ceiling, and leverage.
+
+## Classic H2H variance preferences
+
+Version 4 adds two H2H-only higher-order penalties before the `0.65` penalty
+profile multiplier:
+
+- `-0.85` for a QB with at least two same-team WR/TE players;
+- `-0.55` for three or more same-team QB/RB/WR/TE players.
+
+These terms never exclude a player or lineup. The ordinary QB/receiver boost
+still applies, and a sufficient individual projection advantage can outweigh
+the diversification preference. DST does not count as offense, so the existing
+context-backed RB/DST bonus remains available.
 
 ## Showdown Captain preferences
 
@@ -107,5 +123,11 @@ These labels are explanations, not simulated scenario probabilities. Phase 5
 adds selected higher-order construction rules, but it does not implement
 learned pairwise covariance or game-script probability scoring. Those require
 cutoff-safe backtests or simulation evidence before promotion. Material weight
-changes require a new library version. Version 3 remains an
+changes require a new library version. Version 4 remains an
 `initial_policy_unvalidated` policy prior.
+
+`showdown_gpp_portfolio_v3` adds a strategy-owned saturation layer without relabeling
+the shared v4 library or historical runs. A QB's first, second, and third same-team
+WR/TE receive 0.60, 0.30, and 0.10 points; additional pass catchers receive no extra
+stack reward. An opposing pass-catcher bring-back receives 0.45 once per selected QB
+team. The lineup report replaces the repeated pair events with these threshold events.

@@ -69,8 +69,12 @@ class TargetSchemaAdapterTests(unittest.TestCase):
         self.assertIn("NOT EXISTS", sql["fact_dst_game_actual_compat_cleanup"])
         self.assertIn("schedule_games.game_id", sql["snapshot_salary"])
         self.assertIn("salary.player_status", sql["snapshot_salary"])
+        self.assertIn("salary.created_at AT TIME ZONE 'UTC'", sql["snapshot_salary"])
         self.assertIn("player_status = EXCLUDED.player_status", sql["snapshot_salary"])
         self.assertIn("schedule_games.game_id", sql["snapshot_injury_status"])
+        self.assertIn("captured_source.observed_at", sql["snapshot_injury_status"])
+        self.assertIn("injury.created_at AT TIME ZONE 'UTC'", sql["snapshot_injury_status"])
+        self.assertIn('"public".source_snapshot_ingest_run', sql["snapshot_injury_status"])
         self.assertIn('"public".dk_contest_entries', sql["dfs_contest_entry_result"])
         self.assertIn('"target".dfs_contest_entry_result', sql["dfs_contest_entry_result"])
 
@@ -80,6 +84,15 @@ class TargetSchemaAdapterTests(unittest.TestCase):
 
         self.assertEqual(set(sources), set(sql))
         self.assertEqual(sources["snapshot_salary"], ["curated_salary", "raw_nfl_schedule"])
+        self.assertEqual(
+            sources["snapshot_injury_status"],
+            [
+                "curated_injury",
+                "raw_nfl_schedule",
+                "source_snapshot",
+                "source_snapshot_ingest_run",
+            ],
+        )
         self.assertEqual(sources["dfs_contest_entry_result"], ["dk_contest_entries"])
 
     def test_team_sql_normalizes_cross_source_aliases(self):

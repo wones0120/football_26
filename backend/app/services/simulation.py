@@ -80,7 +80,7 @@ def _num(data: dict[str, Any], *keys: str) -> float:
     return 0.0
 
 
-def calculate_dk_points(raw_row: dict[str, Any]) -> float:
+def calculate_dk_points(raw_row: dict[str, Any], *, floor_at_zero: bool = True) -> float:
     passing_yards = _num(raw_row, "passing_yards")
     passing_tds = _num(raw_row, "passing_tds")
     interceptions = _num(raw_row, "passing_interceptions", "interceptions")
@@ -127,7 +127,7 @@ def calculate_dk_points(raw_row: dict[str, Any]) -> float:
     if receiving_yards >= 100:
         points += 3.0
 
-    return max(points, 0.0)
+    return max(points, 0.0) if floor_at_zero else points
 
 
 def _season_week_ordinal(season: int, week: int) -> int:

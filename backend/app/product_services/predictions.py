@@ -168,6 +168,73 @@ def blend_point_predictions(
     return np.maximum(0.0, blended)
 
 
+def kicker_point_estimates(
+    target_df: pd.DataFrame,
+) -> tuple[pd.Series, dict[str, Any]]:
+    """Use prior-only kicker history, with a current-slate peer fallback."""
+    positions = target_df.get(
+        "position", pd.Series("UNKNOWN", index=target_df.index)
+    ).fillna("UNKNOWN").astype(str).str.upper()
+    kicker_rows = positions.eq("K")
+    history = pd.to_numeric(
+        target_df.get(
+            "player_games_history", pd.Series(0.0, index=target_df.index)
+        ),
+        errors="coerce",
+    ).fillna(0.0)
+    roll3 = pd.to_numeric(
+        target_df.get(
+            "player_roll3_mean", pd.Series(np.nan, index=target_df.index)
+        ),
+        errors="coerce",
+    )
+    roll8 = pd.to_numeric(
+        target_df.get(
+            "player_roll8_mean", pd.Series(np.nan, index=target_df.index)
+        ),
+        errors="coerce",
+    )
+    estimates = (HISTORY_ROLL3_WEIGHT * roll3) + (HISTORY_ROLL8_WEIGHT * roll8)
+    veteran_rows = kicker_rows & history.ge(1.0) & estimates.notna()
+    fallback_rows = kicker_rows & ~veteran_rows
+    if fallback_rows.any():
+        peer_estimates = estimates.loc[veteran_rows]
+        if peer_estimates.empty:
+            names = target_df.loc[
+                fallback_rows,
+                "player_display_name",
+            ].astype(str).tolist()
+            raise ValueError(
+                "Kicker projections require prior canonical game history or a "
+                "current-slate peer history baseline; missing: " + ", ".join(names)
+            )
+        estimates.loc[fallback_rows] = float(peer_estimates.median())
+
+    fallback_names = (
+        target_df.loc[fallback_rows, "player_display_name"].astype(str).tolist()
+        if fallback_rows.any()
+        else []
+    )
+    return estimates, {
+        "model": "prior_game_history_with_slate_peer_fallback",
+        "roll3_weight": HISTORY_ROLL3_WEIGHT,
+        "roll8_weight": HISTORY_ROLL8_WEIGHT,
+        "peer_baseline": (
+            float(estimates.loc[veteran_rows].median())
+            if veteran_rows.any()
+            else None
+        ),
+        "peer_history_count": int(veteran_rows.sum()),
+        "fallback_player_count": int(fallback_rows.sum()),
+        "fallback_players": fallback_names,
+        "reason": (
+            "Historical kickers are absent from the shared training matrix. "
+            "Veterans use their prior-only rolling history; kickers without NFL "
+            "history use the median prior-only anchor of current-slate peers."
+        ),
+    }
+
+
 def _opportunity_units(frame: pd.DataFrame) -> pd.Series:
     """Return role-volume units without using current-game outcomes."""
     positions = frame.get(
@@ -1230,31 +1297,11 @@ class PredictionsService:
         metrics["opportunity_features"] = sources.get("opportunity_features", {})
         metrics["pregame_context"] = sources.get("pregame_context", {})
         kicker_rows = target["position"].astype(str).str.upper().eq("K")
+        kicker_estimates = pd.Series(np.nan, index=target.index, dtype=float)
         if kicker_rows.any():
-            kicker_history = pd.to_numeric(
-                target.loc[kicker_rows, "player_games_history"], errors="coerce"
-            ).fillna(0.0)
-            if (kicker_history < 1).any():
-                missing_kickers = target.loc[
-                    kicker_rows
-                    & pd.to_numeric(
-                        target["player_games_history"], errors="coerce"
-                    ).fillna(0.0).lt(1),
-                    "player_display_name",
-                ].astype(str).tolist()
-                raise ValueError(
-                    "Kicker projections require prior canonical game history; missing: "
-                    + ", ".join(missing_kickers)
-                )
-            metrics["kicker_point_estimate"] = {
-                "model": "prior_game_history_anchor",
-                "roll3_weight": HISTORY_ROLL3_WEIGHT,
-                "roll8_weight": HISTORY_ROLL8_WEIGHT,
-                "reason": (
-                    "The shared gradient-boosting training matrix does not yet contain "
-                    "historical kickers; do not extrapolate the position model."
-                ),
-            }
+            kicker_estimates, metrics["kicker_point_estimate"] = (
+                kicker_point_estimates(target)
+            )
         model = self._train_model(train[FEATURE_COLUMNS], train[TARGET_COL])
         means = self._predict_point_estimates(model, train, target, FEATURE_COLUMNS)
         means, opportunity_details = apply_opportunity_point_adjustment(
@@ -1292,11 +1339,7 @@ class PredictionsService:
             )
             conditional_mean = max(0.0, float(means[index]))
             if position == "K":
-                conditional_mean = max(
-                    0.0,
-                    (HISTORY_ROLL3_WEIGHT * float(row["player_roll3_mean"]))
-                    + (HISTORY_ROLL8_WEIGHT * float(row["player_roll8_mean"])),
-                )
+                conditional_mean = max(0.0, float(kicker_estimates.loc[index]))
             conditional_quantiles = apply_residual_calibration(
                 conditional_mean, profile
             )
@@ -2384,13 +2427,9 @@ class PredictionsService:
                     feature_inputs = {}
             if not isinstance(feature_inputs, dict):
                 feature_inputs = {}
-            l3_avg = float(
-                feature_inputs.get(
-                    "player_roll3_mean",
-                    sum(l3) / len(l3) if l3 else 0.0,
-                )
-                or 0.0
-            )
+            # Display the average of the displayed history. The saved model's
+            # player_roll3_mean may use a fuller source and remains in feature_inputs.
+            l3_avg = float(sum(l3) / len(l3) if l3 else 0.0)
             recent_median = float(row_dict.get("recent_median", np.median(l3) if l3 else 0.0))
             model_mean = float(row_dict.get("predicted_mean", 0.0))
             recent_team_val = row_dict.get("recent_team", "")

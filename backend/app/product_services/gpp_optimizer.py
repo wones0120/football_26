@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -15,6 +15,7 @@ from sqlalchemy.engine import Engine
 
 from Database.config import get_connection_string
 
+from .optimizer_control import solve_control, build_comparison
 from .lineup_correlation_scoring import (
     add_format_specific_objective,
     add_lineup_correlation_objective,
@@ -165,6 +166,7 @@ class GPPOptimizerResult:
     analysis: SlateAnalysis
     portfolio: PortfolioStats
     iterations: int
+    control_comparisons: List[dict] = field(default_factory=list)
 
 
 VALID_POSITIONS = {"QB", "RB", "WR", "TE", "DST", "D", "DEF"}
@@ -665,6 +667,7 @@ def _build_lineup(
     avoid_dst_opponents: bool = False,
     stack_rules: StackRules | None = None,
     required_player_ids: set[str] | None = None,
+    control_comparisons: List[dict] | None = None,
 ) -> Optional[List[int]]:
     if not players:
         return None
@@ -702,6 +705,11 @@ def _build_lineup(
         proj_term = pulp.lpSum(adjusted_projections[i] * x[i] for i in idx_range)
         ceiling_term = pulp.lpSum(adjusted_ceilings[i] * x[i] for i in idx_range)
         lev_term = pulp.lpSum(players[i].leverage * x[i] for i in idx_range)
+    # Keep normalization denominators fixed to isolate only soft-rule scoring.
+    context_multiplier = weights.projection / (max_projection if config.normalize_objective else 1.0) + weights.ceiling / (max_ceiling if config.normalize_objective else 1.0)
+    control_objective = weights.projection * proj_term + weights.ceiling * ceiling_term + weights.leverage * lev_term - pulp.lpSum(
+        players[i].optimizer_context_adjustment * context_multiplier * x[i] for i in idx_range
+    )
     correlation_profile = resolve_strategy_profile(
         contest_format="classic", objective="gpp"
     )
@@ -839,7 +847,22 @@ def _build_lineup(
     if status != pulp.LpStatusOptimal:
         return None
 
-    return [i for i in idx_range if pulp.value(x[i]) >= 0.9]
+    selected = [i for i in idx_range if pulp.value(x[i]) >= 0.9]
+    if control_comparisons is not None:
+        replay = solve_control(model, control_objective)
+        replay["variable_players"] = {
+            variable.name: {"player_id": players[i].player_id, "roster_position": players[i].position}
+            for i, variable in x.items()
+        }
+        control_indices = [i for i in idx_range if replay["values"].get(x[i].name, 0) >= 0.9]
+        def records(indices):
+            return [{**asdict(players[i]), "p90": players[i].ceiling} for i in indices]
+        control_comparisons.append(build_comparison(
+            records(selected), records(control_indices), replay, profile=correlation_profile,
+            context_multiplier=context_multiplier,
+            correlation_multiplier=weights.correlation * config.correlation_bonus,
+        ))
+    return selected
 
 
 def _lineup_stats(players: List[Player], idxs: List[int]) -> Tuple[float, int, int, int]:
@@ -1005,6 +1028,7 @@ def generate_portfolio(
     exclude_lineups: List[set] = []
     used_counts: Dict[str, int] = {}
     lineups: List[List[int]] = []
+    control_comparisons: List[dict] = []
 
     iterations = 0
     max_iterations = 3
@@ -1095,6 +1119,7 @@ def generate_portfolio(
                 avoid_dst_opponents=avoid_dst_opponents,
                 stack_rules=lineup_stack_rules,
                 required_player_ids=required_now,
+                control_comparisons=control_comparisons,
             )
             if not lineup_idxs:
                 break
@@ -1135,6 +1160,13 @@ def generate_portfolio(
             f"{player_id} {counts['generated']}/{counts['required']}"
             for player_id, counts in sorted(unmet_minimums.items())
         )
+    for comparison in control_comparisons:
+        for metric, available in (("ownership_sum", bool(counts.get("ownership", 0))),
+                                  ("leverage_sum", leverage_available)):
+            if not available:
+                comparison["scored_metrics"][metric] = None
+                comparison["control_metrics"][metric] = None
+                comparison["deltas_scored_minus_control"][metric] = None
     result = GPPOptimizerResult(
         job_id=str(uuid.uuid4()),
         status=status,
@@ -1146,6 +1178,7 @@ def generate_portfolio(
         analysis=analysis,
         portfolio=_portfolio_stats(players, lineups),
         iterations=iterations,
+        control_comparisons=control_comparisons,
     )
     return result
 

@@ -1,6 +1,6 @@
 import unittest
 from datetime import UTC, datetime
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pandas as pd
 
@@ -149,6 +149,30 @@ class SlateAwareOwnershipModelTests(unittest.TestCase):
         self.assertIsInstance(metrics["baseline_mae"], float)
         self.assertIn("classic|QB", metrics["calibration_by_format_slot"])
         self.assertIn(metrics["promotion_gate"]["status"], {"passed", "blocked"})
+
+    def test_projection_output_keeps_missing_actual_ownership_numeric(self):
+        history = synthetic_ownership_rows()
+        target = history.head(10).copy()
+        target["season"] = 2026
+        target["week"] = 2
+        target["slate"] = "THURSDAY_NIGHT"
+        target["roster_position"] = ["CPT", "FLEX"] * 5
+        target["actual_ownership"] = float("nan")
+        service = OwnershipService.__new__(OwnershipService)
+        service.engine = MagicMock()
+        service._load_ownership_model_rows = MagicMock(
+            return_value=pd.concat([history, target], ignore_index=True)
+        )
+        service._append_table = MagicMock()
+        service._persist_target_ownership_run = MagicMock(return_value=True)
+
+        with patch("backend.app.product_services.ownership.ensure_table_columns"):
+            result = service.run_projection_model(2026, 2, "THURSDAY_NIGHT")
+
+        projection = service._append_table.call_args.args[1]
+        self.assertEqual(result.rows_written, 10)
+        self.assertTrue(pd.api.types.is_float_dtype(projection["actual_ownership"]))
+        self.assertTrue(projection["actual_ownership"].isna().all())
 
     def test_target_persistence_writes_run_and_projection_lineage(self):
         service = OwnershipService.__new__(OwnershipService)

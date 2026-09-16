@@ -462,6 +462,8 @@ class SimulationService:
                     FROM dk_ownership
                     WHERE season = :season AND week = :week
                       AND UPPER(slate) = UPPER(:slate)
+                      AND source <> 'contest_standings'
+                      AND projected_ownership IS NOT NULL
                     ORDER BY player_id, updated_at DESC NULLS LAST
                     """
                 ),

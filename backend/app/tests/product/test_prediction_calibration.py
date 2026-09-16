@@ -10,10 +10,47 @@ from backend.app.product_services.predictions import (
     build_position_calibration,
     derive_calibration_roles,
     generate_walk_forward_residuals,
+    kicker_point_estimates,
 )
 
 
 class PredictionCalibrationTests(unittest.TestCase):
+    def test_kicker_without_history_uses_current_slate_peer_history(self):
+        target = pd.DataFrame(
+            {
+                "player_display_name": ["Veteran Kicker", "Rookie Kicker"],
+                "position": ["K", "K"],
+                "player_games_history": [20, 0],
+                "player_roll3_mean": [8.0, None],
+                "player_roll8_mean": [10.0, None],
+            }
+        )
+
+        estimates, metrics = kicker_point_estimates(target)
+
+        self.assertAlmostEqual(estimates.iloc[0], 8.8)
+        self.assertAlmostEqual(estimates.iloc[1], 8.8)
+        self.assertEqual(metrics["peer_history_count"], 1)
+        self.assertEqual(metrics["fallback_player_count"], 1)
+        self.assertEqual(metrics["fallback_players"], ["Rookie Kicker"])
+
+    def test_kicker_without_history_still_fails_without_peer_baseline(self):
+        target = pd.DataFrame(
+            {
+                "player_display_name": ["Rookie Kicker"],
+                "position": ["K"],
+                "player_games_history": [0],
+                "player_roll3_mean": [None],
+                "player_roll8_mean": [None],
+            }
+        )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "current-slate peer history baseline; missing: Rookie Kicker",
+        ):
+            kicker_point_estimates(target)
+
     def test_current_opportunity_evidence_moves_veterans_and_rookies(self):
         train = pd.DataFrame(
             {

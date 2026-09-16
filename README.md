@@ -1,5 +1,44 @@
 # football_26 Decision OS
 
+[Historical completeness repair](docs/DATA_COMPLETENESS_REPAIR.md) now backfills
+missing archive games with native-ID and schedule checks, preserves negative actual
+scores, and quarantines legacy identity collisions. Week 1 ownership review is down
+to 44 observations after source-evidenced salary repairs.
+
+Contest ownership imports now retain source-scoped identity evidence and unresolved
+review observations, keep CPT/FLEX labels separate, and never treat actual ownership
+as a pregame projection. See the [Week 1 postmortem](docs/WEEK_1_CONTEST_POSTMORTEM.md)
+and [ownership reconciliation runbook](docs/CONTEST_OWNERSHIP_RECONCILIATION.md).
+
+Phase 6A now provides an experimental joint-simulation API/CLI with signed
+marginals, shared game/team factors, true lineup quantiles, and OPT-007 paired
+comparisons. See [Phase 6A usage and validation limits](docs/PHASE_6A_JOINT_SIMULATION.md).
+
+
+Completed optimizer results include **Compare with rules disabled** (OPT-007).
+Each new Classic or Showdown lineup has a matched control with identical hard
+constraints, player swaps, metric deltas, rule contributions, and saved solver
+inputs. See [matched control comparisons](docs/OPTIMIZER_CONTROL_COMPARISON.md).
+
+
+Showdown cash uses the declared cash distribution weights (50% mean, 25% median,
+15% P10, 5% P90) plus context and existing lineup correlation adjustments.
+New runs record `showdown_cash_distribution_v1`; regenerate older cash runs to
+replace the previous ceiling-based scoring.
+
+Completed optimizer results include **Download all N lineups for DraftKings**.
+This exports every lineup from that saved run without an entry template, portfolio,
+or matching entry count. Upload the CSV under DraftKings → Lineups → Upload Lineups;
+the separate contest-entry update workflow still requires an entry template.
+Runs above 500 lineups download as a ZIP of CSVs with at most 500 lineups each.
+Classic and Showdown exports validate roster shape, salary cap, duplicate players,
+duplicate lineups, and saved DraftKings IDs; Showdown uses distinct Captain IDs.
+Older runs missing site IDs must be regenerated before export.
+
+Completed optimizer results also include **Download readable lineup report**. It saves a standalone
+HTML report with the on-screen lineup summaries, player tables, correlation rules, and matched
+OPT-007 controls. Open it in any browser or use the browser's print command to save a PDF.
+
 Canonical repository for the DFS data, modeling, simulation, Digital Twin, and contest-delivery platform:
 
 1. Multi-source ingestion (DraftKings/FanDuel CSVs + nflreadpy stats, schedules, rosters, and snaps).
@@ -85,6 +124,8 @@ reported as `Missing` rather than causing the coverage request to fail.
 `Current slate features` queues a `player_game_feature_matrix` build for only the active season,
 week, and slate through `/api/features/matrix/jobs`; `Full-season features` queues all available
 salary slates in the selected season. Both use the canonical salary and historical context pipeline.
+Feature-row uniqueness includes the slate, so overlapping contests such as Sunday Main and Sunday
+Late retain independent scoring snapshots for the same player and game.
 The legacy synchronous `/api/features/matrix/build` endpoint remains available. Missing salary
 slices and failed builds return an explicit error instead of a generic server error.
 
@@ -136,9 +177,11 @@ prior team—not only players who remain on the current salary slate—so remove
 disappear. Current context is applied through prior-trained, position-specific monotonic opportunity
 curves after the base point model; historical production and snap features are not rewritten as if
 they were current usage. If explicit shares are absent, lineage identifies the lagged-opportunity
-and salary fallback instead of presenting it as sourced current fact. Kicker projections currently
-require prior game history and use a disclosed 60/40 roll-three/roll-eight history anchor until the
-shared historical matrix has sufficient kicker rows for evaluated position calibration. See
+and salary fallback instead of presenting it as sourced current fact. Kicker projections use a
+disclosed 60/40 roll-three/roll-eight prior-history anchor until the shared historical matrix has
+sufficient kicker rows for evaluated position calibration. A kicker without NFL history uses the
+median prior-only anchor of current-slate kickers with history; the run still fails when no such
+peer baseline exists rather than inventing a fixed projection. See
 `docs/PROJECTION_MODEL_V4_EVALUATION.md`. The optimizer eligibility, freshness-warning, lock, and
 exclusion-audit contract is documented in `docs/PLAYER_POOL_SAFETY.md`.
 
@@ -155,6 +198,11 @@ Salary and injury CSVs are validated before any existing curated slice is cleare
 - When present, DraftKings `Status` (or the supported player/injury-status aliases) is normalized
   and persisted on the active curated salary row. A later valid import replaces only that current
   source/season/week/slate slice; prior raw salary rows and ingest runs remain available for lineage.
+- DraftKings Showdown CPT and FLEX rows may carry different native IDs. When one slot resolves,
+  ingest shares that canonical player only with an exact normalized-name, team, and position sibling
+  in the same file, and leaves the row unresolved if the sibling identity is ambiguous.
+- Canonical salary creation times are interpreted as UTC when copied into the timezone-aware target
+  snapshot, so point-in-time ownership and projection gates do not exclude a newly loaded slate.
 - Injury files require player name, team, position, and an injury-status column. Native player ID is used when present; otherwise identity validation uses normalized name plus team and position. Blank injury-status values are allowed for unlisted/healthy players.
 - Team defenses normalize `D`, `DEF`, `Defense`, `D/ST`, and `DST` to `DST`. After an exact native source-ID match, defenses resolve only through a unique same-source team-defense alias or unique team DST master; defense display names are never used as a fallback.
 - Duplicate player identities, missing required columns, blank required identity values, empty files, and invalid salaries fail the ingest with source CSV row numbers in the error.
@@ -343,6 +391,11 @@ snapshot was observed at or before that cutoff. Simulation pools, optimizer pool
 symbolic injury rules all use the same predicate. Missing timestamps fail closed, so retrospective
 imports cannot silently influence replay.
 
+FanDuel injury ingestion preserves both `Injury Indicator` and `Injury Details`. When an ingest run
+is linked to an immutable prospective source snapshot, the target injury adapter uses that
+snapshot's timezone-aware `observed_at`; legacy unlinked rows treat their timezone-naive creation
+time explicitly as UTC.
+
 The current 2024–2025 FanDuel injury indicators and nflverse schedule betting fields are not approved
 as historical pre-lock inputs: they were loaded on February 25, 2026, and do not preserve when those
 values were first available. DATA-002 remains blocked until a source supplies trustworthy observation
@@ -448,7 +501,10 @@ cluster logic plus Showdown Captain-partner, 3-3/4-2/5-1, favorite-RB Captain,
 and fragile-punt logic. Phase 5A advances it to v3: every positive stack credit
 now requires cutoff-safe game context, structural stack floors are removed, and
 the summed player-ceiling display is explicitly named `Individual Ceiling Sum`
-rather than lineup P90. These construction rules remain soft and auditable. See
+rather than lineup P90. The active v4 library adds Classic H2H-only variance
+penalties for QB plus multiple pass catchers and three or more same-team
+offensive players while retaining RB/DST credit. These construction rules
+remain soft and auditable. See
 [`docs/FORMAT_SPECIFIC_LINEUP_RULES.md`](docs/FORMAT_SPECIFIC_LINEUP_RULES.md).
 
 ## Classic Contest Strategies
@@ -457,8 +513,9 @@ Operations exposes one prominent `Contest Strategy` choice for Classic slates.
 `Head-to-Head` (`classic_head_to_head_v1`) keeps the broad post-eligibility pool,
 removes backup QBs and zero-opportunity rows with explicit reasons, and optimizes
 75% mean, 20% P90, and 5% P10 floor with only a soft correlation bonus. It does
-not require a stack or bring-back and always returns the best lineup plus at
-least five alternates.
+not require a stack or bring-back and returns exactly the requested lineup
+count. Selecting the strategy suggests six lineups in Operations, but a caller
+can reduce or increase that count.
 
 `Large GPP` (`classic_large_gpp_v1`) applies the more selective ceiling/value
 candidate policy and generates a portfolio using 35% normalized mean, 45% P90,
@@ -475,18 +532,91 @@ contracts remain callable for reproducible prior runs. Every selected version is
 returned by the API, persisted with its input lineage and explanations, and never
 silently falls back to a different engine.
 
+For Showdown, Operations exposes `FLEX-only players (comma-separated names)`.
+Each name is resolved to one canonical player ID within the selected slate; a
+missing or ambiguous name fails visibly. FLEX-only players remain eligible for
+selection but cannot occupy CPT. This restriction does not lock the player into
+every lineup, and it is persisted in the optimizer player-control audit.
+
 The remaining data-quality, backtest, and operational follow-ups are tracked in
 [`docs/CLASSIC_OPTIMIZER_CONTEST_STRATEGY_TODO.md`](docs/CLASSIC_OPTIMIZER_CONTEST_STRATEGY_TODO.md).
 
 ## Persistent Showdown Optimizer Modes
 
 Operations and Models send `showdown_cash_qb_captain_stack_v1` for Showdown cash
-and `showdown_gpp_captain_informed_v2` for Showdown GPP. Both current strategies
-require at least one same-team WR or TE in FLEX whenever the captain is a QB. The
-solver encodes this as a hard constraint, and the independent result validator checks it
+and `showdown_gpp_portfolio_v3` for Showdown GPP. The v3 five-entry portfolio uses
+separate defaults for CPT (60%), core players (80%), starting QBs (100%), and punts
+at $1,000 or less (40%). Every lineup contains a starting QB. WR/TE captains require
+their QB, two same-team WR/TE require their QB, and QB captains require two same-team
+WR/TE unless current role evidence identifies a high-rushing QB, which requires one.
+The solver encodes these as hard constraints and the result validator checks them
 again before persistence. Explicit requests for `showdown_cash_baseline_v1`,
-`showdown_gpp_baseline_v1`, and `showdown_gpp_captain_informed_v1` preserve those
-historical contracts for research and A/B comparisons.
+`showdown_gpp_baseline_v1`, `showdown_gpp_captain_informed_v1`, and
+`showdown_gpp_captain_informed_v2` preserve historical contracts.
+
+The Showdown GPP strategy selector also offers **Single-entry GPP**
+(`showdown_single_entry_gpp`) and **Single-entry contest portfolio**
+(`showdown_single_entry_portfolio`). Both reuse the Showdown opportunity, quarterback,
+Captain, correlation, and lineup-quality rules. They generate a candidate pool and
+rank it with configurable mean, Individual Ceiling Sum, solver, correlation, context,
+and relative chalk weights (`single_entry_objective_weights`). The portfolio
+selector may repeat a lineup or Captain; it does not apply cross-contest exposure
+caps. Paste one DraftKings contest URL per line and preview the live details. **Auto**
+or **Enter all** chooses from the available contest pool, with optional total entry
+budget and maximum contest count. Auto ranks single-entry contests with a separate
+heuristic score from prize pool versus full capacity, potential overlay within two
+hours of lock, field size, paid-place percentage, payout flatness, and entry fee.
+After the first contest it skips scores below 0.50. It supports 1–50 contest URLs.
+The optimizer refreshes contest details when it runs. Missing fields are shown in
+the preview and may be supplied as a JSON array keyed by `contest_id`; incomplete
+or multi-entry contests are rejected. All URLs must share a DraftKings draft group.
+Results include contest scores, a top-10 lineup candidate table, score components, assignment reasons,
+and player overlap. The three-contest report compares A / A / A, the best one-alternate
+and repeated-alternate portfolios, and the best A / B / C candidate under the same
+heuristic. Each candidate shows shared players with A, overlap percentage, Jaccard
+similarity, quality loss, and first-alternate diversification credit. It also identifies
+the best different-Captain construction with the same six players, the best
+different-Captain construction changing at least two players, and the best different
+game script, or states when no such candidate was generated. Candidate generation
+includes Captain and script-constrained solves; those candidates are not forced into
+the recommendation. Legacy `num_single_entry_contests` requests remain supported;
+URL-driven runs select the count from the available contest pool. Current recommendations
+are heuristic; payout probabilities, expected profit, and ROI are unavailable until
+game and opponent-field simulation can apply actual contest payout tables.
+
+For exactly five GPP lineups, v3 targets two shootouts, one control script for each
+team, and one contrarian script. After the best lineup establishes the reference,
+later lineups must retain at least 85% of its mean and 90% of its Individual Ceiling
+Sum. If fewer than the requested number pass all constraints, the run reports the
+shortfall and does not relax either floor. Correlation scoring uses diminishing QB/pass-catcher bonuses and one bring-back
+bonus per QB team. Cheap players with salary at most $1,000, mean below 3, P90 below
+10, and no identified current opportunity path are excluded when they are RB/WR/TE.
+The same skill positions from $1,001 through $2,000 are excluded only when mean is
+below 2 and P90 is below 8. Explicit expected usage or a defined current role overrides
+both fallbacks; QB, K, and DST are outside this gate. The UI exposes all four
+exposure controls. Five-entry script labels distinguish shootout, run-control,
+pass-led, and contrarian builds; pass/run-specific position constraints remain future work.
+The player-pool diagnostic separates source eligibility from football opportunity:
+`Raw pool → opportunity eligible → optimizer eligible`. Opportunity removals include
+per-player reason codes, while earlier safety removals remain available in the full audit.
+Completed Showdown lineups are classified from their selected players as shootout,
+pass-led, run-control, or contrarian; the requested portfolio script remains in the
+audit separately. Downloaded reports show exposure caps against requested lineup count
+and realized exposure against generated lineup count, include overlapping under-fill
+constraint diagnostics, and provide a slot-specific relative chalk score with zero
+optimizer weight.
+The UI snapshots the visible CPT percentage when a run starts. The backend normalizes
+it to a stored 0–1 rate, and the report prints both the configured cap and its effective
+appearance limit. A 10% cap across 10 requested lineups permits one Captain appearance.
+For portfolios of 10 or more, the optimizer first enumerates Captain constructions
+that satisfy the unchanged hard correlations and mean/P90 floors. It targets three
+distinct qualifying Captains and both teams when available, and reports qualifying
+candidates, quality-floor rejections, final Captain exposure, and any limitation.
+Portfolio construction is sequential: each accepted lineup consumes exposure and is
+added to the duplicate exclusions before the next solve. The report now makes that
+order dependence explicit, shows the full solver objective for Captain alternatives,
+identifies why qualifying but unused Captains lost or became infeasible at each step,
+and reports mean/P90 degradation for repeated Captains and versus their standalone best.
 
 All versions use the declared P90 captain ILP: one CPT at 1.5x salary plus five FLEX
 slots under the $50,000 salary cap and five-player team limit. The informed GPP
@@ -504,13 +634,18 @@ than admitting backup quarterbacks. `Load Starting QBs` persists the canonical
 that a source-backed confirmation payload covers every slate team exactly once; without confirmed
 inputs it records the unique highest active DraftKings QB salary as an inference. The Showdown
 optimizer independently retains its exact-two-team guard. The pool uses each player's FLEX salary
-as its base, retains the separate DraftKings CPT ID for upload, and accepts every positive showdown salary including
-$200 punts, and includes kickers. When current weekly-roster evidence exists, only `ACT`
+as its base, retains the separate DraftKings CPT ID for upload, and includes kickers.
+Historical strategies accept every positive Showdown salary; v3 applies the opportunity
+gate described above. When current weekly-roster evidence exists, only `ACT`
 players plus team defenses enter the pool; cut, development, reserve, and roster-missing
 salary entries remain excluded. Player mean and P90 values remain separate in the
 persisted result. Before a run can complete, an independent validator checks canonical
 player IDs, slot shape, salary, team and exposure limits, duplicate lineups, and every
-hard construction rule owned by the selected strategy version.
+hard construction rule owned by the selected strategy version. When a current ownership
+run exists, v3 joins separate CPT and FLEX projections by canonical player ID and roster
+role, applies a modest ownership adjustment, and reports the selected role's ownership.
+If those inputs are absent, output states “GPP ownership unavailable — optimizing
+ceiling/correlation only.”
 The optimizer persists successful lineups with normalized slot indexes, CPT/FLEX roles,
 natural positions, starter selections, captain probabilities, model-input context, and
 fallback decisions. The result UI also exposes the complete initial player pool, included/excluded
@@ -608,7 +743,7 @@ python scripts/check_schema_drift.py
 
 The checks validate contiguous migration names, the exact migration ledger, a
 second no-op migration pass, the migration-recorded table/column/constraint
-contract for all 57 `target` tables, and structural agreement between the 22
+contract for all 61 `target` tables, and structural agreement between the 22
 migrated `public` tables and SQLAlchemy metadata. Product services only validate
 the recorded `target` contract; they never create or alter those tables at
 runtime. Neither check uses `AUTO_CREATE_TABLES`.
@@ -636,12 +771,22 @@ Historical injury and ownership data are not required.
 1. `football_26` is the canonical combined repository; `football_opt` is a read-only reference until parity gates pass.
 2. The Digital Twin product shell and the full Data Ops/Simulation Research Lab run from one Vite application.
 3. The backend exposes both product and research API families through one FastAPI process without route collisions.
-4. All 57 product `target` tables are migration-owned through `0017`; migrations `0015` and `0016` own the durable public queue and weekly-stage checkpoints, while `0017` owns model evaluation and promotion decisions. Runtime services fail on incompatible target schema drift instead of repairing it.
+4. All 61 product `target` tables are migration-owned through `0033`; migrations `0032` and `0033` own post-slate reports and targeted learning questions. Runtime services fail on incompatible target schema drift instead of repairing it.
 5. Benchmarks, projection builds, both simulation families, baseline-versus-shock portfolio generation, and the eight-stage weekly decision chain run through a standalone persisted worker queue with idempotency, leases, progress polling, retry, and checkpoint resume.
 6. The Operations workspace can queue and inspect ingest, readiness, prediction, adjustment, simulation, optimization, validation, and export as one resumable weekly run.
 7. See `docs/CONSOLIDATION.md` for the ownership contract, parity gates, and archival policy.
 
 Detailed product architecture and the imported Digital Twin roadmap are retained under `docs/product/`.
+
+After contest results load, Operations can build an immutable LEARN-001 report
+and explains how to read evidence coverage, entry percentiles, projection MAE,
+optimizer lineage, duplicates, and captain exposure. The Digital Twin's
+LEARN-002 panel then uses a frozen model/human bundle to ask at most five
+high-value questions and persists every answer without applying it automatically.
+LEARN-003 scores pre-lock belief theses and exact intervention counterfactuals as
+helped, hurt, no measurable effect, or unscored. See
+`docs/POST_SLATE_LEARNING.md`, `docs/AGENT_LEARNING_QUESTIONS.md`, and
+`docs/HUMAN_OUTCOME_LEARNING.md`.
 
 ## Planning And Status
 
@@ -968,6 +1113,17 @@ applied after the profile; it remains zero by default.
 These are pre-lock research profiles, not claims about historical cash lines,
 field ownership, or payout structure. Until contest-level outcomes are
 available, `balanced` remains the production default.
+
+## Post-Slate Learning
+
+Operations can build a persisted `slate_learning_report_v1` after contest
+standings are loaded. Enter the DraftKings username and select **Build Post-Slate
+Learning Report**; subsequent successful past-slate result loads refresh it
+automatically. The report ties user entries to immutable source files and exact
+canonical lineup, optimizer, projection, rule, belief, portfolio, export, and
+OPT-007 evidence when each link exists. Missing fees, payouts, assignments,
+beliefs, or controls remain explicit and produce a `partial` report rather than
+a guessed result. See [the post-slate learning runbook](docs/POST_SLATE_LEARNING.md).
 
 ## Late Swap
 

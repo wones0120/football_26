@@ -1,0 +1,14 @@
+{
+  "plan_sha256": "5fb63239bd7fcc7bec3a81a2c2fbf8c1459fe5cbb2adcf6317e6d9a327bf6b7b",
+  "history": {
+    "existing": 162354,
+    "identity_review": 3266,
+    "existing_game_review": 2
+  },
+  "salary": {
+    "review": 47
+  },
+  "applied": true,
+  "inserted_actuals": 0,
+  "repaired_salaries": 0
+}

@@ -998,6 +998,29 @@
 .twin-variant-message.saved { color: #9fd9b9; background: rgba(112, 225, 165, 0.055); }
 .twin-variant-message.error { color: #ef9189; background: rgba(239, 121, 112, 0.055); }
 
+.twin-question-lab {
+  margin: 0 clamp(18px, 2.5vw, 30px) clamp(18px, 2.5vw, 30px);
+  padding: clamp(16px, 2vw, 24px);
+  border: 1px solid rgba(228, 187, 117, 0.16);
+  border-radius: 11px;
+  background: radial-gradient(circle at 100% 0, rgba(228, 187, 117, 0.065), transparent 36%), rgba(1, 6, 9, 0.56);
+}
+.twin-question-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 15px; }
+.twin-question-card { min-width: 0; padding: 13px; border: 1px solid rgba(219, 229, 237, 0.08); border-radius: 8px; background: rgba(255, 255, 255, 0.014); }
+.twin-question-card.answered { border-color: rgba(112, 225, 165, 0.16); }
+.twin-question-meta, .twin-question-actions, .twin-question-receipt { display: flex; align-items: center; justify-content: space-between; gap: 7px; }
+.twin-question-meta span { color: var(--twin-amber); font-size: 0.46rem; font-weight: 810; letter-spacing: 0.08em; text-transform: uppercase; }
+.twin-question-meta b { color: #82909a; font-size: 0.48rem; }
+.twin-question-card h4 { margin: 9px 0 0; color: #d8e1e6; font-family: "Iowan Old Style", serif; font-size: 0.82rem; font-weight: 570; line-height: 1.38; }
+.twin-question-card > p { margin: 7px 0 0; color: #6e7c86; font-size: 0.51rem; }
+.twin-question-actions { justify-content: flex-start; flex-wrap: wrap; margin-top: 11px; }
+.twin-question-actions button { padding: 6px 8px; border: 1px solid rgba(120, 170, 255, 0.2); border-radius: 5px; color: #b9cce9; background: rgba(120, 170, 255, 0.05); font: inherit; font-size: 0.49rem; font-weight: 730; cursor: pointer; }
+.twin-question-actions button:last-child { color: #9aa5ac; border-color: rgba(219, 229, 237, 0.12); background: transparent; }
+.twin-question-actions button:disabled { cursor: not-allowed; opacity: 0.42; }
+.twin-question-receipt { align-items: flex-start; margin-top: 11px; padding-top: 9px; border-top: 1px solid rgba(219, 229, 237, 0.07); }
+.twin-question-receipt strong { color: var(--twin-green); font-size: 0.51rem; text-transform: capitalize; }
+.twin-question-receipt span { color: #6f7d86; font-size: 0.48rem; text-align: right; }
+
 .thought-library-empty { display: grid; min-height: 310px; place-content: center; padding: 32px; border: 1px dashed var(--twin-line-strong); border-radius: 10px; text-align: center; }
 .thought-library-empty span { color: var(--twin-blue); font-size: 0.55rem; font-weight: 820; letter-spacing: 0.12em; text-transform: uppercase; }
 .thought-library-empty strong { margin-top: 8px; font-family: "Iowan Old Style", serif; font-size: 1.25rem; font-weight: 570; }
@@ -1034,6 +1057,7 @@
   .thought-composer { border-right: 0; border-bottom: 1px solid var(--twin-line); }
   .thought-card-list { max-height: none; }
   .twin-variant-body { grid-template-columns: 1fr; }
+  .twin-question-list { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 650px) {
@@ -1095,6 +1119,7 @@
   .belief-impact-actions > div { width: 100%; }
   .belief-impact-actions button { flex: 1; }
   .twin-variant-lab { margin: 0 12px 12px; padding: 14px; }
+  .twin-question-lab { margin: 0 12px 12px; padding: 14px; }
   .twin-variant-head { align-items: flex-start; flex-direction: column; }
   .twin-variant-head button { width: 100%; }
   .twin-variant-cards { grid-template-columns: 1fr; }

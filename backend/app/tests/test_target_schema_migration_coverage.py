@@ -75,7 +75,7 @@ def test_every_product_target_table_has_a_numbered_migration() -> None:
     product_tables = _target_tables_in_product_code()
     migrated_tables = _target_tables_in_migrations()
 
-    assert len(migrated_tables) == 57
+    assert len(migrated_tables) == 61
     assert product_tables <= migrated_tables, sorted(product_tables - migrated_tables)
 
 

@@ -21,10 +21,11 @@ from backend.app.models import (
 from backend.app.schemas import InjuryIngestRequest, SalaryIngestRequest
 from backend.app.services.ingest import (
     IngestService,
+    _propagate_salary_identity_to_exact_siblings,
     _synthetic_source_key,
     _validate_ingest_dataframe,
 )
-from backend.app.services.matching import create_player_master, utcnow_naive
+from backend.app.services.matching import create_player_master, upsert_alias, utcnow_naive
 
 
 def _session() -> Session:
@@ -229,6 +230,7 @@ def test_fanduel_injury_validation_uses_semantic_identity_without_id(tmp_path: P
     assert completed.rows_raw == 2
     injuries = session.query(CuratedInjury).order_by(CuratedInjury.curated_injury_id).all()
     assert [injury.injury_status for injury in injuries] == ["Q", None]
+    assert [injury.injury_details for injury in injuries] == ["Ankle", None]
     assert injuries[0].source_player_key == _synthetic_source_key(
         "Example Quarterback",
         "KC",
@@ -390,6 +392,82 @@ def test_salary_ingest_resolves_dst_by_team_and_persists_source_alias(tmp_path: 
     assert alias.player_master_id == defense.player_master_id
     assert alias.team == "BUF"
     assert alias.position == "DST"
+
+
+def test_salary_ingest_propagates_identity_across_showdown_slot_ids(tmp_path: Path) -> None:
+    session = _session()
+    player = create_player_master(
+        session,
+        full_name="Example Receiver",
+        team="BUF",
+        position="WR",
+    )
+    upsert_alias(
+        session=session,
+        player_master_id=player.player_master_id,
+        source_system="draftkings",
+        source_key="dk-cpt-101",
+        alias_name="Example Receiver",
+        team="BUF",
+        position="WR",
+        season=2025,
+        week=1,
+    )
+    session.commit()
+    path = tmp_path / "showdown.csv"
+    _write_csv(
+        path,
+        [
+            {
+                "ID": "dk-cpt-101",
+                "Name": "Example Receiver",
+                "TeamAbbrev": "BUF",
+                "Position": "WR",
+                "Roster Position": "CPT",
+                "Salary": 9000,
+            },
+            {
+                "ID": "dk-flex-101",
+                "Name": "Example Receiver",
+                "TeamAbbrev": "BUF",
+                "Position": "WR",
+                "Roster Position": "FLEX",
+                "Salary": 6000,
+            },
+        ],
+    )
+
+    completed = IngestService(session).ingest_salaries(_salary_request(path))
+
+    assert completed.status == "completed"
+    assert completed.rows_unresolved == 0
+    salaries = session.query(CuratedSalary).order_by(CuratedSalary.salary.desc()).all()
+    assert [salary.player_master_id for salary in salaries] == [
+        player.player_master_id,
+        player.player_master_id,
+    ]
+    flex_alias = (
+        session.query(PlayerAlias)
+        .filter(PlayerAlias.source_key == "dk-flex-101")
+        .one()
+    )
+    assert flex_alias.player_master_id == player.player_master_id
+    assert session.query(UnresolvedPlayerQueue).count() == 0
+
+
+def test_salary_identity_propagation_preserves_ambiguous_sibling() -> None:
+    rows = [
+        {"normalized_name": "same player", "team": "BUF", "position": "WR"},
+        {"normalized_name": "same player", "team": "BUF", "position": "WR"},
+        {"normalized_name": "same player", "team": "BUF", "position": "WR"},
+    ]
+
+    propagated = _propagate_salary_identity_to_exact_siblings(
+        rows,
+        ["master-one", "master-two", None],
+    )
+
+    assert propagated == ["master-one", "master-two", None]
 
 
 def test_unresolved_triage_groups_open_and_recent_rows() -> None:

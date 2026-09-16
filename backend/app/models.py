@@ -962,6 +962,7 @@ class PlayerGameFeatureMatrix(Base):
             "source_system",
             "season",
             "week",
+            "slate",
             "game_id",
             "player_id",
             "position",

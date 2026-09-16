@@ -81,6 +81,7 @@ class PredictionFetchTests(unittest.TestCase):
                     "calibration_position": "RB",
                     "calibration_role": "unknown",
                     "calibration_sample_size": 0,
+                    "feature_inputs": {"player_roll3_mean": 7.37},
                     "adj_mean": 18.0,
                     "adj_mean_base": 18.0,
                     "matchup_factor": 1.0,
@@ -122,6 +123,7 @@ class PredictionFetchTests(unittest.TestCase):
         self.assertEqual(rows[0]["player_display_name"], "Example Runner")
         self.assertEqual(rows[0]["salary"], 7200)
         self.assertEqual(rows[0]["last3_points"], [16.0])
+        self.assertEqual(rows[0]["last3_avg"], 16.0)
         self.assertEqual(rows[0]["team_pos_avg"], 16.0)
         self.assertTrue(any("target.player_projection" in sql for sql in observed_sql))
         self.assertFalse(any("FROM player_expected_points " in sql for sql in observed_sql))

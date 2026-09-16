@@ -206,12 +206,18 @@ export type OptimizerResponse = {
   results?: unknown;
   player_pool?: {
     initial_count: number;
+    source_pool_count?: number;
+    raw_pool_count?: number;
+    opportunity_eligible_count?: number;
+    optimizer_eligible_count?: number;
     eligible_count?: number;
     included_count: number;
     excluded_count: number;
     candidate_excluded_count?: number;
     ineligible_count?: number;
     warning_player_count?: number;
+    removal_reason_counts?: Record<string, number>;
+    prior_eligibility_removal_reason_counts?: Record<string, number>;
     safety?: Record<string, unknown>;
     context_scoring?: {
       library_id?: string;
@@ -245,7 +251,9 @@ export type OptimizerResponse = {
       p90: number;
       optimizer_context_adjustment?: number | null;
       optimizer_context_reason_codes?: string[];
+      flex_only?: boolean;
       included: boolean;
+      removal_stage?: string | null;
       exclusion_reasons: string[];
       exclusion_details?: Array<{
         rule_id?: string | null;
@@ -1017,7 +1025,56 @@ export type DigitalTwinVariantReplay = {
   comparison: DigitalTwinVariantComparison;
 };
 
+export type AgentQuestionAnswer = "support_model" | "support_human" | "lean_upside" | "lean_downside" | "no_change";
+
+export type AgentQuestion = {
+  question_id: string;
+  policy_id: string;
+  variant_set_id: string;
+  season: number;
+  week: number;
+  slate: string;
+  trigger_type: "model_human_disagreement" | "high_value_uncertainty";
+  priority: number;
+  value_of_information_score: number;
+  subject_player_id: string;
+  subject_label: string;
+  question_text: string;
+  context: Record<string, unknown>;
+  evidence_hash: string;
+  status: "pending" | "answered";
+  answer_id?: string | null;
+  answer?: AgentQuestionAnswer | null;
+  answer_text?: string | null;
+  resulting_modifier: Record<string, unknown>;
+  created_at: string;
+  answered_at?: string | null;
+};
+
+export type AgentQuestionListResponse = {
+  policy_id: string;
+  policy: Record<string, unknown>;
+  rows: AgentQuestion[];
+  summary: { total: number; pending: number; answered: number };
+};
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
+
+export async function downloadOptimizerLineups(jobId: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/optimizer/results/${encodeURIComponent(jobId)}/draftkings/download`);
+  if (!response.ok) throw new Error(await extractError(response));
+  const blob = await response.blob();
+  const filename = response.headers.get("Content-Disposition")?.match(/filename="([^"]+)"/)?.[1]
+    ?? `draftkings_${jobId}.${blob.type.includes("zip") ? "zip" : "csv"}`;
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 
 // Allow long-running operations (feature builds, predictions); 10 minutes default.
 const DEFAULT_TIMEOUT_MS = 600_000;
@@ -1300,6 +1357,18 @@ export function runOptimizer(payload: {
   params?: Record<string, unknown>;
 }): Promise<OptimizerResponse> {
   return postJson("/optimizer/run", payload);
+}
+
+export interface ContestPreview {
+  contests: Array<Record<string, unknown>>;
+  refreshed_at: string;
+}
+
+export function previewOptimizerContests(payload: {
+  urls: string[];
+  manual_contest_metadata?: Array<Record<string, unknown>>;
+}): Promise<ContestPreview> {
+  return postJson("/optimizer/contests/preview", payload);
 }
 
 export function fetchOptimizerResults(jobId: string): Promise<OptimizerResponse> {
@@ -1774,6 +1843,89 @@ export function analyzePastSlate(payload: {
   return postJson("/ownership/analyze-past", payload);
 }
 
+export type SlateLearningReport = {
+  report_id: string;
+  contract_id: string;
+  builder_version: string;
+  season: number;
+  week: number;
+  slate: string;
+  entry_user: string;
+  generated_at: string;
+  evidence_hash: string;
+  status: "completed" | "partial";
+  summary: {
+    contests: number;
+    entries: number;
+    identity_complete_entries: number;
+    matched_optimizer_entries: number;
+    entries_with_opt_007: number;
+    duplicate_entries: number;
+    projection_player_observations: number;
+    projection_mae: number | null;
+    projection_rmse: number | null;
+  };
+  portfolio_analysis: {
+    captain_exposure?: Array<{ player_display_name: string; entries: number; pct: number }>;
+    duplicate_entries?: number;
+  };
+  contests: Array<Record<string, unknown>>;
+  entries: Array<Record<string, unknown>>;
+  beliefs: Array<Record<string, unknown>>;
+  agent_questions: Array<Record<string, unknown>>;
+  learning_outcomes: {
+    beliefs: {
+      total: number;
+      theses_scored: number;
+      supported: number;
+      contradicted: number;
+      helped: number;
+      hurt: number;
+      no_measurable_effect: number;
+      unscored: number;
+      by_scope: Record<string, Record<string, number>>;
+      by_confidence_band: Record<string, Record<string, number>>;
+    };
+    agent_answers: {
+      total: number;
+      answered: number;
+      helped: number;
+      hurt: number;
+      no_measurable_effect: number;
+      unscored: number;
+    };
+    effect_tolerance_points: number;
+  };
+  source_file_ids: string[];
+  run_ids: Record<string, string[]>;
+  missing_evidence: string[];
+  interpretation: string;
+};
+
+export function generateSlateLearningReport(payload: {
+  season: number;
+  week: number;
+  slate: string;
+  entry_user: string;
+}): Promise<SlateLearningReport> {
+  return postJson("/learning/reports", payload);
+}
+
+export function fetchLatestSlateLearningReport(params: {
+  season: number;
+  week: number;
+  slate: string;
+  entry_user: string;
+}): Promise<SlateLearningReport> {
+  const query = new URLSearchParams({
+    season: String(params.season),
+    week: String(params.week),
+    slate: params.slate,
+    entry_user: params.entry_user,
+  });
+  return getJson(`/learning/reports/latest?${query.toString()}`);
+}
+
 export function runAgent(
   season: number,
   week: number,
@@ -2004,4 +2156,39 @@ export function createDigitalTwinVariantSet(payload: {
 
 export function replayDigitalTwinVariantSet(variantSetId: string): Promise<DigitalTwinVariantReplay> {
   return postJson(`/digital-twin/variant-sets/${encodeURIComponent(variantSetId)}/replay`, {});
+}
+
+export function fetchAgentQuestions(params: {
+  season: number;
+  week: number;
+  slate: string;
+  variant_set_id?: string;
+}): Promise<AgentQuestionListResponse> {
+  const query = new URLSearchParams({
+    season: String(params.season),
+    week: String(params.week),
+    slate: params.slate,
+  });
+  if (params.variant_set_id) query.set("variant_set_id", params.variant_set_id);
+  return getJson(`/digital-twin/questions?${query.toString()}`);
+}
+
+export function generateAgentQuestions(payload: {
+  season: number;
+  week: number;
+  slate: string;
+  variant_set_id?: string;
+}): Promise<AgentQuestionListResponse> {
+  return postJson("/digital-twin/questions/generate", payload);
+}
+
+export function answerAgentQuestion(
+  questionId: string,
+  answer: AgentQuestionAnswer,
+  answerText?: string,
+): Promise<AgentQuestion> {
+  return postJson(`/digital-twin/questions/${encodeURIComponent(questionId)}/answer`, {
+    answer,
+    answer_text: answerText || null,
+  });
 }

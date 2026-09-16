@@ -29,10 +29,16 @@ from backend.app.product_services.optimizer import (
     SHOWDOWN_QB_CAPTAIN_RECEIVER_RULE_ID,
     OptimizerJob,
     OptimizerService,
+    add_showdown_lineup_chalk_metrics,
+    apply_showdown_opportunity_gate,
     _merge_simulation_evidence,
     _safe_float,
     build_showdown_captain_prior,
+    build_showdown_cash_objective,
     build_head_to_head_objective,
+    classify_showdown_game_script,
+    normalize_exposure_rate,
+    plan_showdown_captain_diversification,
     restrict_pool_to_pregame_available,
     restrict_showdown_pool_to_starting_qbs,
     resolve_optimizer_mode,
@@ -41,10 +47,22 @@ from backend.app.product_services.optimizer import (
     showdown_optimizer_rules,
     summarize_head_to_head_lineup,
     summarize_individual_ceiling_sum,
+    summarize_showdown_portfolio_exposure,
 )
 
 
 class OptimizerModeTests(unittest.TestCase):
+    def test_showdown_cash_prefers_mean_and_stability_over_rb_ceiling_pair(self):
+        pool = pd.DataFrame([
+            {"projection": 9.17, "predicted_p50": 8.0, "predicted_p10": 2.0, "p90": 21.09},
+            {"projection": 8.41, "predicted_p50": 7.0, "predicted_p10": 1.0, "p90": 18.83},
+            {"projection": 14.75, "predicted_p50": 14.0, "predicted_p10": 8.0, "p90": 20.34},
+            {"projection": 9.48, "predicted_p50": 9.0, "predicted_p10": 3.0, "p90": 16.90},
+        ])
+        result = build_showdown_cash_objective(pool)
+        self.assertGreater(result.loc[:1, "p90"].sum(), result.loc[2:, "p90"].sum())
+        self.assertLess(result.loc[:1, "showdown_cash_score"].sum(), result.loc[2:, "showdown_cash_score"].sum())
+
     def test_target_pool_query_loads_cutoff_safe_eligibility_evidence_for_audit(self):
         service = OptimizerService.__new__(OptimizerService)
         service.engine = MagicMock()
@@ -84,6 +102,10 @@ class OptimizerModeTests(unittest.TestCase):
         self.assertIn("pregame_context_observed_at", sql)
         self.assertIn("pregame_expected_snaps", sql)
         self.assertIn("pregame_goal_line_share", sql)
+        self.assertIn("carries_mean_3", sql)
+        self.assertIn("target.ownership_projection", sql)
+        self.assertIn("captain_ownership", sql)
+        self.assertIn("flex_ownership", sql)
         self.assertIn("identity_resolved", sql)
         self.assertIn("roster_evidence_available", sql)
         self.assertIn("salary.player_status", sql)
@@ -319,6 +341,56 @@ class OptimizerModeTests(unittest.TestCase):
         self.assertEqual(summary["individual_ceiling_sum"], 35.0)
         self.assertFalse(summary["projected_p90_is_joint_quantile"])
 
+    def test_head_to_head_run_honors_requested_lineup_count(self):
+        service = OptimizerService.__new__(OptimizerService)
+        service._jobs = {}
+        service.engine = MagicMock()
+        service._resolve_run_lineage = MagicMock(
+            return_value=("projection-run-h2h", None, None)
+        )
+        positions = ["QB", "RB", "RB", "WR", "WR", "WR", "TE", "WR", "DST"]
+        teams = ["AAA", "AAA", "BBB", "AAA", "BBB", "BBB", "CCC", "CCC", "CCC"]
+        pool = pd.DataFrame(
+            [
+                {
+                    "player_id": f"player-{index}",
+                    "name": f"Player {index}",
+                    "position": position,
+                    "player_team": team,
+                    "opponent_team": "",
+                    "salary": 5000,
+                    "projection": 10.0 + index,
+                    "p90": 20.0 + index,
+                    "predicted_p10": 5.0 + index,
+                    "is_starting_qb": position == "QB",
+                }
+                for index, (position, team) in enumerate(zip(positions, teams))
+            ]
+        )
+        lineup = pool.to_dict(orient="records")
+        service._load_player_pool = MagicMock(return_value=pool)
+        service._solve_lineup = MagicMock(return_value=lineup)
+        service._lineups_satisfy_stack = MagicMock(return_value=(True, ""))
+        service._validate_classic_lineups = MagicMock(return_value=(True, ""))
+        service._attach_symbolic_explanations = MagicMock()
+        service._persist_optimizer_run = MagicMock(return_value=True)
+
+        job = service.run_job(
+            season=2026,
+            week=1,
+            slate="SUNDAY_MAIN",
+            strategy=CLASSIC_HEAD_TO_HEAD_STRATEGY_ID,
+            params={"num_lineups": 2, "max_exposure": 1.0},
+            contest_format="classic",
+            objective="cash",
+        )
+
+        self.assertEqual(job.status, "completed")
+        self.assertEqual(job.params["num_lineups"], 2)
+        self.assertEqual(len(job.results or []), 2)
+        self.assertEqual(service._solve_lineup.call_count, 2)
+        self.assertIn("2 lineup(s) generated", job.message)
+
     def test_summed_player_p90_is_labeled_as_an_individual_ceiling_sum(self):
         summary = summarize_individual_ceiling_sum(
             [
@@ -405,8 +477,178 @@ class OptimizerModeTests(unittest.TestCase):
         self.assertEqual(informed["engine"], "captain_informed_ilp")
         self.assertEqual(
             informed["evidence_status"],
-            "production_validated_plus_user_rule",
+            "user_required_portfolio_policy",
         )
+
+    def test_showdown_opportunity_gate_preserves_legitimate_cheap_value(self):
+        pool = pd.DataFrame([
+            {"player_id": "dortch", "position": "WR", "salary": 1000, "projection": 5.43, "p90": 12.40},
+            {"player_id": "teslaa", "position": "WR", "salary": 3800, "projection": 6.54, "p90": 13.51},
+            {"player_id": "role-path", "position": "WR", "salary": 600, "projection": 1.0, "p90": 6.0, "pregame_expected_routes": 8.0},
+        ])
+
+        eligible, excluded = apply_showdown_opportunity_gate(pool)
+
+        self.assertEqual(excluded, set())
+        self.assertEqual(set(eligible["player_id"]), {"dortch", "teslaa", "role-path"})
+
+    def test_showdown_opportunity_gate_excludes_near_zero_skill_player(self):
+        pool = pd.DataFrame([
+            {"player_id": "bell", "position": "WR", "salary": 200, "projection": 1.5, "p90": 7.0, "pregame_role_label": "BACKUP"},
+            {"player_id": "kicker", "position": "K", "salary": 200, "projection": 1.0, "p90": 6.0},
+        ])
+
+        eligible, excluded = apply_showdown_opportunity_gate(pool)
+
+        self.assertEqual(excluded, {"bell"})
+        self.assertEqual(set(eligible["player_id"]), {"kicker"})
+
+    def test_showdown_opportunity_gate_catches_skill_player_above_old_threshold(self):
+        pool = pd.DataFrame([
+            {"player_id": "saylors", "position": "RB", "salary": 1400, "projection": 0.54, "p90": 6.13},
+        ])
+
+        eligible, excluded = apply_showdown_opportunity_gate(pool)
+
+        self.assertTrue(eligible.empty)
+        self.assertEqual(excluded, {"saylors"})
+
+    def test_large_showdown_captain_plan_uses_three_qualifiers_and_both_teams(self):
+        candidates = [
+            {"player_id": "det-1", "team": "DET", "objective_score": 100},
+            {"player_id": "det-2", "team": "DET", "objective_score": 99},
+            {"player_id": "det-3", "team": "DET", "objective_score": 98},
+            {"player_id": "buf-1", "team": "BUF", "objective_score": 97},
+        ]
+
+        planned = plan_showdown_captain_diversification(candidates)
+
+        self.assertEqual(len(set(planned)), 3)
+        self.assertIn("buf-1", planned)
+        self.assertEqual(set(planned) & {"det-1", "det-2", "det-3"}, {"det-1", "det-2"})
+
+    def test_showdown_portfolio_hard_rules_require_qb_for_receiver_captain(self):
+        service = OptimizerService.__new__(OptimizerService)
+        pool = pd.DataFrame([
+            {"player_id": "aaa-qb", "name": "AAA QB", "position": "QB", "player_team": "AAA", "opponent_team": "BBB", "salary": 8000, "projection": 20, "p90": 28, "showdown_qb_eligible": True},
+            {"player_id": "bbb-qb", "name": "BBB QB", "position": "QB", "player_team": "BBB", "opponent_team": "AAA", "salary": 8000, "projection": 18, "p90": 26, "showdown_qb_eligible": True},
+            {"player_id": "aaa-wr1", "name": "AAA WR1", "position": "WR", "player_team": "AAA", "opponent_team": "BBB", "salary": 5000, "projection": 50, "p90": 70},
+            {"player_id": "aaa-wr2", "name": "AAA WR2", "position": "WR", "player_team": "AAA", "opponent_team": "BBB", "salary": 4000, "projection": 15, "p90": 25},
+            {"player_id": "bbb-wr1", "name": "BBB WR1", "position": "WR", "player_team": "BBB", "opponent_team": "AAA", "salary": 4000, "projection": 14, "p90": 24},
+            {"player_id": "bbb-rb", "name": "BBB RB", "position": "RB", "player_team": "BBB", "opponent_team": "AAA", "salary": 4000, "projection": 13, "p90": 23},
+            {"player_id": "aaa-rb", "name": "AAA RB", "position": "RB", "player_team": "AAA", "opponent_team": "BBB", "salary": 3000, "projection": 12, "p90": 22},
+        ])
+
+        lineup = service._solve_lineup(
+            pool,
+            score_col="p90",
+            contest_type="captain",
+            stack_params={"require_starting_qb": True, "hard_qb_correlations": True},
+        )
+
+        captain = next(row for row in lineup or [] if row["roster_position"] == "CPT")
+        selected_ids = {row["player_id"] for row in lineup or []}
+        self.assertEqual(captain["player_id"], "aaa-wr1")
+        self.assertIn("aaa-qb", selected_ids)
+
+    def test_showdown_quality_floor_requires_both_mean_and_p90(self):
+        service = OptimizerService.__new__(OptimizerService)
+        pool = pd.DataFrame([
+            {"player_id": f"p-{index}", "name": f"Player {index}", "position": "RB", "player_team": "AAA" if index < 4 else "BBB", "salary": 4000, "projection": 10, "p90": 20}
+            for index in range(7)
+        ])
+
+        mean_failure = service._solve_lineup(
+            pool, score_col="p90", contest_type="captain",
+            quality_floor={"mean": 1000, "p90": 0},
+        )
+        p90_failure = service._solve_lineup(
+            pool, score_col="p90", contest_type="captain",
+            quality_floor={"mean": 0, "p90": 1000},
+        )
+
+        self.assertIsNone(mean_failure)
+        self.assertIsNone(p90_failure)
+
+    def test_showdown_script_classification_uses_actual_construction(self):
+        def row(player_id, team, position, projection=10, salary=5000):
+            return {
+                "player_id": player_id, "player_name": player_id,
+                "player_team": team, "position": position,
+                "projection": projection, "p90": projection * 1.5,
+                "base_projection": projection, "base_p90": projection * 1.5,
+                "base_salary": salary,
+            }
+
+        det_pass = [
+            row("Goff", "DET", "QB"), row("Amon-Ra", "DET", "WR"),
+            row("LaPorta", "DET", "TE"), row("Jameson", "DET", "WR"),
+            row("Bates", "DET", "K"), row("Shakir", "BUF", "WR"),
+        ]
+        shootout = [
+            row("Goff", "DET", "QB"), row("Amon-Ra", "DET", "WR"),
+            row("Allen", "BUF", "QB"), row("Shakir", "BUF", "WR"),
+        ]
+        run_control = [
+            row("Allen", "BUF", "QB"), row("Cook", "BUF", "RB"),
+            row("Bass", "BUF", "K"), row("Bills", "BUF", "DST"),
+            row("Amon-Ra", "DET", "WR"), row("LaPorta", "DET", "TE"),
+        ]
+        contrarian = [
+            row("Cook", "BUF", "RB"), row("Shakir", "BUF", "WR"),
+            row("Bass", "BUF", "K"), row("Amon-Ra", "DET", "WR"),
+            row("LaPorta", "DET", "TE"), row("Bates", "DET", "K"),
+        ]
+
+        self.assertEqual(classify_showdown_game_script(det_pass)["label"], "DET pass-led")
+        self.assertEqual(classify_showdown_game_script(shootout)["label"], "Shootout")
+        self.assertEqual(classify_showdown_game_script(run_control)["label"], "BUF run-control")
+        self.assertEqual(classify_showdown_game_script(contrarian)["kind"], "contrarian")
+
+    def test_underfilled_showdown_exposure_reports_both_denominators(self):
+        dortch = {
+            "player_id": "dortch", "player_name": "Greg Dortch", "position": "WR",
+            "base_salary": 200, "roster_position": "FLEX",
+        }
+        lineups = [
+            [dict(dortch)] if index < 2 else [{
+                "player_id": f"player-{index}", "player_name": f"Player {index}",
+                "position": "WR", "base_salary": 5000, "roster_position": "FLEX",
+            }]
+            for index in range(4)
+        ]
+
+        report = summarize_showdown_portfolio_exposure(
+            lineups, requested_lineups=5,
+            exposure_rates={"captain": 0.6, "core": 0.8, "starting_qb": 1.0, "cheap_punt": 0.4},
+        )
+        row = next(item for item in report["rows"] if item["player_id"] == "dortch")
+
+        self.assertTrue(report["underfilled"])
+        self.assertEqual(row["maximum_allowed_appearances"], 2)
+        self.assertEqual(row["actual_appearances"], 2)
+        self.assertEqual(row["final_generated_portfolio_exposure"], 0.5)
+        self.assertEqual(row["cap_status"], "PASS")
+
+    def test_ten_lineup_ten_percent_captain_cap_means_one_appearance(self):
+        rate = normalize_exposure_rate(10, default=0.60)
+        report = summarize_showdown_portfolio_exposure(
+            [], requested_lineups=10,
+            exposure_rates={"captain": rate, "core": 0.8, "starting_qb": 1.0, "cheap_punt": 0.4},
+        )
+
+        self.assertEqual(rate, 0.10)
+        self.assertEqual(report["configured_captain_cap"], 0.10)
+        self.assertEqual(report["captain_maximum_appearances"], 1)
+
+    def test_showdown_chalk_metric_is_relative_and_has_zero_weight(self):
+        chalkier = [[{"player_id": f"chalk-{index}", "ownership": 50.0} for index in range(6)]]
+        lower_owned = [[{"player_id": f"low-{index}", "ownership": 25.0} for index in range(6)]]
+        summaries = add_showdown_lineup_chalk_metrics(chalkier + lower_owned)
+
+        self.assertEqual(summaries[0]["relative_chalk_score"], 100.0)
+        self.assertLess(summaries[1]["relative_chalk_score"], 100.0)
+        self.assertEqual(summaries[0]["optimization_weight"], 0.0)
 
         historical = resolve_optimizer_strategy(
             contest_format="showdown",
@@ -423,9 +665,9 @@ class OptimizerModeTests(unittest.TestCase):
             baseline_alias["strategy_id"], SHOWDOWN_GPP_BASELINE_STRATEGY_ID
         )
         self.assertEqual(showdown_optimizer_rules(historical["strategy_id"]), [])
-        self.assertEqual(
-            showdown_optimizer_rules(informed["strategy_id"])[0]["rule_id"],
-            SHOWDOWN_QB_CAPTAIN_RECEIVER_RULE_ID,
+        self.assertIn(
+            "showdown_pass_catcher_captain_qb_v1",
+            {rule["rule_id"] for rule in showdown_optimizer_rules(SHOWDOWN_GPP_CAPTAIN_INFORMED_STRATEGY_ID)},
         )
 
     def test_showdown_pool_keeps_one_unique_top_salary_qb_per_team(self):
@@ -873,6 +1115,59 @@ class OptimizerModeTests(unittest.TestCase):
         self.assertFalse(valid)
         self.assertIn("exactly one CPT", reason)
 
+    def test_showdown_lineup_validation_rejects_flex_only_captain(self):
+        lineup = [
+            {
+                "player_id": f"player-{index}",
+                "roster_position": "CPT" if index == 0 else "FLEX",
+                "player_team": "AAA" if index < 3 else "BBB",
+                "salary": 7500,
+            }
+            for index in range(6)
+        ]
+
+        valid, reason = OptimizerService._validate_showdown_lineups(
+            [lineup],
+            requested_lineups=1,
+            max_exposure=1.0,
+            flex_only_player_ids={"player-0"},
+        )
+
+        self.assertFalse(valid)
+        self.assertIn("FLEX-only player player-0 at CPT", reason)
+
+    def test_showdown_flex_only_name_must_resolve_in_selected_slate(self):
+        service = OptimizerService.__new__(OptimizerService)
+        service._jobs = {}
+        service.engine = MagicMock()
+        service._resolve_run_lineage = MagicMock(
+            return_value=("projection-run-showdown", None, None)
+        )
+        service._load_player_pool = MagicMock(
+            return_value=pd.DataFrame(
+                [
+                    {
+                        "player_id": "player-0",
+                        "name": "Available Player",
+                    }
+                ]
+            )
+        )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "FLEX-only player was not found in the selected slate: Missing Player",
+        ):
+            service.run_job(
+                season=2026,
+                week=1,
+                slate="SUNDAY_NIGHT",
+                strategy="gpp",
+                params={"flex_only_players": ["Missing Player"]},
+                contest_format="showdown",
+                objective="gpp",
+            )
+
     def test_showdown_solver_preserves_mean_and_p90_slot_values(self):
         service = OptimizerService.__new__(OptimizerService)
         pool = pd.DataFrame(
@@ -905,6 +1200,10 @@ class OptimizerModeTests(unittest.TestCase):
         self.assertEqual(
             [row["roster_position"] for row in lineup].count("CPT"),
             1,
+        )
+        self.assertAlmostEqual(
+            lineup[0]["solver_objective_value"],
+            sum(row["objective_score"] for row in lineup),
         )
         for row in lineup:
             multiplier = 1.5 if row["roster_position"] == "CPT" else 1.0
@@ -1180,7 +1479,11 @@ class OptimizerModeTests(unittest.TestCase):
             week=11,
             slate="THURSDAY_NIGHT",
             strategy="gpp",
-            params={"num_lineups": 1, "lock_player_ids": ["player-2"]},
+            params={
+                "num_lineups": 1,
+                "lock_player_ids": ["player-2"],
+                "flex_only_players": ["Player 1"],
+            },
             contest_format="showdown",
             objective="cash",
         )
@@ -1188,6 +1491,9 @@ class OptimizerModeTests(unittest.TestCase):
         self.assertEqual(job.status, "completed")
         solve_pool = service._solve_lineup.call_args.args[0]
         self.assertIn(200, solve_pool["salary"].tolist())
+        self.assertEqual(service._solve_lineup.call_args.kwargs["score_col"], "showdown_cash_score")
+        self.assertIn("showdown_cash_score", solve_pool)
+        self.assertEqual(job.params["objective_config"]["score_column"], "showdown_cash_score")
         self.assertNotIn("final-out-player", set(solve_pool["player_id"]))
         self.assertEqual(
             job.strategy, SHOWDOWN_CASH_QB_CAPTAIN_STACK_STRATEGY_ID
@@ -1204,6 +1510,10 @@ class OptimizerModeTests(unittest.TestCase):
         self.assertEqual(
             service._solve_lineup.call_args.kwargs["locked_player_ids"],
             {"player-2"},
+        )
+        self.assertEqual(
+            service._solve_lineup.call_args.kwargs["flex_only_player_ids"],
+            {"player-1"},
         )
         self.assertEqual(job.params["objective_config"]["captain_slots"], 1)
         self.assertEqual(
@@ -1230,6 +1540,13 @@ class OptimizerModeTests(unittest.TestCase):
             row["player_id"]: row
             for row in job.params["strategy_runtime"]["player_pool"]["rows"]
         }
+        self.assertTrue(audit_by_id["player-1"]["flex_only"])
+        self.assertEqual(
+            job.params["strategy_runtime"]["player_controls"][
+                "flex_only_player_ids"
+            ],
+            ["player-1"],
+        )
         self.assertFalse(audit_by_id["final-out-player"]["included"])
         self.assertEqual(
             audit_by_id["final-out-player"]["exclusion_reasons"],
@@ -1427,13 +1744,13 @@ class OptimizerModeTests(unittest.TestCase):
         self.assertEqual(
             job.strategy, SHOWDOWN_GPP_CAPTAIN_INFORMED_STRATEGY_ID
         )
-        self.assertEqual(
-            job.params["optimizer_rules"][0]["rule_id"],
-            SHOWDOWN_QB_CAPTAIN_RECEIVER_RULE_ID,
+        self.assertIn(
+            "showdown_require_starting_qb_v1",
+            {rule["rule_id"] for rule in job.params["optimizer_rules"]},
         )
-        self.assertEqual(
-            job.results[0][0]["lineup_optimizer_rules"][0]["rule_id"],
-            SHOWDOWN_QB_CAPTAIN_RECEIVER_RULE_ID,
+        self.assertIn(
+            "showdown_require_starting_qb_v1",
+            {rule["rule_id"] for rule in job.results[0][0]["lineup_optimizer_rules"]},
         )
         self.assertTrue(job.lineage_persisted)
         self.assertEqual(job.results[0][0]["roster_position"], "CPT")

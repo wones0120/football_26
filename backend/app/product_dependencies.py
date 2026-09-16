@@ -23,6 +23,8 @@ from .product_services.thought_inbox import ThoughtInboxService
 from .product_services.starters import StartingQBService
 from .product_services.simulations import SimulationService
 from .product_services.pregame_context import PregameContextService
+from .product_services.slate_learning import SlateLearningService
+from .product_services.agent_questions import AgentQuestionService
 
 
 @lru_cache()
@@ -128,3 +130,13 @@ def get_draftkings_export_service() -> DraftKingsExportService:
 @lru_cache()
 def get_news_monitor_service() -> NewsMonitorService:
     return NewsMonitorService()
+
+
+@lru_cache()
+def get_slate_learning_service() -> SlateLearningService:
+    return SlateLearningService()
+
+
+@lru_cache()
+def get_agent_question_service() -> AgentQuestionService:
+    return AgentQuestionService()

@@ -2,6 +2,170 @@
 
 ## Unreleased
 
+- Added separate Showdown single-entry GPP and a single-entry contest portfolio
+  with DraftKings URL preview, live payout ingestion, contest selection, optional
+  budget and contest-count limits, and separate contest and lineup scoring. Live
+  contest details are refreshed when the optimizer runs; payout simulation remains
+  future work. Both strategies score a broad candidate pool using explicit configurable weights,
+  report the top 10 and assignment rationale, and permit the same lineup in separate
+  contests. The existing multi-entry GPP strategy keeps its exposure and uniqueness
+  rules. Portfolio payout probabilities remain unavailable pending contest simulation.
+  The three-contest report now explains its recommended A/B/A-style structure against
+  A/A/A, repeated-alternate, and A/B/C candidates with quality loss, diversification
+  credit, shared-player overlap, Jaccard similarity, and the closest Captain and
+  game-script alternatives. Candidate generation samples alternate Captains and
+  scripts without forcing them into the final selection.
+
+- Added `showdown_gpp_portfolio_v3` for five-entry Showdown GPP builds. It separates
+  CPT/core/QB/punt exposure at 60/80/100/40%, requires a starting QB, enforces
+  WR/TE Captain and multi-receiver QB relationships, distinguishes rushing QB
+  Captain stacks, excludes role-less sub-$1K punts below the mean/P90 gates,
+  saturates repeated correlation bonuses, requires both an 85% mean floor and a
+  90% P90 floor, and targets two shootouts plus run-control, pass-led, and contrarian
+  script labels. Runs report any requested-lineup shortfall without relaxing quality.
+  Pool diagnostics now show raw, opportunity-eligible, and optimizer-eligible counts,
+  with opportunity-removal reasons separated from earlier safety filtering.
+  Showdown reports now classify scripts from actual construction, explain requested
+  versus generated exposure denominators, report under-fill constraint categories,
+  and include a slot-specific relative chalk score that does not affect optimization.
+  The opportunity gate now covers RB/WR/TE through $2,000 with a stricter sub-2 mean
+  and sub-8 P90 fallback when explicit role evidence is absent. For portfolios of 10
+  or more, Captain diversity is selected only from constructions that already pass
+  the existing quality and correlation constraints, targeting three Captains and
+  both teams when those qualifying options exist.
+  The UI now snapshots the visible CPT cap when a run starts, the backend accepts
+  either percentage or rate form and persists the normalized rate, and reports show
+  the configured CPT cap with its requested-lineup appearance limit.
+  Captain reports now identify the sequential greedy construction mode, audit unused
+  qualifying Captains against the constraints available at each lineup step, expose
+  the exact solver-objective comparison, and quantify repeated-Captain and standalone
+  mean/P90 degradation. These diagnostics do not alter portfolio selection.
+  The optimizer now reads canonical CPT/FLEX ownership projections, uses the
+  selected slot's value, and states when ownership is unavailable. Week 2 Thursday
+  produced five validated lineups with 6–8 correlation events instead of 15–16.
+
+- Added a readable optimizer report download alongside the DraftKings upload
+  export. The standalone HTML preserves lineup summaries, player tables,
+  correlation rules, and OPT-007 matched controls and can be printed to PDF.
+
+- Fixed DraftKings Showdown salary identity resolution when CPT and FLEX use
+  different native player IDs. An exact name, team, and position sibling now
+  supplies the canonical identity only when it resolves to one player; ambiguous
+  siblings remain in review. Re-ingesting the 2026 Week 2 Thursday slate reduced
+  unresolved rows from 16 to 4, and the final two players were canonically resolved.
+
+- Fixed target salary timestamps shifting four hours when a timezone-naive UTC
+  ingest time was copied into a timezone-aware snapshot. Ownership modeling now
+  sees newly loaded slates at the correct cutoff, and its result appears directly
+  below the Operations button, including zero-row prerequisite messages.
+
+- Completed `LEARN-003` in `slate_learning_report_v1` builder `2026-09-14.4`.
+  Post-slate reports now score predecision belief theses and compare exact
+  approved/rejected belief impacts plus LEARN-002 answers with their stored
+  counterfactuals. Results retain helped, hurt, no measurable effect, and
+  unscored classifications overall, by scope, and by confidence band. Showdown
+  comparisons normalize CPT points once, and original beliefs and decisions are
+  never rewritten. The Week 1 reports were regenerated and correctly show no
+  human score because no prospective human evidence existed.
+
+- Completed `LEARN-002` with deterministic `agent_question_voi_v1` prompts from
+  immutable DT-703 bundles. The Digital Twin asks at most five questions for
+  material model/human disagreement or high projection uncertainty, persists
+  exact trigger evidence, every answer and no-change response, and any inert
+  proposed modifier. LEARN-001 now includes a weekly reading guide and entry
+  finish percentiles in Operations.
+
+- Completed `LEARN-001` with immutable, evidence-hashed post-slate reports.
+  Reports resolve user entries through contest-scoped canonical identity evidence,
+  score saved projections and symbolic-rule adjustments, retain relevant belief,
+  lineup, portfolio, export, and OPT-007 lineage, calculate financial results only
+  from supplied fees and payout tiers, and list every missing link. Operations can
+  build a report by DraftKings username and refreshes it after successful result
+  loads. All three Week 1 slate reports are persisted; repeated evidence reuses the
+  same report ID.
+
+- Fixed past-slate ownership imports returning `500 Internal Server Error` after
+  a successful database write when the load had no model metrics. The API now
+  returns an empty metrics object, matching the ownership response contract.
+
+- Added a repeatable archive-completeness audit and repair. Retained 155,412 missing
+  historical actuals (3,682 from 2025), restored Lamb's last-three history, and
+  repaired 38 salary identities. Ownership reconciliation resolved 80 more
+  observations, leaving 44 in review. Legacy canonical collisions and two game
+  conflicts remain quarantined; existing actuals and saved projections are unchanged.
+  New actuals preserve negative scores and omit missed-kick penalties while legacy
+  model scoring defaults remain unchanged. Evidence journals support scoped reversal.
+
+- Reconciled the three Week 1 standings archives into 1,471 canonical ownership
+  observations and 124 explicit review observations. Imports retain CPT/FLEX
+  separately and store actual labels without projected ownership. Added append-only
+  identity evidence, legacy contest lineage migrations, and repeatable reconciliation
+  and postmortem commands. The four-entry postmortem includes saved projection
+  comparisons and documents missing fees/payouts and legacy control limitations.
+- Fixed the projection table's last-three average to average its displayed actuals,
+  independently of saved model features. Lamb's discrepancy traced to missing target
+  history records; saved predictions and the model's fuller raw history are unchanged.
+
+- Added the Phase 6A `joint_game_factor_research_v1` API/CLI experiment. Shared
+  game/team factors reorder identical signed marginal draws; lineup evaluation
+  reports true P10/median/P75/P90 and paired scored/control differences using
+  the same draws. Frozen input checksums support database-free replay, and
+  exact scope/projection/cutoff checks reject mismatched runs. A real 382-player,
+  11-game, 5,000-draw historical smoke run preserved marginals and replayed
+  exactly. Structural priors remain unvalidated; missing-cutoff research is
+  explicit opt-in and production promotion is always disabled. Production
+  simulation and optimizer defaults are unchanged.
+
+- Completed OPT-007: new Classic and Showdown runs persist a matched control at
+  each lineup-selection step with context/correlation scoring disabled and the
+  exact same hard constraints. Results show player and Captain-slot swaps, mean,
+  Individual Ceiling Sum, salary, ownership/leverage deltas, base-objective
+  opportunity cost, and per-rule contributions. A checksummed solver snapshot
+  supports replay without current source data. The UI exposes comparisons and
+  JSON; old runs explicitly show comparison unavailable. Controls are individual
+  alternatives, not a separately playable portfolio, and require one additional
+  solve per generated lineup.
+
+- Fixed Showdown cash routing to use the declared mean/median/floor-led profile
+  instead of the GPP ceiling score. New runs persist scoring version, weights,
+  and player score explanations; Captain scoring still applies the 1.5 multiplier.
+
+- Completed optimizer runs now offer “Download all N lineups for DraftKings”
+  without an entry template or portfolio assignment. Classic and Showdown CSVs
+  use saved site IDs (including Captain IDs), validate rosters and salaries, and
+  split more than 500 lineups into a ZIP of CSVs. Existing entry-update exports
+  continue to preserve contest and entry IDs through matching templates.
+
+- Added a Showdown-only `FLEX-only players (comma-separated names)` optimizer
+  control. Supplied names resolve to unambiguous canonical slate IDs, remain
+  selectable at FLEX, and are prohibited at CPT. The restriction composes with
+  player locks, is independently validated after solving, and is preserved in
+  player-pool and run audit metadata.
+
+- Added a point-in-time-safe kicker fallback for Showdown projection runs. A
+  kicker without NFL game history now uses the median 60/40 roll-three/roll-eight
+  prior-history anchor of current-slate kicker peers. Runs still fail when no
+  peer has history, avoiding an unsupported fixed or future-informed estimate.
+
+- Fixed feature-matrix builds for overlapping slates by including `slate` in
+  the player/game uniqueness key. Sunday Main and Sunday Late can now retain
+  independent cutoff-safe feature rows for the same player and game.
+
+- Advanced `optimizer_lineup_correlation` to v4 with Classic H2H-only soft
+  variance penalties for QB plus multiple same-team pass catchers and for three
+  or more same-team offensive players. Same-team lineups remain feasible when
+  individual projections outweigh diversification, and the context-backed
+  RB/DST benefit is unchanged.
+
+- Fixed Classic Head-to-Head lineup count handling. The optimizer now returns
+  exactly the requested count instead of silently raising requests below six;
+  the Operations mode switch may still suggest six as a starting value.
+
+- FanDuel injury ingestion now retains the exported `Injury Details` column. Target injury snapshots
+  use the immutable linked source snapshot's timezone-aware observation time, with an explicit UTC
+  interpretation only for legacy unlinked rows, preventing the database session timezone from
+  shifting point-in-time injury evidence.
+
 - Corrected the Phase 5 optimizer feedback loop with
   `optimizer_lineup_correlation` v3 and `optimizer_player_context` v2. Positive
   QB stacks, QB+2 constructions, receiving-back stacks, RB/DST pairs, and

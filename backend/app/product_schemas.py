@@ -106,6 +106,11 @@ class OptimizerRunRequest(BaseModel):
     params: dict = Field(default_factory=dict)
 
 
+class ContestPreviewRequest(BaseModel):
+    urls: List[str]
+    manual_contest_metadata: List[dict[str, Any]] = Field(default_factory=list)
+
+
 class OptimizerStatusResponse(BaseModel):
     job_id: str
     status: str
@@ -122,6 +127,15 @@ class OptimizerStatusResponse(BaseModel):
     player_pool: Optional[dict[str, Any]] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+
+
+class JointResearchRequest(BaseModel):
+    simulation_run_id: str = Field(..., min_length=1, max_length=128)
+    optimizer_run_id: str | None = Field(default=None, min_length=1, max_length=128)
+    num_simulations: int = Field(default=5000, ge=100, le=20000)
+    seed: int = Field(default=603, ge=0, le=4294967295)
+    threshold: float | None = Field(default=None, allow_inf_nan=False)
+    allow_missing_cutoff: bool = False
 
 
 class SimulationRunRequest(BaseModel):
@@ -857,6 +871,96 @@ class PastSlateAnalysisResponse(BaseModel):
     bucket_stats: List[dict]
     top_lineups: List[dict]
     message: str
+
+
+class SlateLearningReportRequest(BaseModel):
+    season: int = Field(..., ge=2000)
+    week: int = Field(..., ge=1, le=25)
+    slate: str = Field(..., min_length=1, max_length=64)
+    entry_user: str = Field(..., min_length=1, max_length=128)
+
+
+class SlateLearningReportResponse(BaseModel):
+    report_id: str
+    contract_id: str
+    builder_version: str
+    season: int
+    week: int
+    slate: str
+    entry_user: str
+    generated_at: datetime
+    evidence_hash: str
+    status: Literal["completed", "partial"]
+    summary: dict[str, Any] = Field(default_factory=dict)
+    portfolio_analysis: dict[str, Any] = Field(default_factory=dict)
+    contests: List[dict[str, Any]] = Field(default_factory=list)
+    entries: List[dict[str, Any]] = Field(default_factory=list)
+    beliefs: List[dict[str, Any]] = Field(default_factory=list)
+    agent_questions: List[dict[str, Any]] = Field(default_factory=list)
+    learning_outcomes: dict[str, Any] = Field(default_factory=lambda: {
+        "beliefs": {
+            "total": 0, "theses_scored": 0, "supported": 0, "contradicted": 0,
+            "helped": 0, "hurt": 0, "no_measurable_effect": 0, "unscored": 0,
+            "by_scope": {}, "by_confidence_band": {},
+        },
+        "agent_answers": {
+            "total": 0, "answered": 0, "helped": 0, "hurt": 0,
+            "no_measurable_effect": 0, "unscored": 0,
+        },
+        "effect_tolerance_points": 0.25,
+    })
+    source_file_ids: List[str] = Field(default_factory=list)
+    run_ids: dict[str, List[str]] = Field(default_factory=dict)
+    missing_evidence: List[str] = Field(default_factory=list)
+    interpretation: str
+
+
+AgentQuestionAnswer = Literal[
+    "support_model", "support_human", "lean_upside", "lean_downside", "no_change"
+]
+
+
+class AgentQuestionGenerateRequest(BaseModel):
+    season: int = Field(..., ge=2000)
+    week: int = Field(..., ge=1, le=25)
+    slate: str = Field(..., min_length=1, max_length=64)
+    variant_set_id: Optional[str] = None
+
+
+class AgentQuestionAnswerRequest(BaseModel):
+    answer: AgentQuestionAnswer
+    answer_text: Optional[str] = Field(default=None, max_length=5000)
+
+
+class AgentQuestionResponse(BaseModel):
+    question_id: str
+    policy_id: str
+    variant_set_id: str
+    season: int
+    week: int
+    slate: str
+    trigger_type: Literal["model_human_disagreement", "high_value_uncertainty"]
+    priority: int
+    value_of_information_score: float
+    subject_player_id: str
+    subject_label: str
+    question_text: str
+    context: dict[str, Any] = Field(default_factory=dict)
+    evidence_hash: str
+    status: Literal["pending", "answered"]
+    answer_id: Optional[str] = None
+    answer: Optional[AgentQuestionAnswer] = None
+    answer_text: Optional[str] = None
+    resulting_modifier: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+    answered_at: Optional[datetime] = None
+
+
+class AgentQuestionListResponse(BaseModel):
+    policy_id: str
+    policy: dict[str, Any]
+    rows: List[AgentQuestionResponse]
+    summary: dict[str, int]
 
 class BuildFeaturesRequest(BaseModel):
     season: int

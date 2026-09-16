@@ -4,12 +4,14 @@ import {
   createDigitalTwinVariantSet,
   createDigitalTwinBelief,
   createDigitalTwinThoughtCapture,
+  answerAgentQuestion,
   decideDigitalTwinImpactPreview,
   decideDigitalTwinThoughtCandidate,
   fetchDigitalTwinBeliefs,
   fetchDigitalTwinImpactPreviews,
   fetchDigitalTwinVariantSets,
   fetchDigitalTwinThoughtCaptures,
+  fetchAgentQuestions,
   fetchLatestOwnership,
   fetchLatestPredictions,
   fetchNewsMonitorFeedback,
@@ -17,8 +19,11 @@ import {
   fetchSlateReadiness,
   reviseDigitalTwinBelief,
   replayDigitalTwinVariantSet,
+  generateAgentQuestions,
   setDigitalTwinBeliefStatus,
   type BeliefCreatePayload,
+  type AgentQuestion,
+  type AgentQuestionAnswer,
   type BeliefDirection,
   type BeliefImpactPreview,
   type BeliefRevisionPayload,
@@ -147,6 +152,11 @@ function beliefContext(belief: HumanBelief) {
   return context.filter(Boolean).join(" · ") || "All slates";
 }
 
+function questionContextNumber(question: AgentQuestion, key: string): number | null {
+  const value = question.context[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
 function normalizedPlayerName(value: string | null | undefined) {
   return (value ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
@@ -254,6 +264,9 @@ export function DigitalTwin({
   const [thoughtCaptures, setThoughtCaptures] = useState<ThoughtCapture[]>([]);
   const [impactPreviews, setImpactPreviews] = useState<BeliefImpactPreview[]>([]);
   const [variantSets, setVariantSets] = useState<DigitalTwinVariantSet[]>([]);
+  const [agentQuestions, setAgentQuestions] = useState<AgentQuestion[]>([]);
+  const [questionBusy, setQuestionBusy] = useState(false);
+  const [questionMessage, setQuestionMessage] = useState<{ tone: "saved" | "error"; text: string } | null>(null);
   const [readiness, setReadiness] = useState<SlateReadinessResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [errors, setErrors] = useState<string[]>([]);
@@ -292,11 +305,12 @@ export function DigitalTwin({
         fetchDigitalTwinThoughtCaptures({ season, week, slate }),
         fetchDigitalTwinImpactPreviews({ season, week, slate }),
         fetchDigitalTwinVariantSets({ season, week, slate, limit: 1 }),
+        fetchAgentQuestions({ season, week, slate }),
       ]);
       if (cancelled) return;
 
       const nextErrors: string[] = [];
-      const [predictionResult, ownershipResult, newsResult, feedbackResult, readinessResult, beliefResult, captureResult, impactResult, variantResult] = results;
+      const [predictionResult, ownershipResult, newsResult, feedbackResult, readinessResult, beliefResult, captureResult, impactResult, variantResult, questionResult] = results;
 
       if (predictionResult.status === "fulfilled") {
         setPredictions(predictionResult.value.rows);
@@ -351,6 +365,9 @@ export function DigitalTwin({
         setVariantSets([]);
         nextErrors.push("Digital Twin variants unavailable");
       }
+
+      if (questionResult.status === "fulfilled") setAgentQuestions(questionResult.value.rows);
+      else setAgentQuestions([]);
 
       setErrors(nextErrors);
       setLoading(false);
@@ -814,6 +831,60 @@ export function DigitalTwin({
       });
     } finally {
       setVariantBusy(false);
+    }
+  }
+
+  async function findAgentQuestions() {
+    const variantSet = variantSets[0];
+    if (!variantSet || questionBusy) return;
+    setQuestionBusy(true);
+    setQuestionMessage(null);
+    try {
+      const result = await generateAgentQuestions({
+        season,
+        week,
+        slate,
+        variant_set_id: variantSet.variant_set_id,
+      });
+      setAgentQuestions(result.rows);
+      setQuestionMessage({
+        tone: "saved",
+        text: result.summary.total
+          ? `${result.summary.total} high-value question${result.summary.total === 1 ? "" : "s"} found; ${result.summary.pending} still need an answer.`
+          : "No question crossed the value-of-information threshold for this bundle.",
+      });
+    } catch (error) {
+      setQuestionMessage({
+        tone: "error",
+        text: error instanceof Error ? error.message : "Unable to generate targeted questions.",
+      });
+    } finally {
+      setQuestionBusy(false);
+    }
+  }
+
+  async function recordAgentAnswer(question: AgentQuestion, answer: AgentQuestionAnswer) {
+    if (questionBusy || question.status === "answered") return;
+    setQuestionBusy(true);
+    setQuestionMessage(null);
+    try {
+      const updated = await answerAgentQuestion(question.question_id, answer);
+      setAgentQuestions((current) => current.map((row) => (
+        row.question_id === updated.question_id ? updated : row
+      )));
+      setQuestionMessage({
+        tone: "saved",
+        text: answer === "no_change"
+          ? "No-change answer recorded. No modifier was created."
+          : "Answer and proposed modifier recorded. It remains inactive unless it passes the existing belief preview and approval workflow.",
+      });
+    } catch (error) {
+      setQuestionMessage({
+        tone: "error",
+        text: error instanceof Error ? error.message : "Unable to record this answer.",
+      });
+    } finally {
+      setQuestionBusy(false);
     }
   }
 
@@ -1347,6 +1418,49 @@ export function DigitalTwin({
             </div>
           ) : <p className="twin-variant-empty">No comparison bundle has been frozen for this slate and mode.</p>}
           {variantMessage && <p className={`twin-variant-message ${variantMessage.tone}`} aria-live="polite">{variantMessage.text}</p>}
+        </article>
+
+        <article className="twin-question-lab">
+          <div className="twin-variant-head">
+            <div><span>LEARN-002 · targeted judgment</span><h3>Questions worth answering</h3><p>The versioned VOI policy asks at most five questions when model uncertainty is large or an approved human view materially disagrees. Every answer, including no change, is retained.</p></div>
+            <button type="button" onClick={findAgentQuestions} disabled={questionBusy || !variantSets[0]}>{questionBusy ? "Working…" : "Find high-value questions"}</button>
+          </div>
+          {!variantSets[0] ? (
+            <p className="twin-variant-empty">Freeze a Model × Human × Combined bundle first so each question has exact, replayable evidence.</p>
+          ) : agentQuestions.length > 0 ? (
+            <div className="twin-question-list">
+              {agentQuestions.map((question) => {
+                const p10 = questionContextNumber(question, "projection_p10");
+                const p90 = questionContextNumber(question, "projection_p90");
+                const answerChoices: Array<{ value: AgentQuestionAnswer; label: string }> = question.trigger_type === "model_human_disagreement"
+                  ? [
+                    { value: "support_model", label: "Use model view" },
+                    { value: "support_human", label: "Keep human view" },
+                    { value: "no_change", label: "No change" },
+                  ]
+                  : [
+                    { value: "lean_upside", label: "Lean upside" },
+                    { value: "lean_downside", label: "Lean downside" },
+                    { value: "no_change", label: "No change" },
+                  ];
+                return (
+                  <section className={`twin-question-card ${question.status}`} key={question.question_id}>
+                    <div className="twin-question-meta"><span>{question.trigger_type.replaceAll("_", " ")}</span><b>VOI {question.value_of_information_score.toFixed(0)}</b></div>
+                    <h4>{question.question_text}</h4>
+                    {p10 != null && p90 != null && <p>Model range {p10.toFixed(2)}–{p90.toFixed(2)} points · priority {question.priority}/5</p>}
+                    {question.status === "pending" ? (
+                      <div className="twin-question-actions">
+                        {answerChoices.map((choice) => <button type="button" key={choice.value} onClick={() => recordAgentAnswer(question, choice.value)} disabled={questionBusy}>{choice.label}</button>)}
+                      </div>
+                    ) : (
+                      <div className="twin-question-receipt"><strong>{question.answer?.replaceAll("_", " ")}</strong><span>{Object.keys(question.resulting_modifier).length ? "Proposed modifier recorded, not applied" : "No modifier created"}</span></div>
+                    )}
+                  </section>
+                );
+              })}
+            </div>
+          ) : <p className="twin-variant-empty">Run the VOI policy after freezing the latest bundle. An empty result means the slate has no question important enough to interrupt you.</p>}
+          {questionMessage && <p className={`twin-variant-message ${questionMessage.tone}`} aria-live="polite">{questionMessage.text}</p>}
         </article>
       </section>
     </main>

@@ -7,7 +7,9 @@ export const SHOWDOWN_CASH_QB_CAPTAIN_STACK_STRATEGY_ID =
   "showdown_cash_qb_captain_stack_v1";
 export const SHOWDOWN_GPP_BASELINE_STRATEGY_ID = "showdown_gpp_baseline_v1";
 export const SHOWDOWN_GPP_CAPTAIN_INFORMED_STRATEGY_ID =
-  "showdown_gpp_captain_informed_v2";
+  "showdown_gpp_portfolio_v3";
+export const SHOWDOWN_SINGLE_ENTRY_GPP_STRATEGY_ID = "showdown_single_entry_gpp";
+export const SHOWDOWN_SINGLE_ENTRY_PORTFOLIO_STRATEGY_ID = "showdown_single_entry_portfolio";
 
 export type ClassicGppStrategyId =
   | typeof CLASSIC_GPP_BASELINE_STRATEGY_ID

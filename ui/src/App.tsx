@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { OptimizerControlComparison } from "./OptimizerControlComparison";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 import { AppShell, type ViewMode } from "./AppShell";
 import { DailyNewsBrief } from "./DailyNewsBrief";
@@ -20,6 +21,9 @@ import {
 import {
   CLASSIC_CONTEST_STRATEGIES,
   CLASSIC_LARGE_GPP_STRATEGY_ID,
+  SHOWDOWN_GPP_CAPTAIN_INFORMED_STRATEGY_ID,
+  SHOWDOWN_SINGLE_ENTRY_GPP_STRATEGY_ID,
+  SHOWDOWN_SINGLE_ENTRY_PORTFOLIO_STRATEGY_ID,
   optimizerStrategyId,
   type ClassicContestStrategyId,
 } from "./optimizerStrategy";
@@ -27,25 +31,31 @@ import {
   contextReadinessLabel,
   individualCeilingSummary,
 } from "./optimizerPresentation";
+import { downloadOptimizerReport } from "./optimizerReport";
 import type {
   LoadSummary,
   DataQualityHistoryResponse,
   SlateLoadResponse,
   OptimizerResponse,
+  ContestPreview,
   SlateReadinessGateKey,
   SlateReadinessResponse,
   SimulationResponse,
+  SlateLearningReport,
 } from "./api";
 import {
   analyzePastSlate,
   buildFeatures,
   createWeeklyRun,
+  downloadOptimizerLineups,
   fetchCurrentContext,
   fetchLatestPredictions,
+  generateSlateLearningReport,
   fetchOperationalJobs,
   fetchWeeklyRuns,
   fetchDataQualityHistory,
   fetchOptimizerResults,
+  previewOptimizerContests,
   fetchSlateReadiness,
   fetchSymbolicBacktest,
   fetchSymbolicRules,
@@ -303,13 +313,49 @@ function App() {
     });
   }, [activeContextKey]);
   const [slateReadiness, setSlateReadiness] = useState<SlateReadinessResponse | null>(null);
+  const [lineupExportPending, setLineupExportPending] = useState(false);
+  const [lineupExportError, setLineupExportError] = useState<string | null>(null);
   const [dataQualityHistory, setDataQualityHistory] = useState<DataQualityHistoryResponse | null>(null);
   const [dataQualityLoading, setDataQualityLoading] = useState(false);
   const [dataQualityError, setDataQualityError] = useState<string | null>(null);
   const [numLineups, setNumLineups] = useState(20);
   const [maxExposure, setMaxExposure] = useState(60);
+  const [captainMaxExposure, setCaptainMaxExposure] = useState(60);
+  const captainMaxExposureInputRef = useRef<HTMLInputElement>(null);
+  const [coreMaxExposure, setCoreMaxExposure] = useState(80);
+  const [startingQbMaxExposure, setStartingQbMaxExposure] = useState(100);
+  const [cheapPuntMaxExposure, setCheapPuntMaxExposure] = useState(40);
   const [contestFormat, setContestFormat] = useState<"classic" | "showdown">("classic");
   const [optimizerObjective, setOptimizerObjective] = useState<"cash" | "gpp">("gpp");
+  const [showdownGppStrategy, setShowdownGppStrategy] = useState(SHOWDOWN_GPP_CAPTAIN_INFORMED_STRATEGY_ID);
+  const [singleEntryContestUrls, setSingleEntryContestUrls] = useState("");
+  const [singleEntryContestMode, setSingleEntryContestMode] = useState<"auto" | "enter_all">("auto");
+  const [singleEntryBudget, setSingleEntryBudget] = useState("");
+  const [singleEntryMaximum, setSingleEntryMaximum] = useState("");
+  const [singleEntryManual, setSingleEntryManual] = useState("");
+  const [contestPreview, setContestPreview] = useState<ContestPreview | null>(null);
+  const [contestPreviewError, setContestPreviewError] = useState<string | null>(null);
+  const [contestPreviewPending, setContestPreviewPending] = useState(false);
+  const singleEntryContestParams = () => {
+    const urls = singleEntryContestUrls.split(/\r?\n/).map((url) => url.trim()).filter(Boolean);
+    if (!urls.length) throw new Error("Paste at least one DraftKings single-entry contest URL.");
+    let manual: Array<Record<string, unknown>> = [];
+    if (singleEntryManual.trim()) {
+      const parsed = JSON.parse(singleEntryManual);
+      if (!Array.isArray(parsed)) throw new Error("Manual contest metadata must be a JSON array.");
+      manual = parsed;
+    }
+    const budget = singleEntryBudget.trim() ? Number(singleEntryBudget) : undefined;
+    const maximum = singleEntryMaximum.trim() ? Number(singleEntryMaximum) : undefined;
+    if (budget !== undefined && (!Number.isFinite(budget) || budget <= 0)) throw new Error("Maximum budget must be positive.");
+    if (maximum !== undefined && (!Number.isInteger(maximum) || maximum < 1)) throw new Error("Maximum contests must be a positive integer.");
+    return {
+      contest_urls: urls, contest_selection: singleEntryContestMode,
+      manual_contest_metadata: manual,
+      ...(budget !== undefined ? { maximum_total_entry_budget: budget } : {}),
+      ...(maximum !== undefined ? { maximum_contests_to_enter: maximum } : {}),
+    };
+  };
   const [classicContestStrategy, setClassicContestStrategy] =
     useState<ClassicContestStrategyId>(CLASSIC_LARGE_GPP_STRATEGY_ID);
   const [minimumUniqueness, setMinimumUniqueness] = useState(2);
@@ -324,6 +370,9 @@ function App() {
     contestFormat === "classic"
       ? selectedClassicStrategy.objective
       : optimizerObjective;
+  const selectedOptimizerStrategy = contestFormat === "showdown" && optimizerObjective === "gpp"
+    ? showdownGppStrategy
+    : optimizerStrategyId(contestFormat, effectiveOptimizerObjective, classicContestStrategy);
   const [predictionStatuses, setPredictionStatuses] = useState<Record<string, PredictionOperationStatus>>({});
   const predictionStatus = predictionStatuses[activeContextKey] ?? null;
   const setPredictionStatus = useCallback((status: PredictionOperationStatus | null) => {
@@ -382,6 +431,11 @@ function App() {
   const [analysisRows, setAnalysisRows] = useState<
     { player_display_name: string; roster_position?: string | null; count: number; pct: number }[]
   >([]);
+  const [learningEntryUser, setLearningEntryUser] = useState<string>(
+    () => window.localStorage.getItem("dfs-learning-entry-user") ?? "",
+  );
+  const [learningReport, setLearningReport] = useState<SlateLearningReport | null>(null);
+  const [learningError, setLearningError] = useState<string | null>(null);
   const ownershipHasCompletePayoutTiers = ownershipEvidence.payoutTiers.length > 0
     && ownershipEvidence.payoutTiers.every((tier) => (
       tier.minRank.trim()
@@ -442,6 +496,7 @@ function App() {
   const [excludePlayers, setExcludePlayers] = useState<string>("");
   const [excludePlayerIds, setExcludePlayerIds] = useState<string>("");
   const [lockedPlayerIds, setLockedPlayerIds] = useState<string>("");
+  const [flexOnlyPlayers, setFlexOnlyPlayers] = useState<string>("");
   const [topLineups, setTopLineups] = useState<
     {
       rank: number;
@@ -657,6 +712,9 @@ function App() {
   }, [viewMode, season, week, slate]);
 
   const launchWeeklyRun = async () => {
+    const requestedCaptainMaxExposure = Number.isFinite(captainMaxExposureInputRef.current?.valueAsNumber)
+      ? Number(captainMaxExposureInputRef.current?.valueAsNumber)
+      : captainMaxExposure;
     setPendingAction("Queueing weekly run...");
     setWeeklyRunError(null);
     try {
@@ -667,11 +725,18 @@ function App() {
         draftkings_directory: weeklyDirectory.trim() || undefined,
         contest_format: contestFormat,
         objective: effectiveOptimizerObjective,
-        strategy: optimizerStrategyId(contestFormat, effectiveOptimizerObjective, classicContestStrategy),
+        strategy: selectedOptimizerStrategy,
         num_simulations: 1000,
         optimizer_params: {
-          num_lineups: numLineups,
-          max_exposure: maxExposure / 100,
+          num_lineups: selectedOptimizerStrategy === SHOWDOWN_SINGLE_ENTRY_GPP_STRATEGY_ID ? 1 : selectedOptimizerStrategy === SHOWDOWN_SINGLE_ENTRY_PORTFOLIO_STRATEGY_ID ? singleEntryContestUrls.split(/\r?\n/).filter((url) => url.trim()).length : numLineups,
+          ...(selectedOptimizerStrategy === SHOWDOWN_SINGLE_ENTRY_PORTFOLIO_STRATEGY_ID ? singleEntryContestParams() : {}),
+          max_exposure: selectedOptimizerStrategy === SHOWDOWN_SINGLE_ENTRY_GPP_STRATEGY_ID || selectedOptimizerStrategy === SHOWDOWN_SINGLE_ENTRY_PORTFOLIO_STRATEGY_ID ? 1 : maxExposure / 100,
+          ...(contestFormat === "showdown" && effectiveOptimizerObjective === "gpp" && showdownGppStrategy === SHOWDOWN_GPP_CAPTAIN_INFORMED_STRATEGY_ID ? {
+            captain_max_exposure: requestedCaptainMaxExposure / 100,
+            core_player_max_exposure: coreMaxExposure / 100,
+            starting_qb_max_exposure: startingQbMaxExposure / 100,
+            cheap_punt_max_exposure: cheapPuntMaxExposure / 100,
+          } : {}),
           enforce_single_te: enforceSingleTE,
           avoid_dst_opponents: avoidDstOpponents,
           ...(contestFormat === "classic" && classicContestStrategy === CLASSIC_LARGE_GPP_STRATEGY_ID
@@ -693,6 +758,14 @@ function App() {
             .split(",")
             .map((value) => value.trim())
             .filter(Boolean),
+          ...(contestFormat === "showdown"
+            ? {
+                flex_only_players: flexOnlyPlayers
+                  .split(",")
+                  .map((value) => value.trim())
+                  .filter(Boolean),
+              }
+            : {}),
         },
         template_id: weeklyTemplateId.trim() || undefined,
         portfolio_name: `${season} W${week} ${slate}`,
@@ -817,6 +890,9 @@ function App() {
   };
 
   const runOptimizerJob = async () => {
+    const requestedCaptainMaxExposure = Number.isFinite(captainMaxExposureInputRef.current?.valueAsNumber)
+      ? Number(captainMaxExposureInputRef.current?.valueAsNumber)
+      : captainMaxExposure;
     setOptimizerStatus(null); // clear prior results while new job runs
     setError(null);
     setPendingAction("Checking slate readiness...");
@@ -832,13 +908,20 @@ function App() {
         season,
         week,
         slate,
-        strategy: optimizerStrategyId(contestFormat, effectiveOptimizerObjective, classicContestStrategy),
+        strategy: selectedOptimizerStrategy,
         contest_format: contestFormat,
         objective: effectiveOptimizerObjective,
         projection_run_id: activeRunSelection.projectionRunId,
         params: {
-          num_lineups: numLineups,
-          max_exposure: maxExposure / 100,
+          num_lineups: selectedOptimizerStrategy === SHOWDOWN_SINGLE_ENTRY_GPP_STRATEGY_ID ? 1 : selectedOptimizerStrategy === SHOWDOWN_SINGLE_ENTRY_PORTFOLIO_STRATEGY_ID ? singleEntryContestUrls.split(/\r?\n/).filter((url) => url.trim()).length : numLineups,
+          ...(selectedOptimizerStrategy === SHOWDOWN_SINGLE_ENTRY_PORTFOLIO_STRATEGY_ID ? singleEntryContestParams() : {}),
+          max_exposure: selectedOptimizerStrategy === SHOWDOWN_SINGLE_ENTRY_GPP_STRATEGY_ID || selectedOptimizerStrategy === SHOWDOWN_SINGLE_ENTRY_PORTFOLIO_STRATEGY_ID ? 1 : maxExposure / 100,
+          ...(contestFormat === "showdown" && effectiveOptimizerObjective === "gpp" && showdownGppStrategy === SHOWDOWN_GPP_CAPTAIN_INFORMED_STRATEGY_ID ? {
+            captain_max_exposure: requestedCaptainMaxExposure / 100,
+            core_player_max_exposure: coreMaxExposure / 100,
+            starting_qb_max_exposure: startingQbMaxExposure / 100,
+            cheap_punt_max_exposure: cheapPuntMaxExposure / 100,
+          } : {}),
           enforce_single_te: enforceSingleTE,
           avoid_dst_opponents: avoidDstOpponents,
           ...(contestFormat === "classic" && classicContestStrategy === CLASSIC_LARGE_GPP_STRATEGY_ID
@@ -860,6 +943,14 @@ function App() {
             .split(",")
             .map((value) => value.trim())
             .filter(Boolean),
+          ...(contestFormat === "showdown"
+            ? {
+                flex_only_players: flexOnlyPlayers
+                  .split(",")
+                  .map((value) => value.trim())
+                  .filter(Boolean),
+              }
+            : {}),
         },
       });
       setOptimizerStatus(response);
@@ -1219,6 +1310,26 @@ function App() {
         source_file_id: resp.source_file_id,
         evidence_posture: ownershipEvidencePosture,
       });
+      const entryUser = learningEntryUser.trim();
+      if (entryUser) {
+        window.localStorage.setItem("dfs-learning-entry-user", entryUser);
+        setPendingAction("Refreshing post-slate learning report...");
+        try {
+          setLearningReport(await generateSlateLearningReport({
+            season,
+            week,
+            slate,
+            entry_user: entryUser,
+          }));
+          setLearningError(null);
+        } catch (learningFailure) {
+          setLearningError(
+            learningFailure instanceof Error
+              ? learningFailure.message
+              : String(learningFailure),
+          );
+        }
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setOwnershipError(msg);
@@ -1257,6 +1368,28 @@ function App() {
       setAnalysisRows([]);
       setBucketStats([]);
       setTopLineups([]);
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
+  const runSlateLearningReport = async () => {
+    const entryUser = learningEntryUser.trim();
+    if (!entryUser) return;
+    setLearningError(null);
+    setPendingAction("Building post-slate learning report...");
+    try {
+      window.localStorage.setItem("dfs-learning-entry-user", entryUser);
+      const report = await generateSlateLearningReport({
+        season,
+        week,
+        slate,
+        entry_user: entryUser,
+      });
+      setLearningReport(report);
+    } catch (err) {
+      setLearningError(err instanceof Error ? err.message : String(err));
+      setLearningReport(null);
     } finally {
       setPendingAction(null);
     }
@@ -1809,6 +1942,20 @@ function App() {
               </button>
               <button onClick={runOwnershipPredict}>Run Ownership Model</button>
             </div>
+            {ownershipError && <div className="error inline-error">{ownershipError}</div>}
+            {ownershipStatus && (
+              <div className="status-text">
+                {ownershipStatus.message} ({ownershipStatus.rows_written} rows)
+                {ownershipStatus.contest_id && (
+                  <small>
+                    Contest {ownershipStatus.contest_id.slice(0, 18)} · {ownershipStatus.evidence_posture}
+                    {ownershipStatus.target_persisted ? " · target evidence persisted" : " · target persistence unavailable"}
+                  </small>
+                )}
+                {ownershipMetricSummary(ownershipStatus) && <small>{ownershipMetricSummary(ownershipStatus)}</small>}
+                {ownershipStatus.ownership_run_id && <small>Run {ownershipStatus.ownership_run_id.slice(0, 8)} · target lineage {ownershipStatus.target_persisted ? "persisted" : "unavailable"}</small>}
+              </div>
+            )}
             <div className="button-row">
               <label>
                 Top N lineups
@@ -1822,6 +1969,119 @@ function App() {
               </label>
               <button onClick={runPastSlateAnalysis}>Analyze Past Slate (Top N)</button>
             </div>
+            <div className="form-row column">
+              <label>
+                DraftKings username
+                <input
+                  className="full-width"
+                  type="text"
+                  value={learningEntryUser}
+                  onChange={(event) => setLearningEntryUser(event.target.value)}
+                  placeholder="Username used in contest standings"
+                />
+              </label>
+              <button
+                onClick={runSlateLearningReport}
+                disabled={!learningEntryUser.trim() || pendingAction !== null}
+              >
+                Build Post-Slate Learning Report
+              </button>
+            </div>
+            {learningError && <div className="error inline-error">{learningError}</div>}
+            {learningReport && (
+              <div className="status-card">
+                <strong>
+                  Learning report: {learningReport.status} · {learningReport.summary.entries} entries
+                </strong>
+                <p>
+                  {learningReport.summary.matched_optimizer_entries} optimizer matches ·{" "}
+                  {learningReport.summary.entries_with_opt_007} OPT-007 controls ·{" "}
+                  {learningReport.summary.duplicate_entries} duplicate entries
+                </p>
+                <p>
+                  Projection MAE: {learningReport.summary.projection_mae == null
+                    ? "Unavailable"
+                    : learningReport.summary.projection_mae.toFixed(2)} ·{" "}
+                  {learningReport.missing_evidence.length} missing-evidence notices
+                </p>
+                {learningReport.portfolio_analysis.captain_exposure?.length ? (
+                  <p>
+                    Captain exposure: {learningReport.portfolio_analysis.captain_exposure
+                      .map((row) => `${row.player_display_name} ${row.pct.toFixed(0)}%`)
+                      .join(" · ")}
+                  </p>
+                ) : null}
+                <details className="learning-interpretation" open>
+                  <summary>How to read this report each week</summary>
+                  <ol>
+                    <li><strong>Check evidence first.</strong> Partial means some lineage, fee, payout, belief, or control evidence is missing; it does not mean the slate performed poorly.</li>
+                    <li><strong>Read finishes as percentiles.</strong> A smaller top percentage is better. Compare similar contest formats and field sizes before drawing a conclusion.</li>
+                    <li><strong>Track projection MAE over several slates.</strong> It is the average player-level miss in DraftKings points; lower is better, but one slate is noisy.</li>
+                    <li><strong>Check optimizer matches.</strong> Only matched entries can explain which projection, rules, controls, and saved lineup produced the result.</li>
+                    <li><strong>Review construction.</strong> Duplicate entries and concentrated captain exposure identify portfolio decisions that can be improved independently of player outcomes.</li>
+                  </ol>
+                </details>
+                <div className="learning-outcome-summary">
+                  <strong>Human learning</strong>
+                  <p>
+                    Belief theses: {learningReport.learning_outcomes.beliefs.supported} supported · {learningReport.learning_outcomes.beliefs.contradicted} contradicted · {learningReport.learning_outcomes.beliefs.theses_scored} scored
+                  </p>
+                  <p>
+                    Recorded interventions: {learningReport.learning_outcomes.beliefs.helped + learningReport.learning_outcomes.agent_answers.helped} helped · {learningReport.learning_outcomes.beliefs.hurt + learningReport.learning_outcomes.agent_answers.hurt} hurt · {learningReport.learning_outcomes.beliefs.no_measurable_effect + learningReport.learning_outcomes.agent_answers.no_measurable_effect} no measurable effect
+                  </p>
+                  {learningReport.learning_outcomes.beliefs.total === 0 && learningReport.learning_outcomes.agent_answers.total === 0 && (
+                    <small>No pre-lock beliefs or LEARN-002 answers were recorded for this slate, so human judgment cannot be scored yet.</small>
+                  )}
+                </div>
+                {(learningReport.beliefs.length > 0 || learningReport.agent_questions.length > 0) && (
+                  <details className="learning-decision-results">
+                    <summary>Review belief and question outcomes</summary>
+                    <ul>
+                      {learningReport.beliefs.map((belief, index) => (
+                        <li key={String(belief.belief_version_id ?? index)}>
+                          Belief · {String(belief.thought_text ?? belief.subject_id ?? "Unknown subject")} · {String(belief.scope_type ?? "unknown")} · confidence {String(belief.confidence ?? "—")}% · thesis {String(belief.evaluation ?? "unscored").replaceAll("_", " ")} · intervention {String(belief.outcome_effect ?? "unscored").replaceAll("_", " ")}
+                        </li>
+                      ))}
+                      {learningReport.agent_questions.map((question, index) => (
+                        <li key={String(question.question_id ?? index)}>
+                          Question · {String(question.subject_label ?? question.subject_player_id ?? "Unknown subject")} · {String(question.answer ?? "unanswered").replaceAll("_", " ")} · {String(question.outcome_effect ?? "unscored").replaceAll("_", " ")}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+                {learningReport.entries.length > 0 && (
+                  <details className="learning-entry-results">
+                    <summary>Review entry finishes</summary>
+                    <ul>
+                      {learningReport.entries.map((entry, index) => {
+                        const rank = typeof entry.rank === "number" ? entry.rank : null;
+                        const fieldSize = typeof entry.field_size === "number" ? entry.field_size : null;
+                        const topPercent = typeof entry.top_percent === "number" ? entry.top_percent : null;
+                        return (
+                          <li key={String(entry.entry_id ?? index)}>
+                            {rank != null && fieldSize != null ? `${rank.toLocaleString()} / ${fieldSize.toLocaleString()}` : "Rank unavailable"}
+                            {topPercent != null ? ` · top ${topPercent.toFixed(2)}%` : ""}
+                            {entry.lineup_match_basis ? ` · ${String(entry.lineup_match_basis).replaceAll("_", " ")}` : ""}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </details>
+                )}
+                {learningReport.missing_evidence.length > 0 && (
+                  <details>
+                    <summary>Review missing evidence</summary>
+                    <ul>
+                      {learningReport.missing_evidence.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+                <small>Report {learningReport.report_id}</small>
+              </div>
+            )}
           </div>
           <div className="form-row">
             <label>
@@ -1839,20 +2099,6 @@ function App() {
           {featureStatus && (
             <div className="status-text">
               {featureStatus.message}
-            </div>
-          )}
-          {ownershipError && <div className="error inline-error">{ownershipError}</div>}
-          {ownershipStatus && (
-            <div className="status-text">
-              {ownershipStatus.message} ({ownershipStatus.rows_written} rows)
-              {ownershipStatus.contest_id && (
-                <small>
-                  Contest {ownershipStatus.contest_id.slice(0, 18)} · {ownershipStatus.evidence_posture}
-                  {ownershipStatus.target_persisted ? " · target evidence persisted" : " · target persistence unavailable"}
-                </small>
-              )}
-              {ownershipMetricSummary(ownershipStatus) && <small>{ownershipMetricSummary(ownershipStatus)}</small>}
-              {ownershipStatus.ownership_run_id && <small>Run {ownershipStatus.ownership_run_id.slice(0, 8)} · target lineage {ownershipStatus.target_persisted ? "persisted" : "unavailable"}</small>}
             </div>
           )}
           {analysisStatus && (
@@ -2204,7 +2450,7 @@ function App() {
               <p>Shape lineup volume, exposure, format, and objective before the build.</p>
             </div>
             <div className="form-row">
-              <label>
+              {!(contestFormat === "showdown" && optimizerObjective === "gpp" && showdownGppStrategy !== SHOWDOWN_GPP_CAPTAIN_INFORMED_STRATEGY_ID) ? <label>
                 Lineups
                 <input
                   type="number"
@@ -2213,8 +2459,8 @@ function App() {
                   value={numLineups}
                   onChange={(event) => setNumLineups(Number(event.target.value))}
                 />
-              </label>
-              <label>
+              </label> : <p>{showdownGppStrategy === SHOWDOWN_SINGLE_ENTRY_GPP_STRATEGY_ID ? "1 single-entry contest" : "Contest count selected from pasted single-entry contests"}</p>}
+              {contestFormat === "classic" && <label>
                 Max Exposure (%)
                 <input
                   type="number"
@@ -2223,12 +2469,16 @@ function App() {
                   value={maxExposure}
                   onChange={(event) => setMaxExposure(Number(event.target.value))}
                 />
-              </label>
+              </label>}
               <label>
                 Format
                 <select
                   value={contestFormat}
-                  onChange={(event) => setContestFormat(event.target.value as "classic" | "showdown")}
+                  onChange={(event) => {
+                    const next = event.target.value as "classic" | "showdown";
+                    setContestFormat(next);
+                    if (next === "showdown") setNumLineups(5);
+                  }}
                 >
                   <option value="classic">Classic</option>
                   <option value="showdown">Showdown</option>
@@ -2247,6 +2497,53 @@ function App() {
                 </label>
               )}
             </div>
+            {contestFormat === "showdown" && optimizerObjective === "gpp" && (
+              <div className="form-row">
+                <label>Showdown GPP strategy
+                  <select value={showdownGppStrategy} onChange={(event) => setShowdownGppStrategy(event.target.value)}>
+                    <option value={SHOWDOWN_GPP_CAPTAIN_INFORMED_STRATEGY_ID}>Multi-entry GPP portfolio</option>
+                    <option value={SHOWDOWN_SINGLE_ENTRY_GPP_STRATEGY_ID}>Single-entry GPP</option>
+                    <option value={SHOWDOWN_SINGLE_ENTRY_PORTFOLIO_STRATEGY_ID}>Single-entry contest portfolio</option>
+                  </select>
+                </label>
+              </div>
+            )}
+            {contestFormat === "showdown" && optimizerObjective === "gpp" && showdownGppStrategy === SHOWDOWN_SINGLE_ENTRY_PORTFOLIO_STRATEGY_ID && (
+              <div className="status-card nested-card">
+                <h3>Available single-entry contests</h3>
+                <label>DraftKings contest URLs, one per line
+                  <textarea className="full-width" rows={4} value={singleEntryContestUrls} onChange={(event) => { setSingleEntryContestUrls(event.target.value); setContestPreview(null); }} placeholder="https://www.draftkings.com/draft/contest/195677817" />
+                </label>
+                <div className="form-row">
+                  <label>Contest selection
+                    <select value={singleEntryContestMode} onChange={(event) => setSingleEntryContestMode(event.target.value as "auto" | "enter_all")}>
+                      <option value="auto">Auto</option><option value="enter_all">Enter all</option>
+                    </select>
+                  </label>
+                  <label>Maximum total entry budget ($, optional)<input type="number" min={0.01} step={0.01} value={singleEntryBudget} onChange={(event) => setSingleEntryBudget(event.target.value)} /></label>
+                  <label>Maximum contests to enter (optional)<input type="number" min={1} step={1} value={singleEntryMaximum} onChange={(event) => setSingleEntryMaximum(event.target.value)} /></label>
+                </div>
+                <button disabled={contestPreviewPending} onClick={async () => {
+                  setContestPreviewPending(true); setContestPreviewError(null);
+                  try {
+                    const params = singleEntryContestParams();
+                    setContestPreview(await previewOptimizerContests({ urls: params.contest_urls, manual_contest_metadata: params.manual_contest_metadata }));
+                  } catch (error) { setContestPreviewError(error instanceof Error ? error.message : String(error)); }
+                  finally { setContestPreviewPending(false); }
+                }}>{contestPreviewPending ? "Refreshing contests…" : "Preview / refresh contest details"}</button>
+                {contestPreviewError && <p role="alert">{contestPreviewError}</p>}
+                {contestPreview && <div className="table-wrap"><p>Refreshed {new Date(contestPreview.refreshed_at).toLocaleString()}. Counts and potential overlay can change before lock.</p><table><thead><tr><th>Contest</th><th>Slate</th><th>Single entry</th><th>Entry</th><th>Filled / capacity</th><th>Pool</th><th>Paid</th><th>Lock</th><th>Payout tiers</th><th>Missing fields / error</th></tr></thead><tbody>{contestPreview.contests.map((row) => <tr key={String(row.contest_id)}><td>{String(row.name ?? row.contest_id)}</td><td>{String(row.slate ?? "—")}</td><td>{row.single_entry === true ? "Yes" : row.single_entry === false ? "No" : "—"}</td><td>{row.entry_fee == null ? "—" : `$${row.entry_fee}`}</td><td>{String(row.current_entries ?? "—")} / {String(row.capacity ?? "—")}</td><td>{row.prize_pool == null ? "—" : `$${row.prize_pool}`}</td><td>{String(row.paid_places ?? "—")}</td><td>{String(row.lock_time ?? "—")}</td><td>{(row.payout_ladder as unknown[] | undefined)?.length ?? "—"}</td><td>{[...(row.unavailable_fields as string[] ?? []), ...(row.error ? [String(row.error)] : [])].join(", ") || "None"}</td></tr>)}</tbody></table>{contestPreview.contests.map((row) => <details key={`${row.contest_id}-payouts`}><summary>{String(row.name ?? row.contest_id)} payout ladder</summary><table><thead><tr><th>Ranks</th><th>Cash prize</th></tr></thead><tbody>{((row.payout_ladder as Array<Record<string, unknown>> | undefined) ?? []).map((tier, index) => <tr key={index}><td>{String(tier.from)}–{String(tier.to)}</td><td>{tier.cash == null ? "Unavailable" : `$${tier.cash}`}</td></tr>)}</tbody></table></details>)}</div>}
+                <details><summary>Manual metadata for unavailable fields</summary><p>JSON array keyed by contest_id. The preview lists exactly which fields need correction. Refresh reruns the source lookup.</p><textarea className="full-width" rows={4} value={singleEntryManual} onChange={(event) => setSingleEntryManual(event.target.value)} placeholder='[{"contest_id":"195677817","entry_fee":5}]' /></details>
+              </div>
+            )}
+            {contestFormat === "showdown" && optimizerObjective === "gpp" && showdownGppStrategy === SHOWDOWN_GPP_CAPTAIN_INFORMED_STRATEGY_ID && (
+              <div className="form-row">
+                <label>CPT max (%)<input ref={captainMaxExposureInputRef} type="number" min={1} max={100} value={captainMaxExposure} onChange={(event) => setCaptainMaxExposure(Number(event.target.value))} /></label>
+                <label>Core max (%)<input type="number" min={1} max={100} value={coreMaxExposure} onChange={(event) => setCoreMaxExposure(Number(event.target.value))} /></label>
+                <label>Starting QB max (%)<input type="number" min={1} max={100} value={startingQbMaxExposure} onChange={(event) => setStartingQbMaxExposure(Number(event.target.value))} /></label>
+                <label>Cheap punt max (%)<input type="number" min={1} max={100} value={cheapPuntMaxExposure} onChange={(event) => setCheapPuntMaxExposure(Number(event.target.value))} /></label>
+              </div>
+            )}
             {contestFormat === "classic" && (
               <div className="form-row">
                 <label>
@@ -2366,6 +2663,17 @@ function App() {
                   placeholder="Required in every lineup"
                 />
               </label>
+              {contestFormat === "showdown" && (
+                <label className="text-label">
+                  FLEX-only players (comma-separated names)
+                  <input
+                    type="text"
+                    value={flexOnlyPlayers}
+                    onChange={(event) => setFlexOnlyPlayers(event.target.value)}
+                    placeholder="e.g. Malik Nabers"
+                  />
+                </label>
+              )}
             </div>
             <div className="button-row">
               <button className="operations-primary-action" onClick={runOptimizerJob}>Run Optimizer</button>
@@ -2478,6 +2786,103 @@ function App() {
                 <p>{optimizerStatus.strategy_config.description}</p>
               )}
               <p>{optimizerStatus.message}</p>
+              {Array.isArray(optimizerStatus.results) && (() => {
+                const report = (optimizerStatus.results[0] as any[])?.[0]?.single_entry_report;
+                if (!report) return null;
+                const comparisonRows = Array.from(new Map(
+                  [...(report.candidates ?? []), ...(report.selected_candidates ?? []),
+                    ...Object.values(report.top_alternates ?? {}).filter(Boolean)]
+                    .map((candidate: any) => [candidate.rank, candidate])
+                ).values()).sort((left: any, right: any) => left.rank - right.rank) as any[];
+                const comparisons = report.portfolio_comparisons ?? {};
+                const contestSelection = report.contest_selection;
+                const selectedComparison = report.selected_portfolio_comparison;
+                const formatDelta = (value: number) => `${value >= 0 ? "+" : ""}${value.toFixed(3)}`;
+                return <div>
+                  <h4>Recommended portfolio: {report.recommended_structure ?? "A"}</h4>
+                  <p>Heuristic selection. Payout probabilities await field and contest simulation.</p>
+                  {contestSelection && <div>
+                    <p>Contest selection: {contestSelection.mode === "auto" ? "Auto" : "Enter all"} · {contestSelection.selected_count} of {contestSelection.available_count} contests · ${Number(contestSelection.total_entry_fees).toFixed(2)} total entry fees. {contestSelection.note}</p>
+                    <p>Score weights: rake 30%, overlay near lock 15%, field size 15%, paid places 15%, payout flatness 15%, entry fee 10%. Auto cutoff after the first contest: {contestSelection.auto_score_cutoff_after_first.toFixed(2)}.</p>
+                    <div className="table-wrap"><table><thead><tr><th>Selected</th><th>Contest</th><th>Score</th><th>Entry</th><th>Field</th><th>Paid</th><th>Rake</th><th>Potential overlay</th><th>Overlay scored</th><th>Flatness</th><th>Fee score</th></tr></thead><tbody>{contestSelection.ranked_contests.map((contest: any) => <tr key={contest.contest_id}>
+                      <td>{contestSelection.selected_contest_ids.includes(contest.contest_id) ? "Yes" : "No"}</td><td>{contest.name}</td><td>{contest.contest_score.toFixed(3)}</td><td>${contest.entry_fee}</td><td>{contest.capacity}</td><td>{contest.paid_places} ({(contest.contest_score_components.payout_percentage * 100).toFixed(1)}%)</td><td>{((1 - contest.contest_score_components.rake_score) * 100).toFixed(1)}%</td><td>{(contest.contest_score_components.potential_overlay * 100).toFixed(1)}%</td><td>{(contest.contest_score_components.overlay_score * 100).toFixed(1)}%</td><td>{contest.contest_score_components.payout_flatness.toFixed(2)}</td><td>{contest.contest_score_components.entry_fee_score.toFixed(2)}</td>
+                    </tr>)}</tbody></table></div>
+                  </div>}
+                  <p>Weights: mean {report.objective_weights.mean}, P90 {report.objective_weights.p90}, solver {report.objective_weights.solver}, correlation {report.objective_weights.correlation}, context {report.objective_weights.context}, chalk penalty {report.objective_weights.chalk_penalty}.</p>
+                  <p>{report.unique_lineups} unique lineups · {report.unique_captains} unique Captains · overlap: {report.pairwise_player_overlap.join(", ")} players</p>
+                  {report.evaluated_portfolio_count > 0 && <p>Compared {report.evaluated_portfolio_count} candidate combinations with repetition; the table shows the strongest in each structure.</p>}
+                  {comparisons.aaa && <p>Letters name distinct lineups within each row; candidate ranks identify the exact lineups.</p>}
+                  {selectedComparison && comparisons.aaa && <p>
+                    Versus A / A / A, this structure gains {formatDelta(selectedComparison.heuristic_delta_vs_aaa)} heuristic points:
+                    {" "}{selectedComparison.diversification_credit_total.toFixed(3)} diversification credit less {selectedComparison.quality_loss_total.toFixed(3)} quality loss.
+                    {comparisons.best_two_alternates && <> The best A / B / C scores {formatDelta(comparisons.best_two_alternates.heuristic_delta_vs_aaa)} versus A / A / A,
+                    {" "}{(selectedComparison.heuristic_delta_vs_aaa - comparisons.best_two_alternates.heuristic_delta_vs_aaa).toFixed(3)} below the recommendation.</>}
+                  </p>}
+                  {comparisons.aaa && <div className="table-wrap"><table><thead><tr>
+                    <th>Portfolio comparison</th><th>Candidate ranks</th><th>Quality loss</th><th>Diversification credit</th><th>Heuristic delta vs A / A / A</th>
+                  </tr></thead><tbody>{[
+                    comparisons.aaa, comparisons.best_one_alternate, comparisons.best_repeated_alternate,
+                    comparisons.best_two_alternates,
+                  ].filter(Boolean).map((comparison: any) => <tr key={comparison.structure}>
+                    <td>{comparison.structure}</td><td>{comparison.candidate_ranks.join(" / ")}</td>
+                    <td>{comparison.quality_loss_total.toFixed(3)}</td>
+                    <td>{comparison.diversification_credit_total.toFixed(3)}</td>
+                    <td>{formatDelta(comparison.heuristic_delta_vs_aaa)}</td>
+                  </tr>)}</tbody></table></div>}
+                  <ul>{report.assignments.map((assignment: any) =>
+                    <li key={assignment.contest}>{assignment.contest_name ?? `Contest ${assignment.contest}`} {assignment.contest_id ? `(${assignment.contest_id})` : ""}: candidate #{assignment.candidate_rank}. {assignment.reason}</li>
+                  )}</ul>
+                  {report.top_alternates && <div>
+                    <h4>Closest construction alternatives</h4>
+                    <p>“Materially different players” means at least {report.material_player_change_minimum} of six players change. These are candidates for review, not required portfolio slots.</p>
+                    <ul>{[
+                      ["Different Captain, same six players", report.top_alternates.different_captain_only],
+                      ["Different Captain and player combination", report.top_alternates.different_captain_material_players],
+                      ["Different game script", report.top_alternates.different_game_script],
+                    ].map(([label, candidate]: any) => <li key={label}>
+                      {label}: {candidate ? `#${candidate.rank} ${candidate.captain} · ${candidate.game_script.label} · quality loss ${candidate.quality_loss_vs_a.toFixed(3)} · benefit ${candidate.diversification_benefit_vs_a.toFixed(3)}` : "No qualifying candidate in the generated pool"}
+                    </li>)}</ul>
+                  </div>}
+                  <h4>Selected, top 10, and featured alternate lineups</h4>
+                  <div className="table-wrap"><table><thead><tr>
+                    <th>Rank</th><th>Captain</th><th>Single-entry score</th><th>Mean</th><th>Sum of P90s</th><th>Solver</th><th>Ownership</th><th>Relative chalk</th><th>Correlation</th><th>Context</th><th>Script</th><th>Shared with A</th><th>Overlap</th><th>Jaccard</th><th>Quality loss</th><th>Diversification benefit</th><th>Players</th>
+                  </tr></thead><tbody>{comparisonRows.map((candidate: any) => <tr key={candidate.rank}>
+                    <td>{candidate.rank}</td><td>{candidate.captain}</td><td>{candidate.single_entry_score.toFixed(3)}</td><td>{candidate.mean.toFixed(1)}</td><td>{candidate.p90.toFixed(1)}</td>
+                    <td>{candidate.solver_objective.toFixed(1)}</td><td>{candidate.ownership_sum.toFixed(1)}</td>
+                    <td>{candidate.relative_chalk == null ? "n/a" : candidate.relative_chalk.toFixed(1)}</td>
+                    <td>{candidate.correlation_score.toFixed(2)}</td><td>{candidate.context_score.toFixed(2)}</td>
+                    <td>{candidate.game_script.label}</td><td>{candidate.shared_players_with_a ?? "—"}/6</td>
+                    <td>{candidate.overlap_percentage_vs_a == null ? "—" : `${candidate.overlap_percentage_vs_a.toFixed(1)}%`}</td>
+                    <td>{candidate.jaccard_similarity_vs_a == null ? "—" : candidate.jaccard_similarity_vs_a.toFixed(3)}</td>
+                    <td>{candidate.quality_loss_vs_a.toFixed(3)}</td><td>{candidate.diversification_benefit_vs_a == null ? "—" : candidate.diversification_benefit_vs_a.toFixed(3)}</td>
+                    <td>{candidate.players.map((player: any) => `${player.slot} ${player.name}`).join(", ")}</td>
+                  </tr>)}</tbody></table></div>
+                </div>;
+              })()}
+              {optimizerStatus.status === "completed" && Array.isArray(optimizerStatus.results) && optimizerStatus.results.length > 0 && (
+                <div>
+                  <div className="button-row">
+                    <button disabled={lineupExportPending} onClick={async () => {
+                      setLineupExportPending(true);
+                      setLineupExportError(null);
+                      try {
+                        await downloadOptimizerLineups(optimizerStatus.job_id);
+                      } catch (error) {
+                        setLineupExportError(error instanceof Error ? error.message : String(error));
+                      } finally {
+                        setLineupExportPending(false);
+                      }
+                    }}>
+                      {lineupExportPending ? "Preparing download…" : `Download all ${optimizerStatus.results.length} lineups for DraftKings`}
+                    </button>
+                    <button onClick={() => downloadOptimizerReport(optimizerStatus, { season, week, slate })}>
+                      Download readable lineup report
+                    </button>
+                  </div>
+                  <p>No entry template required. Use DraftKings → Lineups → Upload Lineups. More than 500 lineups download as a ZIP of CSV files.</p>
+                  {lineupExportError && <p role="alert">{lineupExportError}</p>}
+                </div>
+              )}
               {optimizerStatus.player_pool && (
                 <>
                   {optimizerStatus.player_pool.context_scoring?.gpp_context_warning && (
@@ -2487,8 +2892,15 @@ function App() {
                   )}
                   <details className="optimizer-pool-details">
                     <summary>
-                      Eligible players: {optimizerStatus.player_pool.eligible_count ?? optimizerStatus.player_pool.initial_count} · Included candidates: {optimizerStatus.player_pool.included_count} · Excluded candidates: {optimizerStatus.player_pool.candidate_excluded_count ?? optimizerStatus.player_pool.excluded_count} · {contextReadinessLabel(optimizerStatus.player_pool.context_scoring)} · Pool warnings: {optimizerStatus.player_pool.warning_player_count ?? 0}
+                      Raw pool: {optimizerStatus.player_pool.raw_pool_count ?? optimizerStatus.player_pool.initial_count} → opportunity eligible: {optimizerStatus.player_pool.opportunity_eligible_count ?? optimizerStatus.player_pool.eligible_count ?? optimizerStatus.player_pool.initial_count} → optimizer eligible: {optimizerStatus.player_pool.optimizer_eligible_count ?? optimizerStatus.player_pool.included_count} · {contextReadinessLabel(optimizerStatus.player_pool.context_scoring)} · Pool warnings: {optimizerStatus.player_pool.warning_player_count ?? 0}
                     </summary>
+                    {optimizerStatus.player_pool.removal_reason_counts && Object.keys(optimizerStatus.player_pool.removal_reason_counts).length > 0 && (
+                      <p>
+                        Removals: {Object.entries(optimizerStatus.player_pool.removal_reason_counts)
+                          .map(([reason, count]) => `${reason.replaceAll("_", " ")} (${count})`)
+                          .join(" · ")}
+                      </p>
+                    )}
                     <button
                       type="button"
                       onClick={() => {
@@ -2541,9 +2953,13 @@ function App() {
                               </td>
                               <td>
                                 {player.included
-                                  ? player.warnings?.length
-                                    ? `Included · ${player.warnings.map((warning) => warning.reason_code).join(", ")}`
-                                    : "Included"
+                                  ? [
+                                      "Included",
+                                      player.flex_only ? "FLEX only" : null,
+                                      player.warnings?.length
+                                        ? player.warnings.map((warning) => warning.reason_code).join(", ")
+                                        : null,
+                                    ].filter(Boolean).join(" · ")
                                   : player.exclusion_reasons.join(", ") || "Excluded"}
                               </td>
                             </tr>
@@ -2581,6 +2997,14 @@ function App() {
                     const hasContextScoring = lineup.some(
                       (player: any) => typeof player?.optimizer_context_adjustment === "number"
                     );
+                    const ownershipValues = lineup
+                      .map((player: any) => player?.ownership)
+                      .filter((value: unknown) => value !== null && value !== undefined && Number.isFinite(Number(value)));
+                    const ownershipAvailable = ownershipValues.length === lineup.length;
+                    const totalOwnership = ownershipValues.reduce(
+                      (sum: number, value: unknown) => sum + Number(value), 0
+                    );
+                    const duplicationRisk = lineup[0]?.lineup_duplication_risk;
                     const stackSummary = lineup[0]?.lineup_stack_summary?.label;
                     const correlationSummary = lineup[0]?.lineup_correlation_summary;
                     const correlationAdjustment = Number(
@@ -2684,10 +3108,25 @@ function App() {
                             </span>
                           )}
                           {gameScript && <span>Script: {gameScript}</span>}
+                          {optimizerStatus.objective === "gpp" && (
+                            <>
+                              <span>
+                                {ownershipAvailable
+                                  ? `Ownership: ${totalOwnership.toFixed(2)}`
+                                  : "GPP ownership unavailable — optimizing ceiling/correlation only"}
+                              </span>
+                              {duplicationRisk?.ownership_available && (
+                                <span>
+                                  Relative chalk: {Number(duplicationRisk.relative_chalk_score).toFixed(1)}/100
+                                </span>
+                              )}
+                            </>
+                          )}
                           {!stackSummary && constructionLabel && (
                             <span>Construction: {constructionLabel}</span>
                           )}
                         </div>
+                        <OptimizerControlComparison comparison={lineup[0]?.lineup_control_comparison} />
                         {correlationRules.length > 0 && (
                           <details>
                             <summary>

@@ -80,3 +80,35 @@ def test_showdown_solver_keeps_locked_canonical_player_in_one_slot() -> None:
     selected = [row for row in lineup if row["player_id"] == "player-7"]
     assert len(selected) == 1
     assert selected[0]["roster_position"] in {"CPT", "FLEX"}
+
+
+def test_showdown_solver_keeps_locked_flex_only_player_out_of_captain() -> None:
+    pool = pd.DataFrame(
+        [
+            {
+                "player_id": f"player-{index}",
+                "name": f"Player {index}",
+                "position": "QB" if index < 2 else "WR",
+                "salary": 5000,
+                "p90": 100 if index == 0 else 30 - index,
+                "projection": 100 if index == 0 else 30 - index,
+                "player_team": "SEA" if index % 2 == 0 else "SF",
+                "opponent_team": "SF" if index % 2 == 0 else "SEA",
+            }
+            for index in range(8)
+        ]
+    )
+
+    lineup = _service()._solve_lineup(
+        pool,
+        contest_type="captain",
+        stack_params={"enabled": False},
+        locked_player_ids={"player-0"},
+        flex_only_player_ids={"player-0"},
+    )
+
+    assert lineup is not None
+    selected = [row for row in lineup if row["player_id"] == "player-0"]
+    assert len(selected) == 1
+    assert selected[0]["roster_position"] == "FLEX"
+    assert sum(row["roster_position"] == "CPT" for row in lineup) == 1

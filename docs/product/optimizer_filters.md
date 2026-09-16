@@ -12,8 +12,9 @@ salary, and projection checks happen before either strategy diverges.
 - Uses 75% mean + 20% P90 + 5% P10 floor, with a small fragile-punt penalty and
   soft QB/receiver correlation bonus.
 - Requires no stack, bring-back, ownership, or complete salary spend.
-- Generates at least six lineups (best plus five alternates) and reports mean,
-  P90, P10 floor/risk, salary, and realized stack.
+- Generates exactly the requested lineup count and reports mean, P90, P10
+  floor/risk, salary, and realized stack. Operations suggests six by default
+  when switching to H2H, but an explicitly entered count is authoritative.
 
 ## Large GPP (`classic_large_gpp_v1`)
 
@@ -80,6 +81,7 @@ PGDATABASE=football_26_dev .venv/bin/python scripts/replay_classic_cash_stack_po
 Current 2025 target actuals cover all nine classic roster spots, including DST. Eleven source-backed standings files are normalized into 1,852,485 entry results, including six complete Sunday Main fields. The replay calculates exact field-relative margins for those weeks but retains `performance_claim_eligible: false` because historical salary rows have post-lock ingestion timestamps rather than proven pre-lock snapshots. It also retains `cash_performance_claim_eligible: false` because the generic legacy files do not prove cash contest type or payout tiers. These outputs are useful diagnostics, not evidence for promoting a stacking policy.
 
 ## Implementation notes
+- Showdown **Single-entry contest portfolio** accepts `params.contest_urls` (1–50 DraftKings `/draft/contest/<id>` URLs), `contest_selection` (`auto` or `enter_all`), optional `maximum_total_entry_budget`, optional `maximum_contests_to_enter`, and optional `manual_contest_metadata` keyed by `contest_id`. `POST /api/optimizer/contests/preview` exposes the parsed public contest facts and unavailable fields. At run time the page is refreshed and embedded `window.mvcVars.contests` payout data is parsed with its draft group. Contest selection and lineup selection have separate scores; the report carries both. The current selection score is a transparent heuristic and does not estimate payout probability or ROI. Potential overlay affects selection only within two hours of lock.
 - The explicit `contest_format` and `objective` request fields resolve the legacy solver mode; `params.contest_type` remains a compatibility fallback. Showdown (`captain`) skips classic filters.
 - For classic cash, `params.stack_policy_id` selects one of the three registry policies exposed by `Operations` under `Cash Stacking Policy`. A versioned policy cannot be combined with legacy stack override fields. Explicit legacy overrides remain supported as `classic_cash_custom_v1` for compatibility and are labeled unvalidated.
 - Classic cash uses `classic_cash_v1`: 25% mean + 35% median + 40% P10 floor + up to 1.25 role-certainty points - up to 3.0 times normalized median-to-floor fragility. Missing quantiles collapse to mean, preserving the previous projection score.

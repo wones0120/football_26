@@ -89,7 +89,7 @@ formula, lineage, and operational contract.
 ## Phase 4 lineup correlation
 
 `backend/app/product_services/lineup_correlation_scoring.py` applies
-`optimizer_lineup_correlation` v3 inside both the baseline ILP and advanced
+`optimizer_lineup_correlation` v4 inside both the baseline ILP and advanced
 Classic GPP objective. It evaluates player pairs and Showdown Captain-specific
 relationships through the same four strategy profiles. All Phase 4 rules are
 soft boosts or soft penalties; the layer never excludes a player or restricts
@@ -109,6 +109,11 @@ advances it to v3 so positive stack terms are multiplied by cutoff-safe game
 environment and missing context contributes zero. The baseline Classic/Showdown
 solvers and advanced Classic GPP engine consume higher-order terms whose activation depends on
 Captain slot, teammate counts, team splits, or an explicitly absent partner.
+
+Version 4 adds Classic H2H-only soft variance penalties for a quarterback with
+multiple same-team pass catchers and for three or more same-team offensive
+players. Same-team combinations remain feasible, and RB/DST retains its
+context-backed positive correlation term.
 
 Classic covers naked pocket-QB penalties with a rushing-role exception, QB
 double stacks, competitive full-game stacks, and three-player skill clusters

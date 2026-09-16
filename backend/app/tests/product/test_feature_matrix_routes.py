@@ -2,10 +2,12 @@ from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.app.main import app
 from backend.app.db import get_db_session
+from backend.app.models import PlayerGameFeatureMatrix
 from backend.app.product_dependencies import get_data_quality_service
 from backend.app.services.lineup_learning import LineupLearningService
 
@@ -74,3 +76,33 @@ def test_salary_slice_lookup_accepts_shell_case_and_preserves_stored_identifier(
             source_system="draftkings", season_start=2026, season_end=2026, slate_filter="SUNDAY_MAIN",
         )
     assert slices == [(2026, 1, "sunday_main")]
+
+
+def test_feature_matrix_uniqueness_allows_the_same_game_in_multiple_slates():
+    engine = create_engine("sqlite://")
+    PlayerGameFeatureMatrix.__table__.create(engine)
+
+    def row(slate: str) -> PlayerGameFeatureMatrix:
+        return PlayerGameFeatureMatrix(
+            source_system="draftkings",
+            season=2026,
+            week=1,
+            slate=slate,
+            game_id="2026_01_GB_MIN",
+            player_id="player-1",
+            position="WR",
+            dk_points=0.0,
+        )
+
+    with Session(engine) as session:
+        session.add_all([row("SUNDAY_MAIN"), row("SUNDAY_LATE")])
+        session.commit()
+        assert session.query(PlayerGameFeatureMatrix).count() == 2
+
+        session.add(row("SUNDAY_LATE"))
+        try:
+            session.commit()
+        except IntegrityError:
+            session.rollback()
+        else:
+            raise AssertionError("duplicate rows within one slate must be rejected")
