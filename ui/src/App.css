@@ -1316,6 +1316,25 @@ table tbody tr:last-child {
   font-size: 0.68rem;
 }
 
+.saved-contest-scroll {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.saved-contest-table {
+  min-width: 1020px;
+  table-layout: fixed;
+}
+
+.saved-contest-table th:nth-child(1) { width: 230px; }
+.saved-contest-table th:nth-child(2) { width: 170px; }
+.saved-contest-table th:nth-child(3) { width: 170px; }
+.saved-contest-table th:nth-child(4) { width: 150px; }
+.saved-contest-table th:nth-child(5) { width: 180px; }
+.saved-contest-table th:nth-child(6) { width: 100px; }
+
 .operations-workspace table thead {
   color: #6f7d89;
   background: rgba(116, 167, 255, 0.035);
@@ -1350,6 +1369,7 @@ table tbody tr:last-child {
 }
 
 .operations-optimizer-panel {
+  min-width: 0;
   order: 2;
 }
 

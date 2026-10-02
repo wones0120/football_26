@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Saved contest details
+
+- Show contest type, entry limit, field capacity/current entries, fee, and prizes
+  after saving DraftKings URLs. Distinguish ticket satellites from cash tournaments.
+- Label prior snapshots after fetch failures and unavailable fields explicitly;
+  keep the user-selected catalog category separate from fetched contest facts.
+
 ### Sunday contest decision and UI execution
 
 - Save the frozen A–E five-entry comparison, seven-player audit, independent single

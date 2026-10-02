@@ -66,6 +66,23 @@ remain lineup constraints. Direct optimizer API exclusions alone do not rebuild 
   marked `contrarian_evidence_unavailable` and retains the ordinary football
   objective. Ownership sum and contrarian confidence remain unavailable.
 
+## Saved contest details
+
+Paste one or more DraftKings URLs into **Saved DraftKings contests** and click
+**Save contests**. The saved list immediately shows the fetched contest type,
+per-person entry limit (single entry, 3-max, 20-max, etc.), maximum field size,
+current entries, entry fee, and prize pool. Structured ticket payout evidence
+identifies ticket satellites and labels their pool as ticket value; mixed prizes
+show total prize value. Known cash format names identify head-to-head, double-up,
+and 50/50 contests. Unsupported or missing type evidence displays **Type unavailable**.
+
+**Catalog category** is the user's grouping choice, separate from the fetched
+contest type. Saving does not assign entries or choose an optimizer strategy.
+Each row shows its observation time. Failed refreshes use a complete earlier
+successful observation labeled **Saved snapshot** and retain the fetch error.
+Fresh partial observations display unavailable fields without silently filling
+them from older snapshots.
+
 ## Head-to-Head (`classic_head_to_head_v1`)
 
 - Keeps every positive-projection, post-eligibility skill player and playable DST.

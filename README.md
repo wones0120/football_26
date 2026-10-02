@@ -1,5 +1,10 @@
 # football_26 Decision OS
 
+**Saved DraftKings contests** now displays contest type, per-person entry limit,
+field capacity/current entries, entry fee, and prize pool immediately after saving
+a URL. Ticket prizes display their ticket value. Failed refreshes label older
+facts as **Saved snapshot**; the **Catalog category** remains your grouping choice.
+
 [Week 4 Sunday Main learning applied and readiness](WEEK4_SUNDAY_MAIN_LEARNING_APPLIED_AND_READINESS.md)
 
 [Week 4 Sunday contest profiles and portfolio decision](WEEK4_SUNDAY_CONTEST_PROFILES_AND_PORTFOLIO_DECISION.md) contains the independent single preview, unassigned five-entry planning portfolio, native-ID manifest, and opt-in UI settings.
