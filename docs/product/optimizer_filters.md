@@ -1,5 +1,28 @@
 # DraftKings NFL Classic Optimizer Filters
 
+Classic small-field production honors `params.portfolio_constraints.max_lineup_overlap`
+when explicitly supplied; 4, 5 and 6 remain those values. Omission retains six.
+`distinct_qb_paths` and the per-lineup objective-loss setting also apply to the
+all-entry core exposure alternative. New reports preserve `policy_contract` and
+`policy_validation`, including requested values, defaults, automatic QB/stack
+minima, selected exposure/risk limits, no implicit canonical-game cap, source labels
+and actual achieved overlap. Candidate-admission caps are separate. The automatic
+quality budget remains rate per entry multiplied by entry count (e.g. .10 × 5 = .50).
+Unproven integer incumbents and underfilled portfolios do not satisfy a requested solve.
+
+Sourced practice facts are normalized to FULL/LIMITED/DNP and retain observation
+time through context, features and optimizer rows. Migration `0045_pregame_practice_signal.sql`
+allows practice-only evidence; it does not assign availability or role. Full practice
+alone cannot establish the existing full-workload risk exception. False availability
+flags render team-volume sentinels as unavailable, while measured zeros remain zero.
+
+The fresh [Sunday Main readiness report](../../WEEK4_SUNDAY_MAIN_LEARNING_APPLIED_AND_READINESS.md)
+links an opt-in common-frame expanded preview and manual native-ID manifest. With
+no saved contest assignments, five is a planning count and all rosters are UNASSIGNED.
+Contest field size/profile is separate from user entry count and technical strategy.
+The development API exposes import-time module fingerprints at `/api/runtime-code`.
+
+
 Showdown requests require an explicit `params.enforce_single_te` boolean. With it
 enabled, candidate generation and final validation reject double-TE lineups,
 including the single-entry portfolio mode. The HTML report shows the saved value,
@@ -298,4 +321,30 @@ Each Classic small-field candidate and selected lineup also receives a football 
 
 The Classic optimizer results view and downloaded report now include an RB player-why table, lineup football-sanity flags, and portfolio counts of flagged constructions. RB evidence includes frozen mean/P90, salary, measured role, lagged snap/carry/target trends, receiving-role strength, team market, model version, and saved one-feature role probes. The report explicitly labels missing same-slate external benchmarks and unavailable SHAP or market counterfactuals. Same-team RB+DST, multiple offensive players on a team implied below 20, and a 15+ mean RB on a team implied below 20 are informational flags only. The strongest alternative and mean/P90/selector cost are computed within the saved candidate universe and labeled with that scope. All diagnostic fields are stored in the Classic small-field report within each new optimizer run; previous runs retain their original report. No projection or optimizer score changes result from these flags.
 
-The pregame role export `scripts/export_pregame_role_snapshot.py` reads a specified saved projection run and canonical-ID-linked weekly roster rows. It includes every salary-listed RB/WR/TE, even when role data is missing, and lists unavailable fields per player. Current Sunday Main coverage is 225 measured role scores among 425 salary skill players; the weekly roster supplies broad positions for 417, not ordinal depth ranks. No Sunday pregame-context rows or route/red-zone counts exist locally. Reports now show team target and RB-carry allocation proxies, missing role players by team, and exact QB+1, QB+2, QB+1+bring-back, and QB+2+bring-back diagnostics for the top ten QBs by mean/P90/value rank. Full pass/rush attempts remain unavailable rather than inferred from target/carry proxies. Candidate concentration displays overlapping projection/value ranks, salary-swap evidence, stack-boundary counts, role evidence, correlation-rule counts, and ownership when covered; it is not causal attribution. Exact QB-family diagnostics are enabled by default for new Classic small-field runs and can be disabled with `classic_qb_family_diagnostics=false` to avoid the additional solver calls.
+The pregame role export `scripts/export_pregame_role_snapshot.py` reads a specified saved projection run and canonical-ID-linked weekly roster rows. It includes every salary-listed RB/WR/TE, even when role data is missing, and lists unavailable fields per player. The earlier exported Sunday Main snapshot reported 225 measured role scores among 425 salary skill players; its weekly roster supplied broad positions for 417, not ordinal depth ranks. At that snapshot, no Sunday pregame-context rows or route/red-zone counts existed locally. The fresh Week 4 context and practice coverage is documented in the readiness report linked above. Reports now show team target and RB-carry allocation proxies, missing role players by team, and exact QB+1, QB+2, QB+1+bring-back, and QB+2+bring-back diagnostics for the top ten QBs by mean/P90/value rank. Full pass/rush attempts remain unavailable rather than inferred from target/carry proxies. Candidate concentration displays overlapping projection/value ranks, salary-swap evidence, stack-boundary counts, role evidence, correlation-rule counts, and ownership when covered; it is not causal attribution. Exact QB-family diagnostics are enabled by default for new Classic small-field runs and can be disabled with `classic_qb_family_diagnostics=false` to avoid the additional solver calls.
+
+
+### Optional Classic planning controls
+
+The Small-field GPP diagnostic selector accepts **Max primary QB stacks per game**
+(`portfolio_constraints.canonical_game_cap`) and **Max appearances per skill player**
+(`portfolio_constraints.skill_max_appearances`), integer counts from one through
+the requested entry count. The game cap combines both QB directions in a canonical
+game; one-off players remain possible in other entries. Skill caps cover RB/WR/TE
+and preserve tighter availability or explicit player caps. Conflicting locks/caps
+fail validation. Blank controls preserve existing defaults.
+
+**Expanded candidate discovery (slower)** (`classic_expanded_discovery=true`)
+opts into the existing common-frame mandatory research sweeps, with at most fifty
+rosters per eligible QB in its frontier enumeration. Final selection uses the full
+known legal reference with ordinary selected exposure and availability controls;
+candidate admission caps do not thin that opt-in reference. This is bounded
+discovery, not exhaustive coverage or validated large-field performance. At one
+entry, automatic multi-entry QB/core diversity caps are omitted; explicit caps and
+the existing elevated-risk budget remain enforced. Counts must be re-solved, and
+Game/Skill appearance controls must be cleared or adjusted when changing count.
+Expanded-preview screens and readable exports qualify readiness as checks of saved
+inputs and roster rules; contest assignments and final inactives still need review.
+
+See [Week 4 Sunday contest decision](../../WEEK4_SUNDAY_CONTEST_PROFILES_AND_PORTFOLIO_DECISION.md)
+for exact reproduction settings, reviewed manifests, and entry-specific clearance.

@@ -44,6 +44,7 @@ PREGAME_ROW_FIELDS = (
     "player_status", "roster_status", "pregame_injury_status", "injury_status",
     "official_availability_status", "injury_observed_at", "practice_participation", "practice_trend",
     "practice_observed_at", "expected_workload_status", "expected_workload_observed_at",
+    "team_targets_mean_3_available", "team_carries_mean_3_available",
     "pregame_context_observed_at",
     "pregame_availability_probability", "pregame_start_probability",
     "pregame_expected_snaps", "pregame_expected_routes", "pregame_expected_carries",
@@ -114,7 +115,7 @@ def freeze_solver_snapshot(*, run_id: str, season: int, week: int, slate: str,
     if len({str(row["player_id"]) for row in rows}) != len(rows):
         raise ValueError("Frozen Classic pool has duplicate canonical player IDs")
     code_files = ("gpp_optimizer.py", "classic_small_field.py", "classic_prospective.py",
-                  "lineup_correlation_scoring.py", "rule_library.py")
+                  "lineup_correlation_scoring.py", "rule_library.py", "classic_portfolio_policy.py")
     code_hashes = {name: sha256((Path(__file__).parent / name).read_bytes()).hexdigest()
                    for name in code_files}
     payload = {

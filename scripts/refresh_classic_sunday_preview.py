@@ -81,7 +81,7 @@ def main():
     for pid in sorted(set(depth_evidence)|set(injury_evidence)):
         salary=salary_by_id[pid];depth=depth_evidence.get(pid);injury=injury_evidence.get(pid,{})
         status=injury.get('report_status');status=None if pd.isna(status) else status
-        if not depth and not status:continue
+        if not depth and not status and not injury.get("practice_status"):continue
         players.append({'player_id':pid,'team':salary['team'],'position':salary['position'],
                         'role_label':depth['role'] if depth else None,'injury_status':status,
                         'evidence':{'depth':depth,'practice_report':injury,
@@ -113,7 +113,7 @@ def main():
             'club_starters_ineligible_under_salary_policy':excluded_starter_evidence}
     with SessionLocal() as session:
         result['features']=LineupLearningService(session).rebuild_player_game_feature_matrix(
-            source_system='draftkings',season_start=2026,season_end=2026,slate='SUNDAY_MAIN',weeks=[3,4] if args.resume_model else [4],
+            source_system='draftkings',season_start=2026,season_end=2026,slate='SUNDAY_MAIN',weeks=[3,4],
             progress_hook=lambda value:print(value,flush=True))
     cutoff=datetime.now(UTC)
     prediction=PredictionsService().train_and_predict(2026,4,slate='SUNDAY_MAIN',data_cutoff_at=cutoff)

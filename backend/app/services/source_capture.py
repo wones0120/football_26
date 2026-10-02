@@ -308,6 +308,37 @@ def verify_snapshot_artifact(snapshot: SourceSnapshot) -> None:
 
 
 class SourceCaptureService:
+    def _verified_local_replica(self, snapshot, payload, payload_path):
+        """Return a detached storage view; never mutate the immutable DB row."""
+        root = REPO_ROOT / "data" / "source_snapshot_replicas" / snapshot.snapshot_id
+        artifact = root / Path(snapshot.artifact_path).name
+        manifest_path = root / "manifest.json"
+        if payload is not None:
+            if _sha256_bytes(payload) != snapshot.content_sha256 or len(payload) != snapshot.byte_count:
+                raise SnapshotIntegrityError("Replica bytes differ from immutable evidence")
+            _write_new_bytes(artifact, payload)
+        else:
+            _copy_new_file(payload_path, artifact, snapshot.content_sha256)
+        replica = SourceSnapshot(**{column.name: getattr(snapshot, column.name)
+                                    for column in SourceSnapshot.__table__.columns})
+        replica.artifact_path = str(artifact)
+        replica.manifest_path = str(manifest_path)
+        manifest = {key: getattr(snapshot, key) for key in (
+            "snapshot_id", "source_system", "dataset", "season", "week", "slate",
+            "observation_basis", "content_sha256", "byte_count", "row_count", "media_type",
+            "original_path", "source_uri", "source_license")}
+        manifest.update({key: _stored_iso(getattr(snapshot, key)) for key in (
+            "observed_at", "effective_at", "captured_at", "slate_lock_at")})
+        manifest.update(contract_id=SNAPSHOT_CONTRACT_ID, pre_lock=snapshot_pre_lock(snapshot),
+                        metadata=snapshot.metadata_json,
+                        artifact_path=snapshot.snapshot_id + "/" + artifact.name,
+                        manifest_path=snapshot.snapshot_id + "/manifest.json",
+                        storage_replica_of={"artifact_path": snapshot.artifact_path,
+                                            "manifest_path": snapshot.manifest_path})
+        _write_new_bytes(manifest_path, (json.dumps(manifest, sort_keys=True) + "\n").encode())
+        verify_snapshot_artifact(replica)
+        return replica
+
     def __init__(
         self,
         session: Session,
@@ -461,7 +492,14 @@ class SourceCaptureService:
 
         existing = self.session.get(SourceSnapshot, snapshot_id)
         if existing is not None:
-            verify_snapshot_artifact(existing)
+            storage_view = existing
+            try:
+                verify_snapshot_artifact(existing)
+            except (OSError, SnapshotIntegrityError) as exc:
+                cause = exc if isinstance(exc, OSError) else exc.__cause__
+                if not isinstance(cause, OSError) or cause.errno != errno.EDEADLK:
+                    raise
+                storage_view = self._verified_local_replica(existing, payload, payload_path)
             if existing.source_license != source_license:
                 raise SnapshotIntegrityError(
                     "The same scoped content was already captured with different license metadata"
@@ -482,7 +520,7 @@ class SourceCaptureService:
                     "The same scoped content was already captured with a different source URI"
                 )
             return SnapshotCaptureResult(
-                snapshot=existing,
+                snapshot=storage_view,
                 created=False,
                 pre_lock=snapshot_pre_lock(existing),
             )

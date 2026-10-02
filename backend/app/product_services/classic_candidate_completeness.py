@@ -1,9 +1,7 @@
-"""Offline prospective candidate discovery. Never imported by production routes.
+"""Common-frame prospective Classic discovery and immutable offline replay.
 
-The existing solver's model is captured with a non-solving adapter in this isolated
-research process. This avoids copying football constraints or modifying frozen
-production code. The temporary patch is restored before any actual solve; use
-process workers, never threads or this adapter in a request-serving process.
+Capture the existing football model without solving or globally patching a solver.
+Production use is explicit opt-in; enumeration may be bounded or unproven.
 """
 from __future__ import annotations
 
@@ -18,7 +16,6 @@ from pathlib import Path
 from statistics import mean, median
 from time import perf_counter
 from typing import Any, Callable, Sequence
-from unittest.mock import patch
 
 import pulp
 
@@ -103,21 +100,17 @@ def load_context(inputs: dict) -> dict:
                 policy=report['production_controls']['policy'])
 
 
-class _CaptureModel(pulp.LpSolver):
-    def actualSolve(self, model: pulp.LpProblem, **kwargs: Any) -> int:
-        self.model = model
-        return pulp.LpStatusNotSolved
-
-
 def capture_model(context: dict) -> pulp.LpProblem:
-    adapter = _CaptureModel()
+    captured = []
     options = context['options']
-    with patch.object(gpp_optimizer, 'make_cbc_solver', return_value=adapter):
-        gpp_optimizer._build_lineup(context['players'], context['config'], None, [],
-            enforce_single_te=options['enforce_single_te'],
-            avoid_dst_opponents=options['avoid_dst_opponents'],
-            required_player_ids=set(options.get('locked_player_ids') or []))
-    model = adapter.model
+    gpp_optimizer._build_lineup(context['players'], context['config'], None, [],
+        enforce_single_te=options['enforce_single_te'],
+        avoid_dst_opponents=options['avoid_dst_opponents'],
+        required_player_ids=set(options.get('locked_player_ids') or []),
+        model_capture=captured.append)
+    if not captured:
+        raise ValueError('Cannot capture an empty Classic model')
+    model = captured[0]
     variables = model.variablesDict()
     for i, player in enumerate(context['players']):
         if player.player_id in context['excluded']:

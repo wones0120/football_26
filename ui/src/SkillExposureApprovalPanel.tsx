@@ -56,6 +56,8 @@ export function SkillExposureApprovalPanel({ optimizer, onNewRun }: {
   return <section className="card">
     <h3>Entry readiness</h3>
     <p><strong>{String(readiness.status ?? "Unavailable")}</strong></p>
+    {(report.candidate_discovery as Row | undefined)?.mode === "opt_in_expanded_full_reference" &&
+      <p>Planning preview: readiness checks cover the saved inputs and roster rules. Confirm contest assignments and final game inactives before entry. Large-field performance remains unvalidated.</p>}
     <h4>Market</h4>
     <p>Market coverage: {String(coverage.sourced_games ?? 0)}/{String(coverage.total_games ?? 0)} games ·
       Fresh: {Array.isArray(coverage.fresh_games) ? coverage.fresh_games.length : 0} ·

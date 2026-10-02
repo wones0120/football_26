@@ -375,6 +375,9 @@ function App() {
   const [numLineups, setNumLineups] = useState(20);
   const [maxExposure, setMaxExposure] = useState(60);
   const [classicMaxLineupOverlap, setClassicMaxLineupOverlap] = useState("");
+  const [classicPrimaryGameCap, setClassicPrimaryGameCap] = useState("");
+  const [classicSkillMaxAppearances, setClassicSkillMaxAppearances] = useState("");
+  const [classicExpandedDiscovery, setClassicExpandedDiscovery] = useState(false);
   const [classicDistinctQbPaths, setClassicDistinctQbPaths] = useState(false);
   const [classicMaxObjectiveLoss, setClassicMaxObjectiveLoss] = useState("");
   const [captainMaxExposure, setCaptainMaxExposure] = useState(60);
@@ -462,13 +465,21 @@ function App() {
       if (!Number.isInteger(value) || value < 0 || value > 8) throw new Error("Maximum lineup overlap must be 0–8 players.");
       constraints.max_lineup_overlap = value;
     }
+    for (const [key, input] of [["canonical_game_cap", classicPrimaryGameCap], ["skill_max_appearances", classicSkillMaxAppearances]]) {
+      if (input.trim()) {
+        const value = Number(input);
+        if (!Number.isInteger(value) || value < 1 || value > numLineups) throw new Error(`${key} must be 1 through the requested lineup count.`);
+        constraints[key] = value;
+      }
+    }
     if (classicDistinctQbPaths) constraints.distinct_qb_paths = true;
     if (classicMaxObjectiveLoss.trim()) {
       const value = Number(classicMaxObjectiveLoss);
       if (!Number.isFinite(value) || value < 0) throw new Error("Maximum selector loss must be non-negative.");
       constraints.max_objective_loss = value;
     }
-    return Object.keys(constraints).length ? { portfolio_constraints: constraints } : {};
+    return { ...(Object.keys(constraints).length ? { portfolio_constraints: constraints } : {}),
+      ...(classicExpandedDiscovery ? { classic_expanded_discovery: true } : {}) };
   };
   const smallMaxContestParams = () => {
     const url = smallMaxContestUrl.trim();
@@ -3346,13 +3357,26 @@ function App() {
                 Max shared players (optional)
                 <input type="number" min={0} max={8} value={classicMaxLineupOverlap}
                   onChange={(event) => setClassicMaxLineupOverlap(event.target.value)}
-                  placeholder="No overlap limit" />
+                  placeholder="Default: 6 shared players" />
               </label>
               <label>
                 Max selector loss (optional)
                 <input type="number" min={0} step="0.01" value={classicMaxObjectiveLoss}
                   onChange={(event) => setClassicMaxObjectiveLoss(event.target.value)}
                   placeholder="No quality floor" />
+              </label>
+              <label>Max primary QB stacks per game (optional)
+                <input type="number" min={1} max={numLineups} value={classicPrimaryGameCap}
+                  onChange={(event) => setClassicPrimaryGameCap(event.target.value)} placeholder="No game cap" />
+              </label>
+              <label>Max appearances per skill player (optional)
+                <input type="number" min={1} max={numLineups} value={classicSkillMaxAppearances}
+                  onChange={(event) => setClassicSkillMaxAppearances(event.target.value)} placeholder="Existing caps" />
+              </label>
+              <label className="checkbox-label">
+                <input type="checkbox" checked={classicExpandedDiscovery}
+                  onChange={(event) => setClassicExpandedDiscovery(event.target.checked)} />
+                Expanded candidate discovery (slower)
               </label>
               <label className="checkbox-label">
                 <input type="checkbox" checked={classicDistinctQbPaths}
@@ -3750,6 +3774,7 @@ function App() {
               )}
               <small>Run Optimizer rebuilds projections using your player availability and exclusions before generating lineups. Use Latest completed (automatic).</small>
               <button className="operations-primary-action" onClick={runOptimizerJob} disabled={Boolean(pendingAction)}>Run Optimizer</button>
+              {pendingAction && <small role="status">{pendingAction}</small>}
               <button onClick={refreshOptimizer} disabled={!optimizerStatus}>
                 Refresh Status
               </button>

@@ -697,3 +697,30 @@ def test_learning_stats_refresh_surfaces_failed_ingest(tmp_path, monkeypatch):
     session.expire_all()
     assert session.query(IngestRun).one().status == "failed"
     assert session.query(SourceSnapshotIngestRun).count() == 1
+
+
+def test_deadlocked_existing_capture_returns_verified_replica_without_mutating_row(tmp_path, monkeypatch):
+    import backend.app.services.source_capture as module
+    session = _session()
+    service=SourceCaptureService(session,snapshot_root=tmp_path/'cloud')
+    kwargs=dict(artifact_name='data.csv',source_system='test',dataset='test',season=2026,week=4,slate='sunday_main',source_license=LICENSE)
+    frame=pd.DataFrame([{'id':'native-1','value':7}])
+    first=service.capture_dataframe(frame,**kwargs)
+    original_paths=(first.snapshot.artifact_path,first.snapshot.manifest_path)
+    original_time=first.snapshot.observed_at
+    verify=module.verify_snapshot_artifact
+    def cloud_error(snapshot):
+        if snapshot.artifact_path==original_paths[0]:raise OSError(errno.EDEADLK,'cloud unavailable')
+        return verify(snapshot)
+    monkeypatch.setattr(module,'REPO_ROOT',tmp_path/'local')
+    monkeypatch.setattr(module,'verify_snapshot_artifact',cloud_error)
+    second=service.capture_dataframe(frame,**kwargs)
+    assert not second.created and second.snapshot.snapshot_id==first.snapshot.snapshot_id
+    verify(second.snapshot)
+    assert (first.snapshot.artifact_path,first.snapshot.manifest_path)==original_paths
+    assert second.snapshot.observed_at==original_time
+    assert not session.dirty
+    assert Path(second.snapshot.artifact_path).read_bytes()==Path(original_paths[0]).read_bytes()
+    # A corrupt original is still a hard integrity failure, not a storage repair.
+    monkeypatch.setattr(module,'verify_snapshot_artifact',lambda snapshot: (_ for _ in ()).throw(SnapshotIntegrityError('checksum differs')))
+    with pytest.raises(SnapshotIntegrityError):service.capture_dataframe(frame,**kwargs)

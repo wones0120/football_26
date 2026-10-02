@@ -48,6 +48,14 @@ def resolve_effective_policy(inputs: dict) -> Policy:
     The final path/family stage is recorded in the saved production tradeoffs.
     """
     report = inputs['report']
+    contract = report.get('policy_contract')
+    if contract:
+        e = contract['effective']
+        return Policy(contract['contract_id'], count=e['entry_count'], overlap=e['max_lineup_overlap'],
+                      distinct_qb=e['distinct_qb_paths'], minimum_qbs=e['minimum_qb_paths'],
+                      minimum_stack_types=e['minimum_stack_families'],
+                      elevated_share=e['availability_risk_policy'].get('selected_lineups_with_elevated_cap', 1),
+                      canonical_game_cap=e['canonical_game_cap'], tolerance=e['max_objective_loss'])
     options = report['frozen_solver_snapshot']['payload']['options']
     constraints = options.get('portfolio_constraints') or {}
     trades = report['production_controls']['selection_tradeoffs']
@@ -66,6 +74,8 @@ def resolve_effective_policy(inputs: dict) -> Policy:
 
 def selected_caps(inputs: dict) -> dict[str, float]:
     r = inputs['report']; p = r['frozen_solver_snapshot']['payload']
+    if r.get('policy_contract'):
+        return dict(r['policy_contract']['effective']['selected_player_maximums'])
     options = p['options']; locked = set(options.get('locked_player_ids') or [])
     risk = {r['player_id']: r for r in r['prospective_experiment']['availability_risk']['players']}
     caps = {}

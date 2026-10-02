@@ -716,6 +716,7 @@ def _build_lineup(
     minimum_player_groups: Sequence[tuple[set[str], int]] | None = None,
     maximum_player_groups: Sequence[tuple[set[str], int]] | None = None,
     solver_backend: str = "bundled",
+    model_capture: Callable[[pulp.LpProblem], None] | None = None,
 ) -> Optional[List[int]]:
     if not players:
         return None
@@ -991,6 +992,9 @@ def _build_lineup(
     for lineup in exclude_lineups:
         model += pulp.lpSum(x[i] for i in sorted(lineup)) <= config.uniqueness_overlap
 
+    if model_capture is not None:
+        model_capture(model)
+        return None
     solver = make_cbc_solver(solver_backend)
     status = model.solve(solver)
     if status != pulp.LpStatusOptimal:

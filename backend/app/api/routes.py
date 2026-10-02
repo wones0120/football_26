@@ -89,6 +89,13 @@ from ..services.ultimate_lineup_runs import (
 
 router = APIRouter(prefix="/api")
 
+from ..product_services.runtime_code import LOADED
+
+
+@router.get("/runtime-code")
+def runtime_code() -> dict:
+    return LOADED
+
 
 @router.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:

@@ -64,6 +64,8 @@ PREGAME_LINEAGE_COLUMNS = [
     "pregame_effective_carry_share_source", "pregame_effective_target_share_source",
     "pregame_role_label",
     "pregame_injury_status",
+    "practice_participation", "practice_trend", "practice_observed_at",
+    "expected_workload_status", "expected_workload_observed_at",
     "pregame_expected_snaps",
     "pregame_expected_routes",
     "pregame_expected_carries",
@@ -859,6 +861,9 @@ def apply_pregame_projection_context(
     rows["pregame_effective_target_share_source"] = None
     rows["pregame_role_label"] = None
     rows["pregame_injury_status"] = None
+    for field in ("practice_participation", "practice_trend", "practice_observed_at",
+                  "expected_workload_status", "expected_workload_observed_at"):
+        rows[field] = None
     rows["pregame_expected_snaps"] = np.nan
     rows["pregame_expected_routes"] = np.nan
     rows["pregame_expected_carries"] = np.nan
@@ -938,6 +943,9 @@ def apply_pregame_projection_context(
                 rows.at[index, output] = value
         evidence = context.get("evidence_json") or context.get("evidence") or {}
         if isinstance(evidence, dict):
+            from .pregame_context import risk_evidence_fields
+            for field, value in risk_evidence_fields(evidence, context.get("observed_at")).items():
+                rows.at[index, field] = value
             for source, output in (
                 ("role_uncertain", "pregame_role_uncertain"),
                 ("newly_assigned_role", "pregame_newly_assigned_role"),

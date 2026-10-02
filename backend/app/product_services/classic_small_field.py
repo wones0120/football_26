@@ -497,6 +497,12 @@ def _football_sanity(
             "diagnostic_only": True}
 
 
+def _evidence_number(row: dict, field: str):
+    if row.get(field + "_available") is False:
+        return None
+    return _number(row.get(field))
+
+
 def _team_reconciliation(players: Sequence[Player], source: dict[str, dict]) -> list[dict]:
     """Show measured and allocated usage separately; never invent team attempt forecasts."""
     by_team: dict[str, list[Player]] = defaultdict(list)
@@ -522,10 +528,10 @@ def _team_reconciliation(players: Sequence[Player], source: dict[str, dict]) -> 
         missing = [p.name for p in members
                    if _number(source.get(str(p.player_id), {}).get("offensive_role_importance")) is None]
         evidence = [source.get(str(p.player_id), {}) for p in members]
-        team_targets = next((_number(row.get("team_targets_mean_3")) for row in evidence
-                             if _number(row.get("team_targets_mean_3")) is not None), None)
-        team_carries = next((_number(row.get("team_carries_mean_3")) for row in evidence
-                             if _number(row.get("team_carries_mean_3")) is not None), None)
+        team_targets = next((_evidence_number(row, "team_targets_mean_3") for row in evidence
+                             if _evidence_number(row, "team_targets_mean_3") is not None), None)
+        team_carries = next((_evidence_number(row, "team_carries_mean_3") for row in evidence
+                             if _evidence_number(row, "team_carries_mean_3") is not None), None)
         teams.append({"team": team, "expected_pass_attempts": None,
                       "expected_rush_attempts": None,
                       "lagged_team_targets_proxy": team_targets,
@@ -813,7 +819,7 @@ def describe_candidate(
         "correlation_positive": sum(max(0.0, float(r.get("objective_contribution") or 0)) for r in correlation["triggered_rules"]),
         "correlation_negative": sum(min(0.0, float(r.get("objective_contribution") or 0)) for r in correlation["triggered_rules"]),
         "correlation_rules": correlation["triggered_rules"],
-        "qb": {"player_id": qb.player_id, "name": qb.name, "team": qb.team,
+        "qb": {"player_id": qb.player_id, "name": qb.name, "team": qb.team, "opponent": qb.opponent,
                "ownership": qb.ownership if ownership_available else None,
                **_rushing_qb(qb, pool_by_id.get(qb.player_id, {}))},
         "stack": {
@@ -888,6 +894,7 @@ def _select_global(
     enforce_maximum_for_locked_ids: set[str] | None = None,
     minimum_qb_paths: int = 1,
     minimum_stack_families: int = 1,
+    canonical_game_cap: int | None = None,
 ) -> list[int]:
     if max_lineup_overlap is not None and (type(max_lineup_overlap) is not int
                                            or not 0 <= max_lineup_overlap <= 8):
@@ -898,6 +905,8 @@ def _select_global(
                                            or not isfinite(float(max_objective_loss))
                                            or float(max_objective_loss) < 0):
         raise ValueError("max_objective_loss must be a finite non-negative number")
+    if canonical_game_cap is not None and (type(canonical_game_cap) is not int or not 1 <= canonical_game_cap <= count):
+        raise ValueError("canonical_game_cap must be an integer from 1 through entry count")
     model = pulp.LpProblem("classic_small_field_selection", pulp.LpMaximize)
     chosen = pulp.LpVariable.dicts("lineup", range(len(candidates)), cat="Binary")
     model += pulp.lpSum(candidates[i]["objective_score"] * chosen[i] for i in chosen)
@@ -913,6 +922,13 @@ def _select_global(
             for j in range(i + 1, len(rosters)):
                 if len(left & rosters[j]) > max_lineup_overlap:
                     model += chosen[i] + chosen[j] <= 1
+    if canonical_game_cap is not None:
+        from .classic_thesis_shadow import canonical_game
+        def game_key(row):
+            qb = row["qb"]
+            return row.get("game_key") or canonical_game(None, qb["team"], qb["opponent"])["key"]
+        for game in sorted({game_key(row) for row in candidates}):
+            model += pulp.lpSum(chosen[i] for i,row in enumerate(candidates) if game_key(row)==game) <= canonical_game_cap
     if distinct_qb_paths:
         for qb_id in sorted({str(row["qb"]["player_id"]) for row in candidates}):
             model += pulp.lpSum(chosen[i] for i, row in enumerate(candidates)
@@ -947,7 +963,8 @@ def _select_global(
         minimum = ceil(count * minimum_exposure_by_player.get(pid, 0.0))
         if minimum:
             model += appearances >= minimum
-    if model.solve(make_cbc_solver(solver_backend)) != pulp.LpStatusOptimal:
+    if (model.solve(make_cbc_solver(solver_backend)) != pulp.LpStatusOptimal
+            or model.sol_status != pulp.LpSolutionOptimal):
         return []
     return sorted((i for i in chosen if pulp.value(chosen[i]) >= 0.9), key=lambda i: -candidates[i]["objective_score"])
 
@@ -1417,14 +1434,22 @@ def analyze_small_field(
     refill_workers: int = 1,
     portfolio_constraints: dict | None = None,
     production_controls: dict | None = None,
+    full_reference_selection: bool = False,
 ) -> tuple[list[list[Player]], dict]:
     if portfolio_constraints is not None and not isinstance(portfolio_constraints, dict):
         raise ValueError("portfolio_constraints must be an object")
     portfolio_constraints = portfolio_constraints or {}
-    supported = {"max_lineup_overlap", "distinct_qb_paths", "max_objective_loss"}
+    from .classic_portfolio_policy import resolve_overlap, build_contract, validate_portfolio
+    effective_overlap = resolve_overlap(portfolio_constraints, bool(production_controls))
+    effective_paths, effective_families = (2 if production_controls and count > 1 else 1), 1
+    supported = {"max_lineup_overlap", "distinct_qb_paths", "max_objective_loss", "canonical_game_cap", "skill_max_appearances"}
     unknown = set(portfolio_constraints) - supported
     if unknown:
         raise ValueError("Unknown Classic small-field portfolio constraints: " + ", ".join(sorted(unknown)))
+    for key in ("canonical_game_cap", "skill_max_appearances"):
+        value = portfolio_constraints.get(key)
+        if value is not None and (type(value) is not int or not 1 <= value <= count):
+            raise ValueError(key + " must be an integer from 1 through entry count")
     if not 1 <= refill_workers <= 4:
         raise ValueError("Classic refill workers must be between 1 and 4")
     if refill_workers > 1 and os.environ.get("PYTHONHASHSEED") != "0":
@@ -1464,10 +1489,17 @@ def analyze_small_field(
                         max(len(candidates), requested_candidate_count or 0))
         original_lineups = list(lineups)
         admission_started = perf_counter()
-        candidates, lineups, production_funnel = _admit_candidate_caps(
-            candidates, lineups, production_controls["candidate_caps"], elevated,
-            target_count, policy["max_elevated_per_lineup"], solver_backend,
-        )
+        if full_reference_selection:
+            target_count = len(candidates)
+            production_funnel = {"requested":target_count,"solved":target_count,"legal":target_count,
+                "accepted":target_count,"remaining_deficit":0,"status":"complete",
+                "selection_scope":"opt_in_expanded_full_reference",
+                "candidate_caps_applied":False,"selected_caps_and_risk_enforced":True}
+        else:
+            candidates, lineups, production_funnel = _admit_candidate_caps(
+                candidates, lineups, production_controls["candidate_caps"], elevated,
+                target_count, policy["max_elevated_per_lineup"], solver_backend,
+            )
         production_funnel["joint_admission_seconds"] = round(perf_counter() - admission_started, 3)
         production_funnel["initial_admitted"] = len(candidates)
         production_funnel["refill_attempts"] = 0
@@ -1566,16 +1598,21 @@ def analyze_small_field(
             pid = player.player_id
             if pid in (locked_player_ids or set()):
                 continue
-            if player.position == "QB":
+            if count > 1 and player.position == "QB":
                 selected_caps[pid] = min(selected_caps.get(pid, 1.0), 0.60)
-            elif player.position in {"RB", "WR", "TE"} and production_controls["core_classes"][pid] != "elite_high_confidence":
+            elif count > 1 and player.position in {"RB", "WR", "TE"} and production_controls["core_classes"][pid] != "elite_high_confidence":
                 selected_caps[pid] = min(selected_caps.get(pid, 1.0), 0.80)
+    skill_limit = portfolio_constraints.get("skill_max_appearances")
+    if skill_limit is not None:
+        for player in players:
+            if player.position in {"RB", "WR", "TE"}:
+                selected_caps[player.player_id] = min(selected_caps.get(player.player_id,1),skill_limit / count)
     def select(*, paths: int = 1, families: int = 1) -> list[int]:
         return _select_global(
             candidates, count, max_exposure, locked_player_ids or set(),
             selected_caps, minimum_exposure_by_player or {},
             solver_backend=solver_backend,
-            max_lineup_overlap=(6 if production_controls else portfolio_constraints.get("max_lineup_overlap")),
+            max_lineup_overlap=effective_overlap,
             distinct_qb_paths=portfolio_constraints.get("distinct_qb_paths", False),
             max_objective_loss=portfolio_constraints.get("max_objective_loss"),
             max_lineups_with_any_player_ids=(
@@ -1588,6 +1625,7 @@ def analyze_small_field(
                 if production_controls else None
             ),
             minimum_qb_paths=paths, minimum_stack_families=families,
+            canonical_game_cap=portfolio_constraints.get("canonical_game_cap"),
         ) if len(candidates) >= count else []
     selected_indices = select(paths=2 if production_controls and count > 1 else 1)
     if production_controls and selected_indices:
@@ -1607,16 +1645,27 @@ def analyze_small_field(
         third = select(paths=3) if count >= 3 else []
         if third and baseline_score - sum(candidates[i]["objective_score"] for i in third) <= tolerance:
             selected_indices = third
-        family_alternative = select(paths=3 if selected_indices == third and third else 2, families=2)
+            effective_paths = 3
+        family_alternative = select(paths=3 if selected_indices == third and third else 2, families=2) if count > 1 else []
         family_cost = (sum(candidates[i]["objective_score"] for i in selected_indices)
                        - sum(candidates[i]["objective_score"] for i in family_alternative)) if family_alternative else None
         if family_alternative and family_cost <= tolerance:
             selected_indices = family_alternative
+            effective_families = 2
         selection_tradeoffs = {"quality_loss_tolerance_per_lineup": tolerance / count,
                                "path_frontier": path_frontier,
                                "alternative_stack_family_selector_cost": family_cost,
                                "selected_stack_family_count": len({candidates[i]["stack"]["type"]
                                                                    for i in selected_indices})}
+    policy_contract = build_contract(
+        requested=portfolio_constraints, count=count, max_exposure=max_exposure,
+        maximums=selected_caps, minimums=minimum_exposure_by_player or {},
+        locked=locked_player_ids or set(), controls=production_controls,
+        minimum_qbs=effective_paths, minimum_stacks=effective_families, tradeoffs=selection_tradeoffs,
+        frontier=max((r["objective_score"] for r in candidates), default=None))
+    policy_validation = validate_portfolio([candidates[i] for i in selected_indices], policy_contract)
+    if selected_indices and policy_validation["status"] != "verified":
+        raise ValueError("Final Classic portfolio violates effective policy: " + ", ".join(policy_validation["violations"]))
     selected = [lineups[i] for i in selected_indices]
     best_mean = max((row["mean"] for row in candidates), default=0)
     best_p90 = max((row["p90"] for row in candidates), default=0)
@@ -1699,7 +1748,10 @@ def analyze_small_field(
             alternative_indexes = _select_global(
                 candidates, len(selected), max_exposure, locked_player_ids or set(),
                 caps, minimum_exposure_by_player or {}, solver_backend=solver_backend,
-                max_lineup_overlap=6,
+                max_lineup_overlap=effective_overlap,
+                distinct_qb_paths=portfolio_constraints.get("distinct_qb_paths", False),
+                max_objective_loss=portfolio_constraints.get("max_objective_loss"),
+                canonical_game_cap=portfolio_constraints.get("canonical_game_cap"),
                 max_lineups_with_any_player_ids=(
                     (elevated_ids, production_controls["policy"]["selected_lineups_with_elevated_cap"])
                     if elevated_ids else None),
@@ -1805,6 +1857,7 @@ def analyze_small_field(
     team_reconciliation = _team_reconciliation(players, source)
     selected_rank_set = {candidates[index]["rank"] for index in selected_indices}
     report = {
+        "policy_contract": policy_contract, "policy_validation": policy_validation,
         "candidate_count": len(candidates), "requested_candidate_count": requested_candidate_count,
         "production_funnel": production_funnel,
         "production_controls": ({"mode": production_controls.get("mode"),

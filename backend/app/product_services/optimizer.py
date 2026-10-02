@@ -3423,7 +3423,9 @@ class OptimizerService:
                 NULL::DOUBLE PRECISION AS snap_share_mean_3,
                 NULL::DOUBLE PRECISION AS target_share_mean_3,
                 NULL::DOUBLE PRECISION AS team_targets_mean_3,
+                NULL::BOOLEAN AS team_targets_mean_3_available,
                 NULL::DOUBLE PRECISION AS team_carries_mean_3,
+                NULL::BOOLEAN AS team_carries_mean_3_available,
                 NULL::DOUBLE PRECISION AS carry_share_mean_3,
                 NULL::DOUBLE PRECISION AS projected_targets,
                 NULL::DOUBLE PRECISION AS projected_carries,
@@ -3545,8 +3547,10 @@ class OptimizerService:
                     AS target_share_mean_3,
                 NULLIF(projection_feature.feature_json ->> 'team_targets_mean_3', '')::DOUBLE PRECISION
                     AS team_targets_mean_3,
+                (projection_feature.feature_json ->> 'team_targets_mean_3_available')::BOOLEAN AS team_targets_mean_3_available,
                 NULLIF(projection_feature.feature_json ->> 'team_carries_mean_3', '')::DOUBLE PRECISION
                     AS team_carries_mean_3,
+                (projection_feature.feature_json ->> 'team_carries_mean_3_available')::BOOLEAN AS team_carries_mean_3_available,
                 NULLIF(projection_feature.feature_json ->> 'carry_share_mean_3', '')::DOUBLE PRECISION
                     AS carry_share_mean_3,
                 NULLIF(projection_feature.feature_json ->> 'projected_targets', '')::DOUBLE PRECISION
@@ -7836,6 +7840,9 @@ class OptimizerService:
                         if small_field
                         else num_lineups
                     )
+                    expanded_discovery = params.get("classic_expanded_discovery", False) if small_field else False
+                    if type(expanded_discovery) is not bool:
+                        raise ValueError("classic_expanded_discovery must be a boolean")
                     production_candidate_target = candidate_target
                     if small_field:
                         raw_production_target = params.get("classic_production_candidate_pool_size", candidate_target)
@@ -8078,6 +8085,13 @@ class OptimizerService:
                                     and float(source_row.get("salary") or 0) <= 4500):
                                 source_row["opportunity_diagnostic"] = showdown_opportunity_diagnostic(source_row)
                         source_by_id = {str(row["player_id"]): row for row in source_rows}
+                        if expanded_discovery:
+                            from .classic_expanded_discovery import expand_reviewed_discovery
+                            gpp_result.lineups, discovery_diagnostics = expand_reviewed_discovery(
+                                gpp_result, all_players, source_rows, risk_controls,
+                                {**frozen_options,"exclude_player_ids":sorted(exclude_ids)},
+                                workers=discovery_workers,
+                            )
                         for candidate in gpp_result.lineups:
                             legal, reason = self._validate_classic_lineups(
                                 [[self._gpp_player_to_dict(player) for player in candidate]],
@@ -8109,6 +8123,7 @@ class OptimizerService:
                             refill_workers=discovery_workers,
                             portfolio_constraints=params.get("portfolio_constraints"),
                             production_controls=risk_controls,
+                            full_reference_selection=expanded_discovery,
                             run_qb_family_diagnostics=(
                                 False if long_shot_mode
                                 else bool(params.get("classic_qb_family_diagnostics", True))
@@ -8122,6 +8137,7 @@ class OptimizerService:
                             "minimum_exposure_by_player": minimum_exposure_by_player,
                             "exclude_player_ids": sorted(exclude_ids),
                             "locked_player_ids": sorted(locked_ids),
+                            "policy_contract": small_field_report["policy_contract"],
                             "portfolio_constraints": params.get("portfolio_constraints") or {},
                             "risk_policy": params.get("classic_availability_risk_policy") or {},
                             "risk_overrides": params.get("classic_availability_overrides") or {},
@@ -8221,6 +8237,11 @@ class OptimizerService:
                             }
                         small_field_report["frozen_generation_inputs"] = frozen_generation_inputs
                         small_field_report["strategy_policy_alignment"] = strategy_config["policy_alignment"]
+                        small_field_report["contest_intent"] = params.get("contest_intent") or {
+                            "assignment_status": "UNASSIGNED", "intended_entry_count": None,
+                            "technical_strategy": strategy, "intended_profile": "unspecified",
+                            "warning": "User entry count does not establish contest field size."}
+                        params["effective_policy_contract"] = small_field_report["policy_contract"]
                         params["portfolio_constraints"] = small_field_report["selected_portfolio"]["constraints"]
                         if len(selected) != num_lineups:
                             raise ValueError(

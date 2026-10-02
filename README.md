@@ -1,5 +1,22 @@
 # football_26 Decision OS
 
+[Week 4 Sunday Main learning applied and readiness](WEEK4_SUNDAY_MAIN_LEARNING_APPLIED_AND_READINESS.md)
+
+[Week 4 Sunday contest profiles and portfolio decision](WEEK4_SUNDAY_CONTEST_PROFILES_AND_PORTFOLIO_DECISION.md) contains the independent single preview, unassigned five-entry planning portfolio, native-ID manifest, and opt-in UI settings.
+
+The [Sunday evidence archives](artifacts/sunday_preparation_archives/README.md)
+preserve frozen inputs, source snapshots, and UI verification. After cloning, run
+`python3 scripts/restore_sunday_preparation_evidence.py` to restore the referenced
+files with checksum verification; existing different evidence is never overwritten.
+
+Classic production now honors explicit overlap 4/5/6; omission retains six.
+Saved reports show requested/effective/source values, automatic quality budgets
+and independently achieved constraints. Sourced practice evidence reaches risk
+classification through persisted features; missing team-volume flags remain missing
+in reports. The expanded Sunday path is opt-in research, with unassigned contest
+intent and pre-lock/approval checks; no strategy weights or saved preferences changed.
+
+
 [The Week 4 Classic discovery/selection reconciliation](WEEK4_CLASSIC_DISCOVERY_SELECTION_RECONCILIATION.md)
 reuses the completed expanded discovery, separates fixed selection from dynamic
 thesis filtering, and traces requested versus effective production settings.

@@ -9,3 +9,7 @@ ui/dist/
 artifacts/checkpoints/
 artifacts/source_snapshots/
 artifacts/weather_forecasts/
+# Immutable Sunday evidence is versioned in sunday_preparation_archives/*.tar.gz.
+artifacts/week4_sunday_readiness/
+artifacts/week4_sunday_decision/
+artifacts/week4_sunday_source_update/

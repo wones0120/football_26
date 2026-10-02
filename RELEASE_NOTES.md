@@ -2,6 +2,37 @@
 
 ## Unreleased
 
+### Sunday contest decision and UI execution
+
+- Save the frozen A–E five-entry comparison, seven-player audit, independent single
+  recommendation and refreshed joint-cap preview with native IDs and roster hashes.
+  Distinguish the supplied 20-max GPP from the ticket satellite; assignments remain unset.
+- Add optional primary-game and all-skill appearance caps and expanded common-frame
+  discovery to the Classic diagnostic selector UI; validate requested/effective caps.
+  Preserve defaults, scoring, ownership and availability controls. Automatic multi-entry
+  QB/core caps no longer round a one-entry request down to zero eligibility.
+  Qualify expanded-preview readiness on-screen and in readable exports.
+- Recover an unreadable file-provider snapshot from verified identical captured bytes
+  through a local storage replica, leaving immutable database evidence unchanged.
+- Preserve Sunday evidence in checksum-verified archives with a restore utility
+  that refuses to overwrite different files, keeping large UI readbacks within
+  GitHub file limits.
+
+
+### Sunday Main integration and readiness
+
+- Honor explicit Classic overlap before the unchanged six-player default, including
+  core-exposure alternatives. Persist requested/effective policy, automatic quality
+  budget and independent canonical-roster validation; reject unproven solves.
+- Propagate sourced practice status/timestamps through context and projection
+  lineage into existing risk controls. Migration 0045 permits practice-only context
+  without authored role or availability. Preserve missing team-volume flags in reports.
+- Add development `/api/runtime-code` import fingerprints and a reproducible opt-in
+  Sunday control/discovery/selection/replay path. The reviewed planning manifest is
+  UNASSIGNED; expanded discovery, game-cap sensitivity and all-entry core audits
+  do not change production strategy defaults or submit entries.
+
+
 ### Pull weekly stats before learning reports
 
 - Weekly learning reports automatically fetch and ingest published player stats

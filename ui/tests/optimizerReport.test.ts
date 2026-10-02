@@ -216,6 +216,9 @@ test("Classic small-field report exposes candidate scoring and stack diagnostics
   const lineup = [{ player_id: "qb", name: "QB One", position: "QB", salary: 6000,
     projection: 20, p90: 30, player_team: "AAA",
     classic_small_field_report: { candidate_count: 120, requested_candidate_count: 120,
+      policy_contract: {contract_id: "classic_requested_effective_policy_v1", requested: {portfolio_constraints: {max_lineup_overlap: 4}}, effective: {max_lineup_overlap: 4}, sources: {max_lineup_overlap: "request"}, automatic_decisions: {total_quality_budget: .5}},
+      policy_validation: {status: "verified", actual_max_overlap: 4},
+      contest_intent: {assignment_status: "UNASSIGNED", intended_entry_count: null},
       selected_ranks: [1], note: "Existing scoring.", top_20: [candidate],
       all_candidates: [candidate],
       production_controls: { mode: "conservative", selection_tradeoffs: {} },
@@ -327,6 +330,9 @@ test("Classic small-field report exposes candidate scoring and stack diagnostics
   assert.match(html, /Strategy and applied policy/);
   assert.match(html, /borrowed_unvalidated/);
   assert.match(html, /Selected portfolio paths/);
+  assert.match(html, /Requested and effective portfolio policy/);
+  assert.match(html, /Achieved overlap:<\/strong> 4/);
+  assert.match(html, /UNASSIGNED/);
   assert.match(html, /Availability risk/);
   assert.match(html, /Questionable WR/);
   assert.match(html, /Projected points sacrificed due to availability-risk controls:<\/strong> 1\.20/);

@@ -110,13 +110,19 @@ def test_historical_freezes_remain_content_identical(frozen):
     assert frozen['sha256']==digest_payload({k:v for k,v in frozen.items() if k!='sha256'})
 
 
-def test_actual_production_call_overrides_overlap_but_forwards_distinct_qb(monkeypatch):
+def test_actual_production_call_honors_overlap_and_forwards_distinct_qb(monkeypatch):
     from types import SimpleNamespace
     from backend.app.product_services import classic_small_field as service
     from backend.app.product_services.classic_candidate_completeness import load_context
 
     inputs=json.loads((FROZEN/'control_inputs.json').read_text())
-    ctx=load_context(inputs);report=inputs['report'];by_id={p.player_id:p for p in ctx['players']}
+    # The historical fixture is immutable and predates the fix. Reconstruct test
+    # objects without treating it as a current-code replay.
+    from backend.app.product_services.gpp_optimizer import Player, SlateConfig, StackRules, TagThresholds, ObjectiveWeights, LineupTagCaps, PortfolioTargets
+    report=inputs['report'];payload=report['frozen_solver_snapshot']['payload'];c=payload['resolved_config']
+    config=SlateConfig(**{**c,'stack_rules':StackRules(**c['stack_rules']),'tag_thresholds':TagThresholds(**c['tag_thresholds']),'objective_weights':ObjectiveWeights(**c['objective_weights']),'tag_caps':LineupTagCaps(**c['tag_caps']),'portfolio_targets':PortfolioTargets(**c['portfolio_targets'])})
+    ctx={'players':[Player(**{**r,'tags':set(r['tags'])}) for r in payload['players']], 'source':{r['player_id']:r for r in payload['pool_rows']}, 'config':config, 'risk':{r['player_id']:r for r in report['prospective_experiment']['availability_risk']['players']}}
+    by_id={p.player_id:p for p in ctx['players']}
     lineups=[[by_id[pid] for pid in r['player_ids']] for r in report['all_candidates']
              if r['rank'] in report['selected_ranks']]
     pool=[{**row,'gpp_player':by_id[row['player_id']]} for row in ctx['source'].values()]
@@ -135,7 +141,7 @@ def test_actual_production_call_overrides_overlap_but_forwards_distinct_qb(monke
             pool_rows=pool,count=5,max_exposure=1,ownership_available=True,
             requested_candidate_count=5,production_controls=controls,
             portfolio_constraints={'max_lineup_overlap':4,'distinct_qb_paths':True})
-    assert captured['max_lineup_overlap']==6
+    assert captured['max_lineup_overlap']==4
     assert captured['distinct_qb_paths'] is True
     assert captured['minimum_qb_paths']==2
 

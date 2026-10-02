@@ -36,6 +36,33 @@ def _position(value: object) -> str:
     return "DST" if normalized in {"D", "DEF", "D/ST"} else normalized
 
 
+def risk_evidence_fields(evidence: Mapping[str, Any], observed_at: Any) -> dict:
+    """Propagate sourced practice facts; depth placement never clears workload.
+
+    The context loader gates received/observed time. The classifier additionally
+    checks the timestamps carried here against the decision cutoff.
+    """
+    practice = evidence.get("practice_report") or {}
+    value = evidence.get("practice_participation") or practice.get("practice_status")
+    aliases = {"FULL PARTICIPATION IN PRACTICE": "FULL",
+               "LIMITED PARTICIPATION IN PRACTICE": "LIMITED",
+               "DID NOT PARTICIPATE IN PRACTICE": "DNP"}
+    status = str(value or "").strip().upper()
+    at = evidence.get("practice_observed_at") or practice.get("observed_at") or observed_at
+    fields = {"practice_participation": aliases.get(status, status) or None,
+              "practice_trend": evidence.get("practice_trend"),
+              "practice_observed_at": at if status else None,
+              "expected_workload_status": evidence.get("expected_workload_status"),
+              "expected_workload_observed_at": evidence.get("expected_workload_observed_at")}
+    # A nested fact may not be newer than the containing observation.
+    if observed_at:
+        bound = _utc(datetime.fromisoformat(str(observed_at).replace("Z", "+00:00")))
+        for key in ("practice_observed_at", "expected_workload_observed_at"):
+            if fields[key] and _utc(datetime.fromisoformat(str(fields[key]).replace("Z", "+00:00"))) > bound:
+                raise ValueError("Risk evidence timestamp is later than its context observation")
+    return fields
+
+
 def load_current_pregame_context(
     connection: Connection,
     *,
@@ -210,7 +237,8 @@ class PregameContextService:
                 )
             }
             if not any(value is not None for value in values.values()) and not any(
-                (role_label, player.get("injury_status"))
+                (role_label, player.get("injury_status"),
+                 risk_evidence_fields(player.get("evidence") or {}, None)["practice_participation"])
             ):
                 raise ValueError(f"players[{index}] contains no pregame context signal")
             normalized.append(
