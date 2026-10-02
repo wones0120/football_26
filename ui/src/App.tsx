@@ -3909,7 +3909,7 @@ function App() {
             </div>
           )}
           {optimizerStatus && (
-            <div className="status-card" ref={optimizerResultsRef}>
+            <div className="status-card optimizer-results" ref={optimizerResultsRef}>
               <h3>
                 Optimizer · {CLASSIC_CONTEST_STRATEGIES.find(
                   (strategy) => strategy.id === optimizerStatus.strategy

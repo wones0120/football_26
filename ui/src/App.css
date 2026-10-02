@@ -1332,6 +1332,10 @@ table tbody tr:last-child {
   min-width: 800px;
 }
 
+.optimizer-results {
+  scroll-margin-top: 100px;
+}
+
 .saved-contest-table th:nth-child(1) { width: 230px; }
 .saved-contest-table th:nth-child(2) { width: 170px; }
 .saved-contest-table th:nth-child(3) { width: 170px; }
