@@ -225,6 +225,35 @@ def test_weekly_job_and_stage_checkpoints_become_visible_together(
         assert len(weekly_run_response(worker_session, run).stages) == len(WEEKLY_STAGES)
 
 
+@pytest.mark.parametrize("settings", [
+    {"refresh_projections": True},
+    {"assume_questionable_out": True},
+    {"availability_overrides": [{"player_id": "receiver", "availability": "assume_out"}]},
+])
+def test_predict_stage_rebuilds_configured_scenarios_instead_of_reusing_active(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, settings: dict,
+) -> None:
+    factory = _factory(tmp_path)
+    request = WeeklyRunRequest(season=2025, week=11, slate="SUNDAY_MAIN", **settings)
+    planned = allocate_stage_artifacts(request)["predict"]
+    def do_not_reuse(*args, **kwargs):
+        pytest.fail("A scenario rebuild must not reuse the active projection")
+    monkeypatch.setattr(SlateReadinessService, "report", do_not_reuse)
+    def rebuild(job_type, nested, payload):
+        assert payload["assume_questionable_out"] is request.assume_questionable_out
+        expected = [
+            {"player_id": "receiver", "player_name": None, "availability": "assume_out"}
+        ] if request.availability_overrides else []
+        assert payload["availability_overrides"] == expected
+        assert nested.run_id == planned["projection_run_id"]
+        return {"projection_run_id": nested.run_id, "rows_written": 10,
+                "target_persisted": True, "message": "Scenario rebuilt"}
+    monkeypatch.setattr("backend.app.services.job_handlers.execute_job_handler", rebuild)
+    outcome = DefaultWeeklyStageExecutor(factory)._predict(request, planned, {})
+    assert outcome.artifact_ids["projection_run_id"] == planned["projection_run_id"]
+    assert outcome.counts["rows_written"] == 10
+
+
 def test_predict_stage_reuses_the_active_immutable_projection_run(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -14,6 +14,7 @@ from sqlalchemy import and_, case, desc, func, select, text
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
+from Database.dst import canonical_team_sql
 from ..models import (
     CuratedGameVenue,
     CuratedGameWeather,
@@ -964,6 +965,87 @@ class IngestService:
                         )
                     )
 
+            self.session.flush()
+            bind = self.session.get_bind()
+            if bind.dialect.name == "postgresql" and self.session.execute(
+                text("SELECT to_regclass('target.snapshot_salary')")
+            ).scalar_one_or_none():
+                self.session.execute(
+                    text(
+                        """
+                        DELETE FROM target.snapshot_salary
+                        WHERE season = :season AND week = :week
+                          AND UPPER(COALESCE(slate, '')) = UPPER(:slate)
+                          AND site = :source_system
+                        """
+                    ),
+                    {
+                        "season": request.season,
+                        "week": request.week,
+                        "slate": request.slate,
+                        "source_system": request.source_system,
+                    },
+                )
+                salary_team = canonical_team_sql("salary.team")
+                salary_opponent = canonical_team_sql("salary.opponent")
+                self.session.execute(
+                    text(
+                        f"""
+                        INSERT INTO target.snapshot_salary
+                            (slate_id, season, week, slate, player_id, site,
+                             site_player_id, salary, roster_position, player_status,
+                             team_id, opponent_team_id, game_id, as_of, source)
+                        SELECT DISTINCT ON (
+                            salary.player_master_id, salary.roster_position
+                        )
+                            salary.season::text || ':' || salary.week::text || ':' ||
+                                COALESCE(salary.slate, 'UNKNOWN'),
+                            salary.season,
+                            salary.week,
+                            salary.slate,
+                            salary.player_master_id,
+                            salary.source_system,
+                            salary.source_player_key,
+                            salary.salary,
+                            salary.roster_position,
+                            salary.player_status,
+                            {salary_team},
+                            {salary_opponent},
+                            schedule.game_id,
+                            salary.created_at AT TIME ZONE 'UTC',
+                            salary.source_system
+                        FROM public.curated_salary salary
+                        LEFT JOIN LATERAL (
+                            SELECT raw.game_id
+                            FROM public.raw_nfl_schedule raw
+                            WHERE raw.season = salary.season
+                              AND raw.week = salary.week
+                              AND (({canonical_team_sql('raw.home_team')} = {salary_team}
+                                    AND {canonical_team_sql('raw.away_team')} = {salary_opponent})
+                                   OR ({canonical_team_sql('raw.home_team')} = {salary_opponent}
+                                       AND {canonical_team_sql('raw.away_team')} = {salary_team}))
+                            ORDER BY raw.created_at DESC, raw.raw_nfl_schedule_id DESC
+                            LIMIT 1
+                        ) schedule ON TRUE
+                        WHERE salary.ingest_run_id = :ingest_run_id
+                          AND salary.player_master_id IS NOT NULL
+                        ORDER BY salary.player_master_id, salary.roster_position,
+                                 salary.created_at DESC
+                        ON CONFLICT (season, week, slate, player_id, site, roster_position)
+                        DO UPDATE SET
+                            site_player_id = EXCLUDED.site_player_id,
+                            salary = EXCLUDED.salary,
+                            player_status = EXCLUDED.player_status,
+                            team_id = EXCLUDED.team_id,
+                            opponent_team_id = EXCLUDED.opponent_team_id,
+                            game_id = EXCLUDED.game_id,
+                            as_of = EXCLUDED.as_of,
+                            source = EXCLUDED.source
+                        """
+                    ),
+                    {"ingest_run_id": run.ingest_run_id},
+                )
+
             self.session.commit()
             run = self._complete_run(
                 run_id=run.ingest_run_id,
@@ -1093,6 +1175,72 @@ class IngestService:
                             resolution_status="open",
                         )
                     )
+            self.session.flush()
+            bind = self.session.get_bind()
+            if bind.dialect.name == "postgresql" and self.session.execute(
+                text("SELECT to_regclass('target.snapshot_injury_status')")
+            ).scalar_one_or_none():
+                self.session.execute(
+                    text(
+                        """
+                        DELETE FROM target.snapshot_injury_status
+                        WHERE season = :season AND week = :week
+                          AND UPPER(COALESCE(slate, '')) = UPPER(:slate)
+                          AND source = :source_system
+                        """
+                    ),
+                    {
+                        "season": request.season,
+                        "week": request.week,
+                        "slate": request.slate,
+                        "source_system": request.source_system,
+                    },
+                )
+                injury_team = canonical_team_sql("injury.team")
+                self.session.execute(
+                    text(
+                        f"""
+                        INSERT INTO target.snapshot_injury_status
+                            (season, week, slate, game_id, player_id, team_id,
+                             position, injury_status, injury_details, as_of, source)
+                        SELECT DISTINCT ON (injury.player_master_id)
+                            injury.season,
+                            injury.week,
+                            injury.slate,
+                            schedule.game_id,
+                            injury.player_master_id,
+                            injury.team,
+                            injury.position,
+                            injury.injury_status,
+                            injury.injury_details,
+                            injury.created_at AT TIME ZONE 'UTC',
+                            injury.source_system
+                        FROM public.curated_injury injury
+                        LEFT JOIN LATERAL (
+                            SELECT raw.game_id, raw.home_team, raw.away_team
+                            FROM public.raw_nfl_schedule raw
+                            WHERE raw.season = injury.season
+                              AND raw.week = injury.week
+                              AND ({canonical_team_sql('raw.home_team')} = {injury_team}
+                                   OR {canonical_team_sql('raw.away_team')} = {injury_team})
+                            ORDER BY raw.created_at DESC, raw.raw_nfl_schedule_id DESC
+                            LIMIT 1
+                        ) schedule ON TRUE
+                        WHERE injury.ingest_run_id = :ingest_run_id
+                          AND injury.player_master_id IS NOT NULL
+                        ORDER BY injury.player_master_id, injury.created_at DESC
+                        ON CONFLICT (season, week, slate, player_id, source)
+                        DO UPDATE SET
+                            game_id = EXCLUDED.game_id,
+                            team_id = EXCLUDED.team_id,
+                            position = EXCLUDED.position,
+                            injury_status = EXCLUDED.injury_status,
+                            injury_details = EXCLUDED.injury_details,
+                            as_of = EXCLUDED.as_of
+                        """
+                    ),
+                    {"ingest_run_id": run.ingest_run_id},
+                )
             self.session.commit()
             run = self._complete_run(
                 run_id=run.ingest_run_id,
@@ -1332,32 +1480,56 @@ class IngestService:
             )
             return IngestResultResponse.model_validate(run, from_attributes=True)
 
-    def ingest_nflreadpy_weekly_stats(self, request: NflReadPySeasonRequest) -> IngestResultResponse:
+    def ingest_nflreadpy_weekly_stats(
+        self,
+        request: NflReadPySeasonRequest,
+        *,
+        source_frame: pd.DataFrame | None = None,
+        ingest_run_id: str | None = None,
+        source_path: str | None = None,
+    ) -> IngestResultResponse:
+        completed = self._completed_run(ingest_run_id)
+        if completed is not None:
+            return IngestResultResponse.model_validate(completed, from_attributes=True)
+
+        selected_weeks = sorted(set(request.weeks or []))
         run = self._new_run(
             source_system="nflreadpy",
             source_table="weekly_stats",
-            source_path=None,
+            source_path=source_path,
             season=request.season,
-            week=None,
+            week=selected_weeks[0] if len(selected_weeks) == 1 else None,
             slate=None,
+            ingest_run_id=ingest_run_id,
         )
         rows_raw = 0
         rows_curated = 0
         rows_unresolved = 0
         try:
-            try:
-                import nflreadpy as nfl  # type: ignore
-            except ModuleNotFoundError as exc:
-                raise RuntimeError(
-                    "nflreadpy is not installed. Activate your virtualenv and run "
-                    "`pip install -r requirements.txt`, then restart the API."
-                ) from exc
-
-            df = self._load_nflreadpy_weekly_data(
-                nfl_module=nfl,
-                season=request.season,
-                weeks=request.weeks,
-            )
+            if source_frame is None:
+                try:
+                    import nflreadpy as nfl  # type: ignore
+                except ModuleNotFoundError as exc:
+                    raise RuntimeError(
+                        "nflreadpy is not installed. Activate your virtualenv and run "
+                        "`pip install -r requirements.txt`, then restart the API."
+                    ) from exc
+                df = self._load_nflreadpy_weekly_data(
+                    nfl_module=nfl,
+                    season=request.season,
+                    weeks=request.weeks,
+                )
+            else:
+                df = _coerce_dataframe(source_frame).copy()
+                if selected_weeks:
+                    if "week" not in df.columns:
+                        raise RuntimeError(
+                            "Could not find a usable week column in captured nflreadpy "
+                            "weekly stats."
+                        )
+                    df = df[
+                        pd.to_numeric(df["week"], errors="coerce").isin(selected_weeks)
+                    ]
             if df is None or getattr(df, "empty", True):
                 raise RuntimeError("nflreadpy weekly stats returned no records.")
 
@@ -1622,32 +1794,56 @@ class IngestService:
             )
             return IngestResultResponse.model_validate(run, from_attributes=True)
 
-    def ingest_nflreadpy_snap_counts(self, request: NflReadPySeasonRequest) -> IngestResultResponse:
+    def ingest_nflreadpy_snap_counts(
+        self,
+        request: NflReadPySeasonRequest,
+        *,
+        source_frame: pd.DataFrame | None = None,
+        ingest_run_id: str | None = None,
+        source_path: str | None = None,
+    ) -> IngestResultResponse:
+        completed = self._completed_run(ingest_run_id)
+        if completed is not None:
+            return IngestResultResponse.model_validate(completed, from_attributes=True)
+
+        selected_weeks = sorted(set(request.weeks or []))
         run = self._new_run(
             source_system="nflreadpy",
             source_table="snap_counts",
-            source_path=None,
+            source_path=source_path,
             season=request.season,
-            week=None,
+            week=selected_weeks[0] if len(selected_weeks) == 1 else None,
             slate=None,
+            ingest_run_id=ingest_run_id,
         )
         rows_raw = 0
         rows_curated = 0
         rows_unresolved = 0
         try:
-            try:
-                import nflreadpy as nfl  # type: ignore
-            except ModuleNotFoundError as exc:
-                raise RuntimeError(
-                    "nflreadpy is not installed. Activate your virtualenv and run "
-                    "`pip install -r requirements.txt`, then restart the API."
-                ) from exc
-
-            df = self._load_nflreadpy_snap_counts(
-                nfl_module=nfl,
-                season=request.season,
-                weeks=request.weeks,
-            )
+            if source_frame is None:
+                try:
+                    import nflreadpy as nfl  # type: ignore
+                except ModuleNotFoundError as exc:
+                    raise RuntimeError(
+                        "nflreadpy is not installed. Activate your virtualenv and run "
+                        "`pip install -r requirements.txt`, then restart the API."
+                    ) from exc
+                df = self._load_nflreadpy_snap_counts(
+                    nfl_module=nfl,
+                    season=request.season,
+                    weeks=request.weeks,
+                )
+            else:
+                df = _coerce_dataframe(source_frame).copy()
+                if selected_weeks:
+                    if "week" not in df.columns:
+                        raise RuntimeError(
+                            "Could not find a usable week column in captured nflreadpy "
+                            "snap counts."
+                        )
+                    df = df[
+                        pd.to_numeric(df["week"], errors="coerce").isin(selected_weeks)
+                    ]
             if df.empty:
                 raise RuntimeError("nflreadpy snap counts returned no records.")
             if "week" not in df.columns:

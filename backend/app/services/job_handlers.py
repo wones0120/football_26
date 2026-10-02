@@ -22,8 +22,10 @@ from ..product_schemas import (
 )
 from ..product_services.agent import NewsMatchupAgent
 from ..product_services.data_quality import DataQualityService
+from ..product_services.canonical_projection_inputs import StaleTrainingOutcomeError
 from ..product_services.predictions import PredictionsService
 from ..product_services.simulations import SimulationService as SlateSimulationService
+from ..product_services.starters import StartingQBService
 from ..schemas import (
     BenchmarkSuiteRunRequest,
     BenchmarkSuiteRunResponse,
@@ -293,7 +295,35 @@ def _projection_handler(
         "Loading canonical salary and feature coverage for the requested projection slice.",
     )
 
+    # The UI resolves starters before enqueueing, but API and weekly jobs can
+    # reach this handler directly. Resolve live slates here as the final gate.
+    # Historical cutoff runs must use their saved prelock evidence instead.
     checkpoint = dict(context.checkpoint)
+    if request.slate and request.data_cutoff_at is None:
+        context.progress(
+            "starting_qb_resolution",
+            1,
+            4,
+            "Resolving and persisting starting-QB evidence for this slate.",
+        )
+        starter_result = StartingQBService(connection_string).derive_starters(
+            season=request.season,
+            week=request.week,
+            slate=request.slate,
+        )
+        if starter_result.rows_written <= 0:
+            raise PermanentJobError(starter_result.message)
+        # Jobs freeze a cutoff when queued. Evidence recorded by this worker
+        # would otherwise be invisible to the time-safe projection loader.
+        checkpoint["data_cutoff_at"] = datetime.now(UTC).isoformat()
+        context.progress(
+            "starting_qb_resolution",
+            1,
+            4,
+            starter_result.message,
+            checkpoint=checkpoint,
+        )
+
     data_cutoff_at = request.data_cutoff_at
     if data_cutoff_at is None and checkpoint.get("data_cutoff_at"):
         data_cutoff_at = datetime.fromisoformat(str(checkpoint["data_cutoff_at"]))
@@ -303,17 +333,85 @@ def _projection_handler(
         4,
         "Training the projection model and persisting immutable outputs.",
     )
-    try:
-        result = prediction_service.train_and_predict(
+    def train(effective_cutoff: datetime | None):
+        return prediction_service.train_and_predict(
             season=request.season,
             week=request.week,
             positions=request.positions,
             slate=request.slate,
-            data_cutoff_at=data_cutoff_at,
+            data_cutoff_at=effective_cutoff,
             feature_run_id=checkpoint.get("feature_run_id"),
             model_run_id=checkpoint.get("model_run_id"),
             projection_run_id=context.run_id,
+            availability_overrides=[
+                row.model_dump(mode="json") for row in request.availability_overrides
+            ],
+            allow_confirmed_inactive_override=request.allow_confirmed_inactive_override,
+            assume_questionable_out=request.assume_questionable_out,
         )
+
+    try:
+        result = train(data_cutoff_at)
+    except StaleTrainingOutcomeError as exc:
+        if request.data_cutoff_at is not None:
+            raise PermanentJobError(
+                f"{exc} Automatic repair is disabled for an explicit historical cutoff."
+            ) from exc
+        grouped_weeks: dict[int, list[int]] = {}
+        for stale_season, stale_week in exc.periods:
+            grouped_weeks.setdefault(stale_season, []).append(stale_week)
+        refreshed_rows = 0
+        refreshed_slices = 0
+        context.progress(
+            "training_feature_refresh",
+            1,
+            4,
+            "Refreshing completed prior-week feature labels from loaded weekly results.",
+        )
+        for stale_season, stale_weeks in sorted(grouped_weeks.items()):
+            with SessionLocal() as session:
+                summary = LineupLearningService(
+                    session
+                ).rebuild_player_game_feature_matrix(
+                    source_system="draftkings",
+                    season_start=stale_season,
+                    season_end=stale_season,
+                    weeks=sorted(set(stale_weeks)),
+                )
+            if not summary["slates_total"] or summary["slates_failed"]:
+                raise PermanentJobError(
+                    "Automatic training-feature refresh could not rebuild all stale "
+                    f"slices for {stale_season} weeks {sorted(set(stale_weeks))}."
+                ) from exc
+            refreshed_rows += int(summary["rows_written"])
+            refreshed_slices += int(summary["slates_completed"])
+        data_cutoff_at = datetime.now(UTC)
+        checkpoint = {
+            **checkpoint,
+            "data_cutoff_at": data_cutoff_at.isoformat(),
+            "automatic_training_feature_refresh": {
+                "periods": [
+                    {"season": season, "week": week}
+                    for season, week in exc.periods
+                ],
+                "slates_completed": refreshed_slices,
+                "rows_written": refreshed_rows,
+            },
+        }
+        context.progress(
+            "projection_model",
+            3,
+            4,
+            (
+                f"Refreshed {refreshed_rows} training rows across "
+                f"{refreshed_slices} slate(s); retrying projections."
+            ),
+            checkpoint=checkpoint,
+        )
+        try:
+            result = train(data_cutoff_at)
+        except ValueError as retry_exc:
+            raise PermanentJobError(str(retry_exc)) from retry_exc
     except ValueError as exc:
         raise PermanentJobError(str(exc)) from exc
 

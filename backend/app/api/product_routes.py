@@ -8,12 +8,13 @@ import subprocess
 import logging
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query
 from fastapi.responses import Response
 
 from Database import NFLIngestionController, NFLDataSource
 from Database.manager import NFLDatabaseManager
 from Database.config import get_connection_string
+from Database.player_identity import repair_salary_identities
 from Database.aggregations import (
     calculate_and_insert_player_season_averages,
     build_team_weekly_aggregations,
@@ -35,6 +36,9 @@ from Database.curated_ingest import (
     _ensure_table,
 )
 from ..product_services.predictions import PredictionsService
+from ..product_services.projection_audit import (
+    capture_benchmark, disagreement_rows, player_why, projection_audit,
+)
 import pandas as pd
 import polars as pl
 from sqlalchemy import text
@@ -88,7 +92,9 @@ from ..product_schemas import (
     BuildFeaturesResponse,
     ModelPipelineSummaryResponse,
     OptimizerRunRequest,
+    SkillExposureDecisionRequest,
     ContestPreviewRequest,
+    SavedContestRequest,
     OptimizerStatusResponse,
     SimulationRunRequest,
     JointResearchRequest,
@@ -132,6 +138,7 @@ from ..product_schemas import (
     OwnershipRunResponse,
     DraftKingsBatchImportRequest,
     DraftKingsBatchImportResponse,
+    WeeklyContestFolderImportRequest,
     PortfolioCreateRequest,
     PortfolioResponse,
     DraftKingsExportResponse,
@@ -140,6 +147,9 @@ from ..product_schemas import (
     PastSlateAnalysisResponse,
     SlateLearningReportRequest,
     SlateLearningReportResponse,
+    WeeklyLearningReportRequest,
+    WeeklyLearningReportResponse,
+    PlayerOutcomeEventRequest,
     AgentQuestionGenerateRequest,
     AgentQuestionAnswerRequest,
     AgentQuestionResponse,
@@ -189,7 +199,7 @@ from ..product_services.digital_twin_variants import DigitalTwinVariantService
 from ..product_services.thought_inbox import ThoughtInboxService
 from ..product_services.news_monitor import NewsMonitorService
 from ..product_services.ownership import OwnershipService
-from ..product_services.batch_import import DraftKingsBatchImportService
+from ..product_services.batch_import import DraftKingsBatchImportService, SelectedWeeklyContestFile
 from ..product_services.portfolio import PortfolioService
 from ..product_services.draftkings_export import DraftKingsExportService
 from ..product_services.slate import SlateDataService
@@ -888,6 +898,40 @@ def batch_import_draftkings(
     return DraftKingsBatchImportResponse(**result.as_dict())
 
 
+@router.post("/imports/draftkings/weekly-contests", response_model=DraftKingsBatchImportResponse)
+def import_weekly_contest_folder(
+    request: WeeklyContestFolderImportRequest,
+    service: DraftKingsBatchImportService = Depends(get_batch_import_service),
+    quality_service: DataQualityService = Depends(get_data_quality_service),
+) -> DraftKingsBatchImportResponse:
+    try:
+        kwargs = {
+            "season": request.season, "week": request.week,
+            "slate": "UNRESOLVED", "recursive": True,
+            "dry_run": request.dry_run, "weekly_contests_only": True,
+        }
+        if request.selected_files is not None:
+            kwargs["selected_files"] = [
+                SelectedWeeklyContestFile(**row.model_dump()) for row in request.selected_files
+            ]
+        result = service.import_directory(request.directory, **kwargs)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    _record_load_quality(
+        quality_service,
+        trigger="weekly_contest_folder_dry_run" if request.dry_run else "weekly_contest_folder_import",
+        season=request.season, week=request.week, slate="WEEK",
+        summaries=[{
+            **row.__dict__, "dataset": "draftkings_contest_standings",
+            "status": "fail" if row.status == "failed" else
+                "warn" if row.status in {"skipped", "staged", "would_stage"} else "pass",
+            "threshold": "raw file staged or contest standings loaded with a verified week and slate",
+        } for row in result.files],
+        source_context={"batch_id": result.batch_id, "directory": result.directory},
+    )
+    return DraftKingsBatchImportResponse(**result.as_dict())
+
+
 @router.post("/portfolios", response_model=PortfolioResponse)
 def create_portfolio(
     request: PortfolioCreateRequest,
@@ -973,6 +1017,7 @@ def run_ownership_model(
         slate=request.slate,
         positions=request.positions,
         data_cutoff_at=request.data_cutoff_at,
+        projection_run_id=request.projection_run_id,
     )
     payload = {**result.__dict__, "model_metrics": result.model_metrics or {}}
     return OwnershipRunResponse(**payload)
@@ -1023,6 +1068,32 @@ def generate_slate_learning_report(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return SlateLearningReportResponse(**result)
+
+
+@router.post("/learning/reports/weekly", response_model=WeeklyLearningReportResponse)
+def generate_weekly_learning_report(
+    request: WeeklyLearningReportRequest,
+    service: SlateLearningService = Depends(get_slate_learning_service),
+) -> WeeklyLearningReportResponse:
+    try:
+        result = service.generate_week(
+            season=request.season, week=request.week, entry_user=request.entry_user,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return WeeklyLearningReportResponse(**result)
+
+
+@router.post("/learning/outcome-events")
+def record_player_outcome_event(
+    request: PlayerOutcomeEventRequest,
+    service: SlateLearningService = Depends(get_slate_learning_service),
+) -> dict[str, str]:
+    try:
+        event_id = service.record_outcome_event(**request.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"event_id": event_id}
 
 
 @router.get("/learning/reports/latest", response_model=SlateLearningReportResponse)
@@ -1427,6 +1498,54 @@ def get_latest_predictions(
     )
 
 
+@router.get("/predict/audit/{projection_run_id}")
+def get_projection_audit(
+    projection_run_id: str,
+    service: PredictionsService = Depends(get_predictions_service),
+) -> dict:
+    try:
+        with service.engine.connect() as connection:
+            return projection_audit(connection, projection_run_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/predict/audit/{projection_run_id}/player/{player_id}")
+def get_player_why(
+    projection_run_id: str, player_id: str,
+    service: PredictionsService = Depends(get_predictions_service),
+) -> dict:
+    try:
+        with service.engine.connect() as connection:
+            return player_why(connection, projection_run_id, player_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/predict/audit/{projection_run_id}/disagreements")
+def get_model_disagreements(
+    projection_run_id: str,
+    service: PredictionsService = Depends(get_predictions_service),
+) -> dict:
+    with service.engine.connect() as connection:
+        projection_audit(connection, projection_run_id)
+        return {"projection_run_id": projection_run_id,
+                "rows": disagreement_rows(connection, projection_run_id)}
+
+
+@router.post("/predict/external-benchmarks", status_code=201)
+def post_external_benchmark(
+    payload: dict = Body(...),
+    service: PredictionsService = Depends(get_predictions_service),
+) -> dict:
+    try:
+        with service.engine.begin() as connection:
+            benchmark_id = capture_benchmark(connection, payload)
+        return {"benchmark_id": benchmark_id}
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 @router.post("/predict/active", response_model=ActivePredictionRunResponse)
 def select_active_prediction_run(
     request: ActivePredictionRunRequest,
@@ -1624,6 +1743,26 @@ def get_slate_readiness(
         except Exception:  # noqa: BLE001 - a telemetry failure must not hide readiness results
             logger.exception("Unable to persist slate-readiness quality history")
     return SlateReadinessResponse(**report)
+
+
+@router.post("/slate/identity-reconcile")
+def reconcile_slate_salary_identities(
+    request: StartingQBRequest,
+    session: Session = Depends(get_db_session),
+) -> dict:
+    """Resolve or quarantine unmatched salaries for one projection slate."""
+    result = repair_salary_identities(
+        session.get_bind(),
+        season=request.season,
+        week=request.week,
+        slate=request.slate,
+    )
+    return {
+        "season": request.season,
+        "week": request.week,
+        "slate": request.slate,
+        **result.__dict__,
+    }
 
 
 @router.get("/data/quality/history", response_model=DataQualityHistoryResponse)
@@ -1847,14 +1986,85 @@ def replay_digital_twin_variant_set(
 
 
 @router.post("/optimizer/contests/preview")
-def preview_optimizer_contests(request: ContestPreviewRequest) -> dict:
+def preview_optimizer_contests(
+    request: ContestPreviewRequest,
+    service: OptimizerService = Depends(get_optimizer_service),
+) -> dict:
+    from ..product_services.showdown_contests import fetch_contests
+    from ..product_services.saved_contests import record_saved_observations
+
+    try:
+        rows = fetch_contests(request.urls, manual=request.manual_contest_metadata)
+        record_saved_observations(service.engine, rows, reason="preview")
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"contests": rows, "refreshed_at": datetime.now(UTC).isoformat()}
+
+
+@router.get("/optimizer/contests/saved")
+def get_saved_optimizer_contests(
+    season: int = Query(..., ge=2000), week: int = Query(..., ge=1, le=25),
+    slate: str = Query(..., min_length=1),
+    contest_format: str | None = None, contest_type: str | None = None,
+    service: OptimizerService = Depends(get_optimizer_service),
+) -> dict:
+    from ..product_services.saved_contests import list_saved_contests
+
+    return {"contests": list_saved_contests(
+        service.engine, season=season, week=week, slate=slate,
+        contest_format=contest_format, contest_type=contest_type,
+    )}
+
+
+@router.get("/optimizer/contests/saved/scopes")
+def get_saved_optimizer_contest_scopes(
+    service: OptimizerService = Depends(get_optimizer_service),
+) -> dict:
+    from ..product_services.saved_contests import list_saved_contest_scopes
+
+    return {"scopes": list_saved_contest_scopes(service.engine)}
+
+
+@router.post("/optimizer/contests/saved")
+def save_optimizer_contests(
+    request: SavedContestRequest,
+    service: OptimizerService = Depends(get_optimizer_service),
+) -> dict:
+    from ..product_services.saved_contests import save_contests
     from ..product_services.showdown_contests import fetch_contests
 
     try:
         rows = fetch_contests(request.urls, manual=request.manual_contest_metadata)
+        saved = save_contests(
+            service.engine, rows, season=request.season, week=request.week,
+            slate=request.slate, contest_format=request.contest_format,
+            contest_type=request.contest_type,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return {"contests": rows, "refreshed_at": datetime.now(UTC).isoformat()}
+    return {"contests": saved}
+
+
+@router.delete("/optimizer/contests/saved/{contest_id}")
+def remove_saved_optimizer_contest(
+    contest_id: str,
+    service: OptimizerService = Depends(get_optimizer_service),
+) -> dict:
+    from ..product_services.saved_contests import archive_saved_contest
+
+    if not archive_saved_contest(service.engine, contest_id):
+        raise HTTPException(status_code=404, detail="Saved contest not found")
+    return {"contest_id": contest_id, "archived": True}
+
+
+@router.get("/optimizer/contests/saved/{contest_id}/observations")
+def get_saved_optimizer_contest_observations(
+    contest_id: str, limit: int = Query(default=50, ge=1, le=500),
+    service: OptimizerService = Depends(get_optimizer_service),
+) -> dict:
+    from ..product_services.saved_contests import list_contest_observations
+
+    return {"contest_id": contest_id, "observations": list_contest_observations(service.engine, contest_id, limit=limit)}
 
 
 @router.post("/optimizer/run", response_model=OptimizerStatusResponse)
@@ -1869,6 +2079,7 @@ def run_optimizer(
             slate=request.slate,
             strategy=request.strategy,
             params=request.params,
+            optimizer_run_id=request.optimizer_run_id,
             contest_format=request.contest_format,
             objective=request.objective,
             projection_run_id=request.projection_run_id,
@@ -1884,6 +2095,9 @@ def run_optimizer(
         strategy_config=job.params.get("strategy_config", {}),
         contest_format=job.contest_format,
         objective=job.objective,
+        enforce_single_te=job.params.get("enforce_single_te") if type(job.params.get("enforce_single_te")) is bool else None,
+        long_shot_mode=bool(job.params.get("long_shot_mode", False)),
+        exclude_opponent_teams=job.params.get("exclude_opponent_teams", []),
         projection_run_id=job.projection_run_id,
         rule_run_id=job.rule_run_id,
         data_cutoff_at=job.data_cutoff_at,
@@ -1894,6 +2108,15 @@ def run_optimizer(
         created_at=job.created_at,
         updated_at=job.updated_at,
     )
+
+
+@router.get("/optimizer/projections")
+def get_optimizer_projection_runs(
+    season: int = Query(..., ge=2000), week: int = Query(..., ge=1, le=25),
+    slate: str = Query(..., min_length=1),
+    service: OptimizerService = Depends(get_optimizer_service),
+) -> dict:
+    return {"runs": service.list_completed_projection_runs(season=season, week=week, slate=slate)}
 
 
 @router.post(
@@ -2001,6 +2224,9 @@ def get_optimizer_results(
         strategy_config=job.params.get("strategy_config", {}),
         contest_format=job.contest_format,
         objective=job.objective,
+        enforce_single_te=job.params.get("enforce_single_te") if type(job.params.get("enforce_single_te")) is bool else None,
+        long_shot_mode=bool(job.params.get("long_shot_mode", False)),
+        exclude_opponent_teams=job.params.get("exclude_opponent_teams", []),
         projection_run_id=job.projection_run_id,
         rule_run_id=job.rule_run_id,
         data_cutoff_at=job.data_cutoff_at,
@@ -2011,6 +2237,73 @@ def get_optimizer_results(
         created_at=job.created_at,
         updated_at=job.updated_at,
     )
+
+
+@router.get("/optimizer/results/{job_id}/skill-exposure")
+def get_skill_exposure_decisions(
+    job_id: str, service: OptimizerService = Depends(get_optimizer_service),
+) -> dict:
+    from ..product_services.skill_exposure_approval import approval_status
+
+    job = service.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Optimizer run not found")
+    return approval_status(job, service.engine)
+
+
+@router.post("/optimizer/results/{job_id}/skill-exposure")
+def decide_skill_exposure(
+    job_id: str, request: SkillExposureDecisionRequest,
+    service: OptimizerService = Depends(get_optimizer_service),
+) -> dict:
+    from ..product_services.skill_exposure_approval import (
+        first_kickoff, record_decision, required_skill_players,
+    )
+
+    job = service.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Optimizer run not found")
+    if job.status != "completed":
+        raise HTTPException(status_code=409, detail="Exposure decisions require a completed run")
+    try:
+        if request.player_id not in {row["player_id"] for row in required_skill_players(job)}:
+            raise ValueError("Player is not a 100% RB/WR/TE exposure case in this run")
+        if datetime.now(UTC) >= first_kickoff(job):
+            raise ValueError("Exposure decisions must be saved before slate kickoff")
+        if request.decision == "approve":
+            return record_decision(job, service.engine, player_id=request.player_id,
+                                   decision="approve", reason=request.reason)
+        cap = request.requested_cap
+        if cap is None:
+            raise ValueError("Cap decision requires requested_cap, at most 0.8")
+        new_run_id = str(uuid4())
+        params = dict(job.params)
+        for derived_key in ("strategy_runtime", "decision_snapshot", "optimizer_rules",
+                            "strategy_config", "stack_policy", "stack_policy_id"):
+            params.pop(derived_key, None)
+        caps = dict(params.get("maximum_exposure_by_player") or {})
+        caps[request.player_id] = cap
+        params["maximum_exposure_by_player"] = caps
+        params["skill_exposure_parent_run_id"] = job.job_id
+        replacement = service.run_job(
+            season=job.season, week=job.week, slate=job.slate,
+            strategy=job.strategy, params=params, contest_format=job.contest_format,
+            objective=job.objective, projection_run_id=job.projection_run_id,
+            rule_run_id=job.rule_run_id, data_cutoff_at=job.data_cutoff_at,
+            optimizer_run_id=new_run_id,
+        )
+        if replacement.status != "completed":
+            raise ValueError(replacement.message or "Capped optimizer run did not complete")
+        appearances = sum(any(str(row.get("player_id")) == request.player_id for row in lineup)
+                          for lineup in replacement.results or [])
+        if appearances > int(len(replacement.results or []) * cap):
+            raise ValueError("Capped optimizer run did not honor the requested exposure")
+        choice = record_decision(job, service.engine, player_id=request.player_id,
+                                 decision="cap", requested_cap=cap,
+                                 resulting_run_id=new_run_id, reason=request.reason)
+        return {**choice, "new_optimizer_run_id": new_run_id}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/optimizer/results/{job_id}/draftkings/download")
@@ -2024,6 +2317,10 @@ def download_optimizer_lineups(
     if job.status != "completed":
         raise HTTPException(status_code=409, detail="Export requires a completed optimizer run")
     try:
+        from ..product_services.skill_exposure_approval import ensure_classic_export_ready
+
+        if job.contest_format == "classic" and getattr(job, "strategy", None) == "classic_small_field_gpp":
+            ensure_classic_export_ready(job, service.engine)
         filename, media_type, content = DraftKingsExportService.build_lineup_download(
             contest_format=job.contest_format, lineups=job.results or [], run_id=job.job_id,
             allow_duplicate_lineups=getattr(job, "strategy", None) == "showdown_single_entry_portfolio",
@@ -2204,6 +2501,7 @@ def derive_starting_qbs(
         rows_written=result.rows_written,
         message=result.message,
         completed_at=result.completed_at,
+        candidates=result.candidates,
     )
 
 
@@ -2238,6 +2536,7 @@ def load_starting_qbs(
         rows_written=result.rows_written,
         message=result.message,
         completed_at=result.completed_at,
+        candidates=result.candidates,
     )
 
 

@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
@@ -10,18 +10,165 @@ from backend.app.product_services.canonical_projection_inputs import (
     FEATURE_COLUMNS,
     POSITION_FEATURE_COLUMNS,
     add_position_features,
+    apply_player_availability_overrides,
+    apply_latest_market_context,
+    reconcile_training_market_context,
     apply_pregame_projection_context,
     attach_lagged_opportunity_features,
+    attach_lagged_participation_features,
     prepare_inputs,
+    load_inputs,
+    StaleTrainingOutcomeError,
+    validate_completed_training_outcomes,
 )
 from backend.app.product_services.predictions import (
     PredictionsService,
     TARGET_COL,
     derive_calibration_roles,
 )
+from backend.app.product_services.offensive_role import attach_offensive_role, rank_team_roles
 
 
 CUTOFF = datetime(2026, 9, 6, 13, tzinfo=timezone.utc)
+
+
+def test_latest_captured_market_changes_both_offenses_without_imputation():
+    target = pd.DataFrame([
+        {"recent_team": "CHI", "opponent_team": "PHI", "game_total_line": 44.5,
+         "team_spread_line": 3.0, "team_implied_total": 20.75,
+         "opponent_implied_total": 23.75},
+        {"recent_team": "PHI", "opponent_team": "CHI", "game_total_line": 44.5,
+         "team_spread_line": -3.0, "team_implied_total": 23.75,
+         "opponent_implied_total": 20.75},
+    ])
+    market = pd.DataFrame([{
+        "raw_nfl_schedule_id": 12, "source_system": "public_market",
+        "home_team": "CHI", "away_team": "PHI",
+        "kickoff": "2026-10-04T17:00:00Z", "created_at": "2026-09-28T18:00:01Z",
+        "raw_row_json": {"total_line": 41.5, "spread_line": -3.5,
+                         "observed_at": "2026-09-28T18:00:00Z"},
+    }])
+    updated, audit = apply_latest_market_context(target, market, cutoff=datetime(2026, 9, 29, tzinfo=timezone.utc))
+    assert updated["team_implied_total"].tolist() == [19.0, 22.5]
+    assert updated["team_spread_line"].tolist() == [3.5, -3.5]
+    assert updated["market_context_updated_from_matrix"].tolist() == [True, True]
+    assert len(audit) == 2
+    assert {row["source_system"] for row in audit} == {"public_market"}
+    unchanged, missing_audit = apply_latest_market_context(target, pd.DataFrame())
+    assert unchanged["team_implied_total"].isna().all()
+    assert unchanged["game_total_line"].isna().all()
+    assert unchanged["team_spread_line"].isna().all()
+    assert missing_audit == []
+    newer_matrix = target.assign(created_at="2026-09-28T19:30:00Z")
+    older_market = market.assign(created_at="2026-09-28T18:00:00Z")
+    preserved, _ = apply_latest_market_context(newer_matrix, older_market,
+                                                cutoff=datetime(2026, 9, 29, tzinfo=timezone.utc))
+    assert preserved["team_implied_total"].tolist() == [19.0, 22.5]
+    late, ignored = apply_latest_market_context(target, market.assign(created_at="2026-09-30T18:00:00Z"),
+                                                 cutoff=datetime(2026, 9, 29, tzinfo=timezone.utc))
+    assert late["team_implied_total"].isna().all()
+    assert {row["status"] for row in ignored} == {"market_timestamp_not_predecision"}
+
+
+def test_historical_market_reconciliation_corrects_reversed_favorite():
+    train = pd.DataFrame([
+        {"season": 2025, "week": 18, "team": "ARI", "opponent": "LAR",
+         "game_id": "game-1", "game_total_line": 49.5,
+         "team_spread_line": -14.5, "team_implied_total": 32.0,
+         "opponent_implied_total": 17.5},
+    ])
+    market = pd.DataFrame([{
+        "season": 2025, "week": 18, "home_team": "LA", "away_team": "ARI",
+        "raw_row_json": {"total_line": 49.5, "spread_line": 14.5},
+    }])
+    corrected, audit = reconcile_training_market_context(train, market)
+    assert corrected.loc[0, "team_spread_line"] == 14.5
+    assert corrected.loc[0, "team_implied_total"] == 17.5
+    assert corrected.loc[0, "opponent_implied_total"] == 32.0
+    assert audit["corrected_players"] == 1
+    assert audit["corrected_games"] == 1
+
+
+def test_market_snapshot_assigns_canonical_game_id_to_dst_feature_without_one():
+    target = pd.DataFrame([{"recent_team": "TB", "opponent_team": "GB",
+                            "game_id": None, "position": "DST",
+                            "game_total_line": 0.0, "team_spread_line": 0.0,
+                            "team_implied_total": 0.0, "opponent_implied_total": 0.0}])
+    market = pd.DataFrame([{"raw_nfl_schedule_id": "snapshot-1", "source_system": "nflverse_schedules",
+                            "home_team": "TB", "away_team": "GB", "game_id": "2026_04_GB_TB",
+                            "kickoff": "2026-10-04T17:00:00Z", "created_at": "2026-09-29T21:22:12Z",
+                            "raw_row_json": {"total_line": 39.5, "spread_line": -3.5,
+                                             "observed_at": "2026-09-29T21:22:11Z"}}])
+    updated, audit = apply_latest_market_context(target, market,
+                                                  cutoff=datetime(2026, 9, 30, tzinfo=timezone.utc))
+    assert updated.loc[0, "game_id"] == "2026_04_GB_TB"
+    assert updated.loc[0, "team_implied_total"] == 18.0
+    assert len(audit) == 1
+
+
+def test_showdown_market_refresh_orders_observations_by_instant_across_timezones():
+    target = pd.DataFrame([{"slate": "THURSDAY_NIGHT", "recent_team": "CLE",
+                            "opponent_team": "PIT", "game_id": "2026_04_PIT_CLE",
+                            "game_total_line": 0.0, "team_spread_line": 0.0,
+                            "team_implied_total": 0.0, "opponent_implied_total": 0.0}])
+    rows = pd.DataFrame([
+        {"raw_nfl_schedule_id": "new", "source_system": "nflverse_schedules",
+         "home_team": "CLE", "away_team": "PIT", "game_id": "2026_04_PIT_CLE",
+         "kickoff": "2026-10-02T00:15:00Z", "created_at": "2026-09-30T01:22:12Z",
+         "raw_row_json": {"total_line": 38.5, "spread_line": -2.5,
+                          "observed_at": "2026-09-29T21:22:11-04:00"}},
+        {"raw_nfl_schedule_id": "old", "source_system": "nflverse_schedules",
+         "home_team": "CLE", "away_team": "PIT", "game_id": "2026_04_PIT_CLE",
+         "kickoff": "2026-10-02T00:15:00Z", "created_at": "2026-09-30T00:00:01Z",
+         "raw_row_json": {"total_line": 37.5, "spread_line": -1.5,
+                          "observed_at": "2026-09-30T00:00:00Z"}},
+    ])
+    updated, _ = apply_latest_market_context(target, rows,
+                                             cutoff=datetime(2026, 9, 30, 2, tzinfo=timezone.utc))
+    assert updated.loc[0, "slate"] == "THURSDAY_NIGHT"
+    assert updated.loc[0, "market_snapshot_row_id"] == "new"
+    assert updated.loc[0, "game_total_line"] == 38.5
+    assert updated.loc[0, "team_implied_total"] == 18.0
+
+
+def test_projection_overlay_consumes_normalized_market_snapshot_columns():
+    target = pd.DataFrame([{"season": 2026, "week": 4, "recent_team": "CLE",
+                            "opponent_team": "PIT", "game_id": "2026_04_PIT_CLE",
+                            "game_total_line": 0.0, "team_spread_line": 0.0,
+                            "team_implied_total": 0.0, "opponent_implied_total": 0.0}])
+    normalized = pd.DataFrame([{"market_snapshot_id": "capture-1",
+                                "source": "nflverse_schedules", "season": 2026, "week": 4,
+                                "home_team": "CLE", "away_team": "PIT",
+                                "game_id": "2026_04_PIT_CLE",
+                                "kickoff_at": "2026-10-02T00:15:00Z",
+                                "observed_at": "2026-09-30T01:22:11Z",
+                                "ingested_at": "2026-09-30T01:22:12Z",
+                                "game_total": 38.5, "home_spread": 2.5}])
+    updated, audit = apply_latest_market_context(target, normalized,
+                                                  cutoff=datetime(2026, 9, 30, 2, tzinfo=timezone.utc))
+    assert updated.loc[0, "game_total_line"] == 38.5
+    assert updated.loc[0, "team_spread_line"] == 2.5
+    assert updated.loc[0, "team_implied_total"] == 18.0
+    assert updated.loc[0, "market_snapshot_row_id"] == "capture-1"
+    assert audit[0]["source_system"] == "nflverse_schedules"
+
+
+def test_prior_season_market_cannot_fill_missing_dst_game_id():
+    target = pd.DataFrame([{"season": 2026, "week": 4, "recent_team": "CLE",
+                            "opponent_team": "PIT", "game_id": None,
+                            "game_total_line": 0.0, "team_spread_line": 0.0,
+                            "team_implied_total": 0.0, "opponent_implied_total": 0.0}])
+    prior = pd.DataFrame([{"season": 2025, "week": 4,
+                           "raw_nfl_schedule_id": "old", "source_system": "nflverse_schedules",
+                           "home_team": "CLE", "away_team": "PIT", "game_id": "2025_04_PIT_CLE",
+                           "kickoff": "2025-10-02T00:15:00Z",
+                           "created_at": "2025-09-30T00:00:01Z",
+                           "raw_row_json": {"total_line": 38.5, "spread_line": -2.5,
+                                            "observed_at": "2025-09-30T00:00:00Z"}}])
+    updated, _ = apply_latest_market_context(target, prior,
+                                             cutoff=datetime(2026, 9, 30, 2, tzinfo=timezone.utc))
+    assert pd.isna(updated.loc[0, "game_total_line"])
+    assert updated.loc[0, "game_id"] is None
 
 
 def inputs():
@@ -59,6 +206,61 @@ def test_cutoff_identity_deduplication_and_label_allowlist():
     assert metadata["salary_row_ids"] == [1]
     assert target["position_wr"].tolist() == [1.0]
     assert target[POSITION_FEATURE_COLUMNS].sum(axis=1).tolist() == [1.0]
+
+
+def test_completed_training_outcome_audit_rejects_pregame_zero_placeholders():
+    train = pd.DataFrame(
+        [
+            {"season": 2026, "week": 1, "player_id": "p1", TARGET_COL: 0.0},
+            {"season": 2026, "week": 1, "player_id": "p2", TARGET_COL: 0.0},
+        ]
+    )
+    weekly_stats = pd.DataFrame(
+        [
+            {
+                "season": 2026,
+                "week": 1,
+                "player_master_id": "p1",
+                "carries": 12,
+                "targets": 3,
+            }
+        ]
+    )
+
+    with pytest.raises(
+        StaleTrainingOutcomeError,
+        match="Rebuild the player-game feature matrix",
+    ) as error:
+        validate_completed_training_outcomes(train, weekly_stats)
+    assert error.value.periods == ((2026, 1),)
+
+
+def test_completed_training_outcome_audit_accepts_scored_period():
+    train = pd.DataFrame(
+        [
+            {"season": 2026, "week": 1, "player_id": "p1", TARGET_COL: 14.5},
+            {"season": 2026, "week": 1, "player_id": "p2", TARGET_COL: 0.0},
+        ]
+    )
+    weekly_stats = pd.DataFrame(
+        [
+            {
+                "season": 2026,
+                "week": 1,
+                "player_master_id": "p1",
+                "carries": 12,
+                "targets": 3,
+            }
+        ]
+    )
+
+    audit = validate_completed_training_outcomes(train, weekly_stats)
+
+    assert audit == {
+        "status": "valid",
+        "periods_checked": 1,
+        "zero_label_periods": [],
+    }
 
 
 def test_all_supported_positions_receive_exactly_one_model_indicator():
@@ -154,6 +356,121 @@ def test_week_one_opportunity_features_carry_prior_season_forward_only():
     assert rows["team_targets_mean_3"].tolist() == [4.5]
     assert metrics["rows_with_lagged_carries"] == 1
     assert metrics["rows_with_lagged_team_carries"] == 1
+    assert rows["carry_share_mean_3_available"].tolist() == [True]
+
+
+def test_role_trends_compare_last_game_with_prior_three_without_future_leakage():
+    matrix = pd.DataFrame([{"season": 2026, "week": 5, "player_master_id": "runner", "team": "SEA", "position": "RB"}])
+    participation = pd.DataFrame([
+        {"season": 2026, "week": week, "player_master_id": "runner",
+         "participation_status": "played_confirmed", "offense_snap_share": share}
+        for week, share in enumerate((0.4, 0.5, 0.6, 0.8, 0.1), 1)
+    ])
+    snaps, _ = attach_lagged_participation_features(
+        matrix, participation, cutoff=pd.Timestamp(CUTOFF))
+    assert snaps.loc[0, "snap_share_last"] == 0.8
+    assert snaps.loc[0, "snap_share_prior3"] == 0.5
+    assert snaps.loc[0, "snap_share_trend"] == pytest.approx(0.3)
+    weekly = pd.DataFrame([
+        {"season": 2026, "week": week, "player_master_id": player,
+         "team": "SEA", "position": "RB", "carries": carries, "targets": targets}
+        for week, pair in enumerate(((4, 1), (5, 2), (6, 3), (8, 4), (100, 100)), 1)
+        for player, carries, targets in (("runner", pair[0], pair[1]), ("other", 10 - min(pair[0], 10), 5 - min(pair[1], 5)))
+    ])
+    usage, _ = attach_lagged_opportunity_features(matrix, weekly, cutoff=pd.Timestamp(CUTOFF))
+    assert usage.loc[0, "rush_share_last"] == pytest.approx(0.8)
+    assert usage.loc[0, "target_share_last"] == pytest.approx(0.8)
+    assert usage.loc[0, "rush_share_trend"] > 0
+    assert usage.loc[0, "target_share_trend"] > 0
+
+    receiver = matrix.assign(position="WR")
+    receiver_usage, _ = attach_lagged_opportunity_features(
+        receiver, weekly, cutoff=pd.Timestamp(CUTOFF))
+    assert pd.isna(receiver_usage.loc[0, "rush_share_trend"])
+
+
+def test_missing_raw_opportunity_is_not_reinterpreted_as_zero():
+    matrix = pd.DataFrame([{"season": 2026, "week": 2,
+                            "player_master_id": "runner", "team": "A"}])
+    weekly = pd.DataFrame([{"season": 2026, "week": 1,
+                            "player_master_id": "runner", "team": "A",
+                            "position": "RB", "carries": None, "targets": 0}])
+    with pytest.raises(ValueError, match="unavailable carries"):
+        attach_lagged_opportunity_features(matrix, weekly, cutoff=pd.Timestamp(CUTOFF))
+
+
+def test_offensive_role_uses_measured_opportunity_and_never_salary():
+    rows = pd.DataFrame([
+        {"position": "RB", "team": "A", "salary": 1000,
+         "carry_share_mean_3": 0.7, "target_share_mean_3": 0.2,
+         "snap_share_mean_3": 0.8,
+         "carry_share_mean_3_available": True,
+         "target_share_mean_3_available": True,
+         "snap_share_mean_3_available": True},
+        {"position": "RB", "team": "A", "salary": 9000,
+         "carry_share_mean_3": 0.0, "target_share_mean_3": 0.0,
+         "snap_share_mean_3": 0.0,
+         "carry_share_mean_3_available": False,
+         "target_share_mean_3_available": False,
+         "snap_share_mean_3_available": False},
+    ])
+    scored = attach_offensive_role(rows)
+    assert scored.loc[0, "offensive_role_class"] == "offensive centerpiece"
+    assert pd.isna(scored.loc[1, "offensive_role_importance"])
+    assert scored.loc[1, "offensive_role_class"] is None
+    changed_salary = rows.copy()
+    changed_salary["salary"] = [10000, 100]
+    assert attach_offensive_role(changed_salary)["offensive_role_importance"].equals(
+        scored["offensive_role_importance"]
+    )
+    ranked = rank_team_roles(scored)
+    assert ranked.iloc[0]["offensive_role_rank"] == 1
+
+
+def test_measured_zero_role_is_distinct_from_missing_role():
+    rows = pd.DataFrame([
+        {"position": "WR", "target_share_mean_3": 0.0,
+         "target_share_mean_3_available": True,
+         "snap_share_mean_3": 0.0, "snap_share_mean_3_available": True},
+        {"position": "WR", "target_share_mean_3": 0.0,
+         "target_share_mean_3_available": False,
+         "snap_share_mean_3": 0.0, "snap_share_mean_3_available": False},
+    ])
+    scored = attach_offensive_role(rows)
+    assert scored.loc[0, "offensive_role_importance"] == 0.0
+    assert pd.isna(scored.loc[1, "offensive_role_importance"])
+
+
+def test_current_expected_counts_activate_reconciled_role_adjustment():
+    target = pd.DataFrame([
+        {"player_id": "lead", "position": "RB", "recent_team": "A",
+         "salary": 7000, "player_games_history": 10,
+         "snap_share_mean_3": 0.6, "carry_share_mean_3": 0.5,
+         "target_share_mean_3": 0.1, "carries_mean_3": 10.0,
+         "targets_mean_3": 2.0, "team_carries_mean_3": 20.0,
+         "team_targets_mean_3": 20.0},
+        {"player_id": "backup", "position": "RB", "recent_team": "A",
+         "salary": 3000, "player_games_history": 10,
+         "snap_share_mean_3": 0.4, "carry_share_mean_3": 0.5,
+         "target_share_mean_3": 0.1, "carries_mean_3": 10.0,
+         "targets_mean_3": 2.0, "team_carries_mean_3": 20.0,
+         "team_targets_mean_3": 20.0},
+    ])
+    context = pd.DataFrame([{"player_master_id": "lead", "expected_carries": 16.0}])
+    rows, metrics = apply_pregame_projection_context(target, pregame_context=context)
+    assert rows["carries_mean_3"].tolist() == pytest.approx([16.0, 4.0])
+    assert rows.loc[0, "pregame_effective_carry_share"] == pytest.approx(0.8)
+    assert rows.loc[0, "pregame_effective_carry_share_source"] == (
+        "expected_count_divided_by_lagged_team_volume"
+    )
+    assert rows["pregame_opportunity_context_applied"].all()
+    carries = [a for a in metrics["allocations"] if a["opportunity"] == "carry"]
+    assert carries[0]["unallocated_volume"] == pytest.approx(0.0)
+    assert metrics["team_pass_attempts"] is None
+    inconsistent = pd.DataFrame([{"player_master_id": "lead",
+                                  "expected_carries": 16.0, "carry_share": 0.4}])
+    with pytest.raises(ValueError, match="share and expected count conflict"):
+        apply_pregame_projection_context(target, pregame_context=inconsistent)
 
 
 def test_pregame_context_zeros_backup_qb_and_redistributes_team_opportunity():
@@ -267,6 +584,214 @@ def test_pregame_context_zeros_backup_qb_and_redistributes_team_opportunity():
     assert bool(by_id.loc["rb-veteran", "pregame_depth_chart_conflict"]) is True
     assert metrics["allocations"][0]["team_volume_source"] == "lagged_full_team_volume"
     assert metrics["context_run_ids"] == ["context-1"]
+
+
+@pytest.mark.parametrize("use_questionable_checkbox", [False, True])
+def test_assume_out_uses_generic_team_opportunity_redistribution(use_questionable_checkbox):
+    target = pd.DataFrame(
+        [
+            {
+                "player_id": "receiver-1", "player_display_name": "Primary Receiver",
+                "position": "WR", "recent_team": "LAR", "salary": 9000,
+                "player_games_history": 10, "snap_share_mean_3": 0.9,
+                "carry_share_mean_3": 0.0, "target_share_mean_3": 0.6,
+                "carries_mean_3": 0.0, "targets_mean_3": 12.0,
+                "team_carries_mean_3": 20.0, "team_targets_mean_3": 20.0,
+            },
+            {
+                "player_id": "receiver-2", "player_display_name": "Second Receiver",
+                "position": "WR", "recent_team": "LAR", "salary": 6000,
+                "player_games_history": 10, "snap_share_mean_3": 0.8,
+                "carry_share_mean_3": 0.0, "target_share_mean_3": 0.4,
+                "carries_mean_3": 0.0, "targets_mean_3": 8.0,
+                "team_carries_mean_3": 20.0, "team_targets_mean_3": 20.0,
+            },
+        ]
+    )
+    context = pd.DataFrame(
+        [{
+            "player_master_id": "receiver-1", "injury_status": "QUESTIONABLE",
+            "availability_probability": 0.75, "expected_routes": 30.0,
+        }]
+    )
+
+    scenario_context, audit = apply_player_availability_overrides(
+        target,
+        context,
+        [] if use_questionable_checkbox else [{"player_name": "Primary Receiver", "availability": "assume_out"}],
+        assume_questionable_out=use_questionable_checkbox,
+    )
+    rows, _ = apply_pregame_projection_context(
+        target,
+        pregame_context=scenario_context,
+    )
+    by_id = rows.set_index("player_id")
+
+    assert audit == [{
+        "player_id": "receiver-1",
+        "player_name": "Primary Receiver",
+        "team": "LAR",
+        "official_availability_status": "QUESTIONABLE",
+        "availability_override": "assume_out",
+        "model_availability_used": 0.0,
+        "opportunity_redistributed": True,
+    }]
+    assert by_id.loc["receiver-1", "pregame_availability_probability"] == 0.0
+    assert by_id.loc["receiver-1", "pregame_expected_routes"] == 0.0
+    assert by_id.loc["receiver-1", "pregame_expected_targets"] == 0.0
+    assert by_id.loc["receiver-1", "targets_mean_3"] == 0.0
+    assert by_id.loc["receiver-2", "target_share_mean_3"] == 1.0
+    assert by_id.loc["receiver-2", "targets_mean_3"] == 20.0
+
+
+def test_partial_injury_redistribution_preserves_unallocated_targets():
+    target = pd.DataFrame([
+        {"player_id": "out", "player_display_name": "Out", "position": "WR",
+         "recent_team": "GB", "salary": 9000, "player_games_history": 3,
+         "snap_share_mean_3": 0.9, "carry_share_mean_3": 0.0,
+         "target_share_mean_3": 0.6, "carries_mean_3": 0.0,
+         "targets_mean_3": 12.0, "team_carries_mean_3": 20.0,
+         "team_targets_mean_3": 20.0},
+        {"player_id": "active", "player_display_name": "Active", "position": "WR",
+         "recent_team": "GB", "salary": 6000, "player_games_history": 3,
+         "snap_share_mean_3": 0.8, "carry_share_mean_3": 0.0,
+         "target_share_mean_3": 0.4, "carries_mean_3": 0.0,
+         "targets_mean_3": 8.0, "team_carries_mean_3": 20.0,
+         "team_targets_mean_3": 20.0},
+    ])
+    context = pd.DataFrame([{
+        "player_master_id": "out", "availability_probability": 1.0,
+        "evidence_json": {"target_redistribution_fraction": 0.75},
+    }])
+    scenario, _ = apply_player_availability_overrides(
+        target, context, [{"player_id": "out", "availability": "assume_out"}]
+    )
+    rows, metrics = apply_pregame_projection_context(
+        target, pregame_context=scenario
+    )
+    by_id = rows.set_index("player_id")
+    target_audit = next(row for row in metrics["allocations"] if row["opportunity"] == "target")
+    assert by_id.loc["out", "targets_mean_3"] == 0.0
+    assert by_id.loc["active", "targets_mean_3"] == pytest.approx(17.0)
+    assert target_audit["unallocated_volume"] == pytest.approx(3.0)
+
+
+def test_assume_active_cannot_override_confirmed_inactive_without_debug_mode():
+    target = pd.DataFrame([{
+        "player_id": "receiver-1", "player_display_name": "Primary Receiver",
+        "position": "WR", "recent_team": "LAR",
+    }])
+    context = pd.DataFrame([{
+        "player_master_id": "receiver-1", "injury_status": "OUT",
+        "availability_probability": 0.0,
+    }])
+
+    with pytest.raises(ValueError, match="cannot override confirmed inactive"):
+        apply_player_availability_overrides(
+            target,
+            context,
+            [{"player_id": "receiver-1", "availability": "assume_active"}],
+        )
+
+
+def test_questionable_checkbox_uses_salary_and_injury_designations_without_mutating_sources():
+    target = pd.DataFrame([
+        {"player_id": "salary-q", "player_display_name": "Salary Q", "recent_team": "GB", "player_status": " q "},
+        {"player_id": "injury-q", "player_display_name": "Injury Q", "recent_team": "GB", "player_status": None},
+        {"player_id": "healthy", "player_display_name": "Healthy", "recent_team": "GB", "player_status": None},
+        {"player_id": "doubtful", "player_display_name": "Doubtful", "recent_team": "GB", "player_status": "D"},
+    ])
+    context = pd.DataFrame([
+        {"player_master_id": "injury-q", "injury_status": "Questionable", "availability_probability": 0.75},
+        {"player_master_id": "healthy", "injury_status": "ACTIVE", "availability_probability": 1.0},
+    ])
+    original_target, original_context = target.copy(deep=True), context.copy(deep=True)
+    unchanged, audit = apply_player_availability_overrides(target, context, [])
+    pd.testing.assert_frame_equal(unchanged, original_context)
+    assert audit == []
+    scenario, audit = apply_player_availability_overrides(
+        target, context,
+        [{"player_name": "Salary Q", "availability": "assume_out"},
+         {"player_id": "salary-q", "availability": "assume_out"}],
+        assume_questionable_out=True,
+    )
+    assert {row["player_id"] for row in audit} == {"salary-q", "injury-q"}
+    assert len(audit) == 2
+    assert {row["official_availability_status"] for row in audit} == {"Q", "QUESTIONABLE"}
+    assert all(row["availability_override"] == "assume_out" for row in audit)
+    assert scenario.set_index("player_master_id").loc["injury-q", "availability_probability"] == 0.0
+    assert scenario.set_index("player_master_id").loc["healthy", "availability_probability"] == 1.0
+    pd.testing.assert_frame_equal(target, original_target)
+    pd.testing.assert_frame_equal(context, original_context)
+    with pytest.raises(ValueError, match="Conflicting availability overrides"):
+        apply_player_availability_overrides(target, context, [
+            {"player_id": "salary-q", "availability": "assume_active"},
+        ], assume_questionable_out=True)
+
+
+def test_questionable_scenario_changes_only_target_availability_not_historical_training():
+    matrix, salaries = inputs()
+    salaries["player_status"] = "QUESTIONABLE"
+    teammate_matrix = matrix.copy()
+    teammate_matrix["player_master_id"] = "canonical-2"
+    teammate_matrix["player_id"] = "teammate-source"
+    teammate_matrix["player_game_feature_matrix_id"] += 10
+    teammate_salaries = salaries.copy()
+    teammate_salaries["player_master_id"] = "canonical-2"
+    teammate_salaries["player_name"] = "Teammate"
+    teammate_salaries["source_player_key"] = ["teammate-flex", "teammate-cpt"]
+    teammate_salaries["curated_salary_id"] += 10
+    teammate_salaries["player_status"] = None
+    matrix = pd.concat([matrix, teammate_matrix], ignore_index=True)
+    salaries = pd.concat([salaries, teammate_salaries], ignore_index=True)
+    base_train, base_target, _ = prepare(matrix, salaries)
+    train, target, metadata = prepare(matrix, salaries, assume_questionable_out=True)
+    pd.testing.assert_frame_equal(train, base_train)
+    assert base_target["pregame_availability_probability"].tolist() == [1.0, 1.0]
+    by_id = target.set_index("player_id")
+    assert by_id.loc["canonical-1", "pregame_availability_probability"] == 0.0
+    assert by_id.loc["canonical-2", "pregame_availability_probability"] == 1.0
+    assert by_id.loc["canonical-1", "availability_override"] == "assume_out"
+    assert by_id.loc["canonical-2", "availability_override"] == "default"
+    assert metadata["availability_scenario"]["assume_questionable_out"] is True
+    assert metadata["availability_scenario"]["overrides"][0]["player_id"] == "canonical-1"
+
+
+@pytest.mark.parametrize("cleared", [False, True])
+def test_questionable_snapshot_selection_uses_cutoff_and_effective_status(cleared):
+    engine = MagicMock()
+    engine.dialect.name = "postgresql"
+    inspector = MagicMock()
+    inspector.has_table.side_effect = lambda name, **kwargs: name in {
+        "snapshot_injury_status", "pregame_player_context",
+    }
+    salaries = pd.DataFrame([{"slate": "NIGHT", "player_master_id": "canonical-1"}])
+    snapshots = pd.DataFrame([
+        {"snapshot_injury_id": 42, "player_id": "canonical-1", "injury_status": "Q",
+         "as_of": CUTOFF, "source": "official"},
+        {"snapshot_injury_id": 43, "player_id": "other-slate", "injury_status": "Q",
+         "as_of": CUTOFF, "source": "official"},
+    ])
+    def prepare_loaded(*args, **kwargs):
+        metadata = {"availability_scenario": {"overrides": kwargs["availability_overrides"] or []}}
+        return pd.DataFrame(), pd.DataFrame(), metadata
+    with (
+        patch("backend.app.product_services.canonical_projection_inputs.inspect", return_value=inspector),
+        patch("backend.app.product_services.canonical_projection_inputs.pd.read_sql",
+              side_effect=[salaries, pd.DataFrame(), snapshots]) as read_sql,
+        patch("backend.app.product_services.canonical_projection_inputs.prepare_inputs", side_effect=prepare_loaded) as prepare_mock,
+        patch("backend.app.product_services.pregame_context.load_current_pregame_context", return_value=[
+            {"player_master_id": "canonical-1", "injury_status": "ACTIVE" if cleared else None},
+        ]),
+    ):
+        _, _, metadata = load_inputs(engine, season=2026, week=1, slate="NIGHT",
+                                     cutoff=CUTOFF, assume_questionable_out=True)
+    snapshot_call = read_sql.call_args_list[2]
+    assert "as_of <= :cutoff" in str(snapshot_call.args[0])
+    assert snapshot_call.kwargs["params"]["cutoff"] == CUTOFF.replace(tzinfo=None)
+    assert bool(prepare_mock.call_args.kwargs["availability_overrides"]) is not cleared
+    rows = metadata["availability_scenario"]["injury_snapshot_rows"]
+    assert [row["snapshot_injury_id"] for row in rows] == ([] if cleared else [42])
 
 
 def test_multiple_active_qbs_require_starting_evidence():
@@ -453,6 +978,7 @@ def test_unavailable_salary_statuses_are_excluded_and_recorded_in_lineage():
 
 def test_current_roster_ineligible_players_are_not_scored():
     matrix, salaries = inputs()
+    salaries["team"] = "LAR"
     development_matrix = matrix.copy()
     development_matrix["player_master_id"] = "canonical-dev"
     development_matrix["player_id"] = "source-dev"
@@ -464,6 +990,7 @@ def test_current_roster_ineligible_players_are_not_scored():
     development_salaries["player_master_id"] = "canonical-dev"
     development_salaries["source_player_key"] = ["dk-dev-flex", "dk-dev-cpt"]
     development_salaries["player_name"] = "Development Receiver"
+    development_salaries["team"] = "LAR"
     development_salaries["curated_salary_id"] += 20
     participation = pd.DataFrame(
         [
@@ -471,7 +998,7 @@ def test_current_roster_ineligible_players_are_not_scored():
                 "season": 2025,
                 "week": 18,
                 "player_master_id": player_id,
-                "team": "A",
+                "team": "LA",
                 "roster_status": "ACT",
                 "participation_status": "played_confirmed",
                 "offense_snap_share": 0.75,
@@ -488,7 +1015,7 @@ def test_current_roster_ineligible_players_are_not_scored():
                 "season": 2026,
                 "week": 1,
                 "player_master_id": "canonical-1",
-                "team": "A",
+                "team": "LA",
                 "roster_status": "ACT",
                 "participation_status": "unknown",
                 "offense_snap_share": None,
@@ -499,7 +1026,7 @@ def test_current_roster_ineligible_players_are_not_scored():
                 "season": 2026,
                 "week": 1,
                 "player_master_id": "canonical-dev",
-                "team": "A",
+                "team": "LA",
                 "roster_status": "DEV",
                 "participation_status": "unknown",
                 "offense_snap_share": None,

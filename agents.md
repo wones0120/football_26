@@ -9,6 +9,7 @@ Build a DFS analytics platform that ingests multi-source NFL data, resolves play
 3. Raw source files are immutable and versioned by ingest run.
 4. Modeling and backtests must be time-safe (no leakage from future data).
 5. UI actions must be idempotent and operationally observable.
+6. Model truth and user preferences are separate. User constraints may change optimizer eligibility or selection, but must never alter projections, football context, ownership, or historical validation. Every user-driven exclusion must retain its model assessment and carry an explicit user-preference reason in optimizer reports.
 
 ## System Principles
 1. Source-of-truth entity keys over fuzzy joins.
@@ -81,6 +82,21 @@ Build a DFS analytics platform that ingests multi-source NFL data, resolves play
    - Feature leakage checks.
    - API contracts for UI workflows.
 5. CI gates: lint, type-check, unit tests, selected integration tests.
+
+## Model efficiency
+
+Use the least expensive model that is appropriate for the task.
+
+- **Luna Medium**: Prefer for simple, localized, low-risk, or repetitive changes such as UI styling, spacing, labels, minor component edits, straightforward tests, documentation, renames, and mechanical refactoring.
+- **Terra Medium**: Default for normal software development, including feature work, multi-file changes, debugging, state/data-flow changes, meaningful refactoring, and work requiring broader understanding of the codebase.
+- **Sol Medium**: Reserve for unusually difficult debugging, architectural decisions, ambiguous cross-cutting problems, or when Terra has already struggled to solve the task correctly.
+- **Sol High**: Use only for exceptional problems where Sol Medium is insufficient.
+
+Do not recommend a more expensive model for a marginal quality improvement.
+
+If the currently selected model is unnecessarily expensive for the task, tell me before substantial work begins and recommend the cheaper model. If the task materially requires a stronger model, tell me why and recommend the appropriate upgrade before substantial work begins.
+
+Do not switch models silently; I will make the model change.
 
 ## Delivery Workflow
 1. Build incrementally in phases:

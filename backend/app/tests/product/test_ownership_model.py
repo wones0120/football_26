@@ -5,11 +5,13 @@ from unittest.mock import MagicMock, patch
 import pandas as pd
 
 from backend.app.product_services.ownership import (
+    OWNERSHIP_MODEL_ID,
     OWNERSHIP_NUMERIC_FEATURES,
     OwnershipService,
     build_slate_aware_ownership_frame,
     generate_walk_forward_ownership_predictions,
     ownership_model_metrics,
+    prelock_projection_context,
 )
 
 
@@ -41,6 +43,26 @@ def synthetic_ownership_rows() -> pd.DataFrame:
 
 
 class SlateAwareOwnershipModelTests(unittest.TestCase):
+    def test_historical_projection_features_require_prelock_provenance(self):
+        rows = pd.DataFrame([
+            {"season": 2025, "week": 1, "slate": "SUNDAY_MAIN", "game_id": "old",
+             "created_at": "2025-09-08T00:00:00Z", "player_id": "p1"},
+            {"season": 2025, "week": 1, "slate": "SUNDAY_MAIN", "game_id": "old",
+             "created_at": "2025-09-06T00:00:00Z",
+             "data_cutoff_at": "2025-09-05T00:00:00Z", "player_id": "p2"},
+            {"season": 2026, "week": 3, "slate": "SUNDAY_MAIN", "game_id": "future",
+             "created_at": "2026-09-25T00:00:00Z",
+             "data_cutoff_at": "2026-09-24T00:00:00Z", "player_id": "p3"},
+        ])
+        kickoffs = pd.DataFrame([
+            {"game_id": "old", "kickoff_at": "2025-09-07T17:00:00Z"},
+        ])
+        filtered = prelock_projection_context(
+            rows, kickoffs, target_season=2026, target_week=3,
+            target_slate="SUNDAY_MAIN",
+        )
+        self.assertEqual(set(filtered["player_id"]), {"p2", "p3"})
+
     def test_captain_slate_marks_captain_and_flex_rows_as_showdown(self):
         rows = pd.DataFrame(
             [
@@ -167,12 +189,22 @@ class SlateAwareOwnershipModelTests(unittest.TestCase):
         service._persist_target_ownership_run = MagicMock(return_value=True)
 
         with patch("backend.app.product_services.ownership.ensure_table_columns"):
-            result = service.run_projection_model(2026, 2, "THURSDAY_NIGHT")
+            result = service.run_projection_model(
+                2026,
+                2,
+                "THURSDAY_NIGHT",
+                projection_run_id="projection-latest",
+            )
 
         projection = service._append_table.call_args.args[1]
         self.assertEqual(result.rows_written, 10)
+        self.assertEqual(
+            service._load_ownership_model_rows.call_args.kwargs["projection_run_id"],
+            "projection-latest",
+        )
         self.assertTrue(pd.api.types.is_float_dtype(projection["actual_ownership"]))
         self.assertTrue(projection["actual_ownership"].isna().all())
+        self.assertEqual(result.model_metrics["input_provenance"]["training_rows"], 160)
 
     def test_target_persistence_writes_run_and_projection_lineage(self):
         service = OwnershipService.__new__(OwnershipService)
@@ -215,6 +247,10 @@ class SlateAwareOwnershipModelTests(unittest.TestCase):
         )
         self.assertEqual(payload[0]["ownership_run_id"], "ownership-run-1")
         self.assertEqual(payload[0]["projected_ownership"], 18.5)
+        run_payload = next(call.args[1] for call in connection.execute.call_args_list
+                           if len(call.args) > 1 and isinstance(call.args[1], dict)
+                           and "model_id" in call.args[1])
+        self.assertEqual(run_payload["model_id"], OWNERSHIP_MODEL_ID)
 
 
 if __name__ == "__main__":

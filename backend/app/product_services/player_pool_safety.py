@@ -130,6 +130,14 @@ PLAYER_POOL_SAFETY_LIBRARY = RuleLibrary(
             category=ExclusionCategory.USER,
         ),
         _safety_rule(
+            "user.preference.questionable_exclusion_v1",
+            "User preference — exclude players designated questionable (Q).",
+            RuleType.HARD_EXCLUSION,
+            "user.exclude_questionable",
+            "user_excluded_questionable",
+            category=ExclusionCategory.USER,
+        ),
+        _safety_rule(
             "context.current_week_missing_v1",
             "Current-week role and availability evidence is missing.",
             RuleType.WARNING,
@@ -391,6 +399,7 @@ def evaluate_player_pool_safety(
     projection_cutoff: datetime | None = None,
     context_max_age: timedelta = DEFAULT_CONTEXT_MAX_AGE,
     user_excluded_player_ids: Iterable[str] = (),
+    exclude_questionable: bool = False,
 ) -> PlayerPoolSafetyResult:
     """Apply all Phase 2 hard gates and retain warning/explanation evidence."""
 
@@ -508,8 +517,11 @@ def evaluate_player_pool_safety(
             and not has_explicit_specialty_role(row)
         )
         roster_status = _text(row.get("roster_status")).upper()
+        row_roster_evidence_available = (
+            _bool(row.get("roster_evidence_available")) or bool(roster_status)
+        )
         current_roster_inactive = (
-            roster_evidence_available
+            row_roster_evidence_available
             and position != "DST"
             and roster_status != "ACT"
         )
@@ -557,7 +569,13 @@ def evaluate_player_pool_safety(
                 "backup_qb_without_package": backup_qb,
                 "context_after_projection_cutoff": context_after_cutoff,
             },
-            "user": {"excluded": bool(player_id and player_id in excluded_ids)},
+            "user": {
+                "excluded": bool(player_id and player_id in excluded_ids),
+                "exclude_questionable": exclude_questionable and (
+                    salary_status in {"Q", "QUESTIONABLE"}
+                    or injury_status in {"Q", "QUESTIONABLE"}
+                ),
+            },
             "warnings": {
                 "current_week_context_missing": context_missing,
                 "current_week_context_stale": context_stale,
@@ -659,3 +677,25 @@ def evaluate_player_pool_safety(
         audit_rows=audit_rows,
         summary=summary,
     )
+
+
+def validate_player_pool_evidence_consistency(pool: pd.DataFrame) -> None:
+    """Fail before filtering when authoritative starter and roster facts conflict."""
+    if pool.empty:
+        return
+    conflicts: list[str] = []
+    for row in pool.to_dict(orient="records"):
+        if _position(row) != "QB" or not _bool(row.get("is_starting_qb")):
+            continue
+        roster_status = _text(row.get("roster_status")).upper()
+        roster_evidence_available = (
+            _bool(row.get("roster_evidence_available")) or bool(roster_status)
+        )
+        if roster_evidence_available and roster_status != "ACT":
+            conflicts.append(
+                f"{_text(row.get('name') or row.get('player_name')) or _canonical_player_id(row)} "
+                f"({_team(row) or 'unknown team'}): starter evidence conflicts with "
+                f"roster status {roster_status or 'MISSING'}"
+            )
+    if conflicts:
+        raise ValueError("Slate player evidence conflict: " + "; ".join(conflicts))

@@ -9,6 +9,13 @@ This runbook creates a local football_26 environment from an empty PostgreSQL da
 - Node.js/npm for the control-plane UI
 - DraftKings/FanDuel source CSVs for salary or injury ingestion
 
+For local CSV ingestion, the UI and auto-discovery API default to `~/NFL`.
+The UI file fields start with `~/NFL/`. Salary and injury loaders resolve that
+folder to the selected slate's expected CSV; a typed filename without `.csv`
+gets the suffix automatically. The exact resolved path appears before loading.
+A missing file returns a 422 response with the attempted path and creates no
+ingest run.
+
 ## 1. Install and configure
 
 ```bash
@@ -63,6 +70,14 @@ curl -sS http://127.0.0.1:8000/api/model/defaults
 ```
 
 Both endpoints should return JSON without a database-schema error.
+
+For the local UI and durable optimizer worker together, run
+`bash scripts/restart_local_backend.sh restart` and confirm
+`bash scripts/restart_local_backend.sh status` shows both processes. On macOS,
+the script uses existing LaunchAgents or submits the API and worker to the
+user's launchd domain. This keeps them running after the command exits. If the
+UI says **Internal Server Error**, check `/api/health` and the two logs under
+`${TMPDIR:-/tmp}/football_26_local_backend/` before retrying the optimizer.
 
 ## 4. Load historical NFL data
 

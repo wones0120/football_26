@@ -12,6 +12,7 @@ from typing import Any, Iterable
 from sqlalchemy import create_engine, inspect, text
 
 from Database.config import get_connection_string
+from Database.dst import canonical_team_sql
 from .replay import parse_slate_lock
 from .salary_eligibility import is_salary_status_eligible, normalize_salary_status
 
@@ -68,22 +69,15 @@ def _eligible_salary_rows(
                 f"SALARY_{normalize_salary_status(row.get('player_status'))}"
             ] += 1
 
-    has_roster_evidence = any(
-        row.get("roster_status") is not None
-        for row in salary_status_eligible
-        if _normalized_position(row.get("position")) != "DST"
-    )
-    if not has_roster_evidence:
-        return salary_status_eligible, dict(sorted(excluded_statuses.items()))
-
     included: list[dict[str, Any]] = []
     for row in salary_status_eligible:
         position = _normalized_position(row.get("position"))
-        status = str(row.get("roster_status") or "MISSING").strip().upper()
-        if position == "DST" or status == "ACT":
+        status = str(row.get("roster_status") or "").strip().upper()
+        row_has_roster_evidence = bool(row.get("roster_evidence_available")) or bool(status)
+        if position == "DST" or not row_has_roster_evidence or status == "ACT":
             included.append(row)
         else:
-            excluded_statuses[status] += 1
+            excluded_statuses[status or "MISSING"] += 1
     return included, dict(sorted(excluded_statuses.items()))
 
 
@@ -367,32 +361,47 @@ def evaluate_slate_readiness(metrics: SlateReadinessMetrics) -> dict[str, Any]:
         )
     )
 
-    if metrics.projection_run_is_explicit:
-        projection_run_status = "pass"
-        projection_run_message = "An explicit active projection run is selected."
-        projection_blocks = ()
-    elif metrics.projection_run_count == 1:
-        projection_run_status = "pass"
-        projection_run_message = "One exact projection run is available."
-        projection_blocks: tuple[str, ...] = ()
-    elif metrics.projection_run_count == 0:
-        projection_run_status = "fail"
-        projection_run_message = "No projection run is available for this slate."
-        projection_blocks = (*OPTIMIZER_GATES, "replay")
-    else:
-        projection_run_status = "fail"
-        projection_run_message = "Multiple projection runs are compatible; select an exact run for replay."
-        projection_blocks = ("replay",)
+    projection_run_status = "pass" if metrics.projection_run_id else "fail"
+    projection_run_message = (
+        f"Latest completed projection run {metrics.projection_run_id} is available for optimization."
+        if metrics.projection_run_id
+        else "No projection run is available for this slate."
+    )
     checks.append(
         _check(
             "projection_run_lineage",
             "projections",
             projection_run_status,
             projection_run_message,
-            applies_to=(*OPTIMIZER_GATES, "replay"),
-            blocks=projection_blocks,
+            applies_to=OPTIMIZER_GATES,
+            blocks=OPTIMIZER_GATES,
             value=metrics.projection_run_count,
-            threshold="one explicit active run, or one compatible legacy run",
+            threshold="one selected projection run",
+            details={
+                "selected_projection_run_id": metrics.projection_run_id,
+                "selection_is_explicit": metrics.projection_run_is_explicit,
+            },
+        )
+    )
+    replay_run_status = (
+        "pass" if metrics.projection_run_id and
+        (metrics.projection_run_is_explicit or metrics.projection_run_count == 1)
+        else "fail"
+    )
+    checks.append(
+        _check(
+            "replay_projection_run_lineage",
+            "projections",
+            replay_run_status,
+            "An exact projection run is selected for replay."
+            if replay_run_status == "pass"
+            else "Select an exact projection run for replay."
+            if metrics.projection_run_count > 1
+            else "No projection run is available for replay.",
+            applies_to=("replay",),
+            blocks=("replay",),
+            value=metrics.projection_run_count,
+            threshold="one exact projection run",
             details={
                 "selected_projection_run_id": metrics.projection_run_id,
                 "selection_is_explicit": metrics.projection_run_is_explicit,
@@ -678,15 +687,36 @@ class SlateReadinessService:
                     else "NULL::TEXT AS roster_status"
                 )
                 roster_status_join = (
-                    """
-                    LEFT JOIN public.curated_player_game_participation participation
-                      ON participation.season = salary.season
-                     AND participation.week = salary.week
-                     AND participation.player_master_id = salary.player_master_id
-                     AND participation.team = salary.team
+                    f"""
+                    LEFT JOIN LATERAL (
+                        SELECT roster_row.roster_status
+                        FROM public.curated_player_game_participation roster_row
+                        WHERE roster_row.season = salary.season
+                          AND roster_row.week = salary.week
+                          AND roster_row.player_master_id = salary.player_master_id
+                          AND {canonical_team_sql('roster_row.team')} =
+                              {canonical_team_sql('salary.team')}
+                        ORDER BY roster_row.created_at DESC,
+                            roster_row.curated_player_game_participation_id DESC
+                        LIMIT 1
+                    ) participation ON TRUE
                     """
                     if has_roster_participation
                     else ""
+                )
+                roster_evidence_select = (
+                    f"""
+                    EXISTS (
+                        SELECT 1
+                        FROM public.curated_player_game_participation roster_evidence
+                        WHERE roster_evidence.season = salary.season
+                          AND roster_evidence.week = salary.week
+                          AND {canonical_team_sql('roster_evidence.team')} =
+                              {canonical_team_sql('salary.team')}
+                    ) AS roster_evidence_available
+                    """
+                    if has_roster_participation
+                    else "FALSE AS roster_evidence_available"
                 )
                 salary_rows = [
                     dict(row)
@@ -711,7 +741,8 @@ class SlateReadinessService:
                                 salary.game_info,
                                 salary.salary,
                                 salary.created_at,
-                                {roster_status_select}
+                                {roster_status_select},
+                                {roster_evidence_select}
                             FROM public.curated_salary salary
                             {roster_status_join}
                             WHERE salary.season = :season AND salary.week = :week
@@ -805,29 +836,6 @@ class SlateReadinessService:
                 metrics.projection_run_count = len(projection_runs)
                 if projection_runs:
                     metrics.projection_run_id = str(projection_runs[0]["projection_run_id"])
-                    if inspector.has_table("active_projection_run", schema="target"):
-                        active_projection = connection.execute(
-                            text(
-                                """
-                                SELECT projection_run_id
-                                FROM target.active_projection_run
-                                WHERE season = :season AND week = :week
-                                  AND (UPPER(slate_id) = UPPER(:slate) OR slate_id = 'DEFAULT')
-                                ORDER BY CASE WHEN UPPER(slate_id) = UPPER(:slate)
-                                    THEN 0 ELSE 1 END, selected_at DESC
-                                LIMIT 1
-                                """
-                            ),
-                            {"season": season, "week": week, "slate": slate},
-                        ).mappings().first()
-                        if active_projection:
-                            active_run_id = str(active_projection["projection_run_id"])
-                            if any(
-                                str(row["projection_run_id"]) == active_run_id
-                                for row in projection_runs
-                            ):
-                                metrics.projection_run_id = active_run_id
-                                metrics.projection_run_is_explicit = True
                     projection_rows = connection.execute(
                         text(
                             """

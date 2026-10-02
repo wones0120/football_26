@@ -370,6 +370,13 @@ body:has(.product-shell) #root {
   outline-offset: 2px;
 }
 
+.shell-week-chip strong {
+  color: #d9e1e7;
+  font-size: 0.67rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
 .shell-slate-chip small {
   overflow: hidden;
   max-width: 190px;
@@ -616,6 +623,7 @@ body:has(.product-shell) #root {
   .shell-slate-chip > span,
   .shell-slate-chip small { display: none; }
   .shell-slate-chip select { font-size: 0.62rem; }
+  .shell-week-chip strong { font-size: 0.62rem; }
   .shell-command-trigger { padding: 8px; }
   .shell-command-trigger svg { width: 17px; }
   .shell-command-trigger kbd { display: none; }
@@ -624,7 +632,7 @@ body:has(.product-shell) #root {
     inset: auto 0 0;
     z-index: 50;
     display: grid;
-    grid-template-columns: repeat(7, minmax(0, 1fr));
+    grid-template-columns: repeat(8, minmax(0, 1fr));
     min-height: 64px;
     padding: 5px max(6px, env(safe-area-inset-left)) max(5px, env(safe-area-inset-bottom));
     border-top: 1px solid var(--shell-line-strong);

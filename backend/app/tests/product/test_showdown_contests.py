@@ -136,8 +136,11 @@ def test_preview_route_returns_fetched_contest(monkeypatch):
     from backend.app.api.product_routes import preview_optimizer_contests
     from backend.app.product_schemas import ContestPreviewRequest
     from backend.app.product_services import showdown_contests
+    from backend.app.product_services import saved_contests
+    from types import SimpleNamespace
 
     monkeypatch.setattr(showdown_contests, "fetch_contests", lambda urls, manual: [contest("123")])
-    result = preview_optimizer_contests(ContestPreviewRequest(urls=["https://www.draftkings.com/draft/contest/123"]))
+    monkeypatch.setattr(saved_contests, "record_saved_observations", lambda engine, rows, reason: 0)
+    result = preview_optimizer_contests(ContestPreviewRequest(urls=["https://www.draftkings.com/draft/contest/123"]), service=SimpleNamespace(engine=object()))
     assert result["contests"][0]["contest_id"] == "123"
     assert result["refreshed_at"]

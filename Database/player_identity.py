@@ -113,9 +113,6 @@ def choose_identity(
     candidate_ids = tuple(sorted(candidates_by_id))
     if not candidates:
         return IdentityDecision(None, "no_match")
-    if len(candidates) == 1:
-        return IdentityDecision(candidates[0].player_id, "unique_name", candidate_ids)
-
     salary_team = normalize_team(str(team or ""))
     salary_position = normalize_position(position)
     team_matches = [
@@ -137,9 +134,14 @@ def choose_identity(
         return IdentityDecision(team_position_matches[0].player_id, "unique_team_position", candidate_ids)
     if len(position_matches) == 1:
         return IdentityDecision(position_matches[0].player_id, "unique_position", candidate_ids)
-    if len(team_matches) == 1:
+    # A matching team does not justify replacing a known football position
+    # with a conflicting salary label (for example, LS mislisted as TE).
+    if len(team_matches) == 1 and (
+        not salary_position
+        or normalize_position(team_matches[0].position) in _UNKNOWN_POSITIONS
+    ):
         return IdentityDecision(team_matches[0].player_id, "unique_team", candidate_ids)
-    return IdentityDecision(None, "ambiguous", candidate_ids)
+    return IdentityDecision(None, "insufficient_evidence" if len(candidates) == 1 else "ambiguous", candidate_ids)
 
 
 def _aliases(value: Any) -> tuple[str, ...]:
@@ -164,6 +166,9 @@ def repair_salary_identities(
     *,
     source_schema: str = "public",
     target_schema: str = "target",
+    season: int | None = None,
+    week: int | None = None,
+    slate: str | None = None,
 ) -> SalaryIdentityRepairResult:
     """Repair unresolved non-DST salaries and persist every non-match for audit."""
     for identifier in (source_schema, target_schema):
@@ -218,9 +223,13 @@ def repair_salary_identities(
                 WHERE player_master_id IS NULL
                   AND upper(trim(COALESCE(NULLIF(position, ''), roster_position, '')))
                       NOT IN ('D', 'DEF', 'DST')
+                  AND (CAST(:season AS INTEGER) IS NULL OR season = :season)
+                  AND (CAST(:week AS INTEGER) IS NULL OR week = :week)
+                  AND (CAST(:slate AS TEXT) IS NULL OR UPPER(slate) = UPPER(:slate))
                 ORDER BY season, week, curated_salary_id
                 """
-            )
+            ),
+            {"season": season, "week": week, "slate": slate},
         ).mappings().all()
 
         decisions: dict[tuple[str, str, str], IdentityDecision] = {}

@@ -241,7 +241,16 @@ def test_projection_dispatch_and_job_status_api_are_idempotent(
 
     app.dependency_overrides[get_db_session] = override_session
     client = TestClient(app)
-    body = {"season": 2025, "week": 11, "slate": "SUNDAY_MAIN"}
+    body = {
+        "season": 2025,
+        "week": 11,
+        "slate": "SUNDAY_MAIN",
+        "availability_overrides": [{
+            "player_name": "Scenario Receiver",
+            "availability": "assume_out",
+        }],
+        "assume_questionable_out": True,
+    }
     headers = {"Idempotency-Key": "projection-api-2025-w11"}
 
     created = client.post("/api/predict/run", json=body, headers=headers)
@@ -259,6 +268,15 @@ def test_projection_dispatch_and_job_status_api_are_idempotent(
     fetched = client.get(f"/api/jobs/{created_payload['job']['job_id']}")
     assert fetched.status_code == 200
     assert fetched.json()["status"] == "queued"
+    with factory() as session:
+        queued = get_job(session, created_payload["job"]["job_id"])
+        assert queued is not None
+        assert queued.request_json["availability_overrides"] == [{
+            "player_name": "Scenario Receiver",
+            "player_id": None,
+            "availability": "assume_out",
+        }]
+        assert queued.request_json["assume_questionable_out"] is True
 
     listed = client.get("/api/jobs?job_type=projection_build")
     assert listed.status_code == 200

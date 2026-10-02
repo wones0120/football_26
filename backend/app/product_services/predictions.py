@@ -23,10 +23,14 @@ from sklearn.isotonic import IsotonicRegression
 from Database.config import get_connection_string
 from .optimizer import _normalize_alias
 from .target_schema import validate_target_schema
+from .model_artifacts import (
+    MODEL_VERSION, deserialize_artifact, git_revision, serialize_artifact,
+    training_fingerprint,
+)
 
 
 TARGET_COL = "label_dk_total_points"
-ACTIVE_MODEL_ID = "gradient_boosting_challenger_v4_1_team_opportunity_context"
+ACTIVE_MODEL_ID = "gradient_boosting_challenger_v4_2_market_corrected"
 POINT_MODEL_RAW_WEIGHT = 0.80
 POINT_MODEL_HISTORY_WEIGHT = 0.20
 HISTORY_ROLL3_WEIGHT = 0.60
@@ -166,6 +170,112 @@ def blend_point_predictions(
         POINT_MODEL_HISTORY_WEIGHT * history_anchor
     )
     return np.maximum(0.0, blended)
+
+
+def role_counterfactual_grid(
+    model: GradientBoostingRegressor, train_df: pd.DataFrame,
+    target_df: pd.DataFrame, feature_cols: list[str],
+) -> list[dict | None]:
+    """Hold scoring inputs fixed while changing only one role feature at a time."""
+    if not {"offensive_role_importance", "offensive_role_completeness"}.issubset(feature_cols):
+        return [None] * len(target_df)
+    features = target_df[feature_cols].apply(pd.to_numeric, errors="coerce").fillna(0.0)
+    baseline = blend_point_predictions(model.predict(features), train_df, target_df)
+    positions = target_df["position"].astype(str).str.upper().to_numpy()
+    importance = pd.to_numeric(target_df["offensive_role_importance"], errors="coerce").to_numpy()
+    completeness = pd.to_numeric(target_df["offensive_role_completeness"], errors="coerce").to_numpy()
+    train_positions = train_df["position"].astype(str).str.upper()
+    train_importance = pd.to_numeric(train_df.get(
+        "offensive_role_importance", pd.Series(np.nan, index=train_df.index)
+    ), errors="coerce")
+    support = {}
+    for position in ("RB", "WR", "TE"):
+        observed = train_importance.loc[train_positions.eq(position)].dropna()
+        support[position] = (
+            (float(observed.quantile(0.05)), float(observed.quantile(0.95)))
+            if len(observed) >= 20 else (0.0, 1.0)
+        )
+    output: list[dict | None] = [None] * len(target_df)
+    for index, position in enumerate(positions):
+        if position not in {"RB", "WR", "TE"} or not np.isfinite(importance[index]):
+            continue
+        low, high = support[position]
+        output[index] = {"baseline_model_mean": float(baseline[index]),
+                         "importance": [], "completeness": [],
+                         "historical_importance_support_5th_95th": [low, high],
+                         "note": "One feature varied at a time; pre-opportunity mean; production prediction unchanged"}
+    for field, values in (
+        ("importance", np.stack([
+            np.asarray([
+                np.clip(value + delta, min(value, support[position][0]),
+                        max(value, support[position][1]))
+                if position in support and np.isfinite(value) else value
+                for value, position in zip(importance, positions, strict=True)
+            ]) for delta in (-0.2, -0.1, 0, 0.1, 0.2)
+        ])),
+        ("completeness", np.stack([np.full(len(target_df), value) for value in (0.5, 0.75, 1.0)])),
+    ):
+        column = f"offensive_role_{field}"
+        for row_values in values:
+            changed = features.copy()
+            changed[column] = np.where(np.isfinite(row_values), row_values, changed[column])
+            means = blend_point_predictions(model.predict(changed), train_df, target_df)
+            for index, item in enumerate(output):
+                if item is not None:
+                    item[field].append({"input": float(row_values[index]),
+                                        "model_mean": float(means[index]),
+                                        "delta": float(means[index] - baseline[index])})
+    return output
+
+
+def historical_role_calibration(residuals: pd.DataFrame) -> dict[str, Any]:
+    """Walk-forward role calibration; ceiling thresholds use earlier periods only."""
+    required = {"season", "week", "position", "offensive_role_class",
+                "actual", "point_prediction", "residual"}
+    if residuals.empty or not required.issubset(residuals.columns):
+        return {"status": "unavailable", "reason": "role-labeled walk-forward residuals unavailable"}
+    frame = residuals.loc[
+        residuals["position"].astype(str).str.upper().isin({"RB", "WR", "TE"})
+        & residuals["offensive_role_class"].notna()
+    ].copy()
+    if frame.empty:
+        return {"status": "unavailable", "reason": "no skill-player role labels in held-out rows"}
+    frame["ceiling_hit"] = np.nan
+    frame["period"] = pd.to_numeric(frame["season"]) * 100 + pd.to_numeric(frame["week"])
+    for period in sorted(frame["period"].unique()):
+        prior = frame.loc[frame["period"] < period]
+        if len(prior) < 30:
+            continue
+        for index, row in frame.loc[frame["period"] == period].iterrows():
+            matched = prior.loc[
+                prior["position"].eq(row["position"])
+                & prior["offensive_role_class"].eq(row["offensive_role_class"])
+            ]
+            if len(matched) < 30:
+                matched = prior.loc[prior["position"].eq(row["position"])]
+            if len(matched) < 30:
+                matched = prior
+            threshold = float(row["point_prediction"]) + float(matched["residual"].quantile(0.9))
+            frame.at[index, "ceiling_hit"] = float(row["actual"] >= threshold)
+
+    def summarize(group: pd.DataFrame) -> dict[str, Any]:
+        error = pd.to_numeric(group["point_prediction"] - group["actual"], errors="coerce")
+        hits = pd.to_numeric(group["ceiling_hit"], errors="coerce")
+        return {"rows": int(len(group)), "mean_fantasy_points": float(group["actual"].mean()),
+                "mean_projection_error_predicted_minus_actual": float(error.mean()),
+                "mae": float(error.abs().mean()), "rmse": float(np.sqrt((error ** 2).mean())),
+                "ceiling_hit_rate": float(hits.mean()) if hits.notna().any() else None,
+                "ceiling_evaluable_rows": int(hits.notna().sum())}
+
+    classes = ("offensive centerpiece", "primary option", "major secondary option",
+               "regular contributor", "rotational contributor", "low-opportunity player")
+    by_class = {label: summarize(frame.loc[frame["offensive_role_class"].eq(label)])
+                for label in classes if frame["offensive_role_class"].eq(label).any()}
+    by_position = {f"{position}|{label}": summarize(group)
+                   for (position, label), group in frame.groupby(["position", "offensive_role_class"])}
+    return {"status": "available", "method": "held-out point predictions; prior-period residual P90 proxy",
+            "by_role_class": by_class, "by_position_and_role_class": by_position,
+            "ceiling_note": "A hit means actual >= point prediction + prior-only 90th residual percentile; this proxy may differ from the production shrinkage-calibrated P90"}
 
 
 def kicker_point_estimates(
@@ -468,6 +578,12 @@ def generate_walk_forward_residuals(
         )
 
         residual_frame = validation[["season", "week", "position", "calibration_role"]].copy()
+        if "offensive_role_class" in validation:
+            residual_frame["offensive_role_class"] = validation["offensive_role_class"].to_numpy()
+        if "offensive_role_importance" in validation:
+            residual_frame["offensive_role_importance"] = pd.to_numeric(
+                validation["offensive_role_importance"], errors="coerce"
+            )
         if "player_id" in validation.columns:
             residual_frame["player_id"] = validation["player_id"].astype(str)
         residual_frame["actual"] = validation[TARGET_COL].astype(float).to_numpy()
@@ -503,7 +619,10 @@ def build_position_calibration(
         fallback["calibration_role"] = derive_calibration_roles(fallback)
         position_medians = fallback.groupby("position")[TARGET_COL].transform("median")
         fallback["residual"] = fallback[TARGET_COL] - position_medians
-        calibration_rows = fallback[["position", "calibration_role", "residual"]].copy()
+        fallback_columns = ["position", "calibration_role", "residual"]
+        if "offensive_role_importance" in fallback:
+            fallback_columns.append("offensive_role_importance")
+        calibration_rows = fallback[fallback_columns].copy()
         method = "historical_position_dispersion_fallback"
 
     if "position" not in calibration_rows.columns:
@@ -590,6 +709,40 @@ def build_position_calibration(
             },
         )
 
+    # Conditional ceiling is learned from chronological out-of-fold residuals.
+    # Low/high are measured-opportunity halves within a position/role, never a
+    # fixed bonus for a role label. Sparse bins fall back to the parent profile.
+    importance_splits: dict[str, float] = {}
+    if "offensive_role_importance" in calibration_rows:
+        for (position, role), role_rows in calibration_rows.groupby(
+            ["position", "calibration_role"]
+        ):
+            known = role_rows.dropna(subset=["offensive_role_importance"])
+            if len(known) < 2 * min_role_rows:
+                continue
+            split = float(known["offensive_role_importance"].median())
+            low = known.loc[known["offensive_role_importance"] < split]
+            high = known.loc[known["offensive_role_importance"] >= split]
+            if min(len(low), len(high)) < min_role_rows:
+                continue
+            base_key = f"{position}|{role}"
+            importance_splits[base_key] = split
+            parent = profiles[base_key]
+            for label, group in (("low", low), ("high", high)):
+                empirical = quantiles_for(group)
+                weight = min(1.0, len(group) / (2 * min_role_rows))
+                values = np.maximum.accumulate([
+                    weight * empirical[name]
+                    + (1.0 - weight) * parent.residual_quantiles[name]
+                    for name in quantile_names
+                ])
+                key = f"{base_key}|importance_{label}"
+                profiles[key] = ResidualCalibrationProfile(
+                    position=key, sample_size=len(group),
+                    source=f"{method}_measured_opportunity_{label}",
+                    residual_quantiles=dict(zip(quantile_names, map(float, values), strict=True)),
+                )
+
     coverage_by_position: dict[str, dict[str, float | int]] = {}
     for position, position_rows in calibration_rows.groupby("position"):
         profile = profiles.get(position, profiles["__ALL__"])
@@ -652,6 +805,7 @@ def build_position_calibration(
         "profiles": {key: profile.as_dict() for key, profile in profiles.items()},
         "coverage_by_position": coverage_by_position,
         "coverage_by_role": coverage_by_role,
+        "importance_splits_by_role": importance_splits,
         "promotion_gate": {
             "status": "passed" if all(promotion_checks.values()) else "blocked",
             "checks": promotion_checks,
@@ -751,6 +905,8 @@ def prediction_code_hash() -> str:
     return hashlib.sha256(
         Path(__file__).read_bytes()
         + Path(__file__).with_name("canonical_projection_inputs.py").read_bytes()
+        + Path(__file__).with_name("offensive_role.py").read_bytes()
+        + Path(__file__).with_name("model_artifacts.py").read_bytes()
     ).hexdigest()
 
 
@@ -800,9 +956,9 @@ class PredictionRecord:
     projection_run_id: str
     data_cutoff_at: datetime
     game_id: str
-    team_implied_total: float = 0.0
-    team_spread: float = 0.0
-    game_total: float = 0.0
+    team_implied_total: float | None = None
+    team_spread: float | None = None
+    game_total: float | None = None
     opp_pts_allowed_pos_3: float = 0.0
     opp_pts_allowed_pos_5: float = 0.0
     run_funnel: float = 0.0
@@ -826,6 +982,108 @@ class PredictionRunResult:
 
     def __len__(self) -> int:
         return len(self.records)
+
+
+def estimate_team_market_elasticity(train: pd.DataFrame) -> dict[str, Any]:
+    """Estimate a prior-only within-team-season fantasy response to implied points."""
+    skill = train.loc[train["position"].astype(str).str.upper().isin(
+        {"QB", "RB", "WR", "TE"}
+    )].copy()
+    games = skill.groupby(["season", "week", "team"], as_index=False).agg(
+        actual=(TARGET_COL, "sum"),
+        implied=("team_implied_total", "median"),
+        player_count=("player_id", "count"),
+    )
+    games = games.loc[games["player_count"].ge(5) & games["implied"].gt(5)].copy()
+    games = games.sort_values(["season", "week", "team"])
+    if len(games) < 50:
+        return {"status": "unavailable_insufficient_prior_games", "games": len(games)}
+
+    def slope(frame: pd.DataFrame) -> float | None:
+        groups = [frame["season"], frame["team"]]
+        x = frame["implied"] - frame.groupby(groups)["implied"].transform("mean")
+        y = frame["actual"] - frame.groupby(groups)["actual"].transform("mean")
+        denominator = float((x * x).sum())
+        return float((x * y).sum() / denominator) if denominator > 0 else None
+
+    cutoff_index = int(len(games) * 0.8)
+    training_slope = slope(games.iloc[:cutoff_index])
+    holdout_slope = slope(games.iloc[cutoff_index:])
+    full_slope = slope(games)
+    status = (
+        "validated_positive_response"
+        if all(value is not None and value > 0 for value in
+               (training_slope, holdout_slope, full_slope))
+        else "unavailable_nonpositive_response"
+    )
+    return {
+        "status": status, "games": len(games),
+        "training_slope": training_slope, "holdout_slope": holdout_slope,
+        "slope": full_slope if status == "validated_positive_response" else None,
+        "method": "within_team_season_prior_games_80_20_positive_holdout",
+        "positions": ["QB", "RB", "WR", "TE"],
+    }
+
+
+def reconcile_market_response(
+    target: pd.DataFrame, current_means: np.ndarray,
+    matrix_means: np.ndarray, market_audit: list[dict],
+    elasticity: dict[str, Any],
+) -> tuple[np.ndarray, list[dict], np.ndarray]:
+    """Avoid double counting by adding only the historical-minus-model response."""
+    adjusted = np.asarray(current_means, dtype=float).copy()
+    point_adjustments = np.zeros(len(target), dtype=float)
+    positions = target["position"].astype(str).str.upper()
+    participation = pd.to_numeric(
+        target["pregame_availability_probability"], errors="coerce"
+    ).fillna(1.0)
+    starts = pd.to_numeric(
+        target["pregame_start_probability"], errors="coerce"
+    ).fillna(1.0)
+    participation = participation.where(~positions.eq("QB"), participation * starts)
+    active = participation.to_numpy(dtype=float)
+    response: list[dict] = []
+    for observation in market_audit:
+        if not observation.get("changed_from_matrix"):
+            continue
+        team_mask = (
+            target["recent_team"].astype(str).eq(str(observation["team"]))
+            & positions.isin({"QB", "RB", "WR", "TE"})
+        ).to_numpy()
+        old_points = float(np.sum(np.asarray(matrix_means) * active * team_mask))
+        model_points = float(np.sum(np.asarray(current_means) * active * team_mask))
+        model_delta = model_points - old_points
+        implied_delta = observation.get("implied_total_delta")
+        slope = elasticity.get("slope")
+        desired_delta = float(slope * implied_delta) if slope is not None and implied_delta is not None else None
+        allocation = None
+        if desired_delta is not None:
+            available_points = np.maximum(0.0, adjusted * active) * team_mask
+            total_available = float(available_points.sum())
+            if total_available > 0:
+                residual = desired_delta - model_delta
+                final_deltas = residual * available_points / total_available
+                adjustment = np.divide(
+                    final_deltas, active, out=np.zeros_like(final_deltas),
+                    where=active > 0,
+                )
+                adjusted += adjustment
+                point_adjustments += adjustment
+                allocation = "proportional_to_current_active_skill_player_mean"
+        response.append({
+            "team": observation["team"],
+            "implied_total_delta": implied_delta,
+            "model_offensive_projection_delta": model_delta,
+            "calibrated_target_delta": desired_delta,
+            "final_offensive_projection_delta": float(
+                np.sum(adjusted * active * team_mask) - old_points
+            ),
+            "direction_mismatch_before_reconciliation": bool(
+                implied_delta and model_delta * implied_delta < 0
+            ),
+            "allocation": allocation,
+        })
+    return np.maximum(0.0, adjusted), response, point_adjustments
 
 
 class PredictionsService:
@@ -941,7 +1199,9 @@ class PredictionsService:
         feature_cols: list[str],
     ) -> np.ndarray:
         """Predict position-aware means with a prior-only player-history anchor."""
-        raw_predictions = model.predict(target_df[feature_cols])
+        raw_predictions = model.predict(
+            target_df[feature_cols].apply(pd.to_numeric, errors="coerce").fillna(0.0)
+        )
         preds = blend_point_predictions(raw_predictions, train_df, target_df)
         y_train = pd.to_numeric(train_df[TARGET_COL], errors="coerce")
         print(
@@ -973,6 +1233,8 @@ class PredictionsService:
         projections: pd.DataFrame,
         calibration_metrics: dict[str, Any] | None = None,
         source_versions: dict[str, Any] | None = None,
+        fitted_model: GradientBoostingRegressor | None = None,
+        calibration_profiles: dict | None = None,
     ) -> bool:
         """Persist append-only active prediction lineage in the target schema."""
         validate_target_schema(
@@ -987,8 +1249,23 @@ class PredictionsService:
                 "projection_run",
                 "active_projection_run",
                 "player_projection",
+                "model_artifact",
             ),
         )
+        if fitted_model is None:
+            raise ValueError("A fitted model is required for auditable projection persistence")
+        artifact_bytes, artifact_sha256 = serialize_artifact(
+            model=fitted_model, train=train_df, target=source_features,
+            feature_columns=feature_cols, calibration=calibration_metrics or {},
+            profiles=calibration_profiles or {},
+        )
+        reloaded = deserialize_artifact(artifact_bytes, artifact_sha256)
+        matrix = source_features[feature_cols].apply(pd.to_numeric, errors="coerce").fillna(0.0)
+        if not np.array_equal(fitted_model.predict(matrix), reloaded["model"].predict(matrix)):
+            raise RuntimeError("Reloaded fitted artifact changes raw projection values")
+        artifact_uri = f"db://target.model_artifact/{context.model_run_id}"
+        dataset_sha256 = training_fingerprint(train_df)
+        revision = git_revision()
         try:
             with self.engine.begin() as connection:
                 training_start = None
@@ -1033,17 +1310,20 @@ class PredictionsService:
                             (model_id, model_name, model_version, trained_on_start,
                              trained_on_end, feature_set_hash, metrics_json, artifact_uri)
                         VALUES
-                            (:model_id, 'Position-aware full-team opportunity-context gradient boosting', 'v4.1-team-opportunity-context', :trained_on_start,
-                             :trained_on_end, :feature_set_hash, CAST(:metrics_json AS JSONB), NULL)
+                            (:model_id, 'Role-aware full-team opportunity gradient boosting', :model_version, :trained_on_start,
+                             :trained_on_end, :feature_set_hash, CAST(:metrics_json AS JSONB), :artifact_uri)
                         ON CONFLICT (model_id) DO UPDATE SET
                             trained_on_start = EXCLUDED.trained_on_start,
                             trained_on_end = EXCLUDED.trained_on_end,
                             feature_set_hash = EXCLUDED.feature_set_hash,
-                            metrics_json = EXCLUDED.metrics_json
+                            metrics_json = EXCLUDED.metrics_json,
+                            artifact_uri = EXCLUDED.artifact_uri
                         """
                     ),
                     {
                         "model_id": ACTIVE_MODEL_ID,
+                        "model_version": MODEL_VERSION,
+                        "artifact_uri": artifact_uri,
                         "trained_on_start": training_start,
                         "trained_on_end": training_end,
                         "feature_set_hash": context.feature_set_hash,
@@ -1078,9 +1358,20 @@ class PredictionsService:
                                 "feature_columns": feature_cols,
                                 "feature_lineage_columns": feature_lineage_cols or [],
                                 "code_hash": context.code_hash,
+                                "git_revision": revision,
+                                "artifact_uri": artifact_uri,
+                                "artifact_sha256": artifact_sha256,
+                                "training_dataset_sha256": dataset_sha256,
+                                "training_cutoff": context.data_cutoff_at.isoformat(),
+                                "model_version": MODEL_VERSION,
                                 "point_estimate": point_estimate_contract(train_df),
                                 "training_filter": _json_safe(
                                     (source_versions or {}).get("participation_filter", {})
+                                ),
+                                "training_outcome_audit": _json_safe(
+                                    (source_versions or {}).get(
+                                        "training_outcome_audit", {}
+                                    )
                                 ),
                                 "opportunity_features": _json_safe(
                                     (source_versions or {}).get("opportunity_features", {})
@@ -1088,11 +1379,36 @@ class PredictionsService:
                                 "pregame_context": _json_safe(
                                     (source_versions or {}).get("pregame_context", {})
                                 ),
-                                "uncertainty_model": "position-and-role-aware walk-forward residual quantiles",
+                                "uncertainty_model": "position, role, and measured-opportunity walk-forward residual quantiles",
                                 "calibration": _json_safe(calibration_metrics or {}),
                             },
                             sort_keys=True,
                         ),
+                    },
+                )
+                connection.execute(
+                    text("""
+                        INSERT INTO target.model_artifact
+                            (model_run_id, artifact_uri, artifact_sha256, artifact_bytes,
+                             model_version, feature_schema_json, training_cutoff,
+                             training_dataset_sha256, code_hash, git_revision, calibration_json)
+                        VALUES
+                            (:model_run_id, :artifact_uri, :artifact_sha256, :artifact_bytes,
+                             :model_version, CAST(:feature_schema AS JSONB), :training_cutoff,
+                             :training_dataset_sha256, :code_hash, :git_revision,
+                             CAST(:calibration AS JSONB))
+                    """), {
+                        "model_run_id": context.model_run_id,
+                        "artifact_uri": artifact_uri,
+                        "artifact_sha256": artifact_sha256,
+                        "artifact_bytes": artifact_bytes,
+                        "model_version": MODEL_VERSION,
+                        "feature_schema": json.dumps(feature_cols),
+                        "training_cutoff": context.data_cutoff_at,
+                        "training_dataset_sha256": dataset_sha256,
+                        "code_hash": context.code_hash,
+                        "git_revision": revision,
+                        "calibration": json.dumps(_json_safe(calibration_metrics or {}), sort_keys=True),
                     },
                 )
 
@@ -1268,6 +1584,9 @@ class PredictionsService:
     def _train_canonical(
         self, *, season, week, positions, slate, data_cutoff_at,
         feature_run_id, model_run_id, projection_run_id,
+        availability_overrides=None,
+        allow_confirmed_inactive_override=False,
+        assume_questionable_out=False,
     ) -> PredictionRunResult:
         from .canonical_projection_inputs import (
             FEATURE_COLUMNS,
@@ -1283,9 +1602,23 @@ class PredictionsService:
         train, target, sources = load_inputs(
             self.engine, season=season, week=week, slate=slate,
             cutoff=context.data_cutoff_at, positions=list(positions) if positions else None,
+            availability_overrides=availability_overrides,
+            allow_confirmed_inactive_override=allow_confirmed_inactive_override,
+            assume_questionable_out=assume_questionable_out,
         )
+        baseline_target = None
+        if assume_questionable_out or any(
+            str(row.get("availability") or "default") != "default"
+            for row in (availability_overrides or [])
+        ):
+            _, baseline_target, _ = load_inputs(
+                self.engine, season=season, week=week, slate=slate,
+                cutoff=context.data_cutoff_at,
+                positions=list(positions) if positions else None,
+            )
         residuals = generate_walk_forward_residuals(train, FEATURE_COLUMNS)
         profiles, metrics = build_position_calibration(residuals, train)
+        metrics["historical_role_calibration"] = historical_role_calibration(residuals)
         metrics["input_coverage"] = {
             "projected_players": len(target),
             "unresolved_salary_source_keys": sources["unresolved_salary_source_keys"],
@@ -1293,22 +1626,91 @@ class PredictionsService:
         }
         metrics["point_estimate"] = point_estimate_contract(train)
         metrics["training_filter"] = sources.get("participation_filter", {})
+        metrics["training_outcome_audit"] = sources.get(
+            "training_outcome_audit", {}
+        )
         metrics["salary_status_policy"] = sources.get("salary_status_policy", {})
         metrics["opportunity_features"] = sources.get("opportunity_features", {})
         metrics["pregame_context"] = sources.get("pregame_context", {})
+        metrics["availability_scenario"] = sources.get("availability_scenario", {})
         kicker_rows = target["position"].astype(str).str.upper().eq("K")
         kicker_estimates = pd.Series(np.nan, index=target.index, dtype=float)
         if kicker_rows.any():
             kicker_estimates, metrics["kicker_point_estimate"] = (
                 kicker_point_estimates(target)
             )
-        model = self._train_model(train[FEATURE_COLUMNS], train[TARGET_COL])
+        model = self._train_model(
+            train[FEATURE_COLUMNS].apply(pd.to_numeric, errors="coerce").fillna(0.0),
+            train[TARGET_COL],
+        )
+        baseline_projection_by_player: dict[str, float] = {}
+        if baseline_target is not None:
+            baseline_means = self._predict_point_estimates(
+                model, train, baseline_target, FEATURE_COLUMNS
+            )
+            baseline_means, _ = apply_opportunity_point_adjustment(
+                baseline_means, train, baseline_target
+            )
+            baseline_positions = baseline_target["position"].astype(str).str.upper()
+            baseline_availability = pd.to_numeric(
+                baseline_target["pregame_availability_probability"], errors="coerce"
+            ).fillna(1.0)
+            baseline_start = pd.to_numeric(
+                baseline_target["pregame_start_probability"], errors="coerce"
+            ).fillna(1.0)
+            baseline_participation = baseline_availability.where(
+                ~baseline_positions.eq("QB"), baseline_availability * baseline_start
+            )
+            baseline_projection_by_player = {
+                str(player_id): max(0.0, float(mean)) * float(probability)
+                for player_id, mean, probability in zip(
+                    baseline_target["player_id"], baseline_means,
+                    baseline_participation, strict=True,
+                )
+            }
+        target["projection_before_scenario"] = target["player_id"].astype(str).map(
+            baseline_projection_by_player
+        )
+        target["role_counterfactual_grid"] = role_counterfactual_grid(
+            model, train, target, FEATURE_COLUMNS,
+        )
         means = self._predict_point_estimates(model, train, target, FEATURE_COLUMNS)
         means, opportunity_details = apply_opportunity_point_adjustment(
             means,
             train,
             target,
         )
+        market_audit = sources.get("market_context", {}).get("team_rows", [])
+        elasticity = estimate_team_market_elasticity(train)
+        sources["market_context"]["historical_elasticity"] = elasticity
+        market_point_adjustments = np.zeros(len(target), dtype=float)
+        if market_audit and any(row.get("changed_from_matrix") for row in market_audit):
+            matrix_market_target = target.copy()
+            for observation in market_audit:
+                team_mask = matrix_market_target["recent_team"].astype(str).eq(
+                    str(observation["team"])
+                )
+                for feature, previous in observation.get("previous_matrix", {}).items():
+                    if feature in FEATURE_COLUMNS:
+                        matrix_market_target.loc[team_mask, feature] = previous
+            matrix_means = self._predict_point_estimates(
+                model, train, matrix_market_target, FEATURE_COLUMNS,
+            )
+            matrix_means, _ = apply_opportunity_point_adjustment(
+                matrix_means, train, matrix_market_target,
+            )
+            means, response, market_point_adjustments = reconcile_market_response(
+                target, np.asarray(means), np.asarray(matrix_means),
+                market_audit, elasticity,
+            )
+            sources["market_context"]["model_response"] = response
+            sources["market_context"]["status"] = (
+                "reconciled_to_prior_team_market_response"
+                if elasticity.get("status") == "validated_positive_response"
+                else "review_required_unvalidated_market_response"
+            )
+        metrics["market_context"] = sources.get("market_context", {})
+        target["market_team_point_adjustment"] = market_point_adjustments
         for column in opportunity_details.columns:
             target[column] = opportunity_details[column].to_numpy()
         roles = derive_calibration_roles(target)
@@ -1323,7 +1725,13 @@ class PredictionsService:
                 in {"LEAD", "COMMITTEE", "PRIMARY", "SECONDARY", "ROTATION"}
                 else derived_role
             )
-            profile = profiles.get(f"{position}|{role}", profiles.get(position, profiles["__ALL__"]))
+            profile_key = f"{position}|{role}"
+            split = metrics.get("importance_splits_by_role", {}).get(profile_key)
+            importance = pd.to_numeric(row.get("offensive_role_importance"), errors="coerce")
+            if split is not None and pd.notna(importance):
+                group = "high" if float(importance) >= split else "low"
+                profile_key = f"{profile_key}|importance_{group}"
+            profile = profiles.get(profile_key, profiles.get(f"{position}|{role}", profiles.get(position, profiles["__ALL__"])))
             availability_probability = float(
                 row.get("pregame_availability_probability", 1.0) or 0.0
             )
@@ -1360,18 +1768,38 @@ class PredictionsService:
                 feature_run_id=context.feature_run_id, model_run_id=context.model_run_id,
                 projection_run_id=context.projection_run_id, data_cutoff_at=context.data_cutoff_at,
                 game_id=prediction_game_id(row.to_dict(), season=season, week=week),
-                team_implied_total=float(row["team_implied_total"]),
-                team_spread=float(row["team_spread_line"]), game_total=float(row["game_total_line"]),
+                team_implied_total=(float(row["team_implied_total"])
+                                    if pd.notna(row["team_implied_total"]) else None),
+                team_spread=(float(row["team_spread_line"])
+                             if pd.notna(row["team_spread_line"]) else None),
+                game_total=(float(row["game_total_line"])
+                            if pd.notna(row["game_total_line"]) else None),
                 calibration_method=profile.source, calibration_position=position,
                 calibration_role=role, calibration_sample_size=profile.sample_size,
             ))
+        target["projection_after_scenario"] = [record.predicted_mean for record in records]
         projections = pd.DataFrame([record.__dict__ for record in records])
+        from .offensive_role import rank_team_roles
+        ranked = rank_team_roles(
+            target.assign(
+                predicted_mean=projections["predicted_mean"].to_numpy(),
+                predicted_p90=projections["predicted_p90"].to_numpy(),
+            )
+        ).set_index("player_id")
+        for column in (
+            "offensive_role_rank", "team_mean_rank", "team_p90_rank",
+            "role_projection_disagreement", "team_cumulative_target_share",
+            "team_cumulative_rb_carry_share",
+        ):
+            if column in ranked:
+                target[column] = target["player_id"].map(ranked[column])
         if not self._persist_target_prediction_run(
             context=context, season=season, week=week, slate=slate,
             feature_cols=FEATURE_COLUMNS,
             feature_lineage_cols=PREGAME_LINEAGE_COLUMNS,
             train_df=train, source_features=target,
             projections=projections, calibration_metrics=metrics, source_versions=sources,
+            fitted_model=model, calibration_profiles=profiles,
         ):
             raise RuntimeError("Canonical projections could not be persisted; the run is not complete.")
         return PredictionRunResult(
@@ -1391,13 +1819,21 @@ class PredictionsService:
         feature_run_id: str | None = None,
         model_run_id: str | None = None,
         projection_run_id: str | None = None,
+        availability_overrides: list[dict] | None = None,
+        allow_confirmed_inactive_override: bool = False,
+        assume_questionable_out: bool = False,
     ) -> PredictionRunResult:
         if inspect(self.engine).has_table("curated_salary"):
             return self._train_canonical(
                 season=season, week=week, positions=positions, slate=slate,
                 data_cutoff_at=data_cutoff_at, feature_run_id=feature_run_id,
                 model_run_id=model_run_id, projection_run_id=projection_run_id,
+                availability_overrides=availability_overrides,
+                allow_confirmed_inactive_override=allow_confirmed_inactive_override,
+                assume_questionable_out=assume_questionable_out,
             )
+        if assume_questionable_out or availability_overrides:
+            raise ValueError("Availability scenarios require canonical projection inputs.")
         df = self._load_features(season)
         if df.empty:
             logging.warning("No predictive_features available for season %s", season)
@@ -1785,6 +2221,8 @@ class PredictionsService:
             source_features=pred_df,
             projections=df_pred,
             calibration_metrics=calibration_metrics,
+            fitted_model=model,
+            calibration_profiles=calibration_profiles,
         )
         if not target_persisted:
             raise RuntimeError(

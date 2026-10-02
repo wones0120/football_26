@@ -10,6 +10,8 @@ Downloads validate IDs, roster composition, salaries and duplicates before
 returning a CSV, or a ZIP of CSVs for runs exceeding 500 lineups. The result-card
 button is **Download all N lineups for DraftKings**. Matching entry templates
 remain necessary only for the separate export that updates existing entries.
+For Classic saved lineups, an explicit `FLEX` roster slot is exported using the
+player's underlying RB, WR, or TE position when validating the nine-player roster.
 
 ## Contract
 
@@ -81,8 +83,98 @@ positive snaps, routes, carries, targets, usage-share, red-zone, goal-line, or
 specialty-role path. Missing evidence is never fabricated. Pick'em or missing
 spread data does not create a favorite/underdog 5-1 contribution.
 
+For `showdown_gpp_portfolio_v3` portfolios of up to five entries, every viable
+Captain receives a forced-CPT legal solve before global portfolio selection.
+The candidate pool also includes ordinary and prior sequential solves, script
+constructions, and the legal highest-mean and highest-P90 rosters. Identical
+Captain/FLEX player sets are deduplicated by canonical player ID. Discovery
+also probes lineups without frequently shared non-QB players, without removing
+those players from the slate. A lineup must
+reach 95% of both raw-quality maxima to enter the portfolio selector; the
+selector does not relax that screen to fill an entry. CPT/core/starting-QB/cheap-
+punt exposure rates remain 60/80/100/40%. The saved report records rank, raw
+quality and selector losses, Captain-family coverage, and binding constraints.
+Favorite 4-2, 5-1, RB-control, DST-control, and RB+DST-control constructions
+are explicitly solved into the candidate pool; none is forced into the final
+portfolio. Positive QB-linked soft rewards use a 0.4–1.0 multiplier based on
+that QB's projected mean relative to the slate's highest projected QB mean.
+This multiplier does not edit projections. Showdown no longer limits lineups
+to one tight end.
+
+### Game-script scenario discovery (`market_margin_role_conditioning_v1`)
+
+The market baseline uses the unchanged, cutoff-safe player distributions.
+When both teams have consistent market totals and implied scores, the candidate
+generator also conditions on each team winning by at least the configured
+margin (default 14 points; valid 7–35). It holds the game total fixed and
+sets the conditional team scores to the least extreme implied-score split that
+satisfies the margin. If the market is missing, inconsistent, or marked unsafe,
+only baseline candidates are generated and the coverage report says why.
+
+The temporary conditioning pool changes team implied totals and role-sensitive
+mean/P90 values, then runs the normal Showdown solver. Winning early-down RBs
+receive a bounded rush-volume sensitivity; winning QB/WR/TE lose late pass
+volume; winner DST gets a sack/turnover sensitivity. Trailing QB/WR/TE and
+receiving RBs receive a pass-volume sensitivity, while early-down RBs and DST
+lose opportunity. Kicker sensitivity follows team scoring and trailing
+fourth-down behavior. A scoring component responds to the change in team
+implied total. The component is capped at ±12%; combined player adjustments
+are capped at 0.78–1.22× baseline. P90 uses the same factor, preserving the
+original player spread ratio. Ownership, salary, eligibility, Captain prior,
+user preferences, and the baseline distribution do not change. There is no
+winner-team objective bonus and no mandatory lineup team count. This is an
+explainable sensitivity model, not a calibrated conditional probability or a
+joint simulated lineup percentile. The saved candidate and selected-lineup
+audits record every adjustment, reason, market input, method version, and
+selection reason. The HTML report displays scenario coverage and baseline
+versus conditioned player values.
+
+`require_scenario_diversity` is off by default. When on, the portfolio selector
+maximizes feasible entry count, then distinct scenario-family coverage, then
+its existing selector score. It never relaxes the 95% joint quality screen or
+Captain/player exposure caps to fill a family. The report records which
+lineups differ from the normal selection and why a family is missing.
+
+The method is validated by deterministic tests for market conservation,
+two-sided role responses, adjustment bounds, unchanged baseline, quality-floor
+retention, and duplicate-roster prevention. Historical calibration of
+conditional player outcomes is not yet available; do not interpret the
+factors as estimated effects. A future joint-game simulator can replace
+`condition_player_pool` with conditional sample filtering while retaining the
+scenario IDs, candidate generators, and portfolio selection interface.
+The **Historical Captain Optimality** report uses legal actual-score Showdown
+oracles, not tournament winners. It deduplicates one repeated historical game,
+leaving 45 completed games. One game has two tied optimal Captains; position
+shares count the oracle's deterministic selection once, while preserving both
+co-optimal Captains in the saved slate record. It shows position shares separately from rates
+per legal Captain opportunity, both for all eligible QBs and a pregame-identified
+starter subset. Starter evidence uses an archived pre-kickoff identity record
+when available; otherwise a clear salary and strictly prior passing-volume
+leader is labeled inferred. Ambiguous teams are excluded from starter rates.
+QB archetypes use carry-volume terciles; prior-three rushing yards and TDs are
+observed pregame proxies, while historical projected rushing-yard/TD components
+and goal-line/design/scramble evidence are unavailable. The high-rush label
+does not assert a measured goal-line role. Wilson intervals and small-sample
+labels accompany the rates. Archetype boundaries for chronological validation
+are fitted on the 2024 training period only, which has three optimal-QB events.
+No archetype-specific production score adjustment is enabled. The report retains
+the existing Captain-position prior and shows hypothetical QB-CPT score
+adjustments and ranks separately from actual selection.
+Historical actual field CPT ownership and full prelock candidate-pool replay
+are unavailable; saved ownership projections are not field outcomes.
+The lineup report shows team counts, saved spread and implied totals, and the
+projection run's direct versus calibrated market response. The team-market
+projection adjustment is applied before optimizer scoring and does not add a
+separate game-total bonus. It describes an aggregate team response; QB-specific
+efficiency, explosive rate, touchdown rate, and play-volume changes are not
+individually identified by the current fitted model.
+If the slate pool lacks complete role ownership, the ownership objective is
+disabled for all candidates. Per-lineup ownership, chalk, and ownership product
+are shown only when every selected slot has role ownership; the product is a
+relative signal, not a duplication probability.
+
 Operations also supports the Showdown-only
-`FLEX-only players (comma-separated names)` control. It resolves each supplied
+**Exclude from Captain (FLEX still allowed; comma-separated names)** control. It resolves each supplied
 name to an unambiguous canonical ID inside the selected slate, constrains that
 player's Captain variable to zero,
 and leaves the FLEX variable eligible. FLEX-only is independent of a player

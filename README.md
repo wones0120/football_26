@@ -1,5 +1,44 @@
 # football_26 Decision OS
 
+[The Week 4 Classic discovery/selection reconciliation](WEEK4_CLASSIC_DISCOVERY_SELECTION_RECONCILIATION.md)
+reuses the completed expanded discovery, separates fixed selection from dynamic
+thesis filtering, and traces requested versus effective production settings.
+Its separate Sunday preview is saved as `00905dcb-d397-4454-99cc-f913fe3345db`;
+it remains **NOT ENTRY READY**. The report includes exact offline replay and API
+readback commands. A new **Run Optimizer** click rebuilds inputs rather than
+replaying that freeze. Production strategy defaults remain unchanged.
+
+[The PIT–CLE final-lock decision](WEEK4_THURSDAY_SHOWDOWN_FINAL_LOCK.md)
+contains the fresh full research-shadow solve, exact three rosters and native DK
+slot IDs, plus common-universe exposure alternatives. Final inactive/elevation,
+QB, salary, market and weather reconciliation now clears **ENTRY READY: YES**.
+The report links the verified three-lineup DraftKings CSV for manual upload.
+Earlier freezes remain immutable; no entry submission is automated.
+
+[The PIT–CLE production/research parity audit](WEEK4_SHOWDOWN_PRODUCTION_RESEARCH_PARITY.md)
+reproduces the saved 149-candidate run and separates discovery depth, ownership,
+conditional scores, and portfolio policies. Showdown conditional discoveries are
+now rescored on the common baseline; its 95% quality floor uses baseline values.
+Role ownership remains diagnostic until its saved model metrics explicitly approve
+the Showdown selector (`selector_approval_by_format.showdown.status = approved`).
+Exposure reports distinguish requested-count caps from realized-count percentages.
+The unchanged production quality policy still cannot supply the audited three-entry
+captain/thesis/overlap portfolio; consult the research shadow and final-lock checks.
+
+[The PIT–CLE Thursday pre-lock audit](WEEK4_THURSDAY_SHOWDOWN_PRELOCK_AUDIT.md)
+freezes current sources and compares 769 broad Showdown candidates, three distinct
+captain/thesis entries, and a ten-entry shadow. Production and Classic remain
+unchanged. Salary/actives need a lock-day refresh; unreliable ownership is
+diagnostic only in the quality shadow. Reproduction scripts and immutable
+evidence are under `artifacts/week4_thursday_showdown_prelock/`.
+
+[The new PIT–CLE game-day decision](WEEK4_THURSDAY_SHOWDOWN_GAMEDAY_FINAL.md)
+verifies the fresh official DK salary/slot file and Operations FanDuel injuries,
+reruns expanded discovery on a new Thursday projection freeze, and quantifies
+three-entry core exposure costs. The morning decision remains provisional until
+official game-day inactives and the final pre-lock refresh. The overnight bundle
+is immutable; production rules, weights and Classic research are unchanged.
+
 [Historical completeness repair](docs/DATA_COMPLETENESS_REPAIR.md) now backfills
 missing archive games with native-ID and schedule checks, preserves negative actual
 scores, and quarantines legacy identity collisions. Week 1 ownership review is down
@@ -9,6 +48,23 @@ Contest ownership imports now retain source-scoped identity evidence and unresol
 review observations, keep CPT/FLEX labels separate, and never treat actual ownership
 as a pregame projection. See the [Week 1 postmortem](docs/WEEK_1_CONTEST_POSTMORTEM.md)
 and [ownership reconciliation runbook](docs/CONTEST_OWNERSHIP_RECONCILIATION.md).
+
+Week learning reports now include optimizer effectiveness: saved candidate pools,
+selected and entered actual scores, tie-aware DraftKings field thresholds,
+selection regret, score correlations, and evidence limits. The download places a
+short comparison before the full JSON and includes a cross-week table as reports
+accumulate. See [post-slate learning](docs/POST_SLATE_LEARNING.md).
+The [Week 3 frozen-pool audit](docs/WEEK3_SELECTOR_AND_GENERATION_COVERAGE_AUDIT.md)
+compares predeclared Classic selectors on identical saved candidates and reports
+pregame QB, stack, game, player, overlap, and generation-funnel coverage. New
+Classic small-field reports expose those pregame diagnostics and save hashed
+generator inputs for future shadow replays. Production weights and controls remain unchanged.
+The [Week 4 prospective Classic experiment](docs/WEEK4_PROSPECTIVE_STRUCTURAL_COVERAGE_PLAN.md)
+freezes immutable pre-lock solver inputs and compares one structural-coverage/risk
+shadow plus one overlap≤6 original-pool shadow with the unchanged production arm.
+Migration `0039` is applied to the local development database; apply it in any other
+environment before its next Classic run. Risk caps are proposed shadow
+controls and are not promoted to the production selector.
 
 Phase 6A now provides an experimental joint-simulation API/CLI with signed
 marginals, shared game/team factors, true lineup quantiles, and OPT-007 paired
@@ -25,6 +81,8 @@ Showdown cash uses the declared cash distribution weights (50% mean, 25% median,
 15% P10, 5% P90) plus context and existing lineup correlation adjustments.
 New runs record `showdown_cash_distribution_v1`; regenerate older cash runs to
 replace the previous ceiling-based scoring.
+Diagnostic Showdown cash runs honor `locked_captain_player_id` when comparing
+forced-Captain constructions; omitted controls retain the usual cash selection.
 
 Completed optimizer results include **Download all N lineups for DraftKings**.
 This exports every lineup from that saved run without an entry template, portfolio,
@@ -38,6 +96,13 @@ Older runs missing site IDs must be regenerated before export.
 Completed optimizer results also include **Download readable lineup report**. It saves a standalone
 HTML report with the on-screen lineup summaries, player tables, correlation rules, and matched
 OPT-007 controls. Open it in any browser or use the browser's print command to save a PDF.
+
+New Classic small-field reports include diagnostic-only role counterfactuals,
+historical role-class calibration, high-role projection/exposure gaps, lagged
+opportunity comparisons, and last-game role trends. Existing saved projections
+can be audited without changing production data using
+`scripts/validate_role_diagnostics.py`; see the
+[role model guide](docs/PROJECTION_MODEL_V4_2_ROLE_OPPORTUNITY.md).
 
 Canonical repository for the DFS data, modeling, simulation, Digital Twin, and contest-delivery platform:
 
@@ -78,6 +143,13 @@ benchmark, feature-matrix, projection, symbolic, research-simulation, slate-simu
 ultimate-lineup jobs. Use `python -m backend.app.worker --help` for worker identity, polling,
 lease, and one-job options.
 
+For local development, `./scripts/restart_local_backend.sh` restarts both the API and durable
+worker, verifies `/api/health`, and writes logs under the system temporary directory. It can take
+over manually started repository API/worker processes, but refuses to stop an unrelated process
+using port 8000. On macOS without existing LaunchAgents, it submits both processes to the user's
+launchd domain so they survive the restart shell exiting. Use `start`, `stop`, or `status` as an
+optional argument.
+
 Fresh database reset (recommended when coming from legacy schemas):
 
 ```bash
@@ -86,6 +158,40 @@ python scripts/apply_migrations.py
 ```
 
 If you see `UndefinedTable` errors (`ingest_run` / `unresolved_player_queue`), the app is pointed at a DB without schema. Run migrations and restart API. In development, `AUTO_CREATE_TABLES=true` also auto-creates missing tables at startup.
+
+Projection runs created after migration `0038_projection_audit_artifacts.sql` persist their fitted
+model and calibration in the database. The optimizer projection selector labels runs whose fitted
+artifact is missing; **Model disagreement** in optimizer results shows reload status, external
+benchmarks, and **Player why** explanations. External benchmarks are diagnostic and never enter
+projection or optimizer scoring. Capture one with `POST /api/predict/external-benchmarks` using
+canonical player IDs, a source URL, capture time, and published projection rows. The original
+Week 3 ESPN capture and complete RB comparison are in `artifacts/week3-espn-benchmark-2026.json`
+and `.md`. The older frozen V4.2 run predates fitted-artifact storage, so its market rescoring is
+unavailable; the app reports this explicitly.
+
+Current Showdown projections preserve starter evidence and the latest sourced
+pregame market snapshot. A saved market audit compares the fitted model's direct
+offense-level response with a prior-only team-market calibration, then records
+any residual adjustment to active QB/RB/WR/TE means. The fitted model, market
+cutoff, calibration, and player adjustments remain attached to the projection
+run. This is an aggregate scoring response; the application does not separately
+estimate pass efficiency, explosive plays, touchdowns, or play volume from a QB
+replacement report.
+
+Showdown optimizer reports now include **Historical Captain Optimality** from
+45 deduplicated, completed DraftKings actual-score oracle games. The section
+shows position shares, all-eligible and pregame-identified starter-QB rates,
+rushing and prior-TD buckets, confidence intervals, chronological A–E model
+checks, and each current starting QB's Captain-family result. The starter
+sample includes clearly marked salary/prior-volume inference where archived
+pre-kickoff identity evidence is unavailable.
+The [study](docs/showdown_captain_optimality_2024_2026.md) and its
+[reproducible summary](docs/showdown_captain_optimality_2024_2026.json) are
+generated by `scripts/build_showdown_captain_optimality.py` from the
+[versioned oracle](artifacts/showdown-oracle-dataset-2026-09-28-v2.json) and
+[captured historical inputs](docs/showdown_captain_historical_inputs_2024_2026.json).
+The QB archetype prior is shadow-only: the chronological training period has
+just three optimal-QB events, so existing Captain scoring remains in effect.
 
 If `POST /api/ingest/nflreadpy/bootstrap` fails with `No module named 'nflreadpy'`, re-activate the venv and reinstall dependencies:
 
@@ -102,19 +208,21 @@ npm install
 npm run dev
 ```
 
-The control plane keeps a sticky `Workspace` jump bar above the panels. Use it to reach `Ingestion`,
-`Simulation`, `Portfolio Comparison`, `Analysis`, `Lineup Backtests`, `Unresolved Queue`, `Salary Slices`,
-`Coverage`, or `Recent Runs` without scrolling through the long simulation form and result tables.
+Research Lab keeps a jump bar above its simulation, portfolio-comparison, analysis, and lineup-backtest panels.
+All source ingestion, freshness checks, identity repair, and historical backfills live in Operations.
+Browser tabs use the mint-green football favicon in `ui/public/favicon.svg`.
 
 The primary application opens in `Digital Twin`. Use the product rail for `Models`, `War Room`, `Research Lab`,
-`Delivery`, `Intelligence`, and `Operations`. `Research Lab` hosts the prior Data Ops control plane in an isolated
-style boundary, preserving role/news/weather shocks, historical backtests, simulation-run selection, asynchronous
-ultimate-lineup progress, and baseline-versus-shock portfolio comparison without leaking its CSS into the product shell.
+`Delivery`, `Intelligence`, and `Operations`. `Research Lab` is the shared-style research surface for role/news/weather
+shocks, historical backtests, simulation-run selection, asynchronous ultimate-lineup progress, and baseline-versus-shock
+portfolio comparison. Operations is the sole surface for ingestion and data-quality repair.
 Season, week, and slate form one active shell context across these workspaces. Projection, simulation, baseline,
 and optimizer run choices are retained per compatible slate, shown in the shell, and restored when returning to that
 slate; Research Lab converts the shared canonical slate ID to its lowercase API form at its boundary. Use the
 always-visible `Active slate` selector in the top-right shell header to change that context from any workspace. The
-2026 Week 1 startup default is `WEDNESDAY_NIGHT`, matching the opening showdown slate.
+browser saves the most recently selected season, week, and slate on this device and restores that context after a
+refresh. When no valid saved context exists, the app uses the current context service and falls back to 2026 Week 1
+`WEDNESDAY_NIGHT` if that service is unavailable.
 
 In the Models workspace, `Check data coverage` reports immediately beside the Projection pipeline
 and then updates four readiness cards. Historical actuals resolve from `target.fact_player_game_actual`;
@@ -149,12 +257,22 @@ and suspended entries are excluded before scoring and by the optimizer/readiness
 optimizer makes its final identity/status/roster/slate decision in a versioned player-pool safety
 gate so every rejected canonical candidate retains a categorized reason. Blank,
 `Q`, and `D` remain eligible until a separate point-in-time injury adjustment supplies stronger
-evidence. The optimizer also reads availability from the selected projection's immutable feature
+evidence. Directly under **Portfolio optimizer** in Operations, the shared form offers
+**Exclude questionable (Q) players**
+for every Classic/Showdown configuration and weekly run, default off. When enabled,
+the UI sends `assume_questionable_out` to the projection rebuild and keeps
+`params.exclude_questionable` as a hard lineup guard. **Run Optimizer** refreshes
+features and projections first, using player exclusions as assumed-out scenarios.
+Original projections remain immutable; the scenario retains before/after
+assessments. See [`docs/PLAYER_POOL_SAFETY.md`](docs/PLAYER_POOL_SAFETY.md).
+The optimizer also reads availability from the selected projection's immutable feature
 lineage: zero availability is a hard exclusion even when the older salary snapshot still says `Q`,
 while partial availability remains eligible and auditable. When current weekly-roster evidence
 exists, non-DST players must also have `ACT` roster
 status before projection scoring; DST remains eligible without a player roster record. Every
-projection run records salary-status and roster-status exclusions with exact rows, players,
+optimizer run compares UTC weekly-roster capture times with the selected projection cutoff
+before applying that roster gate. Every projection run records salary-status and roster-status
+exclusions with exact rows, players,
 statuses, and ingest-run lineage. The
 current player-game feature contract supports QB, RB, WR, TE, K, and DST; excluded positions and
 unresolved salary identities are reported in the job result instead of being silently counted as
@@ -165,6 +283,42 @@ for players with fewer than three games). A strictly lagged three-game offensive
 receiver roles without using target-week participation. Exact filter counts, position baselines,
 weights, feature names, and walk-forward calibration results are stored with each model run. Legacy
 databases without the canonical tables continue to use the older `predictive_features` path.
+
+The v4.2 canonical model adds a salary-free offensive-role score and evidence
+completeness to the regressor. RB role uses carry, target, and snap shares; WR/TE
+role uses target and snap shares. Missing role evidence stays `null` in saved
+lineage, while the numeric model input is explicitly imputed. Prior-only team
+carry and target allocations, role ranks, and projection-rank disagreements are
+saved for audit. The [v4.2 role evaluation](docs/PROJECTION_MODEL_V4_2_ROLE_OPPORTUNITY.md)
+records the time-ordered historical comparison and current data limits.
+Classic small-field optimizer reports now show each skill player's importance beside
+candidate-pool and selected-lineup exposure, projection, price, and ownership;
+this adds diagnostics without changing optimizer scoring or rules.
+Each Classic small-field candidate also carries a football sanity check: likely
+QB-stack script, measured offensive drivers, cheap-player opportunity evidence,
+omitted central players on represented offenses, and role/projection rank conflicts.
+Omission reasons identify candidate-pool and selection evidence, not proven causal
+counterfactuals. Missing role evidence is shown as missing, not as zero opportunity.
+For the 2026 Week 2 Sunday Main slate, run
+`PYTHONPATH=. .venv/bin/python scripts/export_pregame_role_snapshot.py --season 2026 --week 2 --slate SUNDAY_MAIN --projection-run-id bba2fa75-3af1-4f8f-8331-b22107c7da79 --output artifacts/sunday-main-pregame-role-snapshot-2026w2.json`
+to export every salary-listed RB/WR/TE with canonical identity and cutoff-visible
+role provenance. The saved snapshot has 425 skill players, 225 measured role
+scores, and 417 canonical-ID-linked roster positions. Roster positions are broad
+labels, not starter ranks. Route, red-zone, two-minute, and role-trend gaps remain
+explicit until a sourced feed is ingested. New Classic small-field runs include
+exact top-10 QB-family diagnostics by default; set
+`classic_qb_family_diagnostics=false` only to skip the extra solves.
+
+New Classic small-field optimizer reports also persist warning-only RB/DST
+diagnostics. The optimizer results view and downloaded report show `Player why · RB projection and role`,
+`Lineup football sanity · warning only`, and `Portfolio flagged-construction
+exposure`. Same-team RB+DST flags include spread, team total, rushing and
+receiving role, the current rule contribution, and the strongest saved-candidate
+alternative with its mean/P90/selector cost. These fields do not change
+projections, scoring, or eligibility. Saved role-feature probes are diagnostic,
+not causal effects; same-slate external benchmark values remain unavailable
+unless captured with the run. The frozen Week 3 RB/DST audit is preserved in
+`artifacts/week3-rb-dst-audit.md` and its companion JSON file.
 
 `POST /api/pregame-context/runs` stores append-only current availability, starting-QB,
 carry-share, target-share, expected snaps/routes/carries/targets, red-zone/goal-line usage,
@@ -195,6 +349,10 @@ back to the provider's current-season/current-week lookup and finally to its com
 Salary and injury CSVs are validated before any existing curated slice is cleared or new raw/curated rows are written.
 
 - Salary files require source player ID, player name, team, position, and a positive integer salary.
+- A successful canonical salary import updates both `public.curated_salary` and
+  `target.snapshot_salary` in the same transaction. Projection, readiness,
+  ownership, optimizer, and replay consumers therefore use one **Load Salaries**
+  action instead of requiring a second target-schema backfill.
 - When present, DraftKings `Status` (or the supported player/injury-status aliases) is normalized
   and persisted on the active curated salary row. A later valid import replaces only that current
   source/season/week/slate slice; prior raw salary rows and ingest runs remain available for lineage.
@@ -203,7 +361,10 @@ Salary and injury CSVs are validated before any existing curated slice is cleare
   in the same file, and leaves the row unresolved if the sibling identity is ambiguous.
 - Canonical salary creation times are interpreted as UTC when copied into the timezone-aware target
   snapshot, so point-in-time ownership and projection gates do not exclude a newly loaded slate.
-- Injury files require player name, team, position, and an injury-status column. Native player ID is used when present; otherwise identity validation uses normalized name plus team and position. Blank injury-status values are allowed for unlisted/healthy players.
+- Injury files require player name, team, position, and an injury-status column. Native player ID is used when present; otherwise identity validation uses normalized name plus team and position. Matching first checks source-specific aliases, then a unique exact name/team/position alias from another source; multiple canonical matches remain unresolved for review. Blank injury-status values are allowed for unlisted/healthy players.
+- A successful canonical injury import likewise refreshes
+  `target.snapshot_injury_status`; Operations and Research Lab no longer need
+  separate injury loaders to make the same source visible to readiness.
 - Team defenses normalize `D`, `DEF`, `Defense`, `D/ST`, and `DST` to `DST`. After an exact native source-ID match, defenses resolve only through a unique same-source team-defense alias or unique team DST master; defense display names are never used as a fallback.
 - Duplicate player identities, missing required columns, blank required identity values, empty files, and invalid salaries fail the ingest with source CSV row numbers in the error.
 - Failed validation remains traceable as a failed ingest run, while the last valid curated slice is preserved.
@@ -395,6 +556,13 @@ FanDuel injury ingestion preserves both `Injury Indicator` and `Injury Details`.
 is linked to an immutable prospective source snapshot, the target injury adapter uses that
 snapshot's timezone-aware `observed_at`; legacy unlinked rows treat their timezone-naive creation
 time explicitly as UTC.
+Local file ingestion defaults to the `~/NFL` directory for discovery. Salary,
+injury, and ownership file fields start with the `~/NFL/` folder prefix and
+show path examples. The salary and injury loaders resolve a folder-only entry
+to the selected slate's expected CSV and add `.csv` to a typed filename when
+omitted; the exact path appears before loading. Injury discovery
+uses the FanDuel filename pattern found in that folder. A missing file returns
+an actionable 422 error naming the path, before an ingest run is created.
 
 The current 2024–2025 FanDuel injury indicators and nflverse schedule betting fields are not approved
 as historical pre-lock inputs: they were loaded on February 25, 2026, and do not preserve when those
@@ -420,7 +588,7 @@ python scripts/capture_prospective_sources.py \
   --slate sunday_main \
   --slate-lock-at 2026-09-13T13:00:00-04:00 \
   --draftkings-directory ~/Downloads \
-  --nflreadpy-datasets schedules weekly_rosters injuries snap_counts
+  --nflreadpy-datasets schedules weekly_stats weekly_rosters injuries snap_counts
 ```
 
 The Research Lab's `Load Schedules` action applies the same evidence contract to a full-season
@@ -428,11 +596,61 @@ nflreadpy schedule refresh. It captures the fetched frame as an immutable CSV fi
 that exact artifact with a deterministic run ID, records the artifact checksum on the ingest run,
 and links the snapshot to the run. Repeating the action with unchanged upstream content reuses the
 existing snapshot and completed ingest instead of replacing rows without new lineage.
+After a market refresh, run projections before optimizing. Current projection scoring overlays
+the latest captured pre-cutoff schedule line on the saved feature matrix and retains its source,
+observation time, and old-versus-new market values. Projection runs are immutable, so the optimizer must use the newly created latest run
+unless an older run is deliberately selected. nflverse `spread_line` is interpreted as the home
+team's expected margin and converted to the conventional team-spread sign used by model features
+(a favorite has a negative team spread).
+At training time, canonical projection inputs also reconcile historical
+`team_spread_line`, `team_implied_total`, and `opponent_implied_total` against
+source-native pregame schedule lines. This corrects legacy feature-matrix rows
+whose favorite and underdog signs were reversed without mutating stored matrix
+rows. The projection artifact records the number of training players and games
+corrected so earlier runs remain reproducible.
+For a time-sensitive sourced line that is not yet present upstream,
+`scripts/record_manual_market_line.py` records a content-addressed snapshot and an append-only
+schedule observation. Use `--source-kind public_page --source-uri URL` for a line observed on a public source;
+the default remains a user-supplied observation. The script expects `--home-margin` to be positive
+when the home team is favored. The projection run records a model-response diagnostic and flags
+an offense whose summed projection moves opposite its implied-total change; the flag does not
+silently alter player means.
 
 The `Load Weekly Rosters` action and the weekly capture command use the equivalent capture-first
 path for `weekly_rosters`. A current-season roster release can therefore be retained and ingested
 before nflreadpy's regular-season calendar rollover without bypassing source checksums or identity
 quarantine.
+
+Captured nflverse weekly stats and snap counts can also be passed to ingestion as exact preserved
+frames with deterministic run IDs. This keeps result and participation refreshes idempotent and
+ties each ingest run to the artifact checksum used for the rebuild.
+
+For normal current-week UI projection runs, **Run projections** also checks whether completed
+prior-week stats are newer than feature rows that still contain zero placeholder outcomes. The
+durable worker rebuilds every affected DraftKings salary slate, records the refreshed periods and
+row counts in the job checkpoint, advances the effective cutoff to the completed repair, and then
+retries the same immutable projection run. Explicit historical `data_cutoff_at` requests never
+auto-repair because rebuilding them from current data could violate time-safe replay.
+
+Before that readiness check, **Run Projections** reconciles unmatched salaries for the selected
+week/slate, quarantines records without a supported canonical match, and refreshes that slate's
+feature matrix. It then loads starting-QB evidence from the timestamped nflverse depth chart,
+matching QB1 by GSIS ID and team/position-constrained aliases. Depth-chart choices are stored as
+provisional evidence with a source snapshot; an operator's sourced confirmation takes precedence.
+Only genuine missing or conflicting QB1 evidence requires review. Contest standings are imported
+separately in Learning for post-slate analysis and are not required for projections.
+The projection worker repeats starting-QB resolution for current slates even when a job bypasses
+the UI preflight. It records a new effective cutoff after saving that evidence, so the time-safe
+projection loader can see it. Explicit historical cutoff runs use their saved evidence only.
+Starter resolution excludes quarterbacks marked `OUT` or otherwise unavailable in the salary
+snapshot. A sourced provisional starter report can override a stale depth-chart QB1 selection;
+the report URI, observation time, and inferred tier remain in the saved evidence and projection run.
+When the depth-chart QB1 is explicitly OUT in the latest salary snapshot, the loader may
+advance to the unique next depth rank only if that QB is also the unique highest-paid
+eligible salary QB. It records this as provisional evidence; disagreement still blocks.
+**Run Optimizer** also reconciles salary identities before its readiness check. A matching team
+cannot resolve a player when the canonical position conflicts with the salary position; those
+rows enter the auditable quarantine and remain outside the optimizer pool.
 
 A generic `DKSalaries.csv` is accepted only with an explicit `--draftkings-path`, preventing a
 scheduled directory scan from labeling an old download as a new week. DraftKings salary ingestion
@@ -527,12 +745,100 @@ The UI shows eligible/included/excluded counts, player-level exclusion reasons,
 lineup mean, individual ceiling sum, floor where applicable, and realized stack
 structure.
 
+For either Classic or Showdown GPP, **Create one standalone long-shot lineup**
+runs a separate one-lineup solve and labels the result as a long shot. Complete
+ownership is required for the strong contrarian objective: Classic uses 15%
+normalized mean, 30% P90, 40% low-ownership leverage, and 15% correlation;
+Showdown applies a 0.35 role-specific ownership penalty and a contrarian game
+script. Football projections, role evidence, and eligibility rules remain
+unchanged. If ownership is missing or partial, the optimizer does not treat it
+as zero; it reports that contrarian confidence is unavailable. Showdown can
+still use its contrarian game script, while Classic retains the ordinary
+football objective rather than inventing ownership evidence.
+
+`Small-field GPP · diagnostic baseline` (`classic_small_field_gpp`) reuses the
+current Classic GPP objective and flexible stack templates. It requests 120
+distinct legal candidates by default (configurable from 100 to 250 through
+`params.classic_candidate_pool_size`), then chooses the requested 1–5 lineups
+globally under player-exposure controls. Its report shows the top 20 candidates,
+numerical objective terms, QB/stack/game families, ownership and opportunity
+evidence, and top-20/top-50/full-pool exposures. The displayed P90 is the sum
+of player ceilings, not a simulated lineup percentile. An optional DraftKings
+Classic contest URL adds payout and field economics for reporting; it does not
+change lineup scoring or choose an entry count. Enter one URL in that optional
+field; the UI rejects multiple URLs before starting a run. If optional contest
+reporting is invalid in a direct API request, the report records an error while
+preserving the generated lineups. A Sunday Main run requires a
+completed projection run for that slate.
+Sunday final-decision runs merge discoveries into a persistent canonical-ID
+candidate archive and revalidate the full union on every refresh. Classic QB+1,
+QB+2, and QB+3 stacks may be legal with or without a bring-back; bring-back remains
+a correlation and reporting attribute. Refresh manifests distinguish prelock or
+inferred availability/QB evidence from official or confirmed evidence.
+The read-only Week 2 correlation audit can regenerate five shadow candidate
+universes while preserving production weights: control, zero bring-back reward,
+half or zero incremental double-stack reward, and QB+1-only soft construction.
+Run `PYTHONPATH=. .venv/bin/python scripts/audit_sunday_correlation_oneoffs.py
+--projection-run-id <RUN_ID>`. The JSON report includes 125 or more candidates
+per scenario, tracked-player counterfactuals, one-off exposure, QB/game-family
+coverage, and generalized Denver RB availability scenarios.
+For a frozen Classic small-field run, `scripts/audit_sunday_main_portfolio_frontier.py`
+builds a read-only expanded lineup universe: global mean/P90/selector solves, every
+saved starting-QB family and four exact stack constructions, plus the saved
+sequential candidates. Its second stage compares candidate-complete ownership,
+context/correlation and mean-governor shadows, and path-aware 1–5 entry
+portfolios at 6- and 7-player maximum overlap. The script writes JSON artifacts;
+it does not update production settings or optimizer runs. See
+`docs/product/optimizer_filters.md` for the two-stage command and limitations.
+The Operations optimizer has a **Hard exclude players facing teams** control
+(comma-separated team codes). It currently starts with `DEN` per the Week 2
+Broncos-opponent restriction. Excluded players leave the candidate pool before
+optimization, and final Classic or Showdown lineups are validated against the same rule.
+This is an optimizer-only user preference: it never changes projections, football
+context, ownership, or historical validation. Excluded players retain their model
+assessment in the player-pool audit and readable report with explicit optimizer
+eligibility and a user-preference reason. See
+[`docs/MODEL_TRUTH_AND_USER_PREFERENCES.md`](docs/MODEL_TRUTH_AND_USER_PREFERENCES.md).
+Operations also has a per-player **Player decisions** panel.
+**Availability: Default | Assume Active | Assume Out** defines a football
+scenario. **Assume Out** rebuilds projections after the team opportunity
+allocator removes that player's forward route estimate, targets, and carries; **Assume Active**
+removes a tentative injury availability reduction but cannot override a confirmed
+inactive without the separate debug API flag. **Exclude and assume out**, bulk player
+exclusions, and canonical player-ID exclusions now also create assumed-out scenarios.
+The questionable checkbox does the same for selected pre-cutoff salary, injury snapshot,
+or effective pregame-context Q designations. **Run Optimizer** always refreshes features,
+creates and pins a new projection run, then optimizes against that exact run. An older
+projection override blocks this rebuild until **Latest completed (automatic)** is selected.
+Weekly runs from Operations also request a fresh projection instead of reusing the active
+run. Exposure, overlap, distinct-QB, Captain-only and opponent-team constraints remain
+lineup selection controls. Direct optimizer API exclusions retain their preference-only
+contract; availability scenarios require an explicit projection request.
+The readable report shows the
+official status, override, model availability, projection before and after the scenario,
+redistribution state, optimizer eligibility, and reason for every manually affected player.
+The context row's `evidence.target_redistribution_fraction` or
+`evidence.carry_redistribution_fraction` can retain less than all removed work
+in a sourced scenario. The unallocated team volume is reported explicitly;
+recipient route, air-yard, and red-zone forecasts still require separate evidence.
+The **Lock players in every lineup** control accepts comma-separated slate player names,
+resolves each name to its canonical player ID, and requires every locked player in every
+generated lineup. Missing or ambiguous names fail clearly; canonical-ID locking remains
+available as an advanced control.
+
+The starter-QB loader accepts an explicit `evidence_tier` of `confirmed` or
+`inferred` for each supplied QB. A sourced `provisional_` inference can override
+DraftKings salary order while a team decision is pending; its URI, observation
+time, and note are stored with the QB evidence. Rebuild projections after
+replacing a provisional choice.
+
 The historical `classic_gpp_baseline_v1` and `classic_gpp_slate_aware_v1`
 contracts remain callable for reproducible prior runs. Every selected version is
 returned by the API, persisted with its input lineage and explanations, and never
 silently falls back to a different engine.
 
-For Showdown, Operations exposes `FLEX-only players (comma-separated names)`.
+For Showdown, Operations exposes **Exclude from Captain (FLEX still allowed;
+comma-separated names)**.
 Each name is resolved to one canonical player ID within the selected slate; a
 missing or ambiguous name fails visibly. FLEX-only players remain eligible for
 selection but cannot occupy CPT. This restriction does not lock the player into
@@ -553,6 +859,35 @@ The solver encodes these as hard constraints and the result validator checks the
 again before persistence. Explicit requests for `showdown_cash_baseline_v1`,
 `showdown_gpp_baseline_v1`, `showdown_gpp_captain_informed_v1`, and
 `showdown_gpp_captain_informed_v2` preserve historical contracts.
+
+For up to five GPP entries, discovery now solves every legally viable Captain
+family and combines those lineups with the prior sequential output, production
+selector candidates, game scripts, legal raw mean/P90 maxima, and targeted
+exposure-coverage probes. The global
+portfolio selector uses the existing exposure caps and a joint 95% mean/P90
+quality screen against the legal maxima; it may return fewer than requested
+instead of adding a weak entry. The report shows each Captain family's best
+rank and omission reason, lineup quality costs, and ownership-based uniqueness
+signals. Partial CPT/FLEX ownership disables the ownership term for the entire
+solver pool so missing values never act as zero; complete candidate ownership
+remains visible as a diagnostic.
+
+The same `showdown_gpp_portfolio_v3` candidate pool now explores three game
+conditions when a consistent cutoff-safe market total and implied team totals
+are available: the unchanged market baseline, Team A winning by at least 14,
+and Team B winning by at least 14. Team A/B are the two slate teams in sorted
+canonical team-code order. The margin can be set with
+`params.showdown_decisive_margin` (7–35; default 14). The scenario pool includes
+mean, P90, forced-Captain, 5-1/4-2/3-3, RB-control, and DST-control discovery
+solves. These constructions are candidate sources; no team count is required
+for an ordinary scenario solve. Each candidate keeps its scenario, market
+lineage, source, and per-player baseline/conditioned mean and P90. The report
+shows coverage and selection cost. `params.require_scenario_diversity` defaults
+to `false`; when enabled for a multi-entry pool, selection favors distinct
+qualifying scenario families after maximizing entry count and before the
+unchanged selector score. The joint 95% mean/P90 screen and exposure caps
+still apply. Scenario family is separate from the lineup's descriptive
+construction label.
 
 The Showdown GPP strategy selector also offers **Single-entry GPP**
 (`showdown_single_entry_gpp`) and **Single-entry contest portfolio**
@@ -580,9 +915,21 @@ proxy and the existing lineup quality/diversification heuristic choose the lineu
 set. Field size × top-10 prize share breaks contest placement ties. These values
 are heuristic proxies, not measured correlation or calibrated probabilities. It
 supports 1–50 URLs.
+Choose **Small-max GPP** to build Showdown lineups for a 2–5 entry limit. The DraftKings contest URL is optional. With a URL, the optimizer verifies the entry limit and payout ladder, then compares the best lineup set at every count; **Auto** chooses the highest scoring count under the existing payout proxy. Without a URL, choose the generic entry limit and optionally an explicit entry count. Generic **Auto** returns the strongest single lineup because entry-count economics require a real contest. Both paths use the same player projections, candidate pool, quality floors, and configurable Captain, player, starting-QB, and cheap-punt exposure limits. The generic report shows quality, diversity, exposures, and overlap without payout, fee, field-size, or ROI estimates. The contest-backed report additionally shows count-level payout-proxy and fee comparisons and selected-lineup leave-one-out scores. The payout calculation is an uncalibrated uniform-rank proxy, not a calibrated win probability or ROI forecast. The older `showdown_3max_gpp` strategy remains available to saved API requests for compatibility and still requires a URL.
 The optimizer refreshes contest details when it runs. Missing fields are shown in
 the preview and may be supplied as a JSON array keyed by `contest_id`; incomplete
-or multi-entry contests are rejected. All URLs must share a DraftKings draft group.
+contests are rejected. The single-entry portfolio also rejects multi-entry contests; small-max accepts a verified 2–5 entry limit. All URLs in a multi-contest pool must share a DraftKings draft group.
+Operations can save DraftKings URLs to a contest library under the selected season,
+week, slate, format, and type (GPP, cash, head-to-head, double-up, 50/50, or other).
+Saved URLs can be added back to the available contest pool without pasting them
+again. **Browse saved slates** lists every saved season/week/slate/format/type group;
+opening another group shows its contests, and **Switch optimizer to this slate**
+changes the active workspace before its URLs can be used. The library shows the
+last successful entries/capacity with a snapshot label when the latest refresh
+failed. Previewing or optimizing with a saved URL appends a dated observation of its
+source details, payout ladder, field count, and derived economics; prior observations
+remain available for future modeling. Archiving removes a contest from the active
+library without deleting its history. Live details are still refreshed for each run.
 Results include paid-field percentage, min cash and its fee multiple, payouts at
 top 1/5/10/20% ranks, median paid payout, first-place and top-10 prize shares,
 top-1% concentration/flatness, and full-field rake. Guaranteed contests also show
@@ -601,13 +948,42 @@ the recommendation. Legacy `num_single_entry_contests` requests remain supported
 URL-driven runs select the count from the available contest pool. Current recommendations
 are heuristic; the profit proxy is not a calibrated lineup payout probability, and
 expected profit and ROI remain unavailable until game and opponent-field simulation.
+When DraftKings does not return complete contest facts, an optimizer run can reuse a
+complete saved snapshot from the same season, week, and slate. The report labels
+its observation time and omits near-lock overlay because the saved entry count is
+not current. If no verified snapshot exists, the run reports the missing fields.
+The Operations optimizer defaults to **Latest completed (automatic)** for the
+selected slate. It resolves the newest completed projection at run time, even if
+the database's governed active projection points to an older run. The dropdown
+lists older completed runs for an explicit override; **Refresh projections**
+updates the choices without moving the governed active pointer. An optimizer run
+fails clearly if the slate has no completed projection.
+Readiness and automatic ownership refresh use the same newest completed run.
+The formal governed champion remains separate for model promotion and rollback.
+Optimizer preflight treats multiple completed projection runs as normal when a latest run
+is available; exact-run selection remains required for historical replay. The UI sends
+the chosen projection run ID with the optimizer request. If **Refresh ownership before
+optimizing** is enabled, preflight labels missing ownership as a pending refresh and
+rechecks readiness after the ownership model completes. A missing injury snapshot still
+appears as a warning until injuries are loaded.
+Showdown permits multiple tight ends in a lineup. The **Enforce single TE
+(no double-TE lineups)** control remains available for Classic only; legacy
+Showdown requests carrying the field are normalized to `false`. The HTML player-pool audit also shows the opportunity signals and fallback
+result for every surviving RB/WR/TE priced at $2,000 or less. Single-entry candidate details show each
+weighted lineup-score contribution, the underlying solver-score components, and
+mean/P90 losses versus the best-quality candidates alongside the relative-chalk
+trade. These diagnostics do not change lineup or contest-selection weights.
 
-For exactly five GPP lineups, v3 targets two shootouts, one control script for each
-team, and one contrarian script. After the best lineup establishes the reference,
+For exactly five GPP lineups, v3 discovers two-sided pass stacks and control
+scripts for each team. It now also injects favorite 4-2, 5-1, RB-control,
+DST-control, and RB+DST-control candidates before global selection. These are
+candidate families, not required final portfolio compositions. After the best lineup establishes the reference,
 later lineups must retain at least 85% of its mean and 90% of its Individual Ceiling
 Sum. If fewer than the requested number pass all constraints, the run reports the
 shortfall and does not relax either floor. Correlation scoring uses diminishing QB/pass-catcher bonuses and one bring-back
-bonus per QB team. Cheap players with salary at most $1,000, mean below 3, P90 below
+bonus per QB team. Positive QB-linked rewards scale with the QB's projected
+quality relative to the other quarterback in the slate; this does not change
+player projections. Cheap players with salary at most $1,000, mean below 3, P90 below
 10, and no identified current opportunity path are excluded when they are RB/WR/TE.
 The same skill positions from $1,001 through $2,000 are excluded only when mean is
 below 2 and P90 is below 8. Explicit expected usage or a defined current role overrides
@@ -617,7 +993,9 @@ pass-led, and contrarian builds; pass/run-specific position constraints remain f
 The player-pool diagnostic separates source eligibility from football opportunity:
 `Raw pool → opportunity eligible → optimizer eligible`. Opportunity removals include
 per-player reason codes, while earlier safety removals remain available in the full audit.
-Completed Showdown lineups are classified from their selected players as shootout,
+Completed Showdown lineups show team counts, saved spread, implied totals,
+market source/time, and each team's selected mean and selector contribution.
+Underdog-heavy lineups carry an explicit explanation. They are classified from their selected players as shootout,
 pass-led, run-control, or contrarian; the requested portfolio script remains in the
 audit separately. Downloaded reports show exposure caps against requested lineup count
 and realized exposure against generated lineup count, include overlapping under-fill
@@ -644,19 +1022,28 @@ deviations out of range, it records the out-of-distribution fields and uses the 
 winning captain-position mix from the same study instead of trusting the extrapolation.
 
 Before any Showdown solve, the pool is reduced to one QB per team. Explicit QB1 or
-stored confirmed `starting_qb_evidence` wins; otherwise, the unique highest DraftKings FLEX salary
+stored confirmed `starting_qb_evidence` wins; current nflverse QB1 depth-chart evidence is
+captured and matched by GSIS ID when available. Otherwise, the unique highest DraftKings FLEX salary
 is recorded as an inference. Missing, tied, or conflicting evidence blocks the run rather
 than admitting backup quarterbacks. `Load Starting QBs` persists the canonical
 `player_master_id`, team, evidence source, and confirmed/inferred tier through migration
 `0024_starting_qb_evidence.sql`. The same loader supports multi-game Classic slates and validates
-that a source-backed confirmation payload covers every slate team exactly once; without confirmed
-inputs it records the unique highest active DraftKings QB salary as an inference. The Showdown
-optimizer independently retains its exact-two-team guard. The pool uses each player's FLEX salary
-as its base, retains the separate DraftKings CPT ID for upload, and includes kickers.
+the source-backed choices supplied for unresolved teams; all other teams retain their deterministic
+QB1 or unique-salary evidence. When automatic selection fails, Operations lists only the affected
+canonical QB candidates and requires one source URL per choice. Mark a team as **Provisional — team
+undecided** when the report is credible but not confirmed; this persists an inferred, auditable
+selection that must be replaced when confirmation arrives. The Showdown optimizer independently
+retains its exact-two-team guard. The pool uses each player's FLEX salary as its base, retains the
+separate DraftKings CPT ID for upload, and includes kickers.
+Starter candidate joins canonicalize cross-source team aliases such as nflverse `LA` and
+DraftKings `LAR`, so an active quarterback is not dropped because providers use different
+abbreviations for the same franchise.
 Historical strategies accept every positive Showdown salary; v3 applies the opportunity
-gate described above. When current weekly-roster evidence exists, only `ACT`
-players plus team defenses enter the pool; cut, development, reserve, and roster-missing
-salary entries remain excluded. Player mean and P90 values remain separate in the
+gate described above. Weekly-roster evidence is evaluated per canonical team, using the
+same cross-source aliases as readiness and starter validation. For a team covered by that
+source, only `ACT` players plus team defenses enter the pool; uncovered teams remain eligible
+and auditable instead of being treated as inactive because another team has evidence. Cut,
+development, and reserve salary entries remain excluded. Player mean and P90 values remain separate in the
 persisted result. Before a run can complete, an independent validator checks canonical
 player IDs, slot shape, salary, team and exposure limits, duplicate lineups, and every
 hard construction rule owned by the selected strategy version. When a current ownership
@@ -672,6 +1059,13 @@ JSON download. Failed status, messages,
 selected objective, strategy, projection, enabled optimizer rules, rule validation,
 input lineage, and cutoff also reload after an application restart. Separate
 cash-stability and GPP-payout optimization remains future `DT-605` research.
+
+Long local optimizer solves use a browser-generated run ID. If the initial request is still
+running after 30 seconds, Operations keeps the same run active and polls its persisted result
+instead of showing a request-timeout failure or starting a duplicate solve. The status changes to
+**Optimizer is still running locally; waiting for its saved result...** until the result is ready.
+The last completed optimizer result remains visible while a new solve runs and if that solve fails,
+so its lineup downloads are not displaced by an unsuccessful attempt.
 
 ## Durable Operational Worker Queue
 
@@ -787,9 +1181,9 @@ Historical injury and ownership data are not required.
 ## Current Status
 
 1. `football_26` is the canonical combined repository; `football_opt` is a read-only reference until parity gates pass.
-2. The Digital Twin product shell and the full Data Ops/Simulation Research Lab run from one Vite application.
+2. The Digital Twin product shell and its shared-style Research Lab run from one Vite application; Operations owns all ingestion.
 3. The backend exposes both product and research API families through one FastAPI process without route collisions.
-4. All 61 product `target` tables are migration-owned through `0033`; migrations `0032` and `0033` own post-slate reports and targeted learning questions. Runtime services fail on incompatible target schema drift instead of repairing it.
+4. All 69 product `target` tables are migration-owned through `0039`; migrations `0032` and `0033` own post-slate reports and targeted learning questions, `0038` owns projection audit artifacts and external benchmarks, and `0039` owns immutable Classic prospective experiments. Runtime services fail on incompatible target schema drift instead of repairing it.
 5. Benchmarks, projection builds, both simulation families, baseline-versus-shock portfolio generation, and the eight-stage weekly decision chain run through a standalone persisted worker queue with idempotency, leases, progress polling, retry, and checkpoint resume.
 6. The Operations workspace can queue and inspect ingest, readiness, prediction, adjustment, simulation, optimization, validation, and export as one resumable weekly run.
 7. See `docs/CONSOLIDATION.md` for the ownership contract, parity gates, and archival policy.
@@ -965,7 +1359,72 @@ python scripts/run_classic_parameter_sweep.py \
 
 The initial eight-configuration sweep selected `250` candidate lineups, a `4`-slate training window, and a `95th`-percentile top-lineup target. It completed 10 of 12 chronological slates with a `134.43` mean gap and `131.11` median gap. The compact best-config artifact includes the clean code revision, feature-set hash, seed, coverage requirement, and acceptance metrics. This is a provisional bounded result; rerun over broader history and larger candidate pools before adopting it as a production default.
 
+## Ownership refresh during optimization
+
+For GPP objectives, Operations shows **Refresh ownership before optimizing**.
+The setting defaults on and is remembered in local storage. When enabled, **Run
+Optimizer** first fits current-slate ownership, requires a positive projected-row
+count, and pins the resulting `ownership_run_id` into the optimizer request. The
+optimizer then reads that exact ownership run instead of silently switching to a
+newer run. Turn the option off to reuse the latest stored ownership evidence.
+
+Automatic refresh requires **Latest completed (automatic)** projection selection.
+When an older projection is selected, either return to the latest projection or
+turn off ownership refresh; this prevents projection/ownership lineage from being
+mixed. Cash and H2H objectives do not show or run the GPP ownership prerequisite.
+
 ## Showdown Availability Candidate
+
+## Showdown Oracle and Forced-Captain Dataset
+
+Build hindsight legal-lineup labels without changing production projections or
+optimizer weights:
+
+```bash
+source .venv/bin/activate
+python scripts/build_showdown_oracle_dataset.py \
+  --source-system draftkings \
+  --season-start 2024 \
+  --season-end 2026 \
+  --top-lineups 50
+```
+
+The command records the unrestricted actual-score oracle, the best legal lineup
+with every player forced at Captain, Captain regret versus the unrestricted
+oracle, and a ranked set of distinct near-optimal lineups. Captain rows prioritize
+pregame pass attempts, carries, and targets; routes, snaps, role, and red-zone
+evidence remain supporting inputs. When a forward opportunity estimate is absent,
+the export labels its time-safe rolling last-three fallback explicitly. Actual
+attempts, carries, targets, fantasy points, and zero/sub-threshold outcomes are
+labels only and must never enter future-slate features. A slate is excluded from
+training unless final actual usage shows at least two teams with 20 combined pass
+attempts plus player carries, preventing live or unfinished games from being
+misclassified as zero-point Captain outcomes.
+
+Default outputs are:
+
+- `artifacts/showdown-oracle-dataset.json`
+- `artifacts/showdown-forced-captain-oracles.csv`
+- `artifacts/showdown-oracle-report.md`
+
+The dataset is a research input. Production Captain behavior remains unchanged
+until an individual Captain ranker improves walk-forward Captain regret and
+top-Captain recall.
+
+The initial linear volume-ranker candidate is available as a shadow diagnostic:
+
+```bash
+python scripts/train_showdown_captain_volume_ranker.py
+```
+
+It was not promoted. Across 36 walk-forward evaluation slates, the current P90
+baseline produced `5.37` mean Captain regret, a `61.1%` within-five rate, and a
+`2.8%` sub-five selection rate. The first volume candidate produced `10.69`
+regret, `41.7%` within-five, and `16.7%` sub-five. Most historical volume rows
+currently use an explicitly labeled rolling last-three proxy; this result shows
+that lagged opportunity cannot substitute for a reconstructed forward forecast
+or for ceiling. The next candidate must combine time-safe forward attempts,
+carries, and targets with P90 and demonstrate walk-forward improvement.
 
 Showdown captain training can build an opt-in teammate-availability candidate without changing the baseline default:
 
@@ -1134,14 +1593,44 @@ available, `balanced` remains the production default.
 
 ## Post-Slate Learning
 
-Operations can build a persisted `slate_learning_report_v1` after contest
-standings are loaded. Enter the DraftKings username and select **Build Post-Slate
-Learning Report**; subsequent successful past-slate result loads refresh it
-automatically. The report ties user entries to immutable source files and exact
-canonical lineup, optimizer, projection, rule, belief, portfolio, export, and
-OPT-007 evidence when each link exists. Missing fees, payouts, assignments,
-beliefs, or controls remain explicit and produce a `partial` report rather than
-a guessed result. See [the post-slate learning runbook](docs/POST_SLATE_LEARNING.md).
+In Learning, choose the season and week, enter `~/NFL` under **Contest results
+folder**, and select **Scan contest folder**. The scan fills in the slate when
+all contest players match exactly one same-week DraftKings salary file. Check
+the downloads you want, review their suggested scope, then select **Load selected
+files**. Choose a slate yourself only when no unique match is available.
+The importer records per-file results and skips exact content already loaded
+for its verified scope. Saved contest metadata and filename labels prevent
+conflicting assignments. A file marked **Needs slate** has been found but has
+not entered weekly learning; unselected files remain in the folder. Enter the
+DraftKings username and select **Build
+Week Learning Report** to combine every imported slate containing that user's
+entries. Building the report automatically pulls published nflreadpy player stats
+for that season/week before generating the slate reviews, including automatic
+reports after standings imports. The report shows the stats count and retains
+immutable source-snapshot and ingest lineage. A failed pull or unpublished week
+shows an error so the report cannot silently proceed with stale stats.
+The persisted slate reports tie entries to canonical lineup, optimizer,
+projection, rule, belief, portfolio, export, and OPT-007 evidence when each link
+exists. Successfully normalized and previously imported selected standings move to
+`Processed` under the selected folder; scanned and unresolved files stay in place.
+The weekly scan ignores `Processed`.
+Missing evidence stays explicit. See [the post-slate learning runbook](docs/POST_SLATE_LEARNING.md).
+The report now scores complete OPT-007 control lineups, tracks source-backed
+outcome disruptions, separates entry-weighted from unique-player projection
+errors, and reports slate profit only when contest fees and payouts are known.
+`UNKNOWN` residuals remain excluded from training until source-backed outcome
+review classifies them. Weekly net-positive counts stay null without complete
+financial evidence. The report separates lineup structure from saved market
+game environment inputs.
+Optimizer requests may include `params.decision_context` so prelock hypotheses,
+alternatives, and selection reasons are saved with the run. Production settings
+still require separate chronological validation before any change.
+Showdown captain rows display the base score × 1.5 calculation used in the
+lineup total, so the multiplier is visible when reviewing projection errors.
+After building the week report, select **Download report for ChatGPT** to save
+a Markdown file on your computer. It contains a readable week and entry review
+plus the complete structured report, including evidence gaps and source/run IDs.
+Upload the file to ChatGPT when you want further analysis.
 
 ## Late Swap
 
@@ -1402,3 +1891,176 @@ Across 17,342 feature-matrix rows and 28 whole-week slices, canonical identity c
 
 Architecture decisions and acceptance status are maintained in `docs/DECISIONS.md` and `docs/MODEL_REGISTRY.md`.
 An empty-database environment can be reproduced using `docs/BOOTSTRAP_RUNBOOK.md`.
+
+## Classic small-field diagnostic data
+
+The local UI uses native CBC when available and up to four worker processes for
+Classic small-field seed generation. For a five-lineup Sunday Main run, it
+requests 205 seeds and an exact 205-candidate production pool; other slate and
+lineup settings retain their existing target. Choosing Classic small-field in
+the UI defaults to five lineups.
+Each run records its resolved solver, effective worker
+count, and any deterministic-seed fallback under `strategy_runtime.classic_solver`.
+The local backend launcher sets `PYTHONHASHSEED=0` and recognizes launchd-managed
+API/worker services; direct backend launches without that seed use serial
+discovery. Other optimizer strategies keep their existing solver behavior.
+
+The Classic small-field candidate stage now adds legal global highest-mean, highest-P90, highest-selector, and every viable QB/stack-family solve to the sequential pool, deduplicated by canonical player IDs. It reports which global quality lineups the sequential search missed. Ownership is evaluated per lineup: a complete lineup shows ownership and chalk, while a lineup containing any missing ownership shows those aggregate terms as unavailable. Missing slate coverage no longer changes the small-field football scoring weights. Candidate reports include global mean/P90 loss, context/correlation gain, and diagnostic quality-guard frontiers. Exact top-10 QB family diagnostics remain separately optional with `classic_qb_family_diagnostics=false`.
+
+The frozen Week 3 Sunday Main portfolio and Week 2 historical replay are preserved in [the quality-governed portfolio audit](artifacts/sunday-main-quality-governed-portfolio-2026w3.md). The Week 2 actual DK scores were already present in the historical feature matrix; no new result ingest was needed for that validation. No permanent stack/context weight or quality-threshold change was made.
+
+The [Week 3 ownership, correlation, and portfolio audit](docs/WEEK3_OWNERSHIP_CORRELATION_PORTFOLIO_AUDIT.md) documents the saved ownership-run lineage, pre-lock calibration slices, and historical stack sample. Rebuild its read-only artifacts with `PYTHONPATH=. .venv/bin/python scripts/audit_ownership_calibration.py` and `PYTHONPATH=. .venv/bin/python scripts/audit_classic_stack_outcomes.py`. New `slate_aware_ownership_v2_prelock` runs require historical projection features to predate game kickoff and match the slate; frozen v1 forecasts are unchanged. Classic small-field reports explicitly warn that they borrow the unvalidated large-GPP correlation profile. New production runs default to conservative availability caps, six-player maximum overlap, and at least two QB paths; the report starts with an Entry readiness gate. See [Classic optimizer filters](docs/product/optimizer_filters.md) for the exact caps and statuses.
+
+After **Run Ownership Model** or an automatic pre-optimizer refresh, Operations
+shows the ownership run ID, model version, saved-target status, and walk-forward
+metrics. The version identifies the leakage guard used for that run; accuracy
+still requires comparison with resolved contest ownership after the slate.
+
+Forward opportunity forecasting is under shadow validation. See [Forward opportunity shadow model](docs/product/forward_opportunity_shadow.md) for the read-only workflow and its data limitations.
+
+Offensive centrality is validated separately from fantasy projections. See [Offensive opportunity centrality](docs/product/offensive_opportunity_centrality.md).
+The same workflow includes a penalty-only football sanity shadow over complete
+persisted candidate pools. It does not alter production projections or lineup
+selection; it reports bounded weak-role and team-coverage deficits plus selector
+sensitivity before any guardrail is adopted.
+
+For the current Sunday pre-lock workflow, see [Sunday Main pre-lock priority](docs/product/sunday_main_priority.md).
+
+## Week 4 market refresh and Classic entry approval
+
+Capture sourced nflverse totals and spreads before the selected slate locks:
+
+```bash
+PYTHONPATH=. .venv/bin/python scripts/capture_nflverse_markets.py --season 2026 --week 4 --slate SUNDAY_MAIN --dry-run
+PYTHONPATH=. .venv/bin/python scripts/capture_nflverse_markets.py --season 2026 --week 4 --slate SUNDAY_MAIN
+```
+
+Use `THURSDAY_NIGHT` for the Thursday Showdown game. Each capture saves immutable
+raw source bytes and normalized per-game observations with an ingest run ID.
+Refreshes create new observations; create a new projection and optimizer run to
+use them. A report shows game-level coverage, age, and any missing or invalid
+line. The stored `home_spread` is the conventional home-team betting spread:
+negative means the home team is favored. Home implied points are
+`(total - home_spread) / 2`; away implied points are
+`(total + home_spread) / 2`.
+
+For multi-entry Classic small-field runs, a selected RB, WR, or TE in every
+lineup requires a saved, reasoned pre-lock approval before export. The results
+view shows the best comparable portfolio with that player capped at 80% and
+offers approval, an 80% cap, or a lower custom cap. A cap starts a new optimizer
+run and preserves the original. See [Classic optimizer filters](docs/product/optimizer_filters.md)
+and [Week 4 market and entry readiness](WEEK4_MARKET_AND_ENTRY_READINESS.md).
+
+For a large Classic candidate pool, set `classic_candidate_workers` to 2–4 and
+start the process with `PYTHONHASHSEED=0`. The optional
+`classic_production_candidate_pool_size` sets an exact cap-safe production
+target at or above `classic_candidate_pool_size`; a locked player uses the
+existing serial seed generator. The saved Week 4 market run used 205 seeds,
+four workers, and a 205 production target. It admitted 205/205 candidates
+without refill in a 347.6-second full run, including the prospective shadow.
+
+The separate Classic dynamic-thesis shadow reads a completed small-field run's
+frozen pregame candidate universe and groups lineups by canonical game, QB,
+stack size, and bring-back presence. It reports Pareto quality/depth, viable
+theses at four fixed selector tolerances, and jointly selected 1/3/5/10/20-entry
+shadow portfolios without changing the production lineups. Apply migrations,
+then run this before the saved first kickoff:
+
+```bash
+PYTHONHASHSEED=0 PYTHONPATH=. .venv/bin/python scripts/freeze_classic_thesis_shadow.py OPTIMIZER_RUN_ID \
+  --json artifacts/classic-thesis-shadow.json --report CLASSIC_THESIS_SHADOW.md
+```
+
+Repeating the command reuses the immutable snapshot.
+The [Week 4 thesis report](WEEK4_DYNAMIC_THESIS_PORTFOLIO_SHADOW.md) shows the
+named saved-run result and its pregame limits.
+
+The completed Week 4 report also includes Brissett QB opportunity cost, legal
+pay-up controls, correlation-aware Pareto diagnostics, and required-player
+solves that include the saved hard stack rules as well as exact templates.
+Its separate hashed completion supplement preserves the immutable v3 shadow
+and production state. Reproduce the saved document without database access:
+
+```bash
+PYTHONPATH=. .venv/bin/python scripts/render_week4_thesis_completion.py \
+  --inputs artifacts/week4-thesis-frozen-analysis-inputs-8b5c114c.json \
+  --shadow artifacts/week4-dynamic-thesis-shadow-8b5c114c.json \
+  --supplement artifacts/week4-thesis-opportunity-cost-8b5c114c-v2.json \
+  --report WEEK4_DYNAMIC_THESIS_PORTFOLIO_SHADOW.md
+```
+
+`scripts/complete_week4_thesis_analysis.py` can rerun the frozen-input controls
+before the saved kickoff using the same `--inputs` and `--shadow` arguments
+and a new `--output` path. It refuses to overwrite an existing supplement.
+The [completion manifest](artifacts/week4-thesis-completion-manifest.json)
+records the final document and evidence hashes. Future outcomes must be
+evaluated separately without changing the prospective record.
+
+## Classic prospective candidate discovery completeness
+
+The offline completeness layer separates raw legal discovery from cap admission
+and preserves request, roster, risk, displacement, and admission lineage. It uses
+the frozen solver model, exact roster cuts, all starting QB templates including
+triples, automatic pregame player/partner coverage probes, and structural sweeps.
+It reports frontier recall, grouped coverage, target comparisons, saturation,
+thesis portfolios, and runtime. Production selection and its 205 target remain
+unchanged. Safety-limited counts are lower bounds, not exhaustive legal counts.
+
+Run a fresh experiment before the frozen slate's first kickoff with a new output
+path (existing evidence is never overwritten):
+
+```bash
+PYTHONHASHSEED=0 .venv/bin/python -m scripts.research_classic_candidate_completeness \
+  --inputs artifacts/week4-thesis-frozen-analysis-inputs-8b5c114c.json \
+  --output /tmp/classic-completeness-new.json --per-qb-max 75 --replay-baseline --fresh-solves
+```
+
+This model-capture adapter is restricted to an isolated research process; do not
+invoke it in a production server or in threads. Process workers reduce results
+in declared request order. `--replay-evidence PATH` re-analyzes hashed prior
+solves while preserving original solver-code and timing provenance.
+
+Render the completed Week 4 evidence and full player/QB CSV audits without
+database access or additional solves:
+
+```bash
+.venv/bin/python -m scripts.render_candidate_completeness
+```
+
+See [Week 4 candidate frontier completeness](WEEK4_CANDIDATE_FRONTIER_COMPLETENESS.md)
+for measured counts, production recall, the smallest tested target that preserves
+the saved user-policy portfolio, and remaining uncertainty.
+
+## Classic chronological discovery validation
+
+The September 30 cohort audit found no historical Sunday Main slate with complete
+original frozen small-field generation inputs. Week 2/3 saved candidate pools do
+not suffice for unseen-roster replay; Week 4 remains a prospective diagnostic.
+Production stays at 205 and the recommendation is **SHADOW LONGER**. Target 400
+has not been validated across historical slates.
+
+A field-level recheck of all 28 pre-lock Week 2/3 refreshes recovered pinned
+projection/lagged feature records, but did not recover a complete original
+generator and solver frame. Current-table reloads and saved-roster score matches
+do not certify unseen-roster generation. The report records these recoverable
+inputs, specific remaining gaps, and every requested promotion answer.
+
+Audit local salary/projection/run headers and actual/field availability counts
+without reading fantasy score values or modifying the database. Use a fresh
+output path; audit artifacts are created exclusively:
+
+```bash
+.venv/bin/python -m scripts.audit_classic_discovery_cohort \
+  --output /tmp/classic-discovery-cohort-new.json
+```
+
+The offline validation helpers enforce complete original inputs, chronological
+exclusions, frozen pregame artifacts before actuals loading, independent slate
+splits, and exact/structural/quality portfolio matches. The recovered Week 3 research runner completed one provisional experiment;
+its unchanged old replay matched 117/120 rosters and failed exact qualification.
+The full expanded universe and all four target/portfolio comparisons were frozen
+before descriptive actuals attachment. See
+[the multi-slate validation report](CLASSIC_EXPANDED_DISCOVERY_MULTI_SLATE_VALIDATION.md)
+for all exclusions, provisional Week 3 results, unavailable certified aggregate
+metrics, separate Week 4 diagnostics,
+and the remaining work before promotion.

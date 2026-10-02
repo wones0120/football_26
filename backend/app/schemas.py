@@ -135,7 +135,7 @@ class NflReadPySeasonRequest(BaseModel):
 
 class AutoDiscoverIngestRequest(BaseModel):
     source_system: Literal["draftkings", "fanduel"] = "draftkings"
-    directory: str = Field(default="~/Downloads", min_length=1)
+    directory: str = Field(default="~/NFL", min_length=1)
 
 
 class RoleShockRequest(BaseModel):

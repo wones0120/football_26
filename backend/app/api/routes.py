@@ -210,7 +210,10 @@ def ingest_salaries(
     session: Session = Depends(get_db_session),
 ) -> IngestResultResponse:
     service = IngestService(session)
-    result = service.ingest_salaries(request)
+    try:
+        result = service.ingest_salaries(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     if result.status == "failed":
         raise HTTPException(status_code=422, detail=result.error_message or "Salary ingest failed")
     return result
@@ -222,7 +225,10 @@ def ingest_injuries(
     session: Session = Depends(get_db_session),
 ) -> IngestResultResponse:
     service = IngestService(session)
-    result = service.ingest_injuries(request)
+    try:
+        result = service.ingest_injuries(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     if result.status == "failed":
         raise HTTPException(status_code=422, detail=result.error_message or "Injury ingest failed")
     return result

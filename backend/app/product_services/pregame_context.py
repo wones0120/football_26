@@ -12,6 +12,7 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Connection, Engine
 
 from Database.config import get_connection_string
+from Database.dst import canonical_team_sql
 from .salary_eligibility import is_salary_status_eligible, normalize_salary_status
 
 
@@ -101,16 +102,14 @@ def _filter_salary_player_pool(rows: Sequence[Mapping[str, Any]]) -> list[dict[s
     salary_eligible = [
         dict(row) for row in rows if is_salary_status_eligible(row.get("player_status"))
     ]
-    has_roster_evidence = any(
-        row.get("roster_status") is not None
-        for row in salary_eligible
-        if _position(row.get("position")) != "DST"
-    )
     filtered: list[dict[str, Any]] = []
     for row in salary_eligible:
         position = _position(row.get("position"))
         roster_status = str(row.get("roster_status") or "").strip().upper() or None
-        if has_roster_evidence and position != "DST" and roster_status != "ACT":
+        row_has_roster_evidence = bool(row.get("roster_evidence_available")) or bool(
+            roster_status
+        )
+        if row_has_roster_evidence and position != "DST" and roster_status != "ACT":
             continue
         filtered.append(
             {
@@ -424,14 +423,15 @@ class PregameContextService:
             "curated_player_game_participation", schema="public"
         )
         roster_join = (
-            """
+            f"""
             LEFT JOIN LATERAL (
                 SELECT participation.roster_status
                 FROM public.curated_player_game_participation participation
                 WHERE participation.season = salary.season
                   AND participation.week = salary.week
                   AND participation.player_master_id = salary.player_master_id
-                  AND UPPER(participation.team) = UPPER(salary.team)
+                  AND {canonical_team_sql('participation.team')} =
+                      {canonical_team_sql('salary.team')}
                   AND participation.created_at <= :cutoff
                 ORDER BY participation.created_at DESC,
                          participation.curated_player_game_participation_id DESC
@@ -443,6 +443,21 @@ class PregameContextService:
         )
         roster_status_select = (
             "roster.roster_status" if has_roster_participation else "NULL::TEXT"
+        )
+        roster_evidence_select = (
+            f"""
+            EXISTS (
+                SELECT 1
+                FROM public.curated_player_game_participation roster_evidence
+                WHERE roster_evidence.season = salary.season
+                  AND roster_evidence.week = salary.week
+                  AND {canonical_team_sql('roster_evidence.team')} =
+                      {canonical_team_sql('salary.team')}
+                  AND roster_evidence.created_at <= :cutoff
+            )
+            """
+            if has_roster_participation
+            else "FALSE"
         )
         with self.engine.connect() as connection:
             rows = load_current_pregame_context(
@@ -461,7 +476,8 @@ class PregameContextService:
                         salary.team,
                         salary.position,
                         salary.player_status,
-                        {roster_status_select} AS roster_status
+                        {roster_status_select} AS roster_status,
+                        {roster_evidence_select} AS roster_evidence_available
                     FROM public.curated_salary salary
                     {roster_join}
                     WHERE salary.season = :season

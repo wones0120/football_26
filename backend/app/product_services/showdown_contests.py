@@ -138,7 +138,7 @@ def _add_economics(row: dict) -> None:
         lock_time = row.get("lock_time")
         hours_to_lock = ((datetime.fromisoformat(str(lock_time).replace("Z", "+00:00")).astimezone(UTC)
                           - datetime.now(UTC)).total_seconds() / 3600) if lock_time and "lock_time" not in _unavailable_fields(row) else None
-        near_lock = hours_to_lock is not None and 0 <= hours_to_lock <= 2
+        near_lock = row.get("source") != "saved_snapshot" and hours_to_lock is not None and 0 <= hours_to_lock <= 2
         row["economics"] = {
             "gross_fees_at_capacity": capacity * fee,
             "full_field_rake": 1 - pool / (capacity * fee) if capacity * fee else None,
@@ -198,6 +198,26 @@ def fetch_contests(urls: list[str], *, manual: list[dict] | None = None) -> list
         _add_economics(row)
         rows.append(row)
     return rows
+
+
+def validate_entry_limit_contest(contest: dict, *, maximum_entries: int) -> dict:
+    """Require complete economics and the expected per-user entry limit."""
+    source_limit = ((contest.get("source_payload") or {}).get("contestDetail") or {}).get("maximumEntriesPerUser")
+    if source_limit is not None and int(source_limit) != maximum_entries:
+        raise ValueError(f"Contest {contest.get('contest_id')} DraftKings page allows {source_limit} entries per user; expected {maximum_entries}-max")
+    missing = contest.get("unavailable_fields") or _unavailable_fields(contest)
+    if missing or not _ladder_is_complete(contest):
+        raise ValueError(f"Contest {contest.get('contest_id')} needs verified {maximum_entries}-max economics; unavailable: {', '.join(missing) or 'complete payout ladder'}")
+    if int(contest["maximum_entries"]) != maximum_entries:
+        raise ValueError(f"Contest {contest['contest_id']} allows {contest['maximum_entries']} entries per user; expected {maximum_entries}-max")
+    if contest.get("state") not in (None, "Upcoming"):
+        raise ValueError(f"Contest {contest['contest_id']} is no longer upcoming")
+    fee, capacity, entries, pool = (float(contest[key]) for key in ("entry_fee", "capacity", "current_entries", "prize_pool"))
+    if fee <= 0 or capacity <= 0 or not 0 <= entries <= capacity or pool <= 0:
+        raise ValueError(f"Contest {contest['contest_id']} has invalid economics")
+    row = dict(contest)
+    _add_economics(row)
+    return row
 
 
 def _payout_distribution(contest: dict) -> dict[int, float]:

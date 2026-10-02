@@ -157,3 +157,46 @@ def test_showdown_rules_block_six_from_same_team() -> None:
         ],
     )
     assert not _showdown_lineup_satisfies_rules(lineup)
+
+
+def test_showdown_actual_optimizer_honors_forced_captain() -> None:
+    from backend.app.services.lineup_learning import LineupLearningService
+
+    players = [
+        _showdown_player(f"p{index}", "WR", "DAL" if index < 4 else "NYG", "NYG")
+        for index in range(1, 8)
+    ]
+    for index, player in enumerate(players, start=1):
+        player.actual_points = float(20 - index)
+
+    service = object.__new__(LineupLearningService)
+    result = service.optimize_actual_showdown_lineup(
+        players=players,
+        forced_captain_uid="p7",
+    )
+
+    assert result is not None
+    lineup, _points, _salary = result
+    assert lineup.captain.uid == "p7"
+
+
+def test_showdown_actual_optimizer_returns_distinct_ranked_oracles() -> None:
+    from backend.app.services.lineup_learning import LineupLearningService
+
+    players = [
+        _showdown_player(f"p{index}", "WR", "DAL" if index < 4 else "NYG", "NYG")
+        for index in range(1, 9)
+    ]
+    for index, player in enumerate(players, start=1):
+        player.actual_points = float(20 - index)
+
+    service = object.__new__(LineupLearningService)
+    results = service.optimize_top_actual_showdown_lineups(players=players, limit=3)
+
+    assert len(results) == 3
+    keys = [service._showdown_lineup_key(lineup) for lineup, _points, _salary in results]
+    assert len(set(keys)) == 3
+    assert [points for _lineup, points, _salary in results] == sorted(
+        [points for _lineup, points, _salary in results],
+        reverse=True,
+    )

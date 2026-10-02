@@ -100,7 +100,7 @@ class TargetSchemaAdapterTests(unittest.TestCase):
 
         self.assertIn("WHEN 'LA' THEN 'LAR'", expression)
         self.assertIn("WHEN 'JAC' THEN 'JAX'", expression)
-        self.assertIn("upper(trim(salary.team))", expression)
+        self.assertIn("UPPER(TRIM(salary.team))", expression)
 
 
 if __name__ == "__main__":

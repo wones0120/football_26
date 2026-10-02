@@ -130,6 +130,99 @@ def test_master_fallback_requires_exact_name_team_and_position() -> None:
     assert wrong_team_reason == "unresolved"
 
 
+def test_same_source_exact_alias_allows_multiple_keys_for_one_player() -> None:
+    session = _session()
+    player = create_player_master(session, full_name="Traded Player", team="OLD", position="WR")
+    for source_key in ("old-slate", "new-slate"):
+        upsert_alias(
+            session=session,
+            player_master_id=player.player_master_id,
+            source_system="fanduel",
+            source_key=source_key,
+            alias_name="Traded Player",
+            team="NEW",
+            position="WR",
+            season=2026,
+            week=2,
+        )
+    session.commit()
+
+    found_id, reason = find_player_master_id(
+        session=session,
+        source_system="fanduel",
+        source_key="third-slate",
+        name="Traded Player",
+        team="NEW",
+        position="WR",
+    )
+
+    assert found_id == player.player_master_id
+    assert reason == "alias_name_team_position"
+
+
+def test_cross_source_exact_alias_resolves_traded_player() -> None:
+    session = _session()
+    player = create_player_master(session, full_name="Traded Player", team="OLD", position="WR")
+    upsert_alias(
+        session=session,
+        player_master_id=player.player_master_id,
+        source_system="draftkings",
+        source_key="dk-current",
+        alias_name="Traded Player",
+        team="NEW",
+        position="WR",
+        season=2026,
+        week=2,
+    )
+    session.commit()
+
+    found_id, reason = find_player_master_id(
+        session=session,
+        source_system="fanduel",
+        source_key="fd-current",
+        name="Traded Player",
+        team="NEW",
+        position="WR",
+    )
+
+    assert found_id == player.player_master_id
+    assert reason == "alias_cross_source_name_team_position"
+
+
+def test_cross_source_exact_alias_refuses_ambiguous_identity() -> None:
+    session = _session()
+    first = create_player_master(session, full_name="Shared Player", team="OLD", position="WR")
+    second = create_player_master(session, full_name="Shared Player", team="OTHER", position="WR")
+    for source_system, source_key, player_id in (
+        ("draftkings", "dk-key", first.player_master_id),
+        ("nflreadpy", "nfl-key", second.player_master_id),
+    ):
+        upsert_alias(
+            session=session,
+            player_master_id=player_id,
+            source_system=source_system,
+            source_key=source_key,
+            alias_name="Shared Player",
+            team="NEW",
+            position="WR",
+            season=2026,
+            week=2,
+        )
+    session.commit()
+
+    found_id, reason = find_player_master_id(
+        session=session,
+        source_system="fanduel",
+        source_key="fd-key",
+        name="Shared Player",
+        team="NEW",
+        position="WR",
+    )
+
+    assert found_id is None
+    assert reason == "ambiguous_cross_source_name_team_position"
+
+
 def test_upsert_alias_same_source_key_twice_same_transaction() -> None:
     session = _session()
     player = create_player_master(session, full_name="Tez Johnson", team="TB", position="WR")

@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
+from sklearn.ensemble import GradientBoostingRegressor
 
 from backend.app.product_services.predictions import (
     PredictionsService,
@@ -67,6 +68,11 @@ class PredictionLineageTests(unittest.TestCase):
             [{"season": 2025, "week": 10, "label_dk_total_points": 12.0}]
         )
         source_features = pd.DataFrame([{"salary": 6000, "target_share": 0.25}])
+        fitted_model = GradientBoostingRegressor(random_state=42).fit(
+            pd.DataFrame({"salary": [4000, 5000, 6000],
+                          "target_share": [0.10, 0.20, 0.30]}),
+            [8.0, 12.0, 16.0],
+        )
         projections = pd.DataFrame(
             [
                 {
@@ -96,6 +102,7 @@ class PredictionLineageTests(unittest.TestCase):
             train_df=train_df,
             source_features=source_features,
             projections=projections,
+            fitted_model=fitted_model,
         )
 
         self.assertTrue(persisted)
@@ -117,8 +124,11 @@ class PredictionLineageTests(unittest.TestCase):
         self.assertEqual(projection_payload[0]["calibration_sample_size"], 250)
         executed_sql = [str(call.args[0]) for call in connection.execute.call_args_list]
         self.assertTrue(any("INSERT INTO target.projection_run" in sql for sql in executed_sql))
+        self.assertTrue(any("INSERT INTO target.model_artifact" in sql for sql in executed_sql))
         self.assertTrue(any("INSERT INTO target.active_projection_run" in sql for sql in executed_sql))
         active_sql = next(sql for sql in executed_sql if "INSERT INTO target.active_projection_run" in sql)
+        # Projection completion initializes an empty governed scope. Existing
+        # champion pointers remain controlled by model governance.
         self.assertIn("DO NOTHING", active_sql)
         self.assertFalse(any("DELETE FROM player_expected_points" in sql for sql in executed_sql))
 

@@ -302,19 +302,21 @@ def _load_game_lines(engine, season: int) -> pd.DataFrame:
 
     df["home_team"] = df["home_team"].str.upper()
     df["away_team"] = df["away_team"].str.upper()
-    df["spread_line"] = df["spread_line"].fillna(0.0)
-    df["total_line"] = df["total_line"].fillna(0.0)
+    # nflverse spread_line is positive home margin. Keep missing lines null;
+    # a missing market must not become a tied game with a zero total.
+    df["spread_line"] = pd.to_numeric(df["spread_line"], errors="coerce")
+    df["total_line"] = pd.to_numeric(df["total_line"], errors="coerce")
 
     home_team = df[["season", "week", "home_team", "spread_line", "total_line"]].copy()
     home_team = home_team.rename(columns={"home_team": "team"})
-    home_team["team_spread"] = home_team["spread_line"]
-    home_team["team_implied_total"] = (home_team["total_line"] / 2.0) - (home_team["spread_line"] / 2.0)
+    home_team["team_spread"] = -home_team["spread_line"]
+    home_team["team_implied_total"] = (home_team["total_line"] + home_team["spread_line"]) / 2.0
     home_team["game_total"] = home_team["total_line"]
 
     away_team = df[["season", "week", "away_team", "spread_line", "total_line"]].copy()
     away_team = away_team.rename(columns={"away_team": "team"})
-    away_team["team_spread"] = -away_team["spread_line"]
-    away_team["team_implied_total"] = (away_team["total_line"] / 2.0) + (away_team["spread_line"] / 2.0)
+    away_team["team_spread"] = away_team["spread_line"]
+    away_team["team_implied_total"] = (away_team["total_line"] - away_team["spread_line"]) / 2.0
     away_team["game_total"] = away_team["total_line"]
 
     lines = pd.concat([home_team, away_team], ignore_index=True)

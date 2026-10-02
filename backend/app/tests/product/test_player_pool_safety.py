@@ -1,11 +1,13 @@
 from datetime import UTC, datetime, timedelta
 
 import pandas as pd
+import pytest
 
 from backend.app.product_services.player_pool_safety import (
     ExclusionCategory,
     categorize_exclusion_reason,
     evaluate_player_pool_safety,
+    validate_player_pool_evidence_consistency,
 )
 from backend.app.product_services.rule_library import resolve_strategy_profile
 
@@ -75,6 +77,48 @@ def test_hard_eligibility_and_identity_rules_fail_closed() -> None:
     assert result.summary["excluded_count"] == 6
 
 
+def test_roster_evidence_is_scoped_to_the_players_team() -> None:
+    result = _evaluate(
+        [
+            _row("matched-active", roster_status="ACT", roster_evidence_available=True),
+            _row(
+                "unmatched-alias",
+                player_team="SF",
+                opponent_team="SEA",
+                roster_status=None,
+                roster_evidence_available=False,
+            ),
+        ]
+    )
+
+    assert set(result.eligible_pool["player_id"]) == {
+        "matched-active",
+        "unmatched-alias",
+    }
+    unmatched = next(
+        row for row in result.audit_rows if row["player_id"] == "unmatched-alias"
+    )
+    assert "not_on_current_active_roster" not in unmatched["exclusion_reasons"]
+
+
+def test_starting_qb_and_roster_conflict_fails_before_filtering() -> None:
+    with pytest.raises(ValueError, match="starter evidence conflicts with roster status MISSING"):
+        validate_player_pool_evidence_consistency(
+            pd.DataFrame(
+                [
+                    _row(
+                        "starter",
+                        name="Starting Quarterback",
+                        position="QB",
+                        is_starting_qb=True,
+                        roster_status=None,
+                        roster_evidence_available=True,
+                    )
+                ]
+            )
+        )
+
+
 def test_backup_qb_requires_starter_evidence_or_explicit_package_role() -> None:
     result = _evaluate(
         [
@@ -142,3 +186,37 @@ def test_user_exclusion_is_categorized_and_audited() -> None:
     assert excluded["exclusion_details"][0]["category"] == "user"
     assert categorize_exclusion_reason("no positive projection") is ExclusionCategory.PROJECTION
     assert categorize_exclusion_reason("value threshold") is ExclusionCategory.STRATEGY
+
+
+@pytest.mark.parametrize("contest_format", ["classic", "showdown"])
+@pytest.mark.parametrize("objective", ["cash", "gpp"])
+@pytest.mark.parametrize("enabled", [False, True])
+def test_questionable_preference_applies_to_every_profile(
+    contest_format: str, objective: str, enabled: bool,
+) -> None:
+    pool = pd.DataFrame([
+        _row("salary-q", player_status=" q ", projection=18.4, p90=31.2),
+        _row("injury-q", injury_status="Questionable"),
+        _row("context-q", pregame_injury_status="Q"),
+        _row("cleared", injury_status="Q", pregame_injury_status="ACTIVE"),
+        _row("doubtful", player_status="D"),
+        _row("healthy"),
+        _row("out", player_status="OUT"),
+    ])
+    original = pool.copy(deep=True)
+    result = evaluate_player_pool_safety(
+        pool,
+        profile=resolve_strategy_profile(contest_format=contest_format, objective=objective),
+        as_of=NOW,
+        exclude_questionable=enabled,
+    )
+    expected = {"cleared", "doubtful", "healthy"}
+    if not enabled:
+        expected |= {"salary-q", "injury-q", "context-q"}
+    assert set(result.eligible_pool["player_id"]) == expected
+    pd.testing.assert_frame_equal(pool, original)
+    audit = next(row for row in result.audit_rows if row["player_id"] == "salary-q")
+    assert audit["exclusion_reasons"] == (["user_excluded_questionable"] if enabled else [])
+    if enabled:
+        assert audit["exclusion_details"][0]["category"] == "user"
+        assert audit["exclusion_details"][0]["rule_id"] == "user.preference.questionable_exclusion_v1"

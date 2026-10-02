@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import errno
 import json
 from datetime import UTC, datetime
 from pathlib import Path
@@ -15,12 +16,16 @@ from backend.app.models import (
     Base,
     CuratedSalary,
     IngestRun,
+    RawNflSnapCount,
     RawNflSchedule,
+    RawNflWeeklyStat,
     RawNflWeeklyRoster,
     SourceSnapshot,
     SourceSnapshotIngestRun,
 )
 from backend.app.schemas import NflReadPySeasonRequest
+from backend.app.product_services.slate_learning import SlateLearningService
+from backend.app.services.ingest import IngestService
 from backend.app.services.matching import create_player_master
 from backend.app.services.source_capture import (
     NFLREADPY_FETCH_METADATA_ATTR,
@@ -29,6 +34,7 @@ from backend.app.services.source_capture import (
     PostLockSnapshotError,
     SnapshotIntegrityError,
     SourceCaptureService,
+    _retry_deadlocked_read,
     capture_nflreadpy_datasets,
     fetch_nflreadpy_dataset,
     verify_snapshot_artifact,
@@ -36,6 +42,26 @@ from backend.app.services.source_capture import (
 
 
 LICENSE = "Test fixture license"
+
+
+def test_file_provider_deadlock_retries_without_skipping_read(monkeypatch) -> None:
+    attempts = 0
+    waits = []
+    monkeypatch.setattr("backend.app.services.source_capture.sleep", waits.append)
+
+    def read() -> bytes:
+        nonlocal attempts
+        attempts += 1
+        if attempts <= 2:
+            raise OSError(errno.EDEADLK, "Resource deadlock avoided")
+        return b"verified-artifact"
+
+    assert _retry_deadlocked_read(read) == b"verified-artifact"
+    assert attempts == 3
+    assert waits == [0.5, 1.0]
+    with pytest.raises(OSError) as exc:
+        _retry_deadlocked_read(lambda: (_ for _ in ()).throw(OSError(errno.EACCES, "denied")))
+    assert exc.value.errno == errno.EACCES
 
 
 def _session() -> Session:
@@ -491,3 +517,183 @@ def test_nflreadpy_schedule_capture_ingests_exact_artifact_and_links_lineage(
     assert session.query(SourceSnapshot).count() == 1
     assert session.query(SourceSnapshotIngestRun).count() == 1
     assert session.query(RawNflSchedule).count() == 1
+
+
+def test_weekly_stats_loader_requests_weekly_summary() -> None:
+    calls: list[dict[str, object]] = []
+
+    def load_player_stats(**kwargs: object) -> pd.DataFrame:
+        calls.append(kwargs)
+        return pd.DataFrame(
+            [{"season": 2026, "week": 1, "player_id": "00-0000001"}]
+        )
+
+    frame, _version = fetch_nflreadpy_dataset(
+        "weekly_stats",
+        season=2026,
+        week=1,
+        nfl_module=SimpleNamespace(
+            __version__="test-version",
+            load_player_stats=load_player_stats,
+        ),
+    )
+
+    assert calls == [{"seasons": [2026], "summary_level": "week"}]
+    assert len(frame) == 1
+
+
+def test_depth_chart_loader_keeps_timestamped_rows_without_week_column() -> None:
+    frame, version = fetch_nflreadpy_dataset(
+        "depth_charts", season=2026, week=3,
+        nfl_module=SimpleNamespace(
+            __version__="test-version",
+            load_depth_charts=lambda seasons: pd.DataFrame([{
+                "dt": "2026-09-25T06:00:00Z", "team": "NYG",
+                "gsis_id": "00-0031503", "pos_abb": "QB", "pos_rank": 1,
+            }]),
+        ),
+    )
+    assert version == "test-version"
+    assert frame.iloc[0]["gsis_id"] == "00-0031503"
+
+
+def test_captured_weekly_stats_and_snaps_are_idempotent(tmp_path: Path) -> None:
+    session = _session()
+    ingest = IngestService(session)
+    stats_path = tmp_path / "weekly_stats.csv"
+    snaps_path = tmp_path / "snap_counts.csv"
+    stats = pd.DataFrame(
+        [
+            {
+                "season": 2026,
+                "week": 1,
+                "player_id": "00-0000001",
+                "player_display_name": "Example Receiver",
+                "recent_team": "BUF",
+                "opponent_team": "MIA",
+                "position": "WR",
+                "game_id": "2026_01_BUF_MIA",
+            }
+        ]
+    )
+    snaps = pd.DataFrame(
+        [
+            {
+                "season": 2026,
+                "week": 1,
+                "game_id": "2026_01_BUF_MIA",
+                "pfr_player_id": "Exampl00",
+                "player": "Example Receiver",
+                "team": "BUF",
+                "opponent": "MIA",
+                "position": "WR",
+                "offense_snaps": 52,
+                "offense_pct": 0.8,
+            }
+        ]
+    )
+    stats.to_csv(stats_path, index=False)
+    snaps.to_csv(snaps_path, index=False)
+    request = NflReadPySeasonRequest(season=2026, weeks=[1])
+
+    first_stats = ingest.ingest_nflreadpy_weekly_stats(
+        request,
+        source_frame=stats,
+        source_path=str(stats_path),
+        ingest_run_id="stats-run",
+    )
+    second_stats = ingest.ingest_nflreadpy_weekly_stats(
+        request,
+        source_frame=stats,
+        source_path=str(stats_path),
+        ingest_run_id="stats-run",
+    )
+    first_snaps = ingest.ingest_nflreadpy_snap_counts(
+        request,
+        source_frame=snaps,
+        source_path=str(snaps_path),
+        ingest_run_id="snaps-run",
+    )
+    second_snaps = ingest.ingest_nflreadpy_snap_counts(
+        request,
+        source_frame=snaps,
+        source_path=str(snaps_path),
+        ingest_run_id="snaps-run",
+    )
+
+    assert first_stats.status == second_stats.status == "completed"
+    assert first_snaps.status == second_snaps.status == "completed"
+    assert session.query(RawNflWeeklyStat).count() == 1
+    assert session.query(RawNflSnapCount).count() == 1
+    assert session.get(IngestRun, "stats-run").source_path == str(stats_path)
+    assert session.get(IngestRun, "snaps-run").source_path == str(snaps_path)
+
+
+def test_learning_stats_refresh_archives_requested_week_and_reuses_exact_content(tmp_path, monkeypatch):
+    session = _session()
+    stats = pd.DataFrame([
+        {"season": 2026, "week": week, "player_id": "00-0000001",
+         "player_display_name": "Example Receiver", "recent_team": "BUF",
+         "opponent_team": "MIA", "position": "WR", "receptions": week}
+        for week in (1, 2)
+    ])
+    IngestService(session).ingest_nflreadpy_weekly_stats(
+        NflReadPySeasonRequest(season=2026, weeks=[1]), source_frame=stats,
+    )
+    monkeypatch.setattr(
+        "backend.app.product_services.slate_learning.SourceCaptureService",
+        lambda active_session: SourceCaptureService(active_session, snapshot_root=tmp_path),
+    )
+    monkeypatch.setattr(
+        "backend.app.services.source_capture.fetch_nflreadpy_dataset",
+        lambda dataset, nfl_module=None, **scope: fetch_nflreadpy_dataset(
+            dataset, **scope, nfl_module=SimpleNamespace(
+                __version__="test", load_player_stats=lambda **kwargs: stats,
+            ),
+        ),
+    )
+    service = SlateLearningService(engine=session.get_bind())
+    first = service._refresh_weekly_stats(season=2026, week=2)
+    repeated = service._refresh_weekly_stats(season=2026, week=2)
+    assert first == repeated
+    assert first["rows_raw"] == 1
+    session.expire_all()
+    assert session.query(RawNflWeeklyStat).count() == 2
+    assert session.query(RawNflWeeklyStat).filter_by(week=1).one().raw_row_json["receptions"] == 1
+    snapshot = session.get(SourceSnapshot, first["snapshot_id"])
+    assert pd.read_csv(snapshot.artifact_path)["week"].tolist() == [2]
+    verify_snapshot_artifact(snapshot)
+    assert session.get(SourceSnapshotIngestRun, {
+        "snapshot_id": first["snapshot_id"], "ingest_run_id": first["ingest_run_id"],
+    }) is not None
+
+    stats.loc[stats["week"] == 2, "receptions"] = 5
+    corrected = service._refresh_weekly_stats(season=2026, week=2)
+    assert corrected["snapshot_id"] != first["snapshot_id"]
+    session.expire_all()
+    assert session.query(SourceSnapshot).count() == 2
+    assert session.query(RawNflWeeklyStat).count() == 2
+    assert session.query(RawNflWeeklyStat).filter_by(week=2).one().raw_row_json["receptions"] == 5
+    assert pd.read_csv(snapshot.artifact_path)["receptions"].tolist() == [2]
+
+    with pytest.raises(ValueError, match="week 3: No weekly stats are published"):
+        service._refresh_weekly_stats(season=2026, week=3)
+    assert session.query(RawNflWeeklyStat).count() == 2
+
+
+def test_learning_stats_refresh_surfaces_failed_ingest(tmp_path, monkeypatch):
+    session = _session()
+    monkeypatch.setattr(
+        "backend.app.product_services.slate_learning.SourceCaptureService",
+        lambda active_session: SourceCaptureService(active_session, snapshot_root=tmp_path),
+    )
+    monkeypatch.setattr(
+        "backend.app.services.source_capture.fetch_nflreadpy_dataset",
+        lambda *args, **kwargs: (pd.DataFrame([{"season": 2026, "player_id": "source-id"}]), "test"),
+    )
+    service = SlateLearningService(engine=session.get_bind())
+    with pytest.raises(ValueError, match="week 2: Could not find a usable week column"):
+        service._refresh_weekly_stats(season=2026, week=2)
+    session.expire_all()
+    assert session.query(IngestRun).one().status == "failed"
+    assert session.query(SourceSnapshotIngestRun).count() == 1

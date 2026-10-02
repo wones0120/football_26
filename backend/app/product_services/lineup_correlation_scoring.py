@@ -1299,7 +1299,16 @@ def build_format_specific_terms(
                     },
                     count_conditions=((indexes, 5, 5),),
                     evidence_indexes=indexes,
-                    evidence={"dominant_team": team, "team_spread": team_spread},
+                    evidence={
+                        "dominant_team": team, "team_spread": team_spread,
+                        "market_basis": (
+                            "conditional_winner_assumption" if any(
+                                _value(player, "showdown_scenario_id") not in (None, "baseline")
+                                for player in players
+                            ) else "baseline_market"
+                        ),
+                        "rule_concept": "five_one_under_supplied_market_context",
+                    },
                 )
             )
     return terms
@@ -1912,6 +1921,10 @@ def score_lineup_correlations(
             trigger_rows.append(
                 {
                     **trigger.to_dict(),
+                    **({"description": "Reward a 5-1 build under the conditional decisive-winner assumption."}
+                       if trigger.reason_code == "favorite_five_one_construction"
+                       and (term.evidence or {}).get("market_basis") == "conditional_winner_assumption"
+                       else {}),
                     "term_kind": "format_specific",
                     "construction_kind": term.kind,
                     "objective_contribution": (

@@ -26,6 +26,10 @@ class WeeklyRunRequest(BaseModel):
     data_cutoff_at: datetime | None = None
     positions: list[str] | None = None
     projection_run_id: str | None = None
+    availability_overrides: list[dict[str, Any]] = Field(default_factory=list)
+    allow_confirmed_inactive_override: bool = False
+    assume_questionable_out: bool = False
+    refresh_projections: bool = False
     contest_format: Literal["classic", "showdown"] = "classic"
     objective: Literal["cash", "gpp"] = "gpp"
     strategy: str = Field(default="gpp", min_length=1)

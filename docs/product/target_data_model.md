@@ -295,10 +295,12 @@ tokens (`OUT`/`O`, `IR`, `PUP`, `NFI`, reserve, inactive, and suspended) before
 projection scoring and optimization, while blank, questionable, and doubtful
 statuses remain eligible for a later point-in-time injury adjustment. Status
 exclusions are stored in projection lineage rather than inferred from missing
-rows. When current weekly-roster evidence is present, projection and optimizer
-inputs additionally require `ACT` for non-DST players; DST remains eligible
-without a player roster record. Those roster exclusions are stored separately
-in the projection input lineage.
+rows. When current weekly-roster evidence is present for a player's canonical
+team, projection and optimizer inputs additionally require `ACT` for non-DST
+players; DST remains eligible without a player roster record. Canonical team
+aliases are shared across readiness, context, starter evidence, and optimization,
+and evidence for one team never marks an uncovered team inactive. Those roster
+exclusions are stored separately in the projection input lineage.
 
 Replay visibility is fail closed: both observation time and the consuming run's cutoff must exist,
 and `observed_at <= data_cutoff_at`. A game date, report week, file name, or retrospective load time
@@ -1084,7 +1086,12 @@ One optimizer execution. For classic cash, `objective_config_json` stores the co
 
 ### `starting_qb_evidence`
 
-One canonical starting-QB selection per season/week/slate/team. Explicit depth-chart QB1 evidence is `confirmed`; a unique top DraftKings FLEX salary is `inferred` and is recalculated against the current salary slice before each solve. The record stores `player_master_id`, compatibility `player_id`, display name, source, tier, and the exact evidence payload. Ambiguous selection is never persisted and blocks Showdown optimization.
+One canonical starting-QB selection per season/week/slate/team. Explicit depth-chart QB1 evidence is `confirmed`; a unique top DraftKings FLEX salary is `inferred` and is recalculated against the current salary slice before each solve. The record stores `player_master_id`, compatibility `player_id`, display name, source, tier, and the exact evidence payload. An automatic ambiguous selection blocks the run; Operations returns the affected canonical candidates so an operator can add a source-backed `confirmed` selection or an explicitly `inferred` provisional report. Manual evidence is required only for unresolved teams, and a provisional source URI and observation time (plus an optional note) remain auditable until the team confirms its starter.
+For live projection jobs, the worker resolves this evidence before training and advances its saved effective data cutoff after the evidence write. This includes jobs started outside the UI. Explicit historical cutoff jobs do not resolve starters from current information.
+If the saved salary slice explicitly marks the depth-chart QB1 OUT, a unique next-ranked
+QB may be selected as provisional evidence only when he is also the unique top-salary
+eligible QB. The GSIS IDs, OUT status, rank, and depth snapshot ID remain in the
+evidence note. A missing identity, tied rank/salary, or disagreement remains unresolved.
 
 Required columns:
 

@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 import numpy as np
-from sqlalchemy import and_, delete, func, or_, select
+from sqlalchemy import and_, delete, func, or_, select, text
 from sqlalchemy.orm import Session
 
 try:
@@ -65,6 +65,7 @@ from .candidate_checkpoint import (
     candidate_checkpoint_fingerprint,
 )
 from .matching import normalize_position
+from .schedule_context import nflverse_team_market_context
 from .simulation import calculate_dk_points
 
 
@@ -326,6 +327,7 @@ class ShowdownPlayerPoolRow:
     flex_salary: int
     captain_salary: int
     actual_points: float
+    actual_source: str = "unavailable"
     projected_mean_points: float = 0.0
     projected_p90_points: float = 0.0
     game_total_line: float | None = None
@@ -338,6 +340,23 @@ class ShowdownPlayerPoolRow:
     team_missing_usage_share: float = 0.0
     team_available_usage_concentration: float = 0.0
     team_usage_identity_coverage: float = 0.0
+    pregame_expected_pass_attempts: float | None = None
+    pregame_expected_snaps: float | None = None
+    pregame_expected_routes: float | None = None
+    pregame_expected_carries: float | None = None
+    pregame_expected_targets: float | None = None
+    pregame_carry_share: float | None = None
+    pregame_target_share: float | None = None
+    pregame_red_zone_share: float | None = None
+    pregame_goal_line_share: float | None = None
+    offensive_role_importance: float | None = None
+    offensive_role_completeness: float | None = None
+    offensive_role_class: str | None = None
+    offensive_role_confidence: str | None = None
+    pregame_opportunity_source: str = "unavailable"
+    actual_pass_attempts: float = 0.0
+    actual_carries: float = 0.0
+    actual_targets: float = 0.0
     player_master_id: str | None = None
     source_player_key: str | None = None
 
@@ -587,6 +606,14 @@ def _safe_float(value: Any) -> float | None:
     return float(number)
 
 
+def _first_float(*values: Any) -> float | None:
+    for value in values:
+        number = _safe_float(value)
+        if number is not None:
+            return number
+    return None
+
+
 def _safe_str(value: Any) -> str | None:
     if value is None:
         return None
@@ -803,6 +830,30 @@ def _calculate_dk_player_points(raw_row: dict[str, Any], position: str | None) -
     return float(max(points, 0.0))
 
 
+def _apply_curated_showdown_actual_fallback(
+    fallback_rows: list[dict],
+    points_by_master: dict[str, float],
+    source_by_master: dict[str, str],
+    opportunity_by_master: dict[str, dict[str, float]],
+) -> None:
+    """Fill only absent canonical actuals; keep the original raw-stat source preferred."""
+    for fallback in fallback_rows:
+        master_id = str(fallback["player_master_id"])
+        if master_id in points_by_master:
+            continue
+        payload = fallback["payload"] or {}
+        points = _calculate_dk_player_points(payload, payload.get("position"))
+        if not math.isfinite(points):
+            continue
+        points_by_master[master_id] = points
+        source_by_master[master_id] = "curated_weekly_stats"
+        opportunity_by_master[master_id] = {
+            "pass_attempts": _safe_float(payload.get("attempts")) or 0.0,
+            "carries": _safe_float(payload.get("carries")) or 0.0,
+            "targets": _safe_float(payload.get("targets")) or 0.0,
+        }
+
+
 class LineupLearningService:
     def __init__(self, session: Session) -> None:
         self.session = session
@@ -860,6 +911,9 @@ class LineupLearningService:
                     RawNflSchedule.season == season,
                     RawNflSchedule.week == week,
                 )
+            ).order_by(
+                RawNflSchedule.created_at,
+                RawNflSchedule.raw_nfl_schedule_id,
             )
         ).scalars().all()
 
@@ -876,26 +930,12 @@ class LineupLearningService:
                 total_line = _safe_float(payload.get("total"))
             spread_line = _safe_float(payload.get("spread_line"))
 
-            home_implied: float | None = None
-            away_implied: float | None = None
-            if total_line is not None and spread_line is not None:
-                # `spread_line` is home-team spread from nflverse schedules.
-                home_implied = (total_line / 2.0) - (spread_line / 2.0)
-                away_implied = (total_line / 2.0) + (spread_line / 2.0)
-
-            home_ctx: dict[str, float] = {"has_vegas_line": 0.0}
-            away_ctx: dict[str, float] = {"has_vegas_line": 0.0}
-            if total_line is not None:
-                home_ctx["game_total_line"] = total_line
-                away_ctx["game_total_line"] = total_line
-            if spread_line is not None:
-                home_ctx["team_spread_line"] = spread_line
-                away_ctx["team_spread_line"] = -spread_line
-            if home_implied is not None and away_implied is not None:
-                home_ctx["team_implied_total"] = home_implied
-                home_ctx["opponent_implied_total"] = away_implied
-                away_ctx["team_implied_total"] = away_implied
-                away_ctx["opponent_implied_total"] = home_implied
+            home_ctx, away_ctx = nflverse_team_market_context(
+                total_line=total_line,
+                home_margin=spread_line,
+            )
+            home_ctx["has_vegas_line"] = 0.0
+            away_ctx["has_vegas_line"] = 0.0
             if total_line is not None and spread_line is not None:
                 home_ctx["has_vegas_line"] = 1.0
                 away_ctx["has_vegas_line"] = 1.0
@@ -2264,6 +2304,7 @@ class LineupLearningService:
         slate: str,
         projection_lookup: dict[str, tuple[float, float]] | None = None,
         dst_projection_lookup: dict[str, tuple[float, float]] | None = None,
+        curated_actual_fallback: bool = False,
     ) -> list[ShowdownPlayerPoolRow]:
         salary_rows = self.session.execute(
             select(CuratedSalary).where(
@@ -2293,6 +2334,9 @@ class LineupLearningService:
         )
 
         actual_points_by_master: dict[str, float] = {}
+        actual_source_by_master: dict[str, str] = {}
+        actual_opportunity_by_master: dict[str, dict[str, float]] = {}
+        prior_opportunity_by_master: dict[str, dict[str, float]] = {}
         master_ids = sorted({row.player_master_id for row in salary_rows if row.player_master_id})
         if master_ids:
             alias_rows = self.session.execute(
@@ -2327,6 +2371,62 @@ class LineupLearningService:
                         continue
                     for master_id in player_id_to_masters.get(stat_row.player_id, set()):
                         actual_points_by_master[master_id] = max(actual_points_by_master.get(master_id, 0.0), points)
+                        actual_source_by_master[master_id] = "raw_nfl_weekly_stat"
+                        payload = stat_row.raw_row_json or {}
+                        actual_opportunity_by_master[master_id] = {
+                            "pass_attempts": _safe_float(payload.get("attempts")) or 0.0,
+                            "carries": _safe_float(payload.get("carries")) or 0.0,
+                            "targets": _safe_float(payload.get("targets")) or 0.0,
+                        }
+
+                history_rows = self.session.execute(
+                    select(RawNflWeeklyStat).where(
+                        and_(
+                            RawNflWeeklyStat.player_id.in_(tracked_player_ids),
+                            or_(
+                                RawNflWeeklyStat.season < season,
+                                and_(
+                                    RawNflWeeklyStat.season == season,
+                                    RawNflWeeklyStat.week < week,
+                                ),
+                            ),
+                        )
+                    )
+                ).scalars().all()
+                history_by_master: dict[str, dict[tuple[int, int], dict[str, float]]] = defaultdict(dict)
+                for stat_row in history_rows:
+                    payload = stat_row.raw_row_json or {}
+                    opportunity = {
+                        "pass_attempts": _safe_float(payload.get("attempts")) or 0.0,
+                        "carries": _safe_float(payload.get("carries")) or 0.0,
+                        "targets": _safe_float(payload.get("targets")) or 0.0,
+                    }
+                    for master_id in player_id_to_masters.get(stat_row.player_id or "", set()):
+                        history_by_master[master_id][
+                            (int(stat_row.season), int(stat_row.week))
+                        ] = opportunity
+                for master_id, rows_by_week in history_by_master.items():
+                    recent = [
+                        rows_by_week[key]
+                        for key in sorted(rows_by_week, reverse=True)[:3]
+                    ]
+                    if not recent:
+                        continue
+                    prior_opportunity_by_master[master_id] = {
+                        field: float(statistics.mean(row[field] for row in recent))
+                        for field in ("pass_attempts", "carries", "targets")
+                    }
+            if curated_actual_fallback:
+                fallback_rows = list(self.session.execute(text("""
+                    SELECT player_master_id, to_jsonb(stats) AS payload
+                    FROM curated_weekly_stats AS stats
+                    WHERE season = :season AND week = :week
+                      AND player_master_id = ANY(:master_ids)
+                """), {"season": season, "week": week, "master_ids": master_ids}).mappings())
+                _apply_curated_showdown_actual_fallback(
+                    fallback_rows, actual_points_by_master, actual_source_by_master,
+                    actual_opportunity_by_master,
+                )
 
         grouped: dict[str, dict[str, CuratedSalary]] = {}
         for row in salary_rows:
@@ -2379,6 +2479,9 @@ class LineupLearningService:
                 or projection_feature_cache.get(flex_row.source_player_key or "")
                 or {}
             )
+            master_id = str(flex_row.player_master_id or "")
+            prior_opportunity = prior_opportunity_by_master.get(master_id, {})
+            actual_opportunity = actual_opportunity_by_master.get(master_id, {})
 
             pool.append(
                 ShowdownPlayerPoolRow(
@@ -2390,6 +2493,8 @@ class LineupLearningService:
                     flex_salary=flex_salary,
                     captain_salary=captain_salary,
                     actual_points=float(points),
+                    actual_source=("raw_nfl_schedule" if position == "DST" else
+                                   actual_source_by_master.get(master_id, "unavailable")),
                     projected_mean_points=float(projected_mean),
                     projected_p90_points=float(projected_p90),
                     game_total_line=_safe_float(context.get("game_total_line")),
@@ -2414,6 +2519,75 @@ class LineupLearningService:
                     team_usage_identity_coverage=float(
                         usage_context.get("identity_coverage") or 0.0
                     ),
+                    pregame_expected_pass_attempts=(
+                        _first_float(
+                            projection_feature.get("pregame_expected_pass_attempts"),
+                            projection_feature.get("expected_qb_attempts"),
+                            prior_opportunity.get("pass_attempts"),
+                        )
+                    ),
+                    pregame_expected_snaps=_safe_float(
+                        projection_feature.get("pregame_expected_snaps")
+                    ),
+                    pregame_expected_routes=_safe_float(
+                        projection_feature.get("pregame_expected_routes")
+                    ),
+                    pregame_expected_carries=_first_float(
+                        projection_feature.get("pregame_expected_carries"),
+                        prior_opportunity.get("carries"),
+                    ),
+                    pregame_expected_targets=_first_float(
+                        projection_feature.get("pregame_expected_targets"),
+                        prior_opportunity.get("targets"),
+                    ),
+                    pregame_carry_share=_safe_float(
+                        projection_feature.get("pregame_carry_share")
+                    ),
+                    pregame_target_share=_safe_float(
+                        projection_feature.get("pregame_target_share")
+                    ),
+                    pregame_red_zone_share=_safe_float(
+                        projection_feature.get("pregame_red_zone_share")
+                    ),
+                    pregame_goal_line_share=_safe_float(
+                        projection_feature.get("pregame_goal_line_share")
+                    ),
+                    offensive_role_importance=_safe_float(
+                        projection_feature.get("offensive_role_importance")
+                    ),
+                    offensive_role_completeness=_safe_float(
+                        projection_feature.get("offensive_role_completeness")
+                    ),
+                    offensive_role_class=(
+                        str(projection_feature.get("offensive_role_class"))
+                        if projection_feature.get("offensive_role_class") is not None
+                        else None
+                    ),
+                    offensive_role_confidence=(
+                        str(projection_feature.get("offensive_role_confidence"))
+                        if projection_feature.get("offensive_role_confidence") is not None
+                        else None
+                    ),
+                    pregame_opportunity_source=(
+                        "projection_feature"
+                        if any(
+                            projection_feature.get(field) is not None
+                            for field in (
+                                "pregame_expected_pass_attempts",
+                                "expected_qb_attempts",
+                                "pregame_expected_carries",
+                                "pregame_expected_targets",
+                            )
+                        )
+                        else "rolling_last3_actual"
+                        if prior_opportunity
+                        else "unavailable"
+                    ),
+                    actual_pass_attempts=float(
+                        actual_opportunity.get("pass_attempts") or 0.0
+                    ),
+                    actual_carries=float(actual_opportunity.get("carries") or 0.0),
+                    actual_targets=float(actual_opportunity.get("targets") or 0.0),
                     player_master_id=flex_row.player_master_id,
                     source_player_key=flex_row.source_player_key,
                 )
@@ -2427,9 +2601,16 @@ class LineupLearningService:
         self,
         *,
         players: list[ShowdownPlayerPoolRow],
+        forced_captain_uid: str | None = None,
+        excluded_lineups: list[ShowdownLineup] | None = None,
     ) -> tuple[ShowdownLineup, float, int] | None:
         if len(players) < 6:
             return None
+
+        player_index = {player.uid: idx for idx, player in enumerate(players)}
+        if forced_captain_uid is not None and forced_captain_uid not in player_index:
+            return None
+        excluded_lineups = excluded_lineups or []
 
         if HAS_PULP:
             captain_vars: dict[int, LpVariable] = {
@@ -2450,6 +2631,8 @@ class LineupLearningService:
             model += lpSum(flex_vars[idx] for idx in range(len(players))) == 5
             for idx in range(len(players)):
                 model += captain_vars[idx] + flex_vars[idx] <= 1
+            if forced_captain_uid is not None:
+                model += captain_vars[player_index[forced_captain_uid]] == 1
             model += lpSum(
                 (int(players[idx].captain_salary) * captain_vars[idx])
                 + (int(players[idx].flex_salary) * flex_vars[idx])
@@ -2462,6 +2645,20 @@ class LineupLearningService:
                     team_map[row.team].append(idx)
             for team_indices in team_map.values():
                 model += lpSum(captain_vars[idx] + flex_vars[idx] for idx in team_indices) <= 5
+
+            for excluded in excluded_lineups:
+                captain_idx = player_index.get(excluded.captain.uid)
+                flex_idx = [
+                    player_index[player.uid]
+                    for player in excluded.flex_players
+                    if player.uid in player_index
+                ]
+                if captain_idx is not None and len(flex_idx) == 5:
+                    model += (
+                        captain_vars[captain_idx]
+                        + lpSum(flex_vars[idx] for idx in flex_idx)
+                        <= 5
+                    )
 
             status = model.solve(PULP_CBC_CMD(msg=False))
             if LpStatus.get(status) != "Optimal":
@@ -2486,15 +2683,47 @@ class LineupLearningService:
                 return None
             return lineup, self._showdown_actual_points(lineup), self._showdown_salary_used(lineup)
 
-        sorted_players = sorted(players, key=lambda row: row.actual_points, reverse=True)
-        if len(sorted_players) < 6:
-            return None
-        captain = sorted_players[0]
-        flex = sorted_players[1:6]
-        lineup = ShowdownLineup(captain=captain, flex_players=flex)
-        if not self._showdown_lineup_satisfies_rules(lineup):
-            return None
-        return lineup, self._showdown_actual_points(lineup), self._showdown_salary_used(lineup)
+        excluded_keys = {self._showdown_lineup_key(lineup) for lineup in excluded_lineups}
+        captains = (
+            [players[player_index[forced_captain_uid]]]
+            if forced_captain_uid is not None
+            else players
+        )
+        best: tuple[ShowdownLineup, float, int] | None = None
+        for captain in captains:
+            flex_pool = [player for player in players if player.uid != captain.uid]
+            for flex in combinations(flex_pool, 5):
+                lineup = ShowdownLineup(captain=captain, flex_players=list(flex))
+                if self._showdown_lineup_key(lineup) in excluded_keys:
+                    continue
+                if not self._showdown_lineup_satisfies_rules(lineup):
+                    continue
+                points = self._showdown_actual_points(lineup)
+                salary = self._showdown_salary_used(lineup)
+                if best is None or points > best[1]:
+                    best = (lineup, points, salary)
+        return best
+
+    def optimize_top_actual_showdown_lineups(
+        self,
+        *,
+        players: list[ShowdownPlayerPoolRow],
+        limit: int,
+    ) -> list[tuple[ShowdownLineup, float, int]]:
+        """Return distinct legal hindsight lineups ordered by actual DK score."""
+
+        results: list[tuple[ShowdownLineup, float, int]] = []
+        excluded: list[ShowdownLineup] = []
+        for _ in range(max(0, int(limit))):
+            result = self.optimize_actual_showdown_lineup(
+                players=players,
+                excluded_lineups=excluded,
+            )
+            if result is None:
+                break
+            results.append(result)
+            excluded.append(result[0])
+        return results
 
     def _generate_showdown_lineups_for_slate(
         self,

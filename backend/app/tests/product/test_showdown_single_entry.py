@@ -1,5 +1,7 @@
 import pytest
+import pandas as pd
 
+from backend.app.product_schemas import OptimizerRunRequest
 from backend.app.product_services.optimizer import OptimizerService
 from backend.app.product_services.showdown_single_entry import select_single_entry_lineups
 
@@ -24,6 +26,37 @@ def lineup(captain="a", mean=100.0, solver=100.0):
     return players
 
 
+def test_multiple_te_showdown_request_candidate_selection_and_final_validation():
+    request = OptimizerRunRequest.model_validate({
+        "season": 2026, "week": 2, "slate": "THURSDAY_NIGHT",
+        "strategy": "showdown_single_entry_portfolio", "contest_format": "showdown",
+        "objective": "gpp", "params": {"enforce_single_te": True},
+    })
+    assert request.params["enforce_single_te"] is False
+    default_request = OptimizerRunRequest.model_validate({
+            "season": 2026, "week": 2, "slate": "THURSDAY_NIGHT",
+            "strategy": "showdown_single_entry_portfolio", "contest_format": "showdown",
+            "objective": "gpp", "params": {},
+        })
+    assert default_request.params["enforce_single_te"] is False
+    positions = ("QB", "TE", "TE", "WR", "WR", "RB", "WR")
+    pool = pd.DataFrame([
+        {"player_id": f"p{index}", "name": f"Player {index}", "position": position,
+         "player_team": "DET" if index < 4 else "BUF", "opponent_team": "BUF" if index < 4 else "DET",
+         "salary": 5000, "projection": 12.0, "p90": 35.0 if position == "TE" else 23.0,
+         "showdown_qb_eligible": position == "QB", "ownership": 10.0}
+        for index, position in enumerate(positions)
+    ])
+    service = OptimizerService.__new__(OptimizerService)
+    candidate = service._solve_lineup(pool, contest_type="captain", enforce_single_te=request.params["enforce_single_te"], include_control_comparison=False)
+    assert candidate is not None
+    assert sum(row["position"] == "TE" for row in candidate) == 2
+    selected, report = select_single_entry_lineups([candidate], num_contests=1)
+    assert all(sum(player["position"] == "TE" for player in row["players"]) == 2 for row in report["candidates"])
+    valid, reason = service._validate_showdown_lineups(selected, requested_lineups=1, max_exposure=1.0, enforce_single_te=request.params["enforce_single_te"])
+    assert valid, reason
+
+
 def test_single_entry_portfolio_can_repeat_the_best_lineup():
     best = lineup()
     weak = lineup(captain="b", mean=80, solver=80)
@@ -37,6 +70,43 @@ def test_single_entry_portfolio_can_repeat_the_best_lineup():
         portfolio_policy=True, allow_duplicate_lineups=True,
     )
     assert valid, reason
+
+
+def test_candidate_objective_terms_and_quality_trade_reconcile_without_retuning():
+    high_quality = lineup(mean=100, solver=100)
+    low_chalk = lineup(captain="b", mean=98, solver=98)
+    for row in high_quality:
+        row["ownership"] = 80.0
+    for row in low_chalk:
+        row["ownership"] = 1.0
+    _, report = select_single_entry_lineups([high_quality, low_chalk], num_contests=1)
+    assert report["candidate_count"] == 2
+    assert report["serialized_candidate_count"] == 2
+    assert len(report["all_candidates"]) == 2
+    assert report["all_candidates"] == report["candidates"]
+    assert report["objective_weights"]["chalk_penalty"] == 0.03
+    for candidate in report["candidates"]:
+        assert candidate["single_entry_score"] == pytest.approx(sum(candidate["objective_contributions"].values()))
+        assert candidate["solver_objective"] == pytest.approx(sum(candidate["solver_objective_components"].values()))
+        trade = candidate["quality_sacrifice_for_chalk"]
+        assert trade["mean_loss_vs_best_mean"] >= 0
+        assert trade["p90_loss_vs_best_p90"] >= 0
+        assert "chalk_objective_gain_vs_best_quality" in trade
+        assert candidate["objective_contributions"]["duplication_uniqueness"] == 0
+        assert candidate["objective_contributions"]["script"] == 0
+
+
+def test_single_entry_persists_complete_pool_beyond_report_limit():
+    candidates = [lineup(captain=captain, mean=100 - index, solver=100 - index)
+                  for index, captain in enumerate(("a", "b", "c", "d", "e", "f"))]
+    _, report = select_single_entry_lineups(
+        candidates, num_contests=1, report_candidate_limit=2,
+    )
+    assert len(report["candidates"]) == 2
+    assert report["candidate_count"] == 6
+    assert report["serialized_candidate_count"] == 6
+    assert len(report["all_candidates"]) == 6
+    assert [row["rank"] for row in report["all_candidates"]] == list(range(1, 7))
 
 
 def test_close_alternate_may_cover_different_captain():

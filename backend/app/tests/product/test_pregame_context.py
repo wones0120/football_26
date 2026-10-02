@@ -140,6 +140,33 @@ def test_salary_player_pool_applies_status_and_current_roster_gate():
     assert pool[1]["player_status"] == "Q"
 
 
+def test_salary_player_pool_keeps_rows_without_team_roster_evidence():
+    pool = _filter_salary_player_pool(
+        [
+            {
+                "player_id": "lar-qb",
+                "player_display_name": "LAR Quarterback",
+                "team": "LAR",
+                "position": "QB",
+                "player_status": None,
+                "roster_status": None,
+                "roster_evidence_available": False,
+            },
+            {
+                "player_id": "nyg-qb",
+                "player_display_name": "NYG Quarterback",
+                "team": "NYG",
+                "position": "QB",
+                "player_status": None,
+                "roster_status": "ACT",
+                "roster_evidence_available": True,
+            },
+        ]
+    )
+
+    assert {row["player_id"] for row in pool} == {"lar-qb", "nyg-qb"}
+
+
 def test_context_schema_validates_expected_opportunity_fields():
     context = PregamePlayerContextInput(
         player_id="canonical-1",

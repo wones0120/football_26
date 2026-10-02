@@ -8,6 +8,8 @@ from typing import Any, Iterable
 
 import numpy as np
 
+from .schedule_context import nflverse_team_market_context
+
 
 ELIGIBLE_POSITIONS = {"QB", "RB", "WR", "TE"}
 DEFAULT_PRIOR_STRENGTH = 5.0
@@ -341,14 +343,10 @@ def game_context_by_team(schedule_rows: Iterable[Any]) -> dict[str, dict[str, fl
             )
         except (TypeError, ValueError):
             home_spread = None
-        home_context: dict[str, float] = {}
-        away_context: dict[str, float] = {}
-        if total_line is not None:
-            home_context["game_total_line"] = total_line
-            away_context["game_total_line"] = total_line
-        if home_spread is not None:
-            home_context["team_spread_line"] = home_spread
-            away_context["team_spread_line"] = -home_spread
+        home_context, away_context = nflverse_team_market_context(
+            total_line=total_line,
+            home_margin=home_spread,
+        )
         context[home_team] = home_context
         context[away_team] = away_context
     return context

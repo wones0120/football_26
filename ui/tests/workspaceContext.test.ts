@@ -2,10 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  ACTIVE_SLATE_CONTEXT_STORAGE_KEY,
   DEFAULT_SLATE,
   SLATE_OPTIONS,
   normalizeSlateId,
+  parsePersistedActiveSlateContext,
   researchSlateId,
+  serializeActiveSlateContext,
   slateContextKey,
   updateRunSelection,
   type PersistedRunSelections,
@@ -20,6 +23,24 @@ test("starts the 2026 Week 1 slate menu with Wednesday night", () => {
 test("normalizes shell and research slate identifiers at the workspace boundary", () => {
   assert.equal(normalizeSlateId(" sunday main "), "SUNDAY_MAIN");
   assert.equal(researchSlateId("SUNDAY_MAIN"), "sunday_main");
+});
+
+test("round-trips the active season, week, and slate through browser storage", () => {
+  const stored = serializeActiveSlateContext({ season: 2026, week: 2, slate: "sunday main" });
+
+  assert.equal(ACTIVE_SLATE_CONTEXT_STORAGE_KEY, "football-26-active-slate-context");
+  assert.deepEqual(parsePersistedActiveSlateContext(stored), {
+    season: 2026,
+    week: 2,
+    slate: "SUNDAY_MAIN",
+  });
+});
+
+test("rejects malformed or unsupported saved slate contexts", () => {
+  assert.equal(parsePersistedActiveSlateContext(null), null);
+  assert.equal(parsePersistedActiveSlateContext("not-json"), null);
+  assert.equal(parsePersistedActiveSlateContext('{"season":2026,"week":0,"slate":"SUNDAY_MAIN"}'), null);
+  assert.equal(parsePersistedActiveSlateContext('{"season":2026,"week":2,"slate":"UNKNOWN"}'), null);
 });
 
 test("retains persisted run selections independently for each slate scope", () => {

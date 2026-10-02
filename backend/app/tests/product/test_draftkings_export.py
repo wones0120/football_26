@@ -76,6 +76,16 @@ class DraftKingsExportTests(unittest.TestCase):
         rows = list(csv.reader(io.StringIO(content.decode())))
         self.assertEqual(rows[1], ["101", "102", "106", "100", "103", "107", "104", "108", "105"])
 
+    def test_direct_classic_export_accepts_explicit_flex_slot(self):
+        positions = ["QB", "RB", "RB", "WR", "WR", "WR", "TE", "WR", "DST"]
+        lineup = [{"player_id": f"canonical-{i}", "dk_player_id": str(100 + i),
+                   "position": position, "roster_position": "FLEX" if i == 7 else position,
+                   "salary": 5000} for i, position in enumerate(positions)]
+        _, _, content = DraftKingsExportService.build_lineup_download(
+            contest_format="classic", run_id="run", lineups=[lineup])
+        rows = list(csv.reader(io.StringIO(content.decode())))
+        self.assertEqual(rows[1], [str(100 + i) for i in range(9)])
+
     def test_direct_export_splits_at_500_without_losing_lineups(self):
         filename, mime, content = DraftKingsExportService.build_lineup_download(
             contest_format="showdown", run_id="run", lineups=[self.raw_showdown(i * 10) for i in range(501)])

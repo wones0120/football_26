@@ -29,7 +29,7 @@ from .target_schema import validate_target_schema
 
 logger = logging.getLogger(__name__)
 
-OWNERSHIP_MODEL_ID = "slate_aware_ownership_v1"
+OWNERSHIP_MODEL_ID = "slate_aware_ownership_v2_prelock"
 OWNERSHIP_TARGET = "actual_ownership"
 OWNERSHIP_NUMERIC_FEATURES = [
     "salary",
@@ -229,6 +229,31 @@ def _ownership_design_matrices(
     return design.iloc[: len(train_rows)].copy(), design.iloc[len(train_rows) :].copy()
 
 
+def prelock_projection_context(
+    projections: pd.DataFrame, kickoffs: pd.DataFrame, *,
+    target_season: int, target_week: int, target_slate: str,
+) -> pd.DataFrame:
+    """Use historical projection features only when created before that game."""
+    if projections.empty:
+        return projections.copy()
+    frame = projections.copy()
+    frame["created_at"] = pd.to_datetime(frame["created_at"], errors="coerce", utc=True)
+    frame["data_cutoff_at"] = pd.to_datetime(frame["data_cutoff_at"], errors="coerce", utc=True)
+    if kickoffs.empty:
+        frame["kickoff_at"] = pd.NaT
+    else:
+        games = kickoffs[["game_id", "kickoff_at"]].drop_duplicates("game_id")
+        games["kickoff_at"] = pd.to_datetime(games["kickoff_at"], errors="coerce", utc=True)
+        frame = frame.merge(games, on="game_id", how="left", validate="many_to_one")
+    target = ((frame["season"] == target_season) & (frame["week"] == target_week)
+              & frame["slate"].eq(_normalized_slate(target_slate)))
+    available = (frame["created_at"].notna() & frame["data_cutoff_at"].notna()
+                 & frame["kickoff_at"].notna()
+                 & (frame["data_cutoff_at"] <= frame["created_at"])
+                 & (frame["created_at"] < frame["kickoff_at"]))
+    return frame.loc[target | available].drop(columns="kickoff_at")
+
+
 def generate_walk_forward_ownership_predictions(
     feature_frame: pd.DataFrame,
     *,
@@ -336,6 +361,7 @@ class OwnershipLoadResult:
     ownership_run_id: str | None = None
     data_cutoff_at: datetime | None = None
     model_metrics: dict[str, Any] | None = None
+    model_id: str | None = None
 
 
 class OwnershipService:
@@ -472,6 +498,7 @@ class OwnershipService:
         week: int,
         slate: str,
         data_cutoff_at: datetime | None = None,
+        projection_run_id: str | None = None,
     ) -> pd.DataFrame:
         """Load observed ownership plus point-in-time salary/projection context."""
         if not inspect(self.engine).has_table(self.OWNERSHIP_TABLE):
@@ -480,13 +507,20 @@ class OwnershipService:
         if not inspector.has_table("snapshot_salary", schema="target"):
             return pd.DataFrame()
 
-        params: dict[str, Any] = {"season": season, "week": week}
+        params: dict[str, Any] = {
+            "season": season,
+            "week": week,
+            "target_slate": _normalized_slate(slate),
+            "projection_run_id": projection_run_id,
+        }
         salary_cutoff_clause = ""
         projection_cutoff_clause = ""
+        latest_projection_cutoff_clause = ""
         if data_cutoff_at is not None:
             params["data_cutoff_at"] = data_cutoff_at
             salary_cutoff_clause = " AND as_of <= :data_cutoff_at"
             projection_cutoff_clause = " AND created_at <= :data_cutoff_at"
+            latest_projection_cutoff_clause = " AND latest.created_at <= :data_cutoff_at "
 
         with self.engine.begin() as conn:
             ownership = pd.read_sql(
@@ -514,11 +548,22 @@ class OwnershipService:
             projections = (
                 pd.read_sql(
                     text(
-                        "SELECT season, week, slate_id AS slate, player_id, mean AS projection_mean, "
-                        "p90 AS projection_p90, created_at "
+                        "SELECT season, week, slate_id AS slate, player_id, game_id, mean AS projection_mean, "
+                        "p90 AS projection_p90, created_at, data_cutoff_at "
                         "FROM target.player_projection projection "
                         "WHERE (season < :season OR (season = :season AND week <= :week)) "
-                        "AND projection.projection_run_id = COALESCE(("
+                        "AND projection.projection_run_id = CASE "
+                        "WHEN projection.season = :season AND projection.week = :week "
+                        "AND UPPER(COALESCE(projection.slate_id, 'DEFAULT')) = :target_slate "
+                        "THEN COALESCE(:projection_run_id, ("
+                        "SELECT latest.projection_run_id "
+                        "FROM target.projection_run latest "
+                        "WHERE latest.season = :season AND latest.week = :week "
+                        "AND UPPER(latest.slate_id) = :target_slate "
+                        "AND latest.status = 'completed' AND latest.row_count > 0 "
+                        + latest_projection_cutoff_clause
+                        + "ORDER BY latest.created_at DESC, latest.projection_run_id DESC "
+                        "LIMIT 1)) ELSE COALESCE(("
                         "SELECT active.projection_run_id "
                         "FROM target.active_projection_run active "
                         "WHERE active.season = projection.season "
@@ -533,7 +578,7 @@ class OwnershipService:
                         "COALESCE(UPPER(projection.slate_id), 'DEFAULT') "
                         "ORDER BY fallback.created_at DESC, fallback.projection_run_id "
                         "LIMIT 1"
-                        "))"
+                        ")) END"
                         + projection_cutoff_clause
                     ),
                     conn,
@@ -541,6 +586,16 @@ class OwnershipService:
                 )
                 if inspector.has_table("player_projection", schema="target")
                 else pd.DataFrame()
+            )
+            kickoffs = pd.read_sql(
+                text("""
+                    SELECT game_id,
+                           MIN(((raw_row_json ->> 'gameday') || ' ' || kickoff)::timestamp
+                               AT TIME ZONE 'America/New_York') AS kickoff_at
+                    FROM public.raw_nfl_schedule
+                    WHERE raw_row_json ->> 'gameday' IS NOT NULL
+                    GROUP BY game_id
+                """), conn,
             )
             players = (
                 pd.read_sql(
@@ -563,6 +618,10 @@ class OwnershipService:
         if not projections.empty:
             projections["slate"] = projections["slate"].map(_normalized_slate)
             projections["player_id"] = projections["player_id"].astype(str)
+            projections = prelock_projection_context(
+                projections, kickoffs, target_season=season, target_week=week,
+                target_slate=slate,
+            )
         ownership["player_id"] = ownership.get("player_master_id", ownership["player_id"]).fillna(
             ownership["player_id"]
         ).astype(str)
@@ -603,14 +662,13 @@ class OwnershipService:
         )
         if projections.empty:
             projection_context = pd.DataFrame(
-                columns=["season", "week", "player_id", "projection_mean", "projection_p90"]
+                columns=["season", "week", "slate", "player_id", "projection_mean", "projection_p90"]
             )
         else:
-            projections["created_at"] = pd.to_datetime(projections["created_at"], errors="coerce", utc=True)
             projection_context = (
                 projections.sort_values("created_at")
-                .drop_duplicates(["season", "week", "player_id"], keep="last")
-                [["season", "week", "player_id", "projection_mean", "projection_p90"]]
+                .drop_duplicates(["season", "week", "slate", "player_id"], keep="last")
+                [["season", "week", "slate", "player_id", "projection_mean", "projection_p90"]]
             )
 
         history = ownership.merge(
@@ -625,7 +683,7 @@ class OwnershipService:
             suffixes=("", "_fallback"),
         ).merge(
             projection_context,
-            on=["season", "week", "player_id"],
+            on=["season", "week", "slate", "player_id"],
             how="left",
         )
         for column in ("salary", "salary_roster_position", "position", "dimension_position"):
@@ -654,8 +712,9 @@ class OwnershipService:
             projection_context.loc[
                 (projection_context["season"] == season)
                 & (projection_context["week"] == week)
+                & (projection_context["slate"] == target_slate)
             ],
-            on=["season", "week", "player_id"],
+            on=["season", "week", "slate", "player_id"],
             how="left",
         )
         target["roster_position"] = target["salary_roster_position"]
@@ -713,7 +772,11 @@ class OwnershipService:
                                 "random_state": 42,
                                 "numeric_features": OWNERSHIP_NUMERIC_FEATURES,
                                 "categorical_features": OWNERSHIP_CATEGORICAL_FEATURES,
-                                "leakage_policy": "training slates strictly before target season/week",
+                                "leakage_policy": (
+                                    "training slates strictly before target season/week; "
+                                    "historical projection features must match slate, have a "
+                                    "cutoff no later than creation, and predate game kickoff"
+                                ),
                             },
                             sort_keys=True,
                         ),
@@ -766,6 +829,7 @@ class OwnershipService:
         slate: str | None = None,
         positions: list[str] | None = None,
         data_cutoff_at: datetime | None = None,
+        projection_run_id: str | None = None,
     ) -> OwnershipLoadResult:
         """Fit and persist a leakage-safe slate-aware ownership model."""
         if not slate:
@@ -784,6 +848,7 @@ class OwnershipService:
             week=week,
             slate=slate,
             data_cutoff_at=cutoff,
+            projection_run_id=projection_run_id,
         )
         if model_rows.empty:
             return OwnershipLoadResult(
@@ -822,6 +887,13 @@ class OwnershipService:
 
         walk_forward = generate_walk_forward_ownership_predictions(training_rows)
         metrics = ownership_model_metrics(walk_forward)
+        metrics["input_provenance"] = {
+            "historical_projection_policy": (
+                "same slate; cutoff no later than creation; created before game kickoff"
+            ),
+            "training_rows": len(training_rows),
+            "rows_with_projection_feature": int(training_rows["projection_mean"].gt(0).sum()),
+        }
         X_train, X_target = _ownership_design_matrices(training_rows, target_rows)
         model = GradientBoostingRegressor(random_state=42, loss="huber")
         model.fit(X_train, training_rows[OWNERSHIP_TARGET].astype(float))
@@ -890,6 +962,7 @@ class OwnershipService:
             ownership_run_id=ownership_run_id,
             data_cutoff_at=cutoff,
             model_metrics=metrics,
+            model_id=OWNERSHIP_MODEL_ID,
         )
 
     def analyze_past_slate(self, season: int, week: int, slate: str, path: str, top_n: int = 100) -> dict:

@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
+from Database.dst import normalize_team as normalize_nfl_team
 from ..models import PlayerAlias, PlayerMaster
 
 
@@ -30,7 +31,7 @@ def normalize_name(value: str | None) -> str:
 def normalize_team(value: str | None) -> str | None:
     if value is None:
         return None
-    cleaned = value.strip().upper()
+    cleaned = normalize_nfl_team(value)
     return cleaned or None
 
 
@@ -232,8 +233,32 @@ def find_player_master_id(
                 )
             )
         ).scalars().all()
-        if len(alias_exact) == 1:
-            return alias_exact[0].player_master_id, "alias_name_team_position"
+        alias_master_ids = {alias.player_master_id for alias in alias_exact}
+        if len(alias_master_ids) == 1:
+            return alias_master_ids.pop(), "alias_name_team_position"
+        if len(alias_master_ids) > 1:
+            return None, "ambiguous_alias_name_team_position"
+
+    if norm_name and norm_team and norm_position:
+        cross_source_aliases = session.execute(
+            select(PlayerAlias).where(
+                and_(
+                    PlayerAlias.normalized_alias == norm_name,
+                    PlayerAlias.team == norm_team,
+                    PlayerAlias.position == norm_position,
+                )
+            )
+        ).scalars().all()
+        cross_source_master_ids = {
+            alias.player_master_id for alias in cross_source_aliases
+        }
+        if len(cross_source_master_ids) == 1:
+            return (
+                cross_source_master_ids.pop(),
+                "alias_cross_source_name_team_position",
+            )
+        if len(cross_source_master_ids) > 1:
+            return None, "ambiguous_cross_source_name_team_position"
 
     if norm_name and norm_team and norm_position:
         master_exact = session.execute(

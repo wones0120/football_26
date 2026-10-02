@@ -19,7 +19,7 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from Database.dst import repair_dst_identities
+from Database.dst import canonical_team_sql, repair_dst_identities
 from Database.player_identity import repair_salary_identities
 
 
@@ -38,17 +38,6 @@ def qident(identifier: str) -> str:
     if not IDENT_RE.match(identifier):
         raise ValueError(f"Unsafe SQL identifier: {identifier!r}")
     return f'"{identifier}"'
-
-
-def canonical_team_sql(expression: str) -> str:
-    """Render the shared modern-franchise normalization for trusted SQL expressions."""
-    return (
-        f"CASE upper(trim({expression})) "
-        "WHEN 'LA' THEN 'LAR' WHEN 'STL' THEN 'LAR' "
-        "WHEN 'SD' THEN 'LAC' WHEN 'JAC' THEN 'JAX' "
-        "WHEN 'WSH' THEN 'WAS' WHEN 'OAK' THEN 'LV' "
-        f"ELSE upper(trim({expression})) END"
-    )
 
 
 def build_connection_url(args: argparse.Namespace) -> URL:

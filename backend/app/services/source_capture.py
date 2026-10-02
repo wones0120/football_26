@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import csv
+import errno
 import hashlib
 import io
 import json
 import os
 import re
+from time import sleep
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -32,13 +34,17 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 SAFE_COMPONENT_RE = re.compile(r"[^a-zA-Z0-9._-]+")
 NFLREADPY_DATASETS = (
     "schedules",
+    "weekly_stats",
     "weekly_rosters",
+    "depth_charts",
     "injuries",
     "snap_counts",
 )
 NFLREADPY_LOADERS = {
     "schedules": "load_schedules",
+    "weekly_stats": "load_player_stats",
     "weekly_rosters": "load_rosters_weekly",
+    "depth_charts": "load_depth_charts",
     "injuries": "load_injuries",
     "snap_counts": "load_snap_counts",
 }
@@ -136,13 +142,27 @@ def _safe_component(value: str | None, fallback: str) -> str:
 
 
 def _sha256_file(path: Path) -> tuple[str, int]:
-    digest = hashlib.sha256()
-    byte_count = 0
-    with path.open("rb") as handle:
-        while chunk := handle.read(1024 * 1024):
-            digest.update(chunk)
-            byte_count += len(chunk)
-    return digest.hexdigest(), byte_count
+    def read() -> tuple[str, int]:
+        digest = hashlib.sha256()
+        byte_count = 0
+        with path.open("rb") as handle:
+            while chunk := handle.read(1024 * 1024):
+                digest.update(chunk)
+                byte_count += len(chunk)
+        return digest.hexdigest(), byte_count
+
+    return _retry_deadlocked_read(read)
+
+
+def _retry_deadlocked_read(read: Callable[[], Any]) -> Any:
+    """Retry transient macOS file-provider EDEADLK without skipping verification."""
+    for attempt in range(6):
+        try:
+            return read()
+        except OSError as exc:
+            if exc.errno != errno.EDEADLK or attempt == 5:
+                raise
+            sleep(min(0.5 * 2 ** attempt, 8))
 
 
 def _sha256_bytes(payload: bytes) -> str:
@@ -243,7 +263,8 @@ def verify_snapshot_artifact(snapshot: SourceSnapshot) -> None:
     if not manifest_path.is_file():
         raise SnapshotIntegrityError(f"Snapshot manifest is missing: {manifest_path}")
     try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest = json.loads(_retry_deadlocked_read(
+            lambda: manifest_path.read_text(encoding="utf-8")))
     except (OSError, json.JSONDecodeError) as exc:
         raise SnapshotIntegrityError(f"Snapshot manifest is invalid: {manifest_path}") from exc
     expected_manifest_values = {
@@ -827,7 +848,10 @@ def fetch_nflreadpy_dataset(
         ),
     }
     try:
-        frame = _coerce_dataframe(loader(seasons=[season]))
+        if dataset == "weekly_stats":
+            frame = _coerce_dataframe(loader(seasons=[season], summary_level="week"))
+        else:
+            frame = _coerce_dataframe(loader(seasons=[season]))
     except ValueError as exc:
         season_range = NFLREADPY_SEASON_RANGE_RE.search(str(exc))
         allow_weekly_roster_fallback = (
@@ -847,7 +871,7 @@ def fetch_nflreadpy_dataset(
     season_column = "season" if "season" in frame.columns else None
     if season_column:
         frame = frame[pd.to_numeric(frame[season_column], errors="coerce") == season]
-    if week is not None:
+    if week is not None and dataset != "depth_charts":
         if "week" not in frame.columns:
             raise RuntimeError(f"nflreadpy {dataset} output has no week column")
         frame = frame[pd.to_numeric(frame["week"], errors="coerce") == week]

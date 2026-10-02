@@ -51,7 +51,7 @@ export function ContestWorkflow({
   onOpenModelWorkbench,
   onOpenOperations,
 }: Props) {
-  const [directory, setDirectory] = useState("~/Downloads");
+  const [directory, setDirectory] = useState("~/NFL");
   const [recursive, setRecursive] = useState(false);
   const [dryRun, setDryRun] = useState(true);
   const [batch, setBatch] = useState<BatchResult | null>(null);
@@ -195,7 +195,7 @@ export function ContestWorkflow({
       <section className="contest-grid">
         <article className="contest-card import-card">
           <div className="contest-title"><span>Step 1</span><h2>Import files</h2><p>Scan a local directory for salaries, standings, and entry templates.</p></div>
-          <label className="wide-label">Directory<input value={directory} onChange={(event) => setDirectory(event.target.value)} placeholder="~/Downloads" /></label>
+          <label className="wide-label">Directory<input value={directory} onChange={(event) => setDirectory(event.target.value)} placeholder="~/NFL" /></label>
           <div className="contest-checks">
             <label><input type="checkbox" checked={recursive} onChange={(event) => setRecursive(event.target.checked)} /> Include subdirectories</label>
             <label><input type="checkbox" checked={dryRun} onChange={(event) => setDryRun(event.target.checked)} /> Dry run first</label>

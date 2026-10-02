@@ -1,8 +1,8 @@
 from unittest.mock import MagicMock, patch
 
-from backend.app.api.product_routes import load_ownership
-from backend.app.product_schemas import OwnershipLoadRequest
-from backend.app.product_services.ownership import OwnershipLoadResult
+from backend.app.api.product_routes import load_ownership, run_ownership_model
+from backend.app.product_schemas import OwnershipLoadRequest, OwnershipRunRequest
+from backend.app.product_services.ownership import OWNERSHIP_MODEL_ID, OwnershipLoadResult
 
 
 def test_load_ownership_normalizes_missing_model_metrics_in_response():
@@ -33,3 +33,18 @@ def test_load_ownership_normalizes_missing_model_metrics_in_response():
     assert response.rows_written == 55
     assert response.model_metrics == {}
     assert response.target_persisted is True
+
+
+def test_ownership_run_response_exposes_model_version():
+    service = MagicMock()
+    service.run_projection_model.return_value = OwnershipLoadResult(
+        season=2026, week=3, slate="SUNDAY_MAIN", rows_written=100,
+        message="Wrote ownership projections", ownership_run_id="run-123",
+        target_persisted=True, model_metrics={"mae": 3.17},
+        model_id=OWNERSHIP_MODEL_ID,
+    )
+    response = run_ownership_model(
+        OwnershipRunRequest(season=2026, week=3, slate="SUNDAY_MAIN"), service,
+    )
+    assert response.model_id == "slate_aware_ownership_v2_prelock"
+    assert response.ownership_run_id == "run-123"

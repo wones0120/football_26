@@ -1,4 +1,6 @@
 import unittest
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 from Database.player_identity import (
     MasterIdentity,
@@ -31,7 +33,27 @@ class PlayerIdentityTests(unittest.TestCase):
         )
 
         self.assertEqual(decision.player_id, "aaron-jones")
-        self.assertEqual(decision.reason, "unique_name")
+        self.assertEqual(decision.reason, "unique_position")
+
+    def test_name_only_match_remains_unresolved(self) -> None:
+        decision = choose_identity(
+            player_name="Josh Allen", team="BUF", position="QB",
+            masters=[MasterIdentity(player_id="wrong-player", full_name="Josh Allen", team="ARI", position="OL")],
+        )
+        self.assertIsNone(decision.player_id)
+        self.assertEqual(decision.reason, "insufficient_evidence")
+
+    def test_matching_team_does_not_override_known_position_conflict(self) -> None:
+        decision = choose_identity(
+            player_name="Rocco Underwood", team="PHI", position="TE",
+            masters=[MasterIdentity(
+                player_id="long-snapper", full_name="Rocco Underwood",
+                team="PHI", position="LS",
+            )],
+        )
+
+        self.assertIsNone(decision.player_id)
+        self.assertEqual(decision.reason, "insufficient_evidence")
 
     def test_position_breaks_suffix_duplicate_tie(self) -> None:
         masters = [
@@ -102,6 +124,28 @@ class PlayerIdentityTests(unittest.TestCase):
 
         self.assertIsNone(decision.player_id)
         self.assertEqual(decision.reason, "no_match")
+
+    def test_projection_reconciliation_is_scoped_to_one_slate(self) -> None:
+        from backend.app.api.product_routes import reconcile_slate_salary_identities
+        from backend.app.product_schemas import StartingQBRequest
+
+        session = MagicMock()
+        with patch(
+            "backend.app.api.product_routes.repair_salary_identities",
+            return_value=SimpleNamespace(
+                salary_rows_seen=2, salary_rows_resolved=1,
+                salary_rows_quarantined=1,
+            ),
+        ) as repair:
+            result = reconcile_slate_salary_identities(
+                StartingQBRequest(season=2026, week=3, slate="SUNDAY_MAIN"),
+                session=session,
+            )
+        repair.assert_called_once_with(
+            session.get_bind.return_value, season=2026, week=3,
+            slate="SUNDAY_MAIN",
+        )
+        self.assertEqual(result["salary_rows_quarantined"], 1)
 
 
 if __name__ == "__main__":

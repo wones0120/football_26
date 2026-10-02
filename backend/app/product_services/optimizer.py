@@ -5,22 +5,27 @@ from __future__ import annotations
 import uuid
 import math
 import json
-from dataclasses import asdict, dataclass
+import hashlib
+import itertools
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 import logging
+import os
+import re
 
 import pandas as pd
 import numpy as np
 import pulp
 from sqlalchemy import create_engine, text, inspect
-from sqlalchemy.exc import ProgrammingError, ResourceClosedError
+from sqlalchemy.exc import ProgrammingError, ResourceClosedError, SQLAlchemyError
 
 from Database.config import get_connection_string
+from Database.dst import canonical_team_sql, normalize_team
 from Database.operations import ensure_table_columns
 from ..config import get_settings
-from .gpp_optimizer import run_gpp_pipeline, Player as GPPPlayer, GPPOptimizerResult
+from .gpp_optimizer import run_gpp_pipeline, Player as GPPPlayer, GPPOptimizerResult, tag_players
 from .optimizer_control import solve_control, build_comparison
 from .point_in_time import injury_snapshot_cutoff_sql
 from .player_pool_safety import (
@@ -29,6 +34,7 @@ from .player_pool_safety import (
     evaluate_player_pool_safety,
     has_explicit_specialty_role,
     normalize_canonical_player_ids,
+    validate_player_pool_evidence_consistency,
 )
 from .player_context_scoring import score_player_context
 from .lineup_correlation_scoring import (
@@ -40,10 +46,20 @@ from .lineup_correlation_scoring import (
     build_lineup_correlation_terms,
     score_lineup_correlations,
 )
-from .rule_library import StrategyProfile, resolve_strategy_profile
+from .rule_library import CLASSIC_LARGE_GPP_PROFILE_ID, StrategyProfile, resolve_strategy_profile
 from .salary_eligibility import INELIGIBLE_SALARY_STATUSES_SQL
 from .simulations import SimulationService
+from .showdown_portfolio_selection import (
+    candidate_metrics, select_showdown_portfolio, signature as showdown_signature,
+)
+from .showdown_game_scenarios import (
+    DEFAULT_DECISIVE_MARGIN, condition_player_pool, define_game_scenarios,
+)
+from .showdown_captain_optimality import (
+    add_shadow_qb_family_ranks, current_qb_analysis, load_current_qb_prior_features,
+)
 from .target_schema import validate_target_schema
+from .optimizer_effectiveness import candidate_snapshot
 
 
 VALID_CONTEST_FORMATS = {"classic", "showdown"}
@@ -57,6 +73,7 @@ CLASSIC_GPP_BASELINE_STRATEGY_ID = "classic_gpp_baseline_v1"
 CLASSIC_GPP_ADVANCED_STRATEGY_ID = "classic_gpp_slate_aware_v1"
 CLASSIC_HEAD_TO_HEAD_STRATEGY_ID = "classic_head_to_head_v1"
 CLASSIC_LARGE_GPP_STRATEGY_ID = "classic_large_gpp_v1"
+CLASSIC_SMALL_FIELD_GPP_STRATEGY_ID = "classic_small_field_gpp"
 SHOWDOWN_CASH_BASELINE_STRATEGY_ID = "showdown_cash_baseline_v1"
 SHOWDOWN_CASH_QB_CAPTAIN_STACK_STRATEGY_ID = (
     "showdown_cash_qb_captain_stack_v1"
@@ -71,6 +88,8 @@ SHOWDOWN_GPP_CAPTAIN_INFORMED_STRATEGY_ID = (
 SHOWDOWN_GPP_CAPTAIN_INFORMED_V2_STRATEGY_ID = "showdown_gpp_captain_informed_v2"
 SHOWDOWN_SINGLE_ENTRY_GPP_STRATEGY_ID = "showdown_single_entry_gpp"
 SHOWDOWN_SINGLE_ENTRY_PORTFOLIO_STRATEGY_ID = "showdown_single_entry_portfolio"
+SHOWDOWN_THREE_MAX_GPP_STRATEGY_ID = "showdown_3max_gpp"
+SHOWDOWN_SMALL_MAX_GPP_STRATEGY_ID = "showdown_small_max_gpp"
 SHOWDOWN_SINGLE_ENTRY_STRATEGY_IDS = frozenset({
     SHOWDOWN_SINGLE_ENTRY_GPP_STRATEGY_ID,
     SHOWDOWN_SINGLE_ENTRY_PORTFOLIO_STRATEGY_ID,
@@ -84,8 +103,11 @@ SHOWDOWN_GPP_CAPTAIN_INFORMED_STRATEGY_IDS = frozenset(
         SHOWDOWN_GPP_CAPTAIN_INFORMED_V2_STRATEGY_ID,
         SHOWDOWN_GPP_CAPTAIN_INFORMED_STRATEGY_ID,
         *SHOWDOWN_SINGLE_ENTRY_STRATEGY_IDS,
+        SHOWDOWN_THREE_MAX_GPP_STRATEGY_ID,
+        SHOWDOWN_SMALL_MAX_GPP_STRATEGY_ID,
     }
 )
+USER_OPPONENT_PREFERENCE_RULE_ID = "user.preference.opponent_exclusion_v1"
 
 
 @dataclass(frozen=True)
@@ -129,6 +151,18 @@ class OptimizerStrategyConfig:
 
 
 OPTIMIZER_STRATEGIES = {
+    CLASSIC_SMALL_FIELD_GPP_STRATEGY_ID: OptimizerStrategyConfig(
+        strategy_id=CLASSIC_SMALL_FIELD_GPP_STRATEGY_ID,
+        version="v1",
+        contest_format="classic",
+        objective="gpp",
+        engine="small_field_candidate_selector",
+        evidence_status="diagnostic_baseline",
+        description=(
+            "Classic small-field GPP: broad legal candidate pool, existing Classic "
+            "GPP scoring, global lineup selection, and construction diagnostics."
+        ),
+    ),
     CLASSIC_HEAD_TO_HEAD_STRATEGY_ID: OptimizerStrategyConfig(
         strategy_id=CLASSIC_HEAD_TO_HEAD_STRATEGY_ID,
         version="v1",
@@ -259,6 +293,20 @@ OPTIMIZER_STRATEGIES = {
         )
         for strategy_id in SHOWDOWN_SINGLE_ENTRY_STRATEGY_IDS
     },
+    SHOWDOWN_SMALL_MAX_GPP_STRATEGY_ID: OptimizerStrategyConfig(
+        strategy_id=SHOWDOWN_SMALL_MAX_GPP_STRATEGY_ID,
+        version="v1", contest_format="showdown", objective="gpp",
+        engine="global_small_max_candidate_selector",
+        evidence_status="heuristic_unvalidated",
+        description="Showdown small-max GPP lineup selection with optional contest-backed entry-count heuristic.",
+    ),
+    SHOWDOWN_THREE_MAX_GPP_STRATEGY_ID: OptimizerStrategyConfig(
+        strategy_id=SHOWDOWN_THREE_MAX_GPP_STRATEGY_ID,
+        version="v1", contest_format="showdown", objective="gpp",
+        engine="global_three_max_candidate_selector",
+        evidence_status="heuristic_unvalidated",
+        description="One-contest Showdown 3-max GPP global lineup portfolio and entry-count heuristic.",
+    ),
 }
 
 
@@ -269,9 +317,11 @@ def showdown_optimizer_rules(strategy: str) -> list[dict]:
         SHOWDOWN_GPP_CAPTAIN_INFORMED_V2_STRATEGY_ID,
         SHOWDOWN_GPP_CAPTAIN_INFORMED_STRATEGY_ID,
         *SHOWDOWN_SINGLE_ENTRY_STRATEGY_IDS,
+        SHOWDOWN_THREE_MAX_GPP_STRATEGY_ID,
+        SHOWDOWN_SMALL_MAX_GPP_STRATEGY_ID,
     }:
         return []
-    rules = [] if strategy in ({SHOWDOWN_GPP_CAPTAIN_INFORMED_STRATEGY_ID} | SHOWDOWN_SINGLE_ENTRY_STRATEGY_IDS) else [
+    rules = [] if strategy in ({SHOWDOWN_GPP_CAPTAIN_INFORMED_STRATEGY_ID, SHOWDOWN_THREE_MAX_GPP_STRATEGY_ID, SHOWDOWN_SMALL_MAX_GPP_STRATEGY_ID} | SHOWDOWN_SINGLE_ENTRY_STRATEGY_IDS) else [
         {
             "rule_id": SHOWDOWN_QB_CAPTAIN_RECEIVER_RULE_ID,
             "rule_type": "hard_constraint",
@@ -285,7 +335,7 @@ def showdown_optimizer_rules(strategy: str) -> list[dict]:
             "source": "user_required",
         }
     ]
-    if strategy == SHOWDOWN_GPP_CAPTAIN_INFORMED_STRATEGY_ID or strategy in SHOWDOWN_SINGLE_ENTRY_STRATEGY_IDS:
+    if strategy in {SHOWDOWN_GPP_CAPTAIN_INFORMED_STRATEGY_ID, SHOWDOWN_THREE_MAX_GPP_STRATEGY_ID, SHOWDOWN_SMALL_MAX_GPP_STRATEGY_ID} or strategy in SHOWDOWN_SINGLE_ENTRY_STRATEGY_IDS:
         rules.extend(
             [
                 {"rule_id": "showdown_require_starting_qb_v1", "rule_type": "hard_constraint", "trigger": {"portfolio_size_max": 5}, "requirement": {"minimum_starting_qbs": 1}, "source": "user_required"},
@@ -317,6 +367,20 @@ def resolve_optimizer_strategy(
     def with_rule_profile(payload: dict) -> dict:
         payload["rule_profile_id"] = rule_profile.profile_id
         payload["rule_profile"] = rule_profile.to_dict()
+        if payload["strategy_id"] == CLASSIC_SMALL_FIELD_GPP_STRATEGY_ID:
+            if rule_profile.profile_id != CLASSIC_LARGE_GPP_PROFILE_ID:
+                raise ValueError("Classic small-field strategy has an unexpected correlation policy")
+            payload["policy_alignment"] = {
+                "status": "borrowed_unvalidated",
+                "requested_strategy": CLASSIC_SMALL_FIELD_GPP_STRATEGY_ID,
+                "applied_profile_id": rule_profile.profile_id,
+                "warning": "Small-field strategy borrows the Classic large-GPP correlation policy; no small-field-specific policy has passed chronological validation.",
+            }
+        else:
+            payload["policy_alignment"] = {
+                "status": "aligned", "requested_strategy": payload["strategy_id"],
+                "applied_profile_id": rule_profile.profile_id,
+            }
         return payload
 
     if contest_format == "classic" and objective in {"cash", "gpp"}:
@@ -903,10 +967,11 @@ def classify_showdown_game_script(lineup: list[dict]) -> dict:
         return {
             "script_id": "shootout",
             "kind": "shootout",
-            "label": "Shootout",
+            "structure_family_id": "two_sided_pass_stack",
+            "label": "Two-sided pass stack",
             "reason_codes": ["both_teams_qb_pass_catcher"],
             "team_summaries": summaries,
-            "explanation": "Both offenses include a quarterback with at least one pass catcher.",
+            "explanation": "The lineup includes a quarterback and pass catcher from each team; this does not classify the game environment.",
         }
 
     pass_led = [
@@ -982,6 +1047,59 @@ def classify_showdown_game_script(lineup: list[dict]) -> dict:
     }
 
 
+def summarize_showdown_game_environment(lineup: list[dict]) -> dict:
+    """Preserve the team's market context beside the selected game script."""
+    teams: dict[str, dict] = {}
+    for row in lineup:
+        team = str(row.get("player_team") or row.get("team") or "").upper()
+        if not team:
+            continue
+        summary = teams.setdefault(team, {
+            "team": team, "players": 0, "projected_mean": 0.0,
+            "selector_contribution": 0.0, "spread": None,
+            "implied_total": None, "conditioned_spread": None,
+            "conditioned_implied_total": None,
+        })
+        summary["players"] += 1
+        summary["projected_mean"] += _safe_float(row.get("projection"))
+        summary["selector_contribution"] += _safe_float(row.get("objective_score"))
+        for field, output in (("team_spread_line", "spread"),
+                              ("team_implied_total", "implied_total")):
+            value = row.get(f"baseline_{field}", row.get(field))
+            if value is not None and pd.notna(value):
+                summary[output] = float(value)
+            conditioned = row.get(field)
+            if conditioned is not None and pd.notna(conditioned):
+                summary[f"conditioned_{output}"] = float(conditioned)
+    ordered = sorted(teams.values(), key=lambda item: (-item["players"], item["team"]))
+    underdog_heavy = any(
+        row["players"] >= 4 and row["spread"] is not None and row["spread"] > 0
+        for row in ordered
+    )
+    game_totals = [
+        float(row["game_total_line"]) for row in lineup
+        if row.get("game_total_line") is not None and pd.notna(row["game_total_line"])
+    ]
+    return {
+        "team_counts": " / ".join(f"{row['team']} {row['players']}" for row in ordered),
+        "teams": ordered,
+        "game_total": game_totals[0] if game_totals else None,
+        "market_source": next((row.get("market_source_system") for row in lineup
+                               if row.get("market_source_system")), None),
+        "market_observed_at": next((row.get("market_observed_at") for row in lineup
+                                    if row.get("market_observed_at")), None),
+        "underdog_heavy": underdog_heavy,
+        "explanation": (
+            "Underdog-heavy lineup: selected player projections, salary fit, and "
+            "scored stack/context terms outweighed the market underdog signal. "
+            "Review the per-team mean and selector contributions below."
+            if underdog_heavy else
+            "Team count and market context describe the selected lineup; "
+            "they are not additional optimizer rewards."
+        ),
+    }
+
+
 def summarize_showdown_portfolio_exposure(
     lineups: list[list[dict]],
     *,
@@ -1049,6 +1167,8 @@ def summarize_showdown_portfolio_exposure(
         "requested_lineups": requested_lineups,
         "generated_lineups": generated_lineups,
         "underfilled": generated_lineups < requested_lineups,
+        "cap_denominator": requested_lineups,
+        "realized_exposure_denominator": generated_lineups,
         "configured_captain_cap": float(exposure_rates.get("captain", 0.60)),
         "captain_maximum_appearances": max(
             1,
@@ -1067,7 +1187,7 @@ def add_showdown_lineup_chalk_metrics(lineups: list[list[dict]]) -> list[dict]:
     for lineup in lineups:
         ownership = [row.get("ownership") for row in lineup]
         available = len(ownership) == len(lineup) and all(
-            value is not None and _safe_float(value) > 0 for value in ownership
+            value is not None and 0 < _safe_float(value) <= 100 for value in ownership
         )
         log_probability = (
             sum(math.log(min(1.0, _safe_float(value) / 100.0)) for value in ownership)
@@ -1078,11 +1198,27 @@ def add_showdown_lineup_chalk_metrics(lineups: list[list[dict]]) -> list[dict]:
         summaries.append({
             "metric_id": "slot_ownership_log_product_v1",
             "ownership_available": available,
+            "salary_left_unused": SALARY_CAP - sum(_safe_float(row.get("salary")) for row in lineup),
+            "captain_ownership": next(
+                (row.get("ownership") for row in lineup if row.get("roster_position") == "CPT"), None
+            ),
+            "flex_ownership_sum": (
+                sum(_safe_float(row.get("ownership")) for row in lineup
+                    if row.get("roster_position") == "FLEX") if available else None
+            ),
+            "very_low_owned_count": (
+                sum(_safe_float(value) < 5.0 for value in ownership) if available else None
+            ),
+            "missing_ownership_players": [
+                str(row.get("name") or row.get("player_name") or row.get("player_id"))
+                for row in lineup if row.get("ownership") is None
+            ],
             "log_probability": log_probability,
             "probability_product": math.exp(log_probability) if log_probability is not None else None,
             "relative_chalk_score": None,
             "optimization_weight": 0.0,
-            "interpretation": "Relative duplication-risk indicator; not a predicted duplicate count.",
+            "structurally_common": "unavailable_without_field_lineup_model",
+            "interpretation": "Ownership product is a relative chalk signal, not a duplication probability or predicted duplicate count.",
         })
     chalkiest_log = max(available_logs, default=None)
     for lineup, summary in zip(lineups, summaries):
@@ -1093,6 +1229,16 @@ def add_showdown_lineup_chalk_metrics(lineups: list[list[dict]]) -> list[dict]:
         if lineup:
             lineup[0]["lineup_duplication_risk"] = summary
     return summaries
+
+
+def place_small_max_metadata_on_captain(lineup: list[dict]) -> None:
+    """Keep lineup-level diagnostics on the Captain row after roster sorting."""
+    if not lineup or str(lineup[0].get("roster_position")).upper() != "CPT":
+        return
+    for key in ("lineup_duplication_risk", "small_max_report", "three_max_report"):
+        value = next((row.pop(key) for row in lineup if key in row), None)
+        if value is not None:
+            lineup[0][key] = value
 
 
 def plan_showdown_captain_diversification(
@@ -1250,6 +1396,15 @@ def _safe_float(value) -> float:
     return number if math.isfinite(number) else 0.0
 
 
+def _optional_market_float(value) -> float | None:
+    """Keep absent market evidence distinct from a real numeric zero."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
 def normalize_exposure_rate(value, *, default: float) -> float:
     """Accept either a 0-1 rate or UI-style percentage and persist a rate."""
     try:
@@ -1277,6 +1432,48 @@ def _has_current_opportunity(row: pd.Series | dict) -> bool:
         return True
     role = str(row.get("pregame_role_label") or "").strip().upper()
     return role not in {"", "UNKNOWN", "BACKUP", "ROTATION", "GENERIC"}
+
+
+def showdown_opportunity_diagnostic(row: pd.Series | dict) -> dict:
+    """Explain the existing hard gate without changing its thresholds."""
+    salary = _safe_float(row.get("salary"))
+    mean = _safe_float(row.get("projection"))
+    p90 = _safe_float(row.get("p90"))
+    position = str(row.get("position") or "").upper()
+    explicit = _has_current_opportunity(row)
+    legacy = salary <= 1000 and mean < 3 and p90 < 10
+    fallback = salary <= 2000 and mean < 2 and p90 < 8
+    excluded = position in {"RB", "WR", "TE"} and not explicit and (legacy or fallback)
+    return {
+        "roster_status": _json_safe(row.get("roster_status")),
+        "player_status": _json_safe(row.get("player_status")),
+        "expected_active_probability": _json_safe(row.get("pregame_availability_probability")),
+        "expected_start_probability": _json_safe(row.get("pregame_start_probability")),
+        "depth_chart_role": _json_safe(row.get("depth_chart_position")),
+        "role_label": _json_safe(row.get("pregame_role_label")),
+        "expected_snaps": _json_safe(row.get("pregame_expected_snaps")),
+        "expected_routes": _json_safe(row.get("pregame_expected_routes")),
+        "expected_carries": _json_safe(row.get("pregame_expected_carries")),
+        "expected_targets": _json_safe(row.get("pregame_expected_targets")),
+        "recent_snap_share_mean_3": _json_safe(row.get("snap_share_mean_3")),
+        "recent_carries_mean_3": _json_safe(row.get("carries_mean_3")),
+        "recent_targets_mean_3": _json_safe(row.get("targets_mean_3")),
+        "carry_share": _json_safe(row.get("pregame_carry_share")),
+        "target_share": _json_safe(row.get("pregame_target_share")),
+        "red_zone_share": _json_safe(row.get("pregame_red_zone_share")),
+        "goal_line_share": _json_safe(row.get("pregame_goal_line_share")),
+        "explicit_role_signal": explicit,
+        "newly_assigned_role": str(row.get("pregame_newly_assigned_role")).strip().lower() in {"1", "true", "yes"},
+        "injury_created_opportunity": _json_safe(row.get("pregame_injury_created_opportunity")),
+        "legacy_punt_threshold_met": legacy,
+        "low_salary_fallback_threshold_met": fallback,
+        "excluded_by_gate": excluded,
+        "retention_reason": (
+            "explicit_opportunity_signal" if explicit else
+            "above_low_salary_fallback_threshold" if salary <= 2000 and not excluded else
+            "outside_low_salary_gate" if not excluded else "excluded"
+        ),
+    }
 
 
 def apply_showdown_opportunity_gate(pool: pd.DataFrame) -> tuple[pd.DataFrame, set[str]]:
@@ -1307,6 +1504,42 @@ def _is_high_rushing_qb(row: pd.Series | dict) -> bool:
     )
 
 
+def _showdown_qb_correlation_multipliers(pool: pd.DataFrame) -> dict[str, float]:
+    """Scale stack rewards to the QB's own pregame projection in this game.
+
+    This changes correlation rewards only. It never changes a player projection
+    or assumes that an inferred starter is a poor passer.
+    """
+    qbs = pool.loc[pool["position"].astype(str).str.upper().eq("QB")]
+    projected = pd.to_numeric(qbs.get("base_projection", qbs["projection"]), errors="coerce")
+    reference = float(projected.max()) if not projected.empty else 0.0
+    if not math.isfinite(reference) or reference <= 0:
+        return {str(row["player_id"]): 1.0 for _, row in qbs.iterrows()}
+    return {
+        str(row["player_id"]): max(0.4, min(1.0, _safe_float(value) / reference))
+        for (_, row), value in zip(qbs.iterrows(), projected, strict=True)
+    }
+
+
+def _scale_showdown_qb_bonus_terms(pool: pd.DataFrame, terms: list) -> list:
+    """Reduce positive QB-linked soft rewards without weakening penalties."""
+    multipliers = _showdown_qb_correlation_multipliers(pool)
+    adjusted = []
+    for term in terms:
+        indexes = set(getattr(term, "required_indexes", ()))
+        indexes.update(getattr(term, "captain_indexes", ()))
+        if hasattr(term, "left_index"):
+            indexes.update((term.left_index, term.right_index))
+        qb_values = [
+            multipliers[str(pool.loc[index, "player_id"])]
+            for index in indexes
+            if str(pool.loc[index, "player_id"]) in multipliers
+        ]
+        factor = min(qb_values) if qb_values and term.adjustment > 0 else 1.0
+        adjusted.append(replace(term, adjustment=term.adjustment * factor))
+    return adjusted
+
+
 _SATURATED_SHOWDOWN_RULE_IDS = {
     "correlation.qb_pass_catcher_v2",
     "correlation.shootout_bring_back_v1",
@@ -1325,8 +1558,10 @@ def _add_saturated_showdown_correlation_objective(
     terms: list = []
     teams = pool["player_team"].astype(str).str.upper()
     positions = pool["position"].astype(str).str.upper()
+    qb_multipliers = _showdown_qb_correlation_multipliers(pool)
     for qb_index in [i for i in pool.index if positions.iloc[i] == "QB"]:
         team = teams.iloc[qb_index]
+        multiplier = qb_multipliers.get(str(pool.loc[qb_index, "player_id"]), 1.0)
         opponent = str(pool.loc[qb_index].get("opponent_team") or "").upper()
         pass_catchers = [
             i for i in pool.index
@@ -1342,7 +1577,7 @@ def _add_saturated_showdown_correlation_objective(
             model += active <= selected_vars[qb_index]
             model += count >= threshold * active
             model += count <= (threshold - 1) + len(pass_catchers) * active + len(pass_catchers) * (1 - selected_vars[qb_index])
-            terms.append(bonus * active)
+            terms.append(bonus * multiplier * active)
         opponent_catchers = [
             i for i in pool.index
             if teams.iloc[i] == opponent and positions.iloc[i] in {"WR", "TE"}
@@ -1355,7 +1590,7 @@ def _add_saturated_showdown_correlation_objective(
             model += bring_back <= selected_vars[qb_index]
             model += bring_back <= opponent_count
             model += opponent_count <= len(opponent_catchers) * bring_back + len(opponent_catchers) * (1 - selected_vars[qb_index])
-            terms.append(0.45 * bring_back)
+            terms.append(0.45 * multiplier * bring_back)
     return pulp.lpSum(terms)
 
 
@@ -1363,12 +1598,31 @@ def _saturated_showdown_correlation_summary(
     lineup: list[dict], summary: dict
 ) -> dict:
     kept = [
-        row for row in summary.get("triggered_rules", [])
+        dict(row) for row in summary.get("triggered_rules", [])
         if row.get("rule_id") not in _SATURATED_SHOWDOWN_RULE_IDS
         and row.get("construction_kind") != "showdown_fragile_punt"
     ]
+    selected_qb_multipliers = {
+        str(row.get("player_id")): _safe_float(row.get("qb_correlation_multiplier")) or 1.0
+        for row in lineup if str(row.get("position") or "").upper() == "QB"
+    }
+    for trigger in kept:
+        qb_values = [
+            selected_qb_multipliers[str(player.get("player_id"))]
+            for player in (trigger.get("players") or [])
+            if str(player.get("player_id")) in selected_qb_multipliers
+        ]
+        if not qb_values or _safe_float(trigger.get("objective_contribution")) <= 0:
+            continue
+        factor = min(qb_values)
+        trigger["objective_contribution"] = _safe_float(trigger["objective_contribution"]) * factor
+        trigger["score_contribution"] = _safe_float(trigger.get("score_contribution")) * factor
+        trigger["evidence"] = {
+            **(trigger.get("evidence") or {}), "qb_quality_multiplier": factor,
+        }
     custom: list[dict] = []
     for qb in [row for row in lineup if str(row.get("position") or "").upper() == "QB"]:
+        multiplier = _safe_float(qb.get("qb_correlation_multiplier")) or 1.0
         team = str(qb.get("player_team") or qb.get("team") or "").upper()
         opponent = str(qb.get("opponent_team") or "").upper()
         catchers = [
@@ -1381,11 +1635,11 @@ def _saturated_showdown_correlation_summary(
                 custom.append({
                     "rule_id": f"correlation.qb_pass_catcher_saturated_{threshold}_v1",
                     "reason_code": f"qb_pass_catcher_{threshold}",
-                    "score_contribution": contribution,
-                    "objective_contribution": contribution,
+                    "score_contribution": contribution * multiplier,
+                    "objective_contribution": contribution * multiplier,
                     "term_kind": "saturated_team_threshold",
                     "players": [{"player_id": str(qb.get("player_id")), "player_name": qb.get("name"), "team": team, "position": "QB"}],
-                    "evidence": {"pass_catcher_count": len(catchers), "threshold": threshold},
+                    "evidence": {"pass_catcher_count": len(catchers), "threshold": threshold, "qb_quality_multiplier": multiplier},
                 })
         if any(
             str(row.get("player_team") or row.get("team") or "").upper() == opponent
@@ -1395,11 +1649,11 @@ def _saturated_showdown_correlation_summary(
             custom.append({
                 "rule_id": "correlation.shootout_bring_back_team_once_v1",
                 "reason_code": "shootout_bring_back_once",
-                "score_contribution": 0.45,
-                "objective_contribution": 0.45,
+                "score_contribution": 0.45 * multiplier,
+                "objective_contribution": 0.45 * multiplier,
                 "term_kind": "saturated_team_threshold",
                 "players": [{"player_id": str(qb.get("player_id")), "player_name": qb.get("name"), "team": team, "position": "QB"}],
-                "evidence": {"opponent": opponent},
+                "evidence": {"opponent": opponent, "qb_quality_multiplier": multiplier},
             })
     triggers = kept + custom
     total = sum(_safe_float(row.get("objective_contribution")) for row in triggers)
@@ -1419,6 +1673,53 @@ def _safe_text(*values: object) -> str:
         if normalized is not None and str(normalized).strip():
             return str(normalized).strip()
     return ""
+
+
+def apply_user_opponent_preferences(
+    pool: pd.DataFrame,
+    excluded_opponent_teams: set[str],
+) -> pd.DataFrame:
+    """Apply optimizer-only opponent preferences without changing model evidence."""
+    if pool.empty or not excluded_opponent_teams:
+        return pool.copy()
+    if (
+        "opponent_team" not in pool.columns
+        or pool["opponent_team"].isna().any()
+        or pool["opponent_team"].astype(str).str.strip().eq("").any()
+    ):
+        raise ValueError("Opponent-team exclusion requires an opponent team for every player")
+    excluded = {team.strip().upper() for team in excluded_opponent_teams}
+    opponents = pool["opponent_team"].astype(str).str.strip().str.upper()
+    return pool.loc[~opponents.isin(excluded)].copy().reset_index(drop=True)
+
+
+def validate_saved_salary_identity(pool_rows: list[dict], salary_rows: list[dict]) -> dict:
+    """Verify the exact saved DraftKings row behind each optimizer-eligible player."""
+    salary_by_id = {str(row["curated_salary_id"]): row for row in salary_rows}
+    violations = []
+    for row in pool_rows:
+        source_id = str(row.get("salary_source_row_id") or "")
+        salary = salary_by_id.get(source_id)
+        if salary is None:
+            violations.append({"player_id": str(row.get("player_id")),
+                               "reason": "saved_salary_row_missing", "source_row_id": source_id})
+            continue
+        checks = (
+            ("player_id", str(row.get("player_id")), str(salary.get("player_master_id"))),
+            ("team", normalize_team(str(row.get("player_team") or "")),
+             normalize_team(str(salary.get("team") or ""))),
+            ("opponent", normalize_team(str(row.get("opponent_team") or "")),
+             normalize_team(str(salary.get("opponent") or ""))),
+            ("salary", int(row.get("salary") or 0), int(salary.get("salary") or 0)),
+        )
+        for field, actual, expected in checks:
+            if actual != expected:
+                violations.append({"player_id": str(row.get("player_id")),
+                                   "reason": f"salary_{field}_mismatch",
+                                   "actual": actual, "saved": expected,
+                                   "source_row_id": source_id})
+    return {"status": "PASS" if not violations else "BLOCKER",
+            "checked": len(pool_rows), "violations": violations}
 
 
 def restrict_pool_to_pregame_available(
@@ -1491,13 +1792,9 @@ def restrict_showdown_pool_to_starting_qbs(
                 )
             )
             if "starting_qb_evidence_tier" in team_qbs.columns:
-                stored_starter_mask &= (
-                    team_qbs["starting_qb_evidence_tier"]
-                    .fillna("confirmed")
-                    .astype(str)
-                    .str.lower()
-                    != "inferred"
-                )
+                inferred = team_qbs["starting_qb_evidence_tier"].fillna("confirmed").astype(str).str.lower().eq("inferred")
+                provisional = team_qbs.get("starting_qb_source", pd.Series("", index=team_qbs.index)).fillna("").astype(str).str.startswith("provisional_")
+                stored_starter_mask &= ~inferred | provisional
             explicit_mask |= stored_starter_mask
         if "depth_chart_position" in team_qbs.columns:
             explicit_mask |= (
@@ -1569,6 +1866,11 @@ def restrict_showdown_pool_to_starting_qbs(
                     if str(selected.get("starting_qb_observed_at") or "").strip()
                     else {}
                 ),
+                **(
+                    {"note": str(selected.get("starting_qb_note"))}
+                    if str(selected.get("starting_qb_note") or "").strip()
+                    else {}
+                ),
             }
         )
 
@@ -1602,7 +1904,10 @@ def restrict_showdown_pool_to_starting_qbs(
         "selected": selections,
         "evidence_status": (
             "confirmed" if all(row["evidence_tier"] == "confirmed" for row in selections)
-            else "salary_inferred"
+            else "provisional" if any(
+                str(row.get("source") or "").startswith("provisional_")
+                for row in selections
+            ) else "salary_inferred"
         ),
     }
     return filtered.reset_index(drop=True), metadata
@@ -1942,6 +2247,27 @@ class OptimizerService:
         self.connection_string = connection_string or get_connection_string()
         self.engine = create_engine(self.connection_string)
 
+    def list_completed_projection_runs(self, *, season: int, week: int, slate: str) -> list[dict]:
+        """Available optimizer projection choices, newest completed first."""
+        with self.engine.connect() as connection:
+            rows = connection.execute(text("""
+                SELECT r.projection_run_id, r.created_at, r.row_count, r.data_cutoff_at,
+                       CASE WHEN artifact.model_run_id IS NULL THEN 'missing'
+                            ELSE 'stored' END AS model_artifact_status
+                FROM target.projection_run r
+                LEFT JOIN target.model_artifact artifact ON artifact.model_run_id = r.model_run_id
+                WHERE r.season = :season AND r.week = :week
+                  AND UPPER(r.slate_id) = UPPER(:slate)
+                  AND r.status = 'completed' AND r.row_count > 0
+                  AND EXISTS (
+                      SELECT 1 FROM target.player_projection p
+                      WHERE p.projection_run_id = r.projection_run_id
+                  )
+                ORDER BY r.created_at DESC, r.projection_run_id DESC
+                LIMIT 100
+            """), {"season": season, "week": week, "slate": slate}).mappings().all()
+        return [dict(row) for row in rows]
+
     def _resolve_run_lineage(
         self,
         *,
@@ -1952,15 +2278,17 @@ class OptimizerService:
         rule_run_id: str | None,
         data_cutoff_at: datetime | None,
     ) -> tuple[str | None, str | None, datetime | None]:
-        """Best-effort lookup of the active projection and symbolic run IDs."""
+        """Best-effort lookup of the latest completed or explicitly selected projection."""
         try:
             with self.engine.begin() as connection:
                 if projection_run_id is None or data_cutoff_at is None:
                     projection_query = (
                         "SELECT p.projection_run_id, p.data_cutoff_at "
                         "FROM target.player_projection p "
+                        "JOIN target.projection_run r ON r.projection_run_id = p.projection_run_id "
                         "WHERE p.season = :season AND p.week = :week "
-                        "AND (p.slate_id = :slate OR p.slate_id IS NULL) "
+                        "AND UPPER(r.slate_id) = UPPER(:slate) "
+                        "AND r.status = 'completed' AND r.row_count > 0 "
                     )
                     projection_params = {
                         "season": season,
@@ -1970,19 +2298,7 @@ class OptimizerService:
                     if projection_run_id is not None:
                         projection_query += "AND p.projection_run_id = :projection_run_id "
                         projection_params["projection_run_id"] = projection_run_id
-                    else:
-                        projection_query += (
-                            "AND p.projection_run_id = COALESCE(("
-                            "SELECT active.projection_run_id "
-                            "FROM target.active_projection_run active "
-                            "WHERE active.season = :season AND active.week = :week "
-                            "AND (UPPER(active.slate_id) = UPPER(:slate) "
-                            "OR active.slate_id = 'DEFAULT') "
-                            "ORDER BY CASE WHEN UPPER(active.slate_id) = UPPER(:slate) "
-                            "THEN 0 ELSE 1 END, active.selected_at DESC LIMIT 1"
-                            "), p.projection_run_id) "
-                        )
-                    projection_query += "ORDER BY created_at DESC LIMIT 1"
+                    projection_query += "ORDER BY r.created_at DESC, p.created_at DESC LIMIT 1"
                     projection_row = connection.execute(
                         text(projection_query),
                         projection_params,
@@ -2014,6 +2330,100 @@ class OptimizerService:
 
     def _persist_optimizer_run(self, job: OptimizerJob) -> bool:
         """Persist one optimizer execution even when it produced no lineups."""
+        decision_context = job.params.get("decision_context")
+        decision_context = decision_context if isinstance(decision_context, dict) else {}
+        runtime = job.params.setdefault("strategy_runtime", {})
+        runtime["candidate_pool_manifest"] = candidate_snapshot(
+            job.params, job.contest_format
+        )
+        selected_rows = [row for lineup in job.results or [] for row in lineup]
+        pool_rows = (runtime.get("player_pool") or {}).get("rows") or []
+        availability_overrides = [
+            {"player_id": row.get("player_id"), "availability_override": row.get("availability_override"),
+             "reason": row.get("exclusion_reasons")}
+            for row in pool_rows if row.get("availability_override") not in {None, "default"}
+        ]
+        def first_selected(key):
+            return next((row.get(key) for row in selected_rows if row.get(key) is not None), None)
+        decision_snapshot = {
+            "captured_at": job.updated_at.isoformat(),
+            "data_cutoff_at": job.data_cutoff_at.isoformat() if job.data_cutoff_at else None,
+            "nfl_state_snapshot": decision_context.get("nfl_state_snapshot"),
+            "injury_redistribution_state": decision_context.get("injury_redistribution_state"),
+            "projection_run_id": job.projection_run_id,
+            "projection_model_artifact": {"status": "unavailable", "reason": "No projection run selected"},
+            "projection_market_snapshot": [],
+            "optimizer_run_id": job.job_id,
+            "major_hypotheses": decision_context.get("major_hypotheses", []),
+            "availability_assumptions": decision_context.get("availability_assumptions", []) + availability_overrides,
+            "injury_scenarios": decision_context.get("injury_scenarios", []),
+            "user_lineup_exclusions": (
+                [] if decision_context.get("analytic_control")
+                else job.params.get("exclude_player_ids", [])
+            ),
+            "analytic_control": decision_context.get("analytic_control"),
+            "captain_prior_strength": (job.params.get("objective_config") or {}).get("captain_prior_strength"),
+            "captain_prior_source": runtime.get("captain_position_model"),
+            "correlation_context_policy": decision_context.get("correlation_context_policy") or {
+                "correlation": first_selected("lineup_correlation_summary"),
+                "context": first_selected("lineup_context_summary"),
+            },
+            "correlation_policy": decision_context.get("correlation_policy"),
+            "context_policy": decision_context.get("context_policy"),
+            "ownership_source": decision_context.get("ownership_source") or first_selected("ownership_run_id"),
+            "ownership_observed_at": decision_context.get("ownership_observed_at") or first_selected("ownership_observed_at"),
+            "game_market_inputs": decision_context.get("game_market_inputs") or [
+                {"player_id": row.get("player_id"), "game_total_line": row.get("game_total_line"),
+                 "team_spread_line": row.get("team_spread_line"), "team_implied_total": row.get("team_implied_total")}
+                for row in selected_rows if row.get("game_total_line") is not None
+            ],
+            "market_snapshot": [
+                {key: row.get(key) for key in (
+                    "player_id", "game_total_line", "team_spread_line",
+                    "team_implied_total", "market_context_point_in_time_safe",
+                )} for row in selected_rows
+            ],
+            "injury_availability_snapshot": [
+                {key: row.get(key) for key in (
+                    "player_id", "official_availability_status", "availability_override",
+                    "model_availability_used", "pregame_availability_probability",
+                    "pregame_start_probability", "pregame_injury_status", "player_status",
+                )} for row in pool_rows
+            ],
+            "selected_ownership_snapshot": [
+                {key: row.get(key) for key in (
+                    "player_id", "ownership", "projected_ownership",
+                    "ownership_projection", "ownership_run_id", "ownership_observed_at",
+                )} for row in selected_rows
+            ],
+            "portfolio_constraints": job.params.get("portfolio_constraints"),
+            "user_preference_constraints": {
+                key: job.params.get(key) for key in (
+                    "exclude_player_ids", "lock_player_ids", "exclude_players",
+                    "exclude_questionable",
+                    "locked_players", "max_exposure", "min_exposure",
+                ) if key in job.params
+            },
+            "model_explanation_version": "tree-path-v1",
+            "selected_lineups": [
+                [{"player_id": row.get("player_id"), "roster_position": row.get("roster_position")}
+                 for row in lineup] for lineup in job.results or []
+            ],
+            "primary_lineup": decision_context.get("primary_lineup") or (
+                [{"player_id": row.get("player_id"), "roster_position": row.get("roster_position")}
+                 for row in job.results[0]] if job.results else None
+            ),
+            "play_decision": decision_context.get("play_decision"),
+            "important_alternatives": decision_context.get("important_alternatives") or (
+                (runtime.get("single_entry") or {}).get("all_candidates", [])[1:16]
+            ),
+            "reason_selected": decision_context.get("reason_selected") or job.message,
+            "ablation_results": [
+                {key: value for key, value in row["lineup_control_comparison"].items() if key != "replay"}
+                for lineup in job.results or []
+                for row in lineup if row.get("lineup_control_comparison")
+            ] + decision_context.get("shadow_results", []),
+        }
         validate_target_schema(
             self.engine,
             consumer=type(self).__name__,
@@ -2022,10 +2432,63 @@ class OptimizerService:
                 "lineup",
                 "lineup_player",
                 "lineup_constraint_explanation",
+                "classic_prospective_experiment",
             ),
         )
         try:
             with self.engine.begin() as connection:
+                if job.projection_run_id:
+                    artifact_row = connection.execute(text("""
+                        SELECT a.artifact_uri, a.artifact_sha256, a.model_version,
+                               a.training_dataset_sha256, a.code_hash
+                        FROM target.projection_run pr
+                        LEFT JOIN target.model_artifact a ON a.model_run_id = pr.model_run_id
+                        WHERE pr.projection_run_id = :projection_run_id
+                    """), {"projection_run_id": job.projection_run_id}).mappings().first()
+                    decision_snapshot["projection_model_artifact"] = (
+                        dict(artifact_row) if artifact_row and artifact_row["artifact_uri"] else
+                        {"status": "unavailable", "reason": "Fitted artifact absent from selected projection run"}
+                    )
+                    projection_market = connection.execute(text("""
+                        SELECT p.player_id, p.game_id,
+                               f.feature_json ->> 'game_total_line' AS game_total_line,
+                               f.feature_json ->> 'team_spread_line' AS team_spread_line,
+                               f.feature_json ->> 'team_implied_total' AS team_implied_total,
+                               f.feature_json ->> 'opponent_implied_total' AS opponent_implied_total
+                        FROM target.player_projection p
+                        JOIN target.model_run mr ON mr.model_run_id = p.model_run_id
+                        LEFT JOIN target.feature_player_game f
+                          ON f.feature_run_id = mr.feature_run_id
+                         AND f.player_id = p.player_id AND f.game_id = p.game_id
+                         AND f.season = p.season AND f.week = p.week
+                        WHERE p.projection_run_id = :projection_run_id
+                    """), {"projection_run_id": job.projection_run_id}).mappings()
+                    decision_snapshot["projection_market_snapshot"] = [dict(row) for row in projection_market]
+                ownership_run_id = job.params.get("ownership_run_id") or first_selected("ownership_run_id")
+                if ownership_run_id:
+                    ownership_rows = connection.execute(text("""
+                        SELECT ownership_run_id::TEXT, player_id, roster_position,
+                               projected_ownership, data_cutoff_at, feature_json
+                        FROM target.ownership_projection
+                        WHERE ownership_run_id::TEXT = :ownership_run_id
+                          AND season = :season AND week = :week
+                          AND UPPER(slate_id) = UPPER(:slate)
+                    """), {"ownership_run_id": str(ownership_run_id),
+                             "season": job.season, "week": job.week,
+                             "slate": job.slate}).mappings()
+                    decision_snapshot["ownership_snapshot"] = [dict(row) for row in ownership_rows]
+                else:
+                    decision_snapshot["ownership_snapshot"] = []
+                benchmarks = connection.execute(text("""
+                    SELECT benchmark_id, source_name, source_url, captured_at,
+                           raw_snapshot_uri, raw_snapshot_sha256, status
+                    FROM target.external_projection_benchmark
+                    WHERE season = :season AND week = :week AND slate_id = :slate
+                      AND captured_at <= :captured_at
+                    ORDER BY captured_at, benchmark_id
+                """), {"season": job.season, "week": job.week,
+                         "slate": job.slate, "captured_at": job.updated_at}).mappings()
+                decision_snapshot["external_benchmark_snapshots"] = [dict(row) for row in benchmarks]
                 connection.execute(
                     text(
                         """
@@ -2058,7 +2521,7 @@ class OptimizerService:
                         "objective": job.objective,
                         "strategy": job.strategy,
                         "objective_config_json": json.dumps(
-                            {
+                            _json_safe({
                                 "objective": job.objective,
                                 "strategy": job.strategy,
                                 **(
@@ -2066,10 +2529,13 @@ class OptimizerService:
                                     if isinstance(job.params.get("objective_config"), dict)
                                     else {}
                                 ),
-                            },
-                            sort_keys=True,
+                            }),
+                            sort_keys=True, allow_nan=False,
                         ),
-                        "constraint_config_json": json.dumps(job.params, sort_keys=True, default=str),
+                        "constraint_config_json": json.dumps(
+                            _json_safe({**job.params, "decision_snapshot": decision_snapshot}),
+                            sort_keys=True, allow_nan=False,
+                        ),
                         "data_cutoff_at": job.data_cutoff_at,
                         "created_at": job.created_at,
                         "updated_at": job.updated_at,
@@ -2083,6 +2549,72 @@ class OptimizerService:
                     ),
                     {"optimizer_run_id": job.job_id},
                 )
+                classic_report = runtime.get("classic_small_field") or {}
+                frozen = classic_report.get("frozen_solver_snapshot") or runtime.get("classic_run_input_snapshot")
+                experiment = classic_report.get("prospective_experiment")
+                if frozen:
+                    submitted_experiment = experiment
+                    from .classic_prospective import (
+                        guard_prelock_persistence, validate_classic_run_input,
+                        validate_solver_snapshot,
+                    )
+
+                    if frozen["contract"] == "classic_solver_snapshot_v2":
+                        validate_solver_snapshot(frozen)
+                    else:
+                        validate_classic_run_input(frozen)
+                    persisted_experiment = guard_prelock_persistence(
+                        experiment,
+                        (classic_report.get("prelock_timing") or {}).get("first_saved_kickoff_at"),
+                        connection.execute(text("SELECT clock_timestamp()")).scalar_one(),
+                        frozen["sha256"],
+                    )
+                    if persisted_experiment != experiment:
+                        classic_report["prospective_experiment"] = persisted_experiment
+                        experiment = persisted_experiment
+                        connection.execute(text("""
+                            UPDATE target.optimizer_run
+                            SET constraint_config_json = CAST(:constraint_config_json AS JSONB)
+                            WHERE optimizer_run_id = :run_id
+                        """), {"run_id": job.job_id,
+                               "constraint_config_json": json.dumps(
+                                   _json_safe({**job.params, "decision_snapshot": decision_snapshot}),
+                                   sort_keys=True, allow_nan=False)})
+                    connection.execute(text("""
+                        INSERT INTO target.classic_prospective_experiment
+                            (optimizer_run_id, solver_snapshot_sha256, solver_snapshot_json,
+                             experiment_sha256, prelock_experiment_json)
+                        VALUES (:run_id, :snapshot_sha256, CAST(:snapshot AS JSONB),
+                                :experiment_sha256, CAST(:experiment AS JSONB))
+                        ON CONFLICT (optimizer_run_id) DO NOTHING
+                    """), {"run_id": job.job_id, "snapshot_sha256": frozen["sha256"],
+                           "snapshot": json.dumps(frozen, sort_keys=True, allow_nan=False),
+                           "experiment_sha256": experiment.get("sha256") if experiment else None,
+                           "experiment": json.dumps(experiment, sort_keys=True, allow_nan=False)
+                           if experiment else None})
+                    stored = connection.execute(text("""
+                        SELECT solver_snapshot_sha256, experiment_sha256
+                        FROM target.classic_prospective_experiment
+                        WHERE optimizer_run_id = :run_id
+                    """), {"run_id": job.job_id}).mappings().one()
+                    if (persisted_experiment != submitted_experiment and
+                            submitted_experiment and
+                            stored["solver_snapshot_sha256"] == frozen["sha256"] and
+                            stored["experiment_sha256"] == submitted_experiment.get("sha256")):
+                        # A retry after kickoff retains the three arms frozen on the first write.
+                        classic_report["prospective_experiment"] = submitted_experiment
+                        experiment = submitted_experiment
+                        connection.execute(text("""
+                            UPDATE target.optimizer_run
+                            SET constraint_config_json = CAST(:constraint_config_json AS JSONB)
+                            WHERE optimizer_run_id = :run_id
+                        """), {"run_id": job.job_id,
+                               "constraint_config_json": json.dumps(
+                                   _json_safe({**job.params, "decision_snapshot": decision_snapshot}),
+                                   sort_keys=True, allow_nan=False)})
+                    if (stored["solver_snapshot_sha256"] != frozen["sha256"] or
+                            stored["experiment_sha256"] != (experiment.get("sha256") if experiment else None)):
+                        raise ValueError("Classic pre-lock snapshot differs from already frozen run")
                 for lineup_number, lineup in enumerate(job.results or [], start=1):
                     lineup_id = f"{job.job_id}:{lineup_number}"
                     cash_summary = {}
@@ -2104,6 +2636,11 @@ class OptimizerService:
                         for row in lineup
                     )
                     leverage_score = sum(_safe_float(row.get("leverage")) for row in lineup)
+                    if job.contest_format == "showdown" and any(
+                        row.get("ownership") is None for row in lineup
+                    ):
+                        ownership_sum = None
+                        leverage_score = None
                     objective_score = cash_summary.get("objective_score")
                     if job.contest_format == "showdown":
                         objective_score = sum(
@@ -2162,8 +2699,9 @@ class OptimizerService:
                                 "projected_p90": _safe_float(
                                     row.get("p90", row.get("predicted_p90"))
                                 ),
-                                "ownership_projection": _safe_float(
-                                    row.get("ownership", row.get("projected_ownership"))
+                                "ownership_projection": (
+                                    None if job.contest_format == "showdown" and row.get("ownership") is None
+                                    else _safe_float(row.get("ownership", row.get("projected_ownership")))
                                 ),
                                 "player_json": json.dumps(
                                     _json_safe(player_payload),
@@ -2457,8 +2995,9 @@ class OptimizerService:
                     salary=int(_safe_float(row.get("salary"))),
                     projection=projection,
                     ceiling=ceiling,
-                    ownership=_safe_float(
-                        row.get("ownership", row.get("projected_ownership"))
+                    ownership=(
+                        None if pd.isna(row.get("ownership", row.get("projected_ownership")))
+                        else _safe_float(row.get("ownership", row.get("projected_ownership")))
                     ),
                     optimal_lineup_probability=optimal_probability,
                     game_id=(
@@ -2466,27 +3005,12 @@ class OptimizerService:
                         if row.get("game_id") or row.get("game_info")
                         else None
                     ),
-                    spread=(
-                        _safe_float(
-                            row.get("team_spread_line", row.get("spread"))
-                        )
-                        if row.get("team_spread_line", row.get("spread")) is not None
-                        else None
-                    ),
-                    game_total=(
-                        _safe_float(
-                            row.get("game_total_line", row.get("game_total"))
-                        )
-                        if row.get("game_total_line", row.get("game_total")) is not None
-                        else None
-                    ),
-                    team_total=(
-                        _safe_float(
-                            row.get("team_implied_total", row.get("team_total"))
-                        )
-                        if row.get("team_implied_total", row.get("team_total")) is not None
-                        else None
-                    ),
+                    spread=(_optional_market_float(row.get("team_spread_line", row.get("spread")))
+                            if market_context_safe is True else None),
+                    game_total=(_optional_market_float(row.get("game_total_line", row.get("game_total")))
+                                if market_context_safe is True else None),
+                    team_total=(_optional_market_float(row.get("team_implied_total", row.get("team_total")))
+                                if market_context_safe is True else None),
                     market_context_point_in_time_safe=market_context_safe,
                     optimizer_context_adjustment=_safe_float(
                         row.get("optimizer_context_adjustment")
@@ -2608,6 +3132,7 @@ class OptimizerService:
         week: int,
         slate: str,
         projection_run_id: str | None = None,
+        ownership_run_id: str | None = None,
     ) -> pd.DataFrame:
         """Load one exact target-schema salary/projection contract."""
         inspector = inspect(self.engine)
@@ -2627,6 +3152,12 @@ class OptimizerService:
                         salary.source_player_key AS site_player_id,
                         captain.source_player_key AS captain_site_player_id,
                         salary.player_name AS salary_name,
+                        salary.curated_salary_id::TEXT AS salary_source_row_id,
+                        salary.ingest_run_id::TEXT AS salary_ingest_run_id,
+                        salary.source_system AS salary_source_system,
+                        ingest.source_path AS salary_source_path,
+                        ingest.source_checksum AS salary_source_checksum,
+                        salary.created_at AT TIME ZONE 'UTC' AS salary_source_observed_at,
                         salary.salary,
                         COALESCE(
                             NULLIF(salary.position, ''),
@@ -2637,6 +3168,7 @@ class OptimizerService:
                         salary.opponent AS opponent_team_id,
                         salary.game_info AS game_id
                     FROM public.curated_salary salary
+                    LEFT JOIN public.ingest_run ingest ON ingest.ingest_run_id = salary.ingest_run_id
                     LEFT JOIN LATERAL (
                         SELECT role.source_player_key
                         FROM public.curated_salary role
@@ -2665,6 +3197,12 @@ class OptimizerService:
                         salary.site_player_id,
                         captain.site_player_id AS captain_site_player_id,
                         NULL::TEXT AS salary_name,
+                        salary.snapshot_salary_id::TEXT AS salary_source_row_id,
+                        NULL::TEXT AS salary_ingest_run_id,
+                        salary.source AS salary_source_system,
+                        NULL::TEXT AS salary_source_path,
+                        NULL::TEXT AS salary_source_checksum,
+                        salary.as_of AS salary_source_observed_at,
                         salary.salary,
                         salary.roster_position AS salary_position,
                         salary.player_status,
@@ -2725,7 +3263,7 @@ class OptimizerService:
             "d.primary_position)"
         )
         injury_join = ""
-        injury_status_select = "NULL::TEXT AS injury_status"
+        injury_status_select = "NULL::TEXT AS injury_status, NULL::TIMESTAMPTZ AS injury_observed_at"
         filters: list[str] = []
         if has_injuries:
             cutoff_predicate = injury_snapshot_cutoff_sql(
@@ -2734,7 +3272,7 @@ class OptimizerService:
             )
             injury_join = f"""
                 LEFT JOIN LATERAL (
-                    SELECT injury.injury_status
+                    SELECT injury.injury_status, injury.as_of
                     FROM target.snapshot_injury_status injury
                     WHERE injury.season = :season AND injury.week = :week
                       AND injury.player_id = s.player_id
@@ -2744,35 +3282,60 @@ class OptimizerService:
                     LIMIT 1
                 ) i ON TRUE
             """
-            injury_status_select = "i.injury_status"
+            injury_status_select = "i.injury_status, i.as_of AS injury_observed_at"
         roster_join = ""
         roster_status_select = "NULL::TEXT AS roster_status"
         roster_evidence_select = "FALSE AS roster_evidence_available"
+        depth_chart_join = ""
+        depth_chart_select = "NULL::TEXT AS depth_chart_position"
+        if inspector.has_table("raw_nfl_weekly_roster", schema="public") and inspector.has_table("player_alias", schema="public"):
+            depth_chart_select = "roster_depth.depth_chart_position AS depth_chart_position"
+            depth_chart_join = f"""
+                LEFT JOIN LATERAL (
+                    SELECT raw_roster.depth_chart_position
+                    FROM public.player_alias alias
+                    JOIN public.raw_nfl_weekly_roster raw_roster
+                      ON raw_roster.gsis_id = alias.source_key
+                     AND raw_roster.source_system = alias.source_system
+                    WHERE alias.player_master_id = s.player_id
+                      AND alias.source_system = 'nflreadpy'
+                      AND raw_roster.season = :season
+                      AND raw_roster.week = :week
+                      AND {canonical_team_sql('raw_roster.team')} =
+                          {canonical_team_sql('s.team_id')}
+                      AND (p.data_cutoff_at IS NULL OR raw_roster.created_at <= p.data_cutoff_at)
+                    ORDER BY raw_roster.created_at DESC, raw_roster.raw_nfl_weekly_roster_id DESC
+                    LIMIT 1
+                ) roster_depth ON TRUE
+            """
         if has_roster_participation:
             roster_status_select = "participation.roster_status"
-            roster_evidence_select = """
+            roster_evidence_select = f"""
                 EXISTS (
                     SELECT 1
                     FROM public.curated_player_game_participation roster_evidence
                     WHERE roster_evidence.season = :season
                       AND roster_evidence.week = :week
+                      AND {canonical_team_sql('roster_evidence.team')} =
+                          {canonical_team_sql('s.team_id')}
                       AND (
                           p.data_cutoff_at IS NULL
-                          OR roster_evidence.created_at <= p.data_cutoff_at
+                          OR roster_evidence.created_at AT TIME ZONE 'UTC' <= p.data_cutoff_at
                       )
                 ) AS roster_evidence_available
             """
-            roster_join = """
+            roster_join = f"""
                 LEFT JOIN LATERAL (
                     SELECT roster_row.roster_status
                     FROM public.curated_player_game_participation roster_row
                     WHERE roster_row.season = :season
                       AND roster_row.week = :week
                       AND roster_row.player_master_id = s.player_id
-                      AND UPPER(roster_row.team) = UPPER(s.team_id)
+                      AND {canonical_team_sql('roster_row.team')} =
+                          {canonical_team_sql('s.team_id')}
                       AND (
                           p.data_cutoff_at IS NULL
-                          OR roster_row.created_at <= p.data_cutoff_at
+                          OR roster_row.created_at AT TIME ZONE 'UTC' <= p.data_cutoff_at
                       )
                     ORDER BY roster_row.created_at DESC,
                         roster_row.curated_player_game_participation_id DESC
@@ -2824,13 +3387,14 @@ class OptimizerService:
                 starter.source AS starting_qb_source,
                 starter.evidence_tier AS starting_qb_evidence_tier,
             """
-            starter_join = """
+            starter_join = f"""
                 LEFT JOIN public.starting_qb_evidence starter
                   ON starter.season = :season
                  AND starter.week = :week
                  AND UPPER(starter.slate) = UPPER(:slate)
                  AND starter.player_master_id = s.player_id
-                 AND UPPER(starter.team) = UPPER(s.team_id)
+                 AND {canonical_team_sql('starter.team')} =
+                     {canonical_team_sql('s.team_id')}
                  AND UPPER(starter.status) = 'ACTIVE'
             """
         pregame_select = """
@@ -2840,6 +3404,11 @@ class OptimizerService:
                 NULL::DOUBLE PRECISION AS pregame_target_share,
                 NULL::TEXT AS pregame_role_label,
                 NULL::TEXT AS pregame_injury_status,
+                NULL::TEXT AS practice_participation,
+                NULL::TEXT AS practice_trend,
+                NULL::TIMESTAMPTZ AS practice_observed_at,
+                NULL::TEXT AS expected_workload_status,
+                NULL::TIMESTAMPTZ AS expected_workload_observed_at,
                 NULL::TEXT AS pregame_context_run_id,
                 NULL::TEXT AS pregame_context_source,
                 NULL::TIMESTAMPTZ AS pregame_context_observed_at,
@@ -2850,20 +3419,70 @@ class OptimizerService:
                 NULL::DOUBLE PRECISION AS pregame_red_zone_share,
                 NULL::DOUBLE PRECISION AS pregame_goal_line_share,
                 NULL::DOUBLE PRECISION AS carries_mean_3,
+                NULL::DOUBLE PRECISION AS targets_mean_3,
+                NULL::DOUBLE PRECISION AS snap_share_mean_3,
+                NULL::DOUBLE PRECISION AS target_share_mean_3,
+                NULL::DOUBLE PRECISION AS team_targets_mean_3,
+                NULL::DOUBLE PRECISION AS team_carries_mean_3,
+                NULL::DOUBLE PRECISION AS carry_share_mean_3,
+                NULL::DOUBLE PRECISION AS projected_targets,
+                NULL::DOUBLE PRECISION AS projected_carries,
+                NULL::DOUBLE PRECISION AS offensive_role_importance,
+                NULL::DOUBLE PRECISION AS offensive_role_completeness,
+                NULL::TEXT AS offensive_role_class,
+                NULL::TEXT AS offensive_role_confidence,
+                NULL::TEXT AS offensive_role_reason,
+                NULL::TEXT AS offensive_role_source,
+                NULL::JSONB AS role_counterfactual_grid,
+                NULL::JSONB AS historical_role_calibration,
+                NULL::TEXT AS projection_model_version,
+                NULL::TEXT AS projected_opportunity_source,
+                NULL::BOOLEAN AS pregame_opportunity_context_applied,
+                NULL::DOUBLE PRECISION AS player_roll3_mean,
+                NULL::DOUBLE PRECISION AS snap_share_last,
+                NULL::DOUBLE PRECISION AS snap_share_prior3,
+                NULL::DOUBLE PRECISION AS snap_share_trend,
+                NULL::DOUBLE PRECISION AS target_share_last,
+                NULL::DOUBLE PRECISION AS target_share_prior3,
+                NULL::DOUBLE PRECISION AS target_share_trend,
+                NULL::DOUBLE PRECISION AS rush_share_last,
+                NULL::DOUBLE PRECISION AS rush_share_prior3,
+                NULL::DOUBLE PRECISION AS rush_share_trend,
+                NULL::DOUBLE PRECISION AS receptions_mean_3,
+                NULL::DOUBLE PRECISION AS receiving_yards_mean_3,
                 FALSE AS pregame_role_uncertain,
                 FALSE AS pregame_newly_assigned_role,
                 FALSE AS pregame_depth_chart_conflict,
+                NULL::TEXT AS official_availability_status,
+                'default'::TEXT AS availability_override,
+                NULL::DOUBLE PRECISION AS model_availability_used,
+                FALSE AS opportunity_redistributed,
+                NULL::DOUBLE PRECISION AS projection_before_scenario,
+                NULL::DOUBLE PRECISION AS projection_after_scenario,
+                NULL::TEXT AS market_source_system,
+                NULL::TEXT AS market_observed_at,
+                NULL::TEXT AS team_starting_qb_name,
         """
         pregame_join = ""
         if has_projection_features:
             feature_select = """
-                NULLIF(projection_feature.feature_json ->> 'game_total_line', '')::DOUBLE PRECISION
-                    AS game_total_line,
-                NULLIF(projection_feature.feature_json ->> 'team_spread_line', '')::DOUBLE PRECISION
-                    AS team_spread_line,
-                NULLIF(projection_feature.feature_json ->> 'team_implied_total', '')::DOUBLE PRECISION
-                    AS team_implied_total,
-                TRUE AS market_context_point_in_time_safe,
+                CASE WHEN projection_feature.feature_json ->> 'market_observed_at' IS NOT NULL
+                          AND projection_feature.feature_json ->> 'market_source_system' IS NOT NULL
+                     THEN NULLIF(projection_feature.feature_json ->> 'game_total_line', '')::DOUBLE PRECISION
+                     ELSE NULL END AS game_total_line,
+                CASE WHEN projection_feature.feature_json ->> 'market_observed_at' IS NOT NULL
+                          AND projection_feature.feature_json ->> 'market_source_system' IS NOT NULL
+                     THEN NULLIF(projection_feature.feature_json ->> 'team_spread_line', '')::DOUBLE PRECISION
+                     ELSE NULL END AS team_spread_line,
+                CASE WHEN projection_feature.feature_json ->> 'market_observed_at' IS NOT NULL
+                          AND projection_feature.feature_json ->> 'market_source_system' IS NOT NULL
+                     THEN NULLIF(projection_feature.feature_json ->> 'team_implied_total', '')::DOUBLE PRECISION
+                     ELSE NULL END AS team_implied_total,
+                (projection_feature.feature_json ->> 'market_observed_at' IS NOT NULL
+                 AND projection_feature.feature_json ->> 'market_source_system' IS NOT NULL
+                 AND NULLIF(projection_feature.feature_json ->> 'game_total_line', '')::DOUBLE PRECISION > 0
+                 AND projection_feature.feature_json ->> 'team_spread_line' IS NOT NULL)
+                    AS market_context_point_in_time_safe,
             """
             feature_join = ""
             pregame_select = """
@@ -2882,6 +3501,22 @@ class OptimizerService:
                     AS pregame_role_label,
                 projection_feature.feature_json ->> 'pregame_injury_status'
                     AS pregame_injury_status,
+                projection_feature.feature_json ->> 'practice_participation'
+                    AS practice_participation,
+                projection_feature.feature_json ->> 'practice_trend'
+                    AS practice_trend,
+                NULLIF(projection_feature.feature_json ->> 'practice_observed_at', '')::TIMESTAMPTZ
+                    AS practice_observed_at,
+                projection_feature.feature_json ->> 'expected_workload_status'
+                    AS expected_workload_status,
+                NULLIF(projection_feature.feature_json ->> 'expected_workload_observed_at', '')::TIMESTAMPTZ
+                    AS expected_workload_observed_at,
+                projection_feature.feature_json ->> 'market_source_system'
+                    AS market_source_system,
+                projection_feature.feature_json ->> 'market_observed_at'
+                    AS market_observed_at,
+                projection_feature.feature_json ->> 'team_starting_qb_name'
+                    AS team_starting_qb_name,
                 projection_feature.feature_json
                     ->> 'pregame_context_run_id' AS pregame_context_run_id,
                 projection_feature.feature_json
@@ -2902,16 +3537,91 @@ class OptimizerService:
                     AS pregame_goal_line_share,
                 NULLIF(projection_feature.feature_json ->> 'carries_mean_3', '')::DOUBLE PRECISION
                     AS carries_mean_3,
+                NULLIF(projection_feature.feature_json ->> 'targets_mean_3', '')::DOUBLE PRECISION
+                    AS targets_mean_3,
+                NULLIF(projection_feature.feature_json ->> 'snap_share_mean_3', '')::DOUBLE PRECISION
+                    AS snap_share_mean_3,
+                NULLIF(projection_feature.feature_json ->> 'target_share_mean_3', '')::DOUBLE PRECISION
+                    AS target_share_mean_3,
+                NULLIF(projection_feature.feature_json ->> 'team_targets_mean_3', '')::DOUBLE PRECISION
+                    AS team_targets_mean_3,
+                NULLIF(projection_feature.feature_json ->> 'team_carries_mean_3', '')::DOUBLE PRECISION
+                    AS team_carries_mean_3,
+                NULLIF(projection_feature.feature_json ->> 'carry_share_mean_3', '')::DOUBLE PRECISION
+                    AS carry_share_mean_3,
+                NULLIF(projection_feature.feature_json ->> 'projected_targets', '')::DOUBLE PRECISION
+                    AS projected_targets,
+                NULLIF(projection_feature.feature_json ->> 'projected_carries', '')::DOUBLE PRECISION
+                    AS projected_carries,
+                NULLIF(projection_feature.feature_json ->> 'offensive_role_importance', '')::DOUBLE PRECISION
+                    AS offensive_role_importance,
+                NULLIF(projection_feature.feature_json ->> 'offensive_role_completeness', '')::DOUBLE PRECISION
+                    AS offensive_role_completeness,
+                projection_feature.feature_json ->> 'offensive_role_class'
+                    AS offensive_role_class,
+                projection_feature.feature_json ->> 'offensive_role_confidence'
+                    AS offensive_role_confidence,
+                projection_feature.feature_json ->> 'offensive_role_reason'
+                    AS offensive_role_reason,
+                projection_feature.feature_json ->> 'offensive_role_source'
+                    AS offensive_role_source,
+                projection_feature.feature_json -> 'role_counterfactual_grid'
+                    AS role_counterfactual_grid,
+                projection_model_run.params_json -> 'calibration' -> 'historical_role_calibration'
+                    AS historical_role_calibration,
+                projection_registry.model_version AS projection_model_version,
+                projection_feature.feature_json ->> 'projected_opportunity_source'
+                    AS projected_opportunity_source,
+                NULLIF(projection_feature.feature_json ->> 'pregame_opportunity_context_applied', '')::BOOLEAN
+                    AS pregame_opportunity_context_applied,
+                NULLIF(projection_feature.feature_json ->> 'player_roll3_mean', '')::DOUBLE PRECISION
+                    AS player_roll3_mean,
+                NULLIF(projection_feature.feature_json ->> 'snap_share_last', '')::DOUBLE PRECISION
+                    AS snap_share_last,
+                NULLIF(projection_feature.feature_json ->> 'snap_share_prior3', '')::DOUBLE PRECISION
+                    AS snap_share_prior3,
+                NULLIF(projection_feature.feature_json ->> 'snap_share_trend', '')::DOUBLE PRECISION
+                    AS snap_share_trend,
+                NULLIF(projection_feature.feature_json ->> 'target_share_last', '')::DOUBLE PRECISION
+                    AS target_share_last,
+                NULLIF(projection_feature.feature_json ->> 'target_share_prior3', '')::DOUBLE PRECISION
+                    AS target_share_prior3,
+                NULLIF(projection_feature.feature_json ->> 'target_share_trend', '')::DOUBLE PRECISION
+                    AS target_share_trend,
+                NULLIF(projection_feature.feature_json ->> 'rush_share_last', '')::DOUBLE PRECISION
+                    AS rush_share_last,
+                NULLIF(projection_feature.feature_json ->> 'rush_share_prior3', '')::DOUBLE PRECISION
+                    AS rush_share_prior3,
+                NULLIF(projection_feature.feature_json ->> 'rush_share_trend', '')::DOUBLE PRECISION
+                    AS rush_share_trend,
+                NULLIF(projection_feature.feature_json ->> 'receptions_mean_3', '')::DOUBLE PRECISION
+                    AS receptions_mean_3,
+                NULLIF(projection_feature.feature_json ->> 'receiving_yards_mean_3', '')::DOUBLE PRECISION
+                    AS receiving_yards_mean_3,
                 COALESCE(NULLIF(projection_feature.feature_json ->> 'pregame_role_uncertain', '')::BOOLEAN, FALSE)
                     AS pregame_role_uncertain,
                 COALESCE(NULLIF(projection_feature.feature_json ->> 'pregame_newly_assigned_role', '')::BOOLEAN, FALSE)
                     AS pregame_newly_assigned_role,
                 COALESCE(NULLIF(projection_feature.feature_json ->> 'pregame_depth_chart_conflict', '')::BOOLEAN, FALSE)
                     AS pregame_depth_chart_conflict,
+                projection_feature.feature_json ->> 'official_availability_status'
+                    AS official_availability_status,
+                COALESCE(projection_feature.feature_json ->> 'availability_override', 'default')
+                    AS availability_override,
+                NULLIF(projection_feature.feature_json ->> 'model_availability_used', '')::DOUBLE PRECISION
+                    AS model_availability_used,
+                COALESCE(NULLIF(projection_feature.feature_json ->> 'opportunity_redistributed', '')::BOOLEAN, FALSE)
+                    AS opportunity_redistributed,
+                NULLIF(projection_feature.feature_json ->> 'projection_before_scenario', '')::DOUBLE PRECISION
+                    AS projection_before_scenario,
+                NULLIF(projection_feature.feature_json ->> 'projection_after_scenario', '')::DOUBLE PRECISION
+                    AS projection_after_scenario,
             """
             pregame_join = """
                 LEFT JOIN target.model_run projection_model_run
                   ON projection_model_run.model_run_id = p.model_run_id
+                LEFT JOIN target.model_registry projection_registry
+                  ON projection_registry.model_id = projection_model_run.model_id
                 LEFT JOIN target.feature_player_game projection_feature
                   ON projection_feature.feature_run_id =
                         projection_model_run.feature_run_id
@@ -2939,12 +3649,16 @@ class OptimizerService:
         ownership_select = """
                 NULL::DOUBLE PRECISION AS captain_ownership,
                 NULL::DOUBLE PRECISION AS flex_ownership,
+                NULL::DOUBLE PRECISION AS ownership,
+                NULL::TEXT AS ownership_run_id,
         """
         ownership_join = ""
         if has_ownership:
             ownership_select = """
                 ownership.captain_ownership,
                 ownership.flex_ownership,
+                ownership.player_ownership AS ownership,
+                ownership.ownership_run_id,
             """
             ownership_join = """
                 LEFT JOIN LATERAL (
@@ -2954,14 +3668,20 @@ class OptimizerService:
                         ) AS captain_ownership,
                         MAX(projected_ownership) FILTER (
                             WHERE UPPER(roster_position) = 'FLEX'
-                        ) AS flex_ownership
+                        ) AS flex_ownership,
+                        SUM(projected_ownership) FILTER (
+                            WHERE UPPER(roster_position) <> 'CPT'
+                        ) AS player_ownership,
+                        MAX(ownership_run_id::TEXT) AS ownership_run_id
                     FROM target.ownership_projection ownership_row
                     WHERE ownership_row.season = :season
                       AND ownership_row.week = :week
                       AND UPPER(ownership_row.slate_id) = UPPER(:slate)
                       AND ownership_row.player_id = s.player_id
-                      AND ownership_row.ownership_run_id = (
-                          SELECT latest.ownership_run_id
+                      AND ownership_row.ownership_run_id::TEXT = COALESCE(
+                          :ownership_run_id,
+                          (
+                          SELECT latest.ownership_run_id::TEXT
                           FROM target.ownership_model_run latest
                           WHERE latest.season = :season
                             AND latest.week = :week
@@ -2970,6 +3690,7 @@ class OptimizerService:
                                    latest.created_at DESC,
                                    latest.ownership_run_id DESC
                           LIMIT 1
+                          )
                       )
                 ) ownership ON TRUE
             """
@@ -3017,6 +3738,12 @@ class OptimizerService:
                     ELSE UPPER({position_source})
                 END AS position,
                 s.salary,
+                s.salary_source_row_id,
+                s.salary_ingest_run_id,
+                s.salary_source_system,
+                s.salary_source_path,
+                s.salary_source_checksum,
+                s.salary_source_observed_at,
                 s.player_status,
                 UPPER(TRIM(COALESCE(s.player_status, ''))) NOT IN (
                     {INELIGIBLE_SALARY_STATUSES_SQL}
@@ -3036,6 +3763,7 @@ class OptimizerService:
                 {feature_select}
                 {starter_select}
                 {roster_status_select},
+                {depth_chart_select},
                 {roster_evidence_select},
                 {injury_status_select},
                 {calibration_select['calibration_method']} AS calibration_method,
@@ -3047,11 +3775,13 @@ class OptimizerService:
             LEFT JOIN target.dim_player d ON d.player_id = s.player_id
             {injury_join}
             {roster_join}
+            {depth_chart_join}
             {feature_join}
             {starter_join}
             {pregame_join}
             {ownership_join}
             {row_filter}
+            ORDER BY s.player_id
             """
         )
         with self.engine.begin() as connection:
@@ -3063,6 +3793,7 @@ class OptimizerService:
                     "week": week,
                     "slate": slate,
                     "projection_run_id": projection_run_id,
+                    "ownership_run_id": ownership_run_id,
                 },
             )
         if pool.empty:
@@ -3084,12 +3815,32 @@ class OptimizerService:
         pool["team_norm"] = pool["player_team"]
         return pool
 
+    def _showdown_ownership_selector_policy(self, pool: pd.DataFrame) -> dict:
+        from .showdown_ownership_policy import showdown_ownership_policy
+
+        run_ids = sorted(set(pool.get("ownership_run_id", pd.Series(dtype=str)).dropna().astype(str)))
+        headers = []
+        if run_ids:
+            try:
+                with self.engine.connect() as connection:
+                    headers = [dict(row) for row in connection.execute(text("""
+                        SELECT ownership_run_id::TEXT, metrics_json
+                        FROM target.ownership_model_run
+                        WHERE ownership_run_id::TEXT = ANY(:run_ids)
+                    """), {"run_ids": run_ids}).mappings()]
+            except SQLAlchemyError:
+                # Older databases or frozen offline runs have no promotion
+                # evidence. Do not silently treat coverage as approval.
+                headers = []
+        return showdown_ownership_policy(headers, run_ids)
+
     def _load_player_pool(
         self,
         season: int,
         week: int,
         slate: str,
         projection_run_id: str | None = None,
+        ownership_run_id: str | None = None,
     ) -> pd.DataFrame:
         """Join salaries with projections for the slate."""
         inspector = inspect(self.engine)
@@ -3105,6 +3856,7 @@ class OptimizerService:
                 week,
                 slate,
                 projection_run_id=projection_run_id,
+                ownership_run_id=ownership_run_id,
             )
         if not (
             inspector.has_table("curated_salaries")
@@ -3115,6 +3867,7 @@ class OptimizerService:
                 week,
                 slate,
                 projection_run_id=projection_run_id,
+                ownership_run_id=ownership_run_id,
             )
         try:
             with self.engine.begin() as connection:
@@ -3679,6 +4432,8 @@ class OptimizerService:
         avoid_dst_opponents: bool,
         uniqueness_overlap: int | None = None,
         locked_player_ids: set[str] | None = None,
+        excluded_player_ids: set[str] | None = None,
+        excluded_opponent_teams: set[str] | None = None,
     ) -> tuple[bool, str]:
         """Validate finalized classic lineups independently of either solver."""
         exposure_counts: dict[str, int] = {}
@@ -3699,6 +4454,19 @@ class OptimizerService:
                 return False, f"Lineup {lineup_number} has a missing canonical player ID"
             if len(set(player_ids)) != len(player_ids):
                 return False, f"Lineup {lineup_number} contains a duplicate player ID"
+            excluded_players = set(player_ids) & (excluded_player_ids or set())
+            if excluded_players:
+                return False, (
+                    f"Lineup {lineup_number} contains excluded player(s): "
+                    + ", ".join(sorted(excluded_players))
+                )
+            if excluded_opponent_teams:
+                for row, player_id in zip(lineup, player_ids):
+                    opponent = str(row.get("opponent_team") or row.get("opponent") or "").strip().upper()
+                    if not opponent:
+                        return False, f"Lineup {lineup_number} player {player_id} is missing opponent team"
+                    if opponent in excluded_opponent_teams:
+                        return False, f"Lineup {lineup_number} player {player_id} faces excluded opponent {opponent}"
             missing_locks = (locked_player_ids or set()) - set(player_ids)
             if missing_locks:
                 return False, (
@@ -3803,12 +4571,14 @@ class OptimizerService:
         *,
         requested_lineups: int,
         max_exposure: float,
+        enforce_single_te: bool = False,
         require_qb_captain_receiver: bool = False,
         portfolio_policy: bool = False,
         allow_duplicate_lineups: bool = False,
         portfolio_exposure_rates: dict[str, float] | None = None,
         locked_player_ids: set[str] | None = None,
         flex_only_player_ids: set[str] | None = None,
+        excluded_opponent_teams: set[str] | None = None,
     ) -> tuple[bool, str]:
         """Validate the persisted one-CPT/five-FLEX contract independently."""
         exposure_counts: dict[str, int] = {}
@@ -3834,6 +4604,13 @@ class OptimizerService:
                 return False, f"Lineup {lineup_number} has a missing canonical player ID"
             if len(set(player_ids)) != len(player_ids):
                 return False, f"Lineup {lineup_number} contains a duplicate player ID"
+            if excluded_opponent_teams:
+                for row, player_id in zip(lineup, player_ids):
+                    opponent = str(row.get("opponent_team") or row.get("opponent") or "").strip().upper()
+                    if not opponent:
+                        return False, f"Lineup {lineup_number} player {player_id} is missing opponent team"
+                    if opponent in excluded_opponent_teams:
+                        return False, f"Lineup {lineup_number} player {player_id} faces excluded opponent {opponent}"
             missing_locks = (locked_player_ids or set()) - set(player_ids)
             if missing_locks:
                 return False, (
@@ -4251,7 +5028,7 @@ class OptimizerService:
             for player_id in frame.loc[mask, "player_id"]:
                 reasons.setdefault(str(player_id), []).append(reason)
 
-        if strategy == CLASSIC_HEAD_TO_HEAD_STRATEGY_ID:
+        if strategy in {CLASSIC_HEAD_TO_HEAD_STRATEGY_ID, CLASSIC_SMALL_FIELD_GPP_STRATEGY_ID}:
             positive_projection = (frame["projection"] > 0) & (frame["p90"] > 0)
             exclude(~positive_projection, "no positive projection")
             keep = positive_projection.copy()
@@ -4271,6 +5048,13 @@ class OptimizerService:
                 )
                 exclude(backup_qb, "backup QB / zero expected snaps")
                 keep &= ~backup_qb
+            if strategy == CLASSIC_SMALL_FIELD_GPP_STRATEGY_ID:
+                eligible, opportunity_excluded = apply_showdown_opportunity_gate(frame.loc[keep])
+                for player_id in opportunity_excluded:
+                    reasons.setdefault(str(player_id), []).append(
+                        "low-opportunity skill player under existing generalized gate"
+                    )
+                keep &= frame["player_id"].isin(set(eligible["player_id"].astype(str)))
             return frame.loc[keep].reset_index(drop=True), reasons
 
         if strategy == CLASSIC_LARGE_GPP_STRATEGY_ID:
@@ -4398,6 +5182,11 @@ class OptimizerService:
         pool[score_col] = pd.to_numeric(pool[score_col], errors="coerce").fillna(0)
         pool["salary"] = pd.to_numeric(pool.get("salary", 0), errors="coerce").fillna(0)
         pool = pool.reset_index(drop=True)
+        if contest_type == "captain":
+            qb_multipliers = _showdown_qb_correlation_multipliers(pool)
+            pool["qb_correlation_multiplier"] = pool["player_id"].astype(str).map(
+                qb_multipliers
+            ).fillna(1.0)
         print(f"[solve] sample objective values:\n{pool[[score_col,'name','position','salary']].head(5).to_string(index=False)}")
 
         context_score_columns = {
@@ -4474,12 +5263,12 @@ class OptimizerService:
             )
             if bool(params.get("use_role_ownership", False)):
                 ownership_weight = float(params.get("ownership_weight", 0.08))
-                captain_ownership = pd.to_numeric(
-                    pool.get("captain_ownership", np.nan), errors="coerce"
-                )
-                flex_ownership = pd.to_numeric(
-                    pool.get("flex_ownership", np.nan), errors="coerce"
-                )
+                if not {"captain_ownership", "flex_ownership"} <= set(pool.columns):
+                    raise ValueError("Role ownership scoring requires both CPT and FLEX ownership")
+                captain_ownership = pd.to_numeric(pool["captain_ownership"], errors="coerce")
+                flex_ownership = pd.to_numeric(pool["flex_ownership"], errors="coerce")
+                if not (np.isfinite(captain_ownership).all() and np.isfinite(flex_ownership).all()):
+                    raise ValueError("Role ownership scoring requires complete finite CPT/FLEX ownership")
                 objective_expression -= ownership_weight * pulp.lpSum(
                     _safe_float(captain_ownership.iloc[i]) * cap_vars[i]
                     + _safe_float(flex_ownership.iloc[i]) * flex_vars[i]
@@ -4503,6 +5292,9 @@ class OptimizerService:
                             for trigger in term.evaluation.triggered_rules
                         )
                     ]
+                    correlation_terms = _scale_showdown_qb_bonus_terms(
+                        pool, correlation_terms
+                    )
                 objective_expression += add_lineup_correlation_objective(
                     model,
                     correlation_terms,
@@ -4520,6 +5312,8 @@ class OptimizerService:
                         term for term in format_terms
                         if term.kind != "showdown_fragile_punt"
                     ]
+                if bool(params.get("saturate_correlations", False)):
+                    format_terms = _scale_showdown_qb_bonus_terms(pool, format_terms)
                 objective_expression += add_format_specific_objective(
                     model,
                     format_terms,
@@ -4639,6 +5433,30 @@ class OptimizerService:
                             ).iloc[0]
                             if pd.notna(ownership) and float(ownership) > median_ownership:
                                 model += cap_vars[i] == 0
+            elif script_kind == "team_control" and script_team:
+                team_indexes = [i for i in index_range if normalized_teams.iloc[i] == script_team]
+                model += pulp.lpSum(selected[i] for i in team_indexes) >= int(
+                    script.get("minimum_team_players", 4)
+                )
+                model += pulp.lpSum(cap_vars[i] for i in team_indexes) == 1
+                for required_position in script.get("required_positions", []):
+                    required_indexes = [
+                        i for i in team_indexes
+                        if normalized_positions.iloc[i] == required_position
+                        or (required_position == "DST" and normalized_positions.iloc[i] in {"D", "DEF"})
+                    ]
+                    model += pulp.lpSum(selected[i] for i in required_indexes) >= 1
+            elif script_kind == "scenario_construction" and script_team:
+                team_indexes = [i for i in index_range if normalized_teams.iloc[i] == script_team]
+                if script.get("team_players") is not None:
+                    model += pulp.lpSum(selected[i] for i in team_indexes) == int(script["team_players"])
+                for required_position in script.get("required_positions", []):
+                    required_indexes = [
+                        i for i in team_indexes
+                        if normalized_positions.iloc[i] == required_position
+                        or (required_position == "DST" and normalized_positions.iloc[i] in {"D", "DEF"})
+                    ]
+                    model += pulp.lpSum(selected[i] for i in required_indexes) >= 1
 
             if quality_floor:
                 mean_expression = pulp.lpSum(
@@ -4792,6 +5610,16 @@ class OptimizerService:
                         base_salary = _safe_float(row.get("salary"))
                         base_projection = _safe_float(row.get("projection"))
                         base_p90 = _safe_float(row.get("p90", base_projection))
+                        if "baseline_projection" in row:
+                            row["baseline_projection"] = _safe_float(row["baseline_projection"]) * (1.5 if selected_cap else 1.0)
+                        if "baseline_p90" in row:
+                            row["baseline_p90"] = _safe_float(row["baseline_p90"]) * (1.5 if selected_cap else 1.0)
+                        if selected_cap and isinstance(row.get("showdown_scenario_adjustment"), dict):
+                            adjustment = dict(row["showdown_scenario_adjustment"])
+                            for field in ("baseline_mean", "scenario_mean", "baseline_p90", "scenario_p90", "delta_mean", "delta_p90"):
+                                if adjustment.get(field) is not None:
+                                    adjustment[field] = _safe_float(adjustment[field]) * 1.5
+                            row["showdown_scenario_adjustment"] = adjustment
                         base_objective = _safe_float(
                             row.get(score_col, row.get("projection"))
                         )
@@ -4837,6 +5665,10 @@ class OptimizerService:
                 paired_rows.append(lineup_rows)
             lineup_rows = paired_rows[0]
             lineup_rows[0]["solver_objective_value"] = scored_objective_value
+            lineup_rows[0]["solver_ownership_weight"] = (
+                float(params.get("ownership_weight", 0.08))
+                if bool(params.get("use_role_ownership", False)) else 0.0
+            )
             if replay is not None:
                 lineup_rows[0]["lineup_control_comparison"] = build_comparison(
                     lineup_rows, paired_rows[1], replay, profile=rule_profile,
@@ -5069,6 +5901,8 @@ class OptimizerService:
                 return existing
         now = datetime.now(timezone.utc).replace(tzinfo=None)
         params = dict(params or {})
+        if "exclude_questionable" in params and type(params["exclude_questionable"]) is not bool:
+            raise ValueError("params.exclude_questionable must be an explicit boolean")
 
         contest_format, objective, contest_type = resolve_optimizer_mode(
             contest_format=contest_format,
@@ -5081,6 +5915,24 @@ class OptimizerService:
             strategy=strategy,
         )
         strategy = str(strategy_config["strategy_id"])
+        if "long_shot_mode" in params and type(params["long_shot_mode"]) is not bool:
+            raise ValueError("params.long_shot_mode must be an explicit boolean")
+        long_shot_mode = bool(params.get("long_shot_mode", False))
+        if long_shot_mode and objective != "gpp":
+            raise ValueError("Long-shot mode is available only for GPP optimization")
+        if long_shot_mode:
+            params["num_lineups"] = 1
+        if contest_format == "showdown":
+            # The legacy request field is accepted for saved-run compatibility;
+            # Showdown legality now permits any number of tight ends.
+            params["enforce_single_te"] = False
+            margin = float(params.get("showdown_decisive_margin", DEFAULT_DECISIVE_MARGIN))
+            if not math.isfinite(margin) or margin < 7 or margin > 35:
+                raise ValueError("showdown_decisive_margin must be between 7 and 35")
+            params["showdown_decisive_margin"] = margin
+            if type(params.get("require_scenario_diversity", False)) is not bool:
+                raise ValueError("require_scenario_diversity must be an explicit boolean")
+            params["require_scenario_diversity"] = bool(params.get("require_scenario_diversity", False))
         params["strategy_config"] = strategy_config
         optimizer_rules = (
             showdown_optimizer_rules(strategy)
@@ -5209,12 +6061,51 @@ class OptimizerService:
             rule_run_id=rule_run_id,
             data_cutoff_at=data_cutoff_at,
         )
+        if projection_run_id is None:
+            raise ValueError(f"No completed projection is available for {season} Week {week} {slate}")
+
+        projection_market_audit: dict = {}
+        historical_captain_report: dict = {}
+        historical_qb_pool: list[dict] = []
+        if contest_format == "showdown":
+            historical_path = (Path(__file__).resolve().parents[3]
+                               / "docs/showdown_captain_optimality_2024_2026.json")
+            try:
+                candidate_report = json.loads(historical_path.read_text(encoding="utf-8"))
+                latest = candidate_report.get("latest_completed_period") or []
+                if len(latest) == 2 and (int(latest[0]), int(latest[1])) < (season, week):
+                    historical_captain_report = candidate_report
+                    params.setdefault("strategy_runtime", {})[
+                        "historical_captain_optimality"
+                    ] = {"status": "available", "source_sha256": candidate_report.get("source_sha256"),
+                         "slate_count": candidate_report.get("slate_count"),
+                         "prior_application": candidate_report.get("prior_application")}
+                else:
+                    historical_captain_report = {"status": "unavailable_future_or_same_period_artifact"}
+            except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+                historical_captain_report = {"status": "unavailable", "reason": str(exc)}
+        if contest_format == "showdown" and self.engine.dialect.name == "postgresql":
+            with self.engine.connect() as connection:
+                market_row = connection.execute(text("""
+                    SELECT mr.params_json -> 'calibration' -> 'market_context' AS market_context
+                    FROM target.projection_run pr
+                    JOIN target.model_run mr ON mr.model_run_id = pr.model_run_id
+                    WHERE pr.projection_run_id = :run_id
+                """), {"run_id": projection_run_id}).scalar_one_or_none()
+            if isinstance(market_row, dict):
+                projection_market_audit = market_row
+                params.setdefault("strategy_runtime", {})["projection_market_audit"] = market_row
 
         pool = self._load_player_pool(
             season,
             week,
             slate,
             projection_run_id=projection_run_id,
+            ownership_run_id=(
+                str(params.get("ownership_run_id"))
+                if params.get("ownership_run_id")
+                else None
+            ),
         )
         initial_pool = pool.copy()
         eligible_pool_ids: set[str] = set()
@@ -5246,12 +6137,36 @@ class OptimizerService:
                 "FLEX-only canonical player IDs were not found in the selected slate: "
                 + ", ".join(sorted(missing_flex_only_ids))
             )
+        requested_captain_id = str(params.get("locked_captain_player_id") or "").strip()
+        if requested_captain_id and requested_captain_id not in initial_player_ids:
+            raise ValueError("Locked Captain player ID was not found in the selected slate")
+        if requested_captain_id and requested_captain_id in flex_only_ids:
+            raise ValueError("Locked Captain cannot also be FLEX-only")
         params["flex_only_player_ids"] = sorted(flex_only_ids)
         params["flex_only_players"] = sorted(flex_only_names)
         exclude_ids = normalize_canonical_player_ids(
             params.get("exclude_player_ids"),
             field_name="exclude_player_ids",
         )
+        resolved_exclude_ids, excluded_player_names = _resolve_player_control_names(
+            initial_pool,
+            params.get("exclude_players"),
+            field_name="Excluded",
+        )
+        exclude_ids.update(resolved_exclude_ids)
+        params["exclude_player_ids"] = sorted(exclude_ids)
+        params["exclude_players"] = sorted(excluded_player_names)
+        opponent_values = params.get("exclude_opponent_teams") or []
+        if isinstance(opponent_values, str):
+            opponent_values = opponent_values.split(",")
+        if not isinstance(opponent_values, (list, tuple, set)):
+            raise ValueError("exclude_opponent_teams must be a list of team codes")
+        excluded_opponent_teams = {
+            str(value).strip().upper() for value in opponent_values if str(value).strip()
+        }
+        if any(not re.fullmatch(r"[A-Z]{2,3}", team) for team in excluded_opponent_teams):
+            raise ValueError("exclude_opponent_teams must contain NFL team codes such as DEN")
+        params["exclude_opponent_teams"] = sorted(excluded_opponent_teams)
         lock_values: list = []
         for lock_field in ("lock_player_ids", "locked_player_ids"):
             field_values = params.get(lock_field)
@@ -5265,6 +6180,21 @@ class OptimizerService:
             lock_values,
             field_name="locked_player_ids",
         )
+        resolved_locked_ids, locked_player_names = _resolve_player_control_names(
+            initial_pool,
+            params.get("locked_players"),
+            field_name="Locked",
+        )
+        locked_ids.update(resolved_locked_ids)
+        requested_exclude_names = set(excluded_player_names)
+        conflicting_lock_names = {
+            _normalize_alias(name) for name in locked_player_names
+        } & {_normalize_alias(name) for name in requested_exclude_names}
+        if conflicting_lock_names:
+            raise ValueError(
+                "Players cannot be both locked and excluded: "
+                + ", ".join(sorted(conflicting_lock_names))
+            )
         conflicting_controls = exclude_ids & locked_ids
         if conflicting_controls:
             raise ValueError(
@@ -5284,6 +6214,7 @@ class OptimizerService:
                 f"{contest_format}"
             )
         params["locked_player_ids"] = sorted(locked_ids)
+        params["locked_players"] = sorted(locked_player_names)
 
         rule_profile = resolve_strategy_profile(
             contest_format=contest_format,
@@ -5298,7 +6229,9 @@ class OptimizerService:
             "profile_version": rule_profile.version,
             "objective_multiplier": 1.0,
             "evidence_status": "initial_policy_unvalidated",
+            "policy_alignment": strategy_config["policy_alignment"],
         }
+        validate_player_pool_evidence_consistency(pool)
         safety_result = evaluate_player_pool_safety(
             pool,
             profile=rule_profile,
@@ -5306,6 +6239,7 @@ class OptimizerService:
             as_of=datetime.now(timezone.utc),
             projection_cutoff=data_cutoff_at,
             user_excluded_player_ids=exclude_ids,
+            exclude_questionable=params.get("exclude_questionable", False),
         )
         pool = safety_result.eligible_pool
         params.setdefault("strategy_runtime", {})["player_pool_safety"] = (
@@ -5347,7 +6281,7 @@ class OptimizerService:
                 ):
                     warnings.append(warning)
 
-        if strategy == SHOWDOWN_GPP_CAPTAIN_INFORMED_STRATEGY_ID or strategy in SHOWDOWN_SINGLE_ENTRY_STRATEGY_IDS:
+        if strategy in {SHOWDOWN_GPP_CAPTAIN_INFORMED_STRATEGY_ID, SHOWDOWN_THREE_MAX_GPP_STRATEGY_ID, SHOWDOWN_SMALL_MAX_GPP_STRATEGY_ID} or strategy in SHOWDOWN_SINGLE_ENTRY_STRATEGY_IDS:
             pool, opportunity_excluded = apply_showdown_opportunity_gate(pool)
             opportunity_eligible_ids = set(pool["player_id"].astype(str))
             for player_id in opportunity_excluded:
@@ -5436,8 +6370,17 @@ class OptimizerService:
                 params.setdefault("strategy_runtime", {})[
                     "starter_qb_filter"
                 ] = starter_runtime
+                historical_qb_pool = pool.loc[
+                    pool["position"].astype(str).str.upper().eq("QB")
+                ].to_dict(orient="records")
             except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
-                pool_failure_message = f"Showdown optimizer blocked: {exc}"
+                lineage = f"projection run {projection_run_id or 'unresolved'}"
+                if data_cutoff_at is not None:
+                    lineage += f" (cutoff {data_cutoff_at.isoformat()})"
+                pool_failure_message = (
+                    f"Showdown optimizer blocked: {exc} Selected {lineage}; "
+                    "review the projection selection and source snapshots."
+                )
                 record_pool_exclusions(pool, pd.DataFrame(), "starter_validation_failed")
                 pool = pd.DataFrame()
         simulation_result = None
@@ -5475,6 +6418,22 @@ class OptimizerService:
             if not pool.empty and "player_id" in pool
             else set()
         )
+        if excluded_opponent_teams and not pool.empty:
+            before_opponent_exclusions = pool.copy()
+            pool = apply_user_opponent_preferences(pool, excluded_opponent_teams)
+            record_pool_exclusions(
+                before_opponent_exclusions, pool, "excluded_opponent_team", ExclusionCategory.USER,
+            )
+            retained_ids = set(pool["player_id"].astype(str))
+            for excluded_row in before_opponent_exclusions.loc[
+                ~before_opponent_exclusions["player_id"].astype(str).isin(retained_ids)
+            ].to_dict(orient="records"):
+                player_id = _safe_text(excluded_row.get("player_id"))
+                opponent = _safe_text(excluded_row.get("opponent_team")).upper()
+                for detail in exclusion_details.get(player_id, []):
+                    if detail.get("reason_code") == "excluded_opponent_team":
+                        detail["rule_id"] = USER_OPPONENT_PREFERENCE_RULE_ID
+                        detail["description"] = f"User preference — opponent {opponent}"
         # Optional hard exclusions by player name/id passed in params
         exclude_names = {
             str(name).lower().strip(): str(name).lower().strip()
@@ -5608,6 +6567,8 @@ class OptimizerService:
             "locked_player_ids": sorted(locked_ids),
             "excluded_player_ids": sorted(exclude_ids),
             "excluded_player_names": sorted(exclude_names),
+            "excluded_opponent_teams": sorted(excluded_opponent_teams),
+            "exclude_questionable": params.get("exclude_questionable", False),
             "flex_only_player_ids": sorted(flex_only_ids),
             "flex_only_player_names": sorted(flex_only_names),
         }
@@ -5649,27 +6610,62 @@ class OptimizerService:
                     ).fillna(0.0)
                     params["leverage_weight"] = leverage_weight
                 score_col = "gpp_score"
-            enforce_single_te = bool(params.get("enforce_single_te", False))
+            enforce_single_te = False if contest_format == "showdown" else bool(params.get("enforce_single_te", False))
             avoid_dst_opponents = bool(params.get("avoid_dst_opponents", False))
             stack_cfg = dict(stack_policy)
             stack_cfg["require_qb_captain_receiver"] = (
                 require_qb_captain_receiver
             )
-            portfolio_v3 = strategy == SHOWDOWN_GPP_CAPTAIN_INFORMED_STRATEGY_ID
-            single_entry = strategy in SHOWDOWN_SINGLE_ENTRY_STRATEGY_IDS
-            if portfolio_v3 or single_entry:
+            portfolio_v3 = strategy == SHOWDOWN_GPP_CAPTAIN_INFORMED_STRATEGY_ID and not long_shot_mode
+            single_entry = strategy in SHOWDOWN_SINGLE_ENTRY_STRATEGY_IDS and not long_shot_mode
+            three_max = strategy == SHOWDOWN_THREE_MAX_GPP_STRATEGY_ID and not long_shot_mode
+            small_max = strategy == SHOWDOWN_SMALL_MAX_GPP_STRATEGY_ID and not long_shot_mode
+            if contest_format == "showdown" and params.get("require_scenario_diversity") and (
+                not portfolio_v3 or num_lineups > 5
+            ):
+                raise ValueError(
+                    "require_scenario_diversity is available for showdown_gpp_portfolio_v3 with up to five lineups"
+                )
+            portfolio_contest = None
+            if portfolio_v3 and params.get("contest_urls"):
+                from .showdown_contests import fetch_contests, validate_entry_limit_contest
+                urls = params["contest_urls"]
+                if not isinstance(urls, list) or len(urls) != 1:
+                    raise ValueError("Five-entry Showdown GPP requires exactly one contest URL")
+                if num_lineups != 5:
+                    raise ValueError("A 5-max contest URL requires exactly five requested lineups")
+                fetched = fetch_contests(urls, manual=params.get("manual_contest_metadata"))
+                from .saved_contests import record_saved_observations
+                record_saved_observations(self.engine, fetched, reason="optimizer")
+                portfolio_contest = validate_entry_limit_contest(fetched[0], maximum_entries=5)
+            if portfolio_v3 or single_entry or three_max or small_max or long_shot_mode:
+                ownership_selector_policy = self._showdown_ownership_selector_policy(pool)
+                params.setdefault("strategy_runtime", {})["showdown_ownership_selector_policy"] = ownership_selector_policy
+                showdown_ownership_complete = bool(
+                    {"captain_ownership", "flex_ownership"} <= set(pool.columns)
+                    and pd.to_numeric(pool["captain_ownership"], errors="coerce").notna().all()
+                    and pd.to_numeric(pool["flex_ownership"], errors="coerce").notna().all()
+                    and ownership_selector_policy["eligible"]
+                )
+                if not showdown_ownership_complete:
+                    for field in ("ownership", "captain_ownership", "flex_ownership"):
+                        if field in pool:
+                            if "diagnostic_" + field not in pool:
+                                pool["diagnostic_" + field] = pool[field]
+                            pool[field] = None
                 stack_cfg.update(
                     {
-                        "require_starting_qb": single_entry or num_lineups <= 5,
+                        "require_starting_qb": single_entry or three_max or num_lineups <= 5,
                         "hard_qb_correlations": True,
                         "opportunity_gate": True,
                         "saturate_correlations": True,
-                        "use_role_ownership": bool(
-                            {"captain_ownership", "flex_ownership"} <= set(pool.columns)
-                            and pd.to_numeric(pool["captain_ownership"], errors="coerce").notna().any()
-                            and pd.to_numeric(pool["flex_ownership"], errors="coerce").notna().any()
+                        # A partial pool must not give missing players a zero-
+                        # ownership advantage in the linear objective.
+                        "use_role_ownership": showdown_ownership_complete,
+                        "ownership_weight": float(
+                            params.get("long_shot_ownership_weight", 0.35)
+                            if long_shot_mode else params.get("ownership_weight", 0.08)
                         ),
-                        "ownership_weight": float(params.get("ownership_weight", 0.08)),
                     }
                 )
 
@@ -5713,7 +6709,7 @@ class OptimizerService:
                     player_limits[pid] = max(1, int(math.ceil(num_lineups * rate)))
 
                 team_implied: dict[str, float] = {}
-                if portfolio_v3:
+                if portfolio_v3 or long_shot_mode:
                     for team, team_rows in pool.groupby("player_team"):
                         raw_values = (
                             team_rows["team_implied_total"]
@@ -5724,14 +6720,36 @@ class OptimizerService:
                         team_implied[str(team).upper()] = float(values.max()) if not values.empty else 0.0
                 ordered_teams = sorted(team_implied, key=lambda team: (-team_implied[team], team))
                 scripts: list[dict] = []
+                control_discovery_scripts: list[dict] = []
+                if portfolio_v3 and ordered_teams:
+                    favorite = ordered_teams[0]
+                    for minimum, required in (
+                        (4, []), (5, []), (4, ["RB"]),
+                        (4, ["DST"]), (4, ["RB", "DST"]),
+                    ):
+                        suffix = "_".join(required).lower() or "open"
+                        control_discovery_scripts.append({
+                            "script_id": f"{favorite}_{minimum}_{6-minimum}_control_{suffix}",
+                            "kind": "team_control", "team": favorite,
+                            "minimum_team_players": minimum,
+                            "required_positions": required,
+                            "label": f"{favorite} {minimum}-{6-minimum} control {suffix}",
+                        })
                 if portfolio_v3 and num_lineups == 5 and len(ordered_teams) >= 2:
                     scripts = [
-                        {"script_id": "shootout_1", "kind": "shootout", "label": "Shootout"},
-                        {"script_id": "shootout_2", "kind": "shootout", "label": "Shootout"},
+                        {"script_id": "shootout_1", "kind": "shootout", "label": "Two-sided pass stack"},
+                        {"script_id": "shootout_2", "kind": "shootout", "label": "Two-sided pass stack"},
                         {"script_id": f"{ordered_teams[0]}_run_control", "kind": "run_control", "team": ordered_teams[0], "label": f"{ordered_teams[0]} run-control"},
                         {"script_id": f"{ordered_teams[1]}_pass_led", "kind": "pass_led", "team": ordered_teams[1], "label": f"{ordered_teams[1]} pass-led"},
                         {"script_id": f"{ordered_teams[1]}_contrarian", "kind": "contrarian", "team": ordered_teams[1], "label": f"Contrarian {ordered_teams[1]} script"},
                     ]
+                elif long_shot_mode and len(ordered_teams) >= 2:
+                    scripts = [{
+                        "script_id": f"{ordered_teams[1]}_long_shot",
+                        "kind": "contrarian",
+                        "team": ordered_teams[1],
+                        "label": f"Long-shot {ordered_teams[1]} script",
+                    }]
                 quality_floor: dict[str, float] | None = None
                 captain_diversification: dict = {
                     "enabled": portfolio_v3 and num_lineups >= 10,
@@ -5773,11 +6791,336 @@ class OptimizerService:
                         },
                         "quality_floor": dict(quality_floor or {}),
                         "game_scripts": [dict(script) for script in scripts],
+                        "control_discovery_scripts": [dict(script) for script in control_discovery_scripts],
                         "ownership_status": (
                             "cpt_flex_available" if stack_cfg["use_role_ownership"] else "unavailable"
                         ),
                         "correlation_policy": "qb_stack_diminishing_60_30_10_bringback_once_v1",
                     }
+                    if num_lineups <= 5 and not requested_captain_id:
+                        base_kwargs = {
+                            "enforce_single_te": enforce_single_te,
+                            "avoid_dst_opponents": avoid_dst_opponents,
+                            "contest_type": contest_type,
+                            "stack_params": stack_cfg,
+                            "locked_player_ids": locked_ids,
+                            "flex_only_player_ids": flex_only_ids,
+                            "rule_profile": rule_profile,
+                            "include_control_comparison": False,
+                        }
+                        candidates: list[list[dict]] = []
+                        sources: dict[tuple[str, tuple[str, tuple[str, ...]]], set[str]] = {}
+                        scenario_definitions = define_game_scenarios(
+                            pool, params["showdown_decisive_margin"]
+                        )
+                        scenario_audits = [item.audit() for item in scenario_definitions]
+
+                        def add_candidate(lineup: list[dict] | None, source: str, scenario: dict | None = None) -> None:
+                            if not lineup:
+                                return
+                            scenario_audit = scenario or scenario_audits[0]
+                            if scenario_audit["scenario_id"] != "baseline":
+                                from .showdown_candidate_comparison import baseline_rescore_discovery
+
+                                lineup = baseline_rescore_discovery(lineup, lambda ids, captain: self._solve_lineup(
+                                    pool, score_col=score_col, locked_player_ids=ids,
+                                    locked_captain_player_id=captain,
+                                    **{key: value for key, value in base_kwargs.items() if key != "locked_player_ids"},
+                                ))
+                            for player in lineup:
+                                player["showdown_scenario_id"] = scenario_audit["scenario_id"]
+                                player["showdown_scenario"] = dict(scenario_audit)
+                                player["showdown_candidate_source"] = source
+                                player.setdefault("baseline_projection", player.get("projection"))
+                                player.setdefault("baseline_p90", player.get("p90"))
+                                player.setdefault("showdown_scenario_adjustment", {
+                                    "reason": "market baseline", "baseline_mean": player.get("projection"),
+                                    "scenario_mean": player.get("projection"),
+                                    "baseline_p90": player.get("p90"), "scenario_p90": player.get("p90"),
+                                    "delta_mean": 0.0, "delta_p90": 0.0,
+                                })
+                            correlation = score_lineup_correlations(lineup, profile=rule_profile)
+                            lineup[0]["lineup_correlation_summary"] = (
+                                _saturated_showdown_correlation_summary(lineup, correlation)
+                            )
+                            candidates.append(lineup)
+                            sources.setdefault((scenario_audit["scenario_id"], showdown_signature(lineup)), set()).add(source)
+
+                        normal_signatures: list[list[tuple[str, str]]] = []
+                        for _ in range(max(20, num_lineups * 6)):
+                            lineup = self._solve_lineup(
+                                pool, score_col=score_col,
+                                exclude_signatures=normal_signatures,
+                                **base_kwargs,
+                            )
+                            if not lineup:
+                                break
+                            normal_signatures.append([
+                                (str(row["player_id"]), str(row["roster_position"]))
+                                for row in lineup
+                            ])
+                            add_candidate(lineup, "normal")
+                        sequential_used: dict[str, int] = {}
+                        sequential_captains: dict[str, int] = {}
+                        sequential_signatures: list[list[tuple[str, str]]] = []
+                        for lineup_index in range(num_lineups):
+                            lineup = self._solve_lineup(
+                                pool, score_col=score_col,
+                                exposure_remaining={
+                                    pid: limit - sequential_used.get(pid, 0)
+                                    for pid, limit in player_limits.items()
+                                },
+                                captain_exposure_remaining={
+                                    pid: captain_limit - sequential_captains.get(pid, 0)
+                                    for pid in player_limits
+                                },
+                                exclude_signatures=sequential_signatures,
+                                quality_floor=quality_floor,
+                                portfolio_script=(scripts[lineup_index]
+                                                  if lineup_index < len(scripts) else None),
+                                **base_kwargs,
+                            )
+                            if not lineup:
+                                break
+                            add_candidate(lineup, "prior_sequential")
+                            sequential_signatures.append([
+                                (str(row["player_id"]), str(row["roster_position"]))
+                                for row in lineup
+                            ])
+                            for row in lineup:
+                                pid = str(row["player_id"])
+                                sequential_used[pid] = sequential_used.get(pid, 0) + 1
+                                if row["roster_position"] == "CPT":
+                                    sequential_captains[pid] = sequential_captains.get(pid, 0) + 1
+                        for script in [*scripts, *control_discovery_scripts]:
+                            add_candidate(self._solve_lineup(
+                                pool, score_col=score_col, portfolio_script=script,
+                                **base_kwargs,
+                            ), f"script:{script['script_id']}")
+                        raw_pool = pool.copy()
+                        raw_pool["captain_objective_multiplier"] = 1.0
+                        raw_kwargs = {
+                            **base_kwargs,
+                            "rule_profile": None,
+                            "stack_params": {**stack_cfg, "use_role_ownership": False},
+                        }
+                        for raw_score, label in (("projection", "highest_mean"), ("p90", "highest_p90")):
+                            raw = self._solve_lineup(raw_pool, score_col=raw_score, **raw_kwargs)
+                            if raw:
+                                # Re-evaluate this exact roster under the production
+                                # selector so all candidates have comparable scores.
+                                selected_ids = {str(row["player_id"]) for row in raw}
+                                captain_id = showdown_signature(raw)[0]
+                                rescored = self._solve_lineup(
+                                    pool, score_col=score_col,
+                                    locked_player_ids=selected_ids,
+                                    locked_captain_player_id=captain_id,
+                                    **{key: value for key, value in base_kwargs.items()
+                                       if key != "locked_player_ids"},
+                                )
+                                add_candidate(rescored, label)
+                        family_lineups: dict[str, list[dict]] = {}
+                        for _, player in pool.iterrows():
+                            player_id = str(player.get("player_id") or "")
+                            if not player_id or player_id in flex_only_ids or player_id in family_lineups:
+                                continue
+                            lineup = self._solve_lineup(
+                                pool, score_col=score_col,
+                                locked_captain_player_id=player_id,
+                                **base_kwargs,
+                            )
+                            if lineup:
+                                family_lineups[player_id] = lineup
+                                add_candidate(lineup, "captain_family")
+                                family_exclusions = [[
+                                    (str(row["player_id"]), str(row["roster_position"]))
+                                    for row in lineup
+                                ]]
+                                for _ in range(2):
+                                    alternative = self._solve_lineup(
+                                        pool, score_col=score_col,
+                                        locked_captain_player_id=player_id,
+                                        exclude_signatures=family_exclusions,
+                                        **base_kwargs,
+                                    )
+                                    if not alternative:
+                                        break
+                                    add_candidate(alternative, "captain_family_alternative")
+                                    family_exclusions.append([
+                                        (str(row["player_id"]), str(row["roster_position"]))
+                                        for row in alternative
+                                    ])
+                                for raw_score, label in (("projection", "mean"), ("p90", "p90")):
+                                    raw_family = self._solve_lineup(
+                                        raw_pool, score_col=raw_score,
+                                        locked_captain_player_id=player_id,
+                                        **raw_kwargs,
+                                    )
+                                    if not raw_family:
+                                        continue
+                                    rescored = self._solve_lineup(
+                                        pool, score_col=score_col,
+                                        locked_player_ids={str(row["player_id"]) for row in raw_family},
+                                        locked_captain_player_id=player_id,
+                                        **{key: value for key, value in base_kwargs.items()
+                                           if key != "locked_player_ids"},
+                                    )
+                                    add_candidate(rescored, f"captain_family_raw_{label}")
+                        params.setdefault("strategy_runtime", {}).setdefault(
+                            "showdown_portfolio_policy", {}
+                        )["game_script_scenarios"] = {
+                            "definitions": scenario_audits,
+                            "status": "complete" if len(scenario_definitions) == 3 else "decisive_scenarios_unavailable_without_consistent_cutoff_safe_market",
+                            "require_scenario_diversity": params["require_scenario_diversity"],
+                        }
+                        for scenario in scenario_definitions[1:]:
+                            conditioned_pool = condition_player_pool(pool, scenario)
+                            raw_conditioned_pool = conditioned_pool.copy()
+                            raw_conditioned_pool["captain_objective_multiplier"] = 1.0
+                            audit = scenario.audit()
+                            scenario_kwargs = {**base_kwargs}
+                            add_candidate(self._solve_lineup(
+                                conditioned_pool, score_col=score_col, **scenario_kwargs,
+                            ), "highest_gpp_objective", audit)
+                            for raw_score, label in (("projection", "highest_mean"), ("p90", "highest_p90")):
+                                raw = self._solve_lineup(
+                                    raw_conditioned_pool, score_col=raw_score,
+                                    **{**scenario_kwargs, "rule_profile": None,
+                                       "stack_params": {**stack_cfg, "use_role_ownership": False}},
+                                )
+                                if raw:
+                                    rescored = self._solve_lineup(
+                                        conditioned_pool, score_col=score_col,
+                                        locked_player_ids={str(row["player_id"]) for row in raw},
+                                        locked_captain_player_id=showdown_signature(raw)[0],
+                                        **{key: value for key, value in scenario_kwargs.items()
+                                           if key != "locked_player_ids"},
+                                    )
+                                    add_candidate(rescored, label, audit)
+                            for _, player in conditioned_pool.iterrows():
+                                player_id = str(player.get("player_id") or "")
+                                if not player_id or player_id in flex_only_ids:
+                                    continue
+                                add_candidate(self._solve_lineup(
+                                    conditioned_pool, score_col=score_col,
+                                    locked_captain_player_id=player_id, **scenario_kwargs,
+                                ), "captain_family", audit)
+                            for count in (5, 4, 3):
+                                add_candidate(self._solve_lineup(
+                                    conditioned_pool, score_col=score_col,
+                                    portfolio_script={"kind": "scenario_construction", "team": scenario.winner,
+                                                      "team_players": count}, **scenario_kwargs,
+                                ), f"team_split_{count}_{6-count}", audit)
+                            for required in (["RB"], ["DST"], ["RB", "DST"]):
+                                add_candidate(self._solve_lineup(
+                                    conditioned_pool, score_col=score_col,
+                                    portfolio_script={"kind": "scenario_construction", "team": scenario.winner,
+                                                      "required_positions": required}, **scenario_kwargs,
+                                ), "control_" + "_".join(required).lower(), audit)
+                        if not candidates:
+                            return [], "failed", "No legal Showdown candidate was found"
+                        # Probe a small set of commonly shared one-offs before
+                        # declaring an exposure-driven underfill. These temporary
+                        # discovery exclusions never alter slate eligibility.
+                        unique_candidates = {
+                            showdown_signature(lineup): lineup for lineup in candidates
+                        }
+                        discovery_mean = max(candidate_metrics(lineup)["baseline_mean"]
+                                             for lineup in unique_candidates.values())
+                        discovery_p90 = max(candidate_metrics(lineup)["baseline_p90"]
+                                            for lineup in unique_candidates.values())
+                        discovery_floor = {
+                            "mean": 0.95 * discovery_mean,
+                            "p90": 0.95 * discovery_p90,
+                        }
+                        frequency: dict[str, int] = {}
+                        for lineup in unique_candidates.values():
+                            metrics = candidate_metrics(lineup)
+                            if (metrics["baseline_mean"] < discovery_floor["mean"]
+                                    or metrics["baseline_p90"] < discovery_floor["p90"]):
+                                continue
+                            for row in lineup:
+                                pid = str(row["player_id"])
+                                if (str(row.get("position") or "").upper() != "QB"
+                                        and pid not in locked_ids):
+                                    frequency[pid] = frequency.get(pid, 0) + 1
+                        common_ids = sorted(frequency, key=lambda pid: (-frequency[pid], pid))[:6]
+                        for size in (1, 2):
+                            for removed_ids in itertools.combinations(common_ids, size):
+                                reduced_pool = pool.loc[
+                                    ~pool["player_id"].astype(str).isin(removed_ids)
+                                ].reset_index(drop=True)
+                                add_candidate(self._solve_lineup(
+                                    reduced_pool, score_col=score_col,
+                                    quality_floor=discovery_floor,
+                                    **base_kwargs,
+                                ), "exposure_coverage")
+                        selected, selection_report = select_showdown_portfolio(
+                            candidates,
+                            requested=num_lineups,
+                            player_limits=player_limits,
+                            captain_limit=captain_limit,
+                            require_scenario_diversity=params["require_scenario_diversity"],
+                        )
+                        selection_report["scenario_definitions"] = scenario_audits
+                        selection_report["scenario_generation_status"] = (
+                            "complete" if len(scenario_definitions) == 3
+                            else "Decisive scenarios unavailable: consistent cutoff-safe market total and implied totals are required"
+                        )
+                        signature_ranks = {
+                            (lineup[0]["showdown_scenario_id"], showdown_signature(lineup)): index + 1
+                            for index, lineup in enumerate(sorted(
+                                { (lineup[0]["showdown_scenario_id"], showdown_signature(lineup)): lineup
+                                  for lineup in candidates }.values(),
+                                key=lambda lineup: (-candidate_metrics(lineup)["selector"],
+                                                    lineup[0]["showdown_scenario_id"], showdown_signature(lineup)),
+                            ))
+                        }
+                        selected_captains = {showdown_signature(lineup)[0] for lineup in selected}
+                        family_rows = []
+                        for player_id, lineup in family_lineups.items():
+                            row = candidate_metrics(lineup)
+                            rank = signature_ranks.get(("baseline", showdown_signature(lineup)))
+                            if player_id in selected_captains:
+                                reason = "Selected Captain family"
+                            else:
+                                reason = selection_report["omission_reasons"].get(
+                                    rank, "Not present in final portfolio"
+                                )
+                            family_rows.append(dict(row, rank=rank, selected=player_id in selected_captains,
+                                                    reason=reason))
+                        family_rows.sort(key=lambda row: (row["rank"] or 10**9, row["captain_name"]))
+                        selection_report["family_rows"] = family_rows
+                        selection_report["source_coverage"] = {
+                            source: sum(source in names for names in sources.values())
+                            for source in sorted({name for names in sources.values() for name in names})
+                        }
+                        selection_report["ownership_selection_status"] = (
+                            "complete slate role ownership used in selector"
+                            if showdown_ownership_complete else
+                            "role ownership diagnostic only: incomplete or not explicitly approved for Showdown; selector term disabled uniformly"
+                        )
+                        runtime = params.setdefault("strategy_runtime", {}).setdefault(
+                            "showdown_portfolio_policy", {}
+                        )
+                        runtime["candidate_selection"] = selection_report
+                        runtime["underfill_diagnostics"] = selection_report["underfill_diagnostics"]
+                        runtime["quality_floor"] = {
+                            "mean": 0.95 * selection_report["best_mean"],
+                            "p90": 0.95 * selection_report["best_p90"],
+                        }
+                        if selected:
+                            next(row for row in selected[0] if row["roster_position"] == "CPT")[
+                                "captain_family_coverage_report"
+                            ] = selection_report
+                        status_local = "completed" if selected else "failed"
+                        message_local = (
+                            f"Selected {len(selected)} of {num_lineups} Showdown lineups from "
+                            f"{selection_report['candidate_count']} distinct candidates; "
+                            "joint mean/P90 floor=95% of common baseline raw maxima; "
+                            f"{selection_report['ownership_selection_status']}"
+                        )
+                        return selected, status_local, message_local
                     if num_lineups >= 10 and quality_floor:
                         qualifying: list[dict] = []
                         quality_rejected: list[dict] = []
@@ -5977,8 +7320,9 @@ class OptimizerService:
                         quality_floor=quality_floor,
                         portfolio_script=(scripts[lineup_index] if lineup_index < len(scripts) else None),
                         locked_captain_player_id=(
-                            forced_captain_ids[lineup_index]
-                            if lineup_index < len(forced_captain_ids) else None
+                            requested_captain_id
+                            or (forced_captain_ids[lineup_index]
+                                if lineup_index < len(forced_captain_ids) else None)
                         ),
                     )
                     if not lineup:
@@ -6006,7 +7350,7 @@ class OptimizerService:
                         role = str(row.get("roster_position") or "").upper() if contest_type == "captain" else None
                         signature.append((pid, role))
                     lineup_results_local.append(lineup)
-                    if portfolio_v3:
+                    if portfolio_v3 or long_shot_mode:
                         script = scripts[lineup_index] if lineup_index < len(scripts) else {"script_id": "best_available", "label": "Best available"}
                         for row in lineup:
                             row["portfolio_script_target"] = dict(script)
@@ -6449,13 +7793,55 @@ class OptimizerService:
             uniqueness_overlap: int | None = None
             correlation_objective_multiplier = 1.0
 
+            if contest_format == "classic":
+                from .classic_prospective import freeze_classic_run_input
+
+                params.setdefault("strategy_runtime", {})["classic_run_input_snapshot"] = freeze_classic_run_input(
+                    run_id=job_id, season=season, week=week, slate=slate,
+                    created_at=now, cutoff=data_cutoff_at,
+                    projection_run_id=projection_run_id, strategy=strategy,
+                    rows=pool.to_dict("records"), params=params,
+                )
             use_gpp = (
-                strategy_config["engine"] in {"slate_aware_gpp", "large_gpp_portfolio"}
+                strategy_config["engine"] in {"slate_aware_gpp", "large_gpp_portfolio", "small_field_candidate_selector"}
                 and contest_format == "classic"
                 and objective == "gpp"
             )
             if use_gpp:
                 try:
+                    small_field = strategy == CLASSIC_SMALL_FIELD_GPP_STRATEGY_ID
+                    solver_backend = "bundled"
+                    discovery_workers = 1
+                    parallel_fallback_reason = None
+                    if small_field:
+                        from .cbc_solver import resolve_cbc_backend
+
+                        solver_backend = resolve_cbc_backend(
+                            str(params.get("classic_solver_backend", "bundled"))
+                        )
+                        raw_workers = params.get("classic_candidate_workers", 1)
+                        if isinstance(raw_workers, bool) or not isinstance(raw_workers, int) or not 1 <= raw_workers <= 4:
+                            raise ValueError("classic_candidate_workers must be an integer between 1 and 4")
+                        discovery_workers = raw_workers
+                        if discovery_workers > 1 and os.environ.get("PYTHONHASHSEED") != "0":
+                            discovery_workers = 1
+                            parallel_fallback_reason = (
+                                "Parallel discovery requires PYTHONHASHSEED=0 at process start; "
+                                "used one worker for deterministic results"
+                            )
+                    candidate_target = (
+                        1
+                        if long_shot_mode
+                        else max(100, min(250, int(params.get("classic_candidate_pool_size", 120))))
+                        if small_field
+                        else num_lineups
+                    )
+                    production_candidate_target = candidate_target
+                    if small_field:
+                        raw_production_target = params.get("classic_production_candidate_pool_size", candidate_target)
+                        if isinstance(raw_production_target, bool) or not isinstance(raw_production_target, int) or not candidate_target <= raw_production_target <= 250:
+                            raise ValueError("classic_production_candidate_pool_size must be an integer from the seed target through 250")
+                        production_candidate_target = raw_production_target
                     maximum_exposure_by_player = dict(
                         params.get("maximum_exposure_by_player") or {}
                     )
@@ -6476,34 +7862,390 @@ class OptimizerService:
                     for player_id in locked_ids:
                         maximum_exposure_by_player[player_id] = 1.0
                         minimum_exposure_by_player[player_id] = 1.0
-                    ownership_available = (
-                        "ownership" in pool.columns
-                        and pd.to_numeric(pool["ownership"], errors="coerce")
-                        .notna()
-                        .any()
+                    risk_controls = None
+                    candidate_caps: dict[str, float] = {}
+                    elevated_ids: set[str] = set()
+                    if small_field:
+                        from .classic_prospective import (
+                            classify_pool, core_classes, resolve_overrides, resolve_risk_policy,
+                        )
+
+                        risk_mode = params.get("availability_risk_mode", "conservative")
+                        if risk_mode not in {"conservative", "off"}:
+                            raise ValueError("availability_risk_mode must be conservative or off")
+                        params["availability_risk_mode"] = risk_mode
+                        if risk_mode == "conservative":
+                            risk_policy = resolve_risk_policy(params.get("classic_availability_risk_policy"))
+                            risks = classify_pool(pool.to_dict("records"), now)
+                            overrides = resolve_overrides(
+                                params.get("classic_availability_overrides"), set(risks),
+                            )
+                            risk_players = self._gpp_players_from_pool(pool)
+                            core = core_classes(risk_players, risks)
+                            for player in risk_players:
+                                pid = player.player_id
+                                bucket = risks[pid]["bucket"]
+                                override = overrides.get(pid, {})
+                                if bucket == "out" or bucket == "doubtful" and not override.get("allow_doubtful"):
+                                    candidate_caps[pid] = 0.0
+                                else:
+                                    candidate_caps[pid] = float(override.get("candidate_cap", {
+                                        "questionable_elevated": risk_policy["elevated_candidate_cap"],
+                                        "questionable_full_role": risk_policy["full_role_candidate_cap"],
+                                    }.get(bucket, risk_policy["elite_candidate_cap"] if core[pid] == "elite_high_confidence"
+                                          else risk_policy["non_elite_candidate_cap"])))
+                                selected_cap = override.get("selected_cap", {
+                                    "questionable_elevated": risk_policy["elevated_selected_cap"],
+                                    "questionable_full_role": risk_policy["full_role_selected_cap"],
+                                }.get(bucket))
+                                if selected_cap is not None:
+                                    maximum_exposure_by_player[pid] = min(
+                                        maximum_exposure_by_player.get(pid, 1.0), float(selected_cap),
+                                    )
+                                if bucket == "questionable_elevated":
+                                    elevated_ids.add(pid)
+                                if pid in locked_ids and bucket == "normal":
+                                    candidate_caps[pid] = 1.0
+                                if pid in locked_ids and candidate_caps[pid] < 1.0:
+                                    raise ValueError(f"Locked risk player {pid} requires a reasoned candidate-cap override")
+                            allowed = {pid for pid, cap in candidate_caps.items() if cap > 0}
+                            pool = pool.loc[pool["player_id"].astype(str).isin(allowed)].copy()
+                            risk_controls = {"mode": risk_mode, "policy": risk_policy,
+                                             "classifications": risks, "core_classes": core,
+                                             "overrides": overrides, "candidate_caps": candidate_caps,
+                                             "locked_ids": sorted(locked_ids)}
+                    salary_identity = {"status": "UNAVAILABLE", "checked": 0, "violations": []}
+                    if small_field and self.engine.dialect.name == "postgresql":
+                        source_ids = [int(value) for value in pool["salary_source_row_id"].dropna()]
+                        with self.engine.connect() as connection:
+                            saved_salaries = [dict(row) for row in connection.execute(text("""
+                                SELECT curated_salary_id, player_master_id, team, opponent, salary
+                                FROM public.curated_salary
+                                WHERE curated_salary_id = ANY(:source_ids)
+                            """), {"source_ids": source_ids}).mappings()]
+                        salary_identity = validate_saved_salary_identity(
+                            pool.to_dict("records"), saved_salaries,
+                        )
+                        if salary_identity["violations"]:
+                            raise ValueError("Saved salary identity mismatch: " +
+                                             str(salary_identity["violations"][:5]))
+                    ownership_values = (
+                        pd.to_numeric(pool["ownership"], errors="coerce")
+                        if "ownership" in pool.columns else pd.Series(dtype=float)
                     )
+                    ownership_covered = int(ownership_values.notna().sum())
+                    ownership_available = bool(len(pool) and ownership_covered == len(pool))
+                    ownership_evidence = {
+                        "status": ("available" if ownership_available else
+                                   "partial" if ownership_covered else "unavailable"),
+                        "source": "target.ownership_projection",
+                        "covered_players": ownership_covered,
+                        "eligible_players": len(pool),
+                        "ownership_run_ids": sorted({str(value) for value in pool.get("ownership_run_id", pd.Series(dtype=str)).dropna()}),
+                        "missing_reason": None if ownership_available else (
+                            "No current-slate ownership projections" if ownership_covered == 0
+                            else "Partial player coverage; evaluate ownership by candidate"
+                        ),
+                    }
+                    generation_players = self._gpp_players_from_pool(pool)
+                    seed_starting_qb_ids = {
+                        str(row["player_id"]) for row in pool.to_dict("records")
+                        if row.get("position") == "QB" and row.get("is_starting_qb") in (True, 1)
+                    } if small_field else set()
+                    parallel_seeds = (
+                        small_field and discovery_workers > 1 and candidate_target > 1
+                        and len(seed_starting_qb_ids) >= discovery_workers
+                        and not locked_ids
+                    )
+                    if small_field and discovery_workers > 1 and not parallel_seeds:
+                        parallel_fallback_reason = (
+                            parallel_fallback_reason or
+                            "Parallel seed generation requires one starting QB per worker "
+                            "and no locked players; used sequential seeds"
+                        )
+                    frozen_generation_inputs = None
+                    if small_field:
+                        frozen_rows = [
+                            _json_safe({**asdict(player), "tags": sorted(player.tags)})
+                            for player in generation_players
+                        ]
+                        frozen_options = _json_safe({
+                            "candidate_target": candidate_target,
+                            "production_candidate_target": production_candidate_target,
+                            "seed_generation_method": "parallel_qb_shards" if parallel_seeds else "sequential",
+                            "seed_generation_workers": discovery_workers if parallel_seeds else 1,
+                            "generation_max_exposure": 1.0,
+                            "ownership_available": ownership_available,
+                            "candidate_aware_ownership": True,
+                            "long_shot_mode": long_shot_mode,
+                            "large_gpp": strategy in {CLASSIC_LARGE_GPP_STRATEGY_ID, CLASSIC_SMALL_FIELD_GPP_STRATEGY_ID},
+                            "minimum_uniqueness": int(params.get("minimum_uniqueness", 2)),
+                            "max_players_per_team": params.get("max_players_per_team"),
+                            "max_players_per_game": params.get("max_players_per_game"),
+                            "stack_templates": params.get("stack_templates"),
+                            "enforce_single_te": enforce_single_te,
+                            "avoid_dst_opponents": avoid_dst_opponents,
+                            "locked_player_ids": sorted(locked_ids),
+                            "starting_qb_ids": sorted(
+                                str(row["player_id"]) for row in pool.to_dict("records")
+                                if row.get("position") == "QB" and row.get("is_starting_qb") in (True, 1)
+                            ),
+                            "solver_backend": solver_backend,
+                        })
+                        frozen_payload = {"players": frozen_rows, "options": frozen_options}
+                        frozen_generation_inputs = {
+                            "contract": "classic_frozen_generation_inputs_v1",
+                            "captured_stage": "after_eligibility_context_and_ownership_before_candidate_generation",
+                            "sha256": hashlib.sha256(json.dumps(
+                                frozen_payload, sort_keys=True, separators=(",", ":"),
+                                allow_nan=False,
+                            ).encode()).hexdigest(),
+                            **frozen_payload,
+                        }
                     gpp_result = run_gpp_pipeline(
                         season=season,
                         week=week,
                         slate=slate,
-                        num_lineups=num_lineups,
+                        num_lineups=1 if parallel_seeds else candidate_target,
                         engine=self.engine,
-                        players=self._gpp_players_from_pool(pool),
+                        players=generation_players,
                         ownership_available=ownership_available,
-                        max_exposure=max_exposure,
+                        max_exposure=1.0 if small_field else max_exposure,
                         enforce_single_te=enforce_single_te,
                         avoid_dst_opponents=avoid_dst_opponents,
-                        large_gpp=(strategy == CLASSIC_LARGE_GPP_STRATEGY_ID),
+                        large_gpp=(strategy in {CLASSIC_LARGE_GPP_STRATEGY_ID, CLASSIC_SMALL_FIELD_GPP_STRATEGY_ID}),
                         minimum_uniqueness=int(params.get("minimum_uniqueness", 2)),
                         max_from_team=params.get("max_players_per_team"),
                         max_from_game=params.get("max_players_per_game"),
                         stack_templates=params.get("stack_templates"),
-                        maximum_exposure_by_player=maximum_exposure_by_player,
-                        minimum_exposure_by_player=minimum_exposure_by_player,
+                        maximum_exposure_by_player=(
+                            {} if parallel_seeds else
+                            {pid: cap for pid, cap in candidate_caps.items() if cap > 0}
+                            if small_field else maximum_exposure_by_player
+                        ),
+                        minimum_exposure_by_player=(
+                            {} if parallel_seeds else
+                            {player_id: 1.0 for player_id in locked_ids}
+                            if small_field else minimum_exposure_by_player
+                        ),
+                        include_control_comparisons=not small_field,
+                        long_shot_mode=long_shot_mode,
+                        candidate_aware_ownership=small_field,
+                        solver_backend=solver_backend,
+                        precompute_correlation_terms=small_field,
+                        maximum_player_groups=(
+                            [(elevated_ids, risk_policy["max_elevated_per_lineup"])]
+                            if small_field and risk_controls and elevated_ids else None
+                        ),
                     )
+                    small_field_report = None
+                    if small_field:
+                        from .classic_small_field import analyze_small_field, expand_candidate_discovery, generate_parallel_seeds
+                        from .classic_prospective import (
+                            freeze_solver_snapshot, run_prospective_experiment,
+                            slate_kickoff_evidence_pool,
+                        )
+                        all_players = self._gpp_players_from_pool(pool)
+                        tag_players(all_players, gpp_result.config.tag_thresholds)
+                        if parallel_seeds:
+                            gpp_result = generate_parallel_seeds(
+                                gpp_result, all_players, count=candidate_target,
+                                max_workers=discovery_workers,
+                                starting_qb_ids=seed_starting_qb_ids,
+                                candidate_caps=candidate_caps,
+                                elevated_ids=elevated_ids,
+                                max_elevated=risk_policy["max_elevated_per_lineup"] if risk_controls else 9,
+                                enforce_single_te=enforce_single_te,
+                                avoid_dst_opponents=avoid_dst_opponents,
+                                solver_backend=solver_backend,
+                            )
+                        starting_qb_ids = {
+                            str(row["player_id"]) for row in pool.to_dict("records")
+                            if row.get("position") == "QB" and row.get("is_starting_qb") in (True, 1)
+                        }
+                        gpp_result.lineups, discovery_diagnostics = expand_candidate_discovery(
+                            gpp_result, all_players,
+                            enforce_single_te=enforce_single_te,
+                            avoid_dst_opponents=avoid_dst_opponents,
+                            locked_player_ids=locked_ids,
+                            starting_qb_ids=starting_qb_ids or None,
+                            max_workers=discovery_workers,
+                            solver_backend=solver_backend,
+                        )
+                        source_rows = pool.to_dict("records")
+                        for source_row in source_rows:
+                            if (source_row.get("position") in {"RB", "WR", "TE"}
+                                    and float(source_row.get("salary") or 0) <= 4500):
+                                source_row["opportunity_diagnostic"] = showdown_opportunity_diagnostic(source_row)
+                        source_by_id = {str(row["player_id"]): row for row in source_rows}
+                        for candidate in gpp_result.lineups:
+                            legal, reason = self._validate_classic_lineups(
+                                [[self._gpp_player_to_dict(player) for player in candidate]],
+                                requested_lineups=1, max_exposure=1.0,
+                                enforce_single_te=enforce_single_te,
+                                avoid_dst_opponents=avoid_dst_opponents,
+                                locked_player_ids=locked_ids,
+                                excluded_player_ids=exclude_ids,
+                                excluded_opponent_teams=excluded_opponent_teams,
+                            )
+                            if not legal:
+                                raise ValueError(f"Candidate failed Classic legality: {reason}")
+                        selected, small_field_report = analyze_small_field(
+                            gpp_result,
+                            pool_rows=[{**source_by_id[player.player_id], "gpp_player": player} for player in all_players],
+                            count=num_lineups, max_exposure=max_exposure,
+                            ownership_available=ownership_available,
+                            locked_player_ids=locked_ids,
+                            maximum_exposure_by_player=maximum_exposure_by_player,
+                            minimum_exposure_by_player=minimum_exposure_by_player,
+                            requested_candidate_count=production_candidate_target,
+                            strict_candidate_target="classic_production_candidate_pool_size" in params,
+                            ownership_evidence=ownership_evidence,
+                            candidate_aware_ownership=True,
+                            discovery_diagnostics=discovery_diagnostics,
+                            enforce_single_te=enforce_single_te,
+                            avoid_dst_opponents=avoid_dst_opponents,
+                            solver_backend=solver_backend,
+                            refill_workers=discovery_workers,
+                            portfolio_constraints=params.get("portfolio_constraints"),
+                            production_controls=risk_controls,
+                            run_qb_family_diagnostics=(
+                                False if long_shot_mode
+                                else bool(params.get("classic_qb_family_diagnostics", True))
+                            ),
+                        )
+                        prospective_options = {
+                            **frozen_options,
+                            "requested_lineups": num_lineups,
+                            "selection_max_exposure": max_exposure,
+                            "maximum_exposure_by_player": maximum_exposure_by_player,
+                            "minimum_exposure_by_player": minimum_exposure_by_player,
+                            "exclude_player_ids": sorted(exclude_ids),
+                            "locked_player_ids": sorted(locked_ids),
+                            "portfolio_constraints": params.get("portfolio_constraints") or {},
+                            "risk_policy": params.get("classic_availability_risk_policy") or {},
+                            "risk_overrides": params.get("classic_availability_overrides") or {},
+                            "candidate_discovery": {"max_workers": discovery_workers,
+                                                    "solver_backend": solver_backend},
+                            "pruning": {"post_expansion_pruning": "none",
+                                        "deduplication": "canonical_player_id_roster",
+                                        "post_expansion_candidate_cap": None},
+                            "deterministic_seed": params.get("seed"),
+                        }
+                        solver_snapshot = freeze_solver_snapshot(
+                            run_id=job_id, season=season, week=week, slate=slate,
+                            created_at=now, cutoff=data_cutoff_at,
+                            projection_run_id=projection_run_id, strategy=strategy,
+                            players=all_players, pool_rows=source_rows,
+                            source_pool_rows=initial_pool.to_dict("records"),
+                            options=prospective_options, resolved_config=gpp_result.config,
+                            policy_ids={"stack": params.get("stack_policy_id"),
+                                        "correlation_context": strategy_config.get("policy_alignment"),
+                                        "correlation_profile": {
+                                            "id": resolve_strategy_profile(contest_format="classic", objective="gpp").profile_id,
+                                            "version": resolve_strategy_profile(contest_format="classic", objective="gpp").version,
+                                        },
+                                        "correlation_policy": (params.get("decision_context") or {}).get("correlation_policy"),
+                                        "context_policy": (params.get("decision_context") or {}).get("context_policy"),
+                                        "ownership_policy": ownership_evidence.get("source"),
+                                        "rule_run_id": rule_run_id},
+                        )
+                        small_field_report["frozen_solver_snapshot"] = solver_snapshot
+                        small_field_report["salary_identity"] = salary_identity
+                        small_field_report["generation_funnel"] = {
+                            **(gpp_result.generation_funnel or {}),
+                            "production_admission": small_field_report.get("production_funnel"),
+                        }
+                        from .optimizer_effectiveness import chronological_validation
+
+                        kickoff_evidence = slate_kickoff_evidence_pool(initial_pool.to_dict("records"))
+                        prelock_timing = chronological_validation(
+                            {"data_cutoff_at": (data_cutoff_at.replace(tzinfo=data_cutoff_at.tzinfo or timezone.utc)
+                                                if data_cutoff_at else None),
+                             "optimizer_created_at": now.replace(tzinfo=timezone.utc)},
+                            kickoff_evidence,
+                        )
+                        small_field_report["prelock_timing"] = prelock_timing
+                        from .classic_small_field import classic_entry_readiness
+                        small_field_report["entry_readiness"] = classic_entry_readiness(
+                            players=all_players, selected=selected,
+                            candidates=small_field_report["all_candidates"],
+                            source=source_by_id, salary_identity=salary_identity,
+                            production_funnel=small_field_report.get("production_funnel"),
+                            controls=risk_controls,
+                            first_kickoff_at=prelock_timing.get("first_saved_kickoff_at"),
+                            decision_at=now, requested_count=num_lineups,
+                            market_fresh_hours=float(params.get("market_fresh_hours", 6)),
+                            market_stale_hours=float(params.get("market_stale_hours", 24)),
+                            market_stale_policy=str(params.get("market_stale_policy", "warning")),
+                        )
+                        if params.get("classic_prospective_experiment", True) and prelock_timing["status"] == "predecision":
+                            try:
+                                small_field_report["prospective_experiment"] = run_prospective_experiment(
+                                    snapshot=solver_snapshot,
+                                    production_candidates=small_field_report["all_candidates"],
+                                    production_selected_ranks=small_field_report["selected_ranks"],
+                                    players=all_players, source_rows=source_rows,
+                                    config=gpp_result.config, selected_count=num_lineups,
+                                    max_exposure=max_exposure, locked_ids=locked_ids,
+                                    maximums=maximum_exposure_by_player,
+                                    minimums=minimum_exposure_by_player,
+                                    ownership_available=ownership_available,
+                                    enforce_single_te=enforce_single_te,
+                                    avoid_dst_opponents=avoid_dst_opponents,
+                                    solver_backend=solver_backend,
+                                    risk_config=params.get("classic_availability_risk_policy"),
+                                    override_config=params.get("classic_availability_overrides"),
+                                )
+                                completion_timing = chronological_validation(
+                                    {"data_cutoff_at": data_cutoff_at,
+                                     "optimizer_created_at": datetime.now(timezone.utc)},
+                                    kickoff_evidence,
+                                )
+                                if completion_timing["status"] != "predecision":
+                                    small_field_report["prospective_experiment"] = {
+                                        "status": "not_frozen_prelock",
+                                        "reason": "shadow_completed_at_or_after_saved_kickoff",
+                                        "frozen_snapshot_sha256": solver_snapshot["sha256"],
+                                    }
+                            except ValueError as exc:
+                                small_field_report["prospective_experiment"] = {
+                                    "status": "blocked_invalid_or_late_pregame_evidence",
+                                    "reason": str(exc),
+                                    "frozen_snapshot_sha256": solver_snapshot["sha256"],
+                                }
+                        elif params.get("classic_prospective_experiment", True):
+                            small_field_report["prospective_experiment"] = {
+                                "status": "not_frozen_prelock", "reason": prelock_timing["reason"],
+                                "frozen_snapshot_sha256": solver_snapshot["sha256"],
+                            }
+                        small_field_report["frozen_generation_inputs"] = frozen_generation_inputs
+                        small_field_report["strategy_policy_alignment"] = strategy_config["policy_alignment"]
+                        params["portfolio_constraints"] = small_field_report["selected_portfolio"]["constraints"]
+                        if len(selected) != num_lineups:
+                            raise ValueError(
+                                f"Global selection found {len(selected)}/{num_lineups} lineups "
+                                f"from {len(gpp_result.lineups)} legal candidates"
+                            )
+                        gpp_result.lineups = selected
                     lineup_results = [
                         [self._gpp_player_to_dict(p) for p in lineup] for lineup in gpp_result.lineups
                     ]
+                    if small_field:
+                        for lineup in lineup_results:
+                            complete = all(player["ownership"] is not None for player in lineup)
+                            for player in lineup:
+                                player["ownership_status"] = "available" if complete else "unavailable"
+                                if not complete or player["optimal_lineup_probability"] is None:
+                                    player["leverage"] = None
+                    if small_field_report and lineup_results:
+                        lineup_results[0][0]["classic_small_field_report"] = small_field_report
+                        urls = params.get("contest_urls") or []
+                        if urls:
+                            from .classic_small_field import contest_reporting_snapshot
+                            small_field_report["contest"] = contest_reporting_snapshot(
+                                urls, manual=params.get("manual_contest_metadata"),
+                            )
                     for lineup, comparison in zip(lineup_results, gpp_result.control_comparisons):
                         lineup[0]["lineup_control_comparison"] = comparison
                     site_ids = {str(row["player_id"]): row.get("dk_player_id")
@@ -6511,7 +8253,7 @@ class OptimizerService:
                     for lineup in lineup_results:
                         for player in lineup:
                             player["dk_player_id"] = site_ids.get(str(player["player_id"]))
-                    status = gpp_result.status
+                    status = "completed" if small_field and len(lineup_results) == num_lineups else gpp_result.status
                     uniqueness_overlap = gpp_result.config.uniqueness_overlap
                     correlation_objective_multiplier = (
                         gpp_result.config.objective_weights.correlation
@@ -6524,10 +8266,15 @@ class OptimizerService:
                         f"{gpp_result.message}; strategy={strategy}; "
                         f"validation=slate-aware-config"
                     )
+                    if small_field_report:
+                        message += (
+                            f"; {small_field_report['candidate_count']}/{candidate_target} legal candidates; "
+                            f"globally selected {len(lineup_results)}"
+                        )
                     stack_policy = {
                         "policy_id": (
                             "classic_large_gpp_flexible_stacks_v1"
-                            if strategy == CLASSIC_LARGE_GPP_STRATEGY_ID
+                            if strategy in {CLASSIC_LARGE_GPP_STRATEGY_ID, CLASSIC_SMALL_FIELD_GPP_STRATEGY_ID}
                             else "classic_gpp_slate_aware_stack_v1"
                         ),
                         "contest_format": "classic",
@@ -6555,21 +8302,60 @@ class OptimizerService:
                         "iterations": gpp_result.iterations,
                         "analysis": asdict(gpp_result.analysis),
                         "config": asdict(gpp_result.config),
-                        "portfolio": asdict(gpp_result.portfolio),
+                        "portfolio": (
+                            {"candidate_pool_portfolio": asdict(gpp_result.portfolio),
+                             "selected_lineup_ranks": small_field_report["selected_ranks"]}
+                            if small_field_report else asdict(gpp_result.portfolio)
+                        ),
                     })
+                    if small_field_report:
+                        params["strategy_runtime"]["classic_small_field"] = small_field_report
+                        params["strategy_runtime"]["classic_solver"] = {
+                            "backend": solver_backend,
+                            "requested_candidate_workers": params.get("classic_candidate_workers", 1),
+                            "candidate_workers": discovery_workers,
+                            "parallel_fallback_reason": parallel_fallback_reason,
+                            "correlation_terms_cached": True,
+                        }
                 except Exception as exc:  # noqa: BLE001
                     lineup_results = []
                     status = "failed"
                     message = f"{strategy} failed: {exc}"
-            elif single_entry:
+            elif single_entry or three_max or small_max:
                 from .showdown_single_entry import select_single_entry_lineups
                 from .showdown_contests import fetch_contests, select_contests
 
                 contest_metadata = params.get("contest_metadata")
                 contest_selection_report = None
-                if strategy == SHOWDOWN_SINGLE_ENTRY_PORTFOLIO_STRATEGY_ID and params.get("contest_urls"):
+                if three_max or small_max:
+                    from .showdown_three_max import (
+                        select_generic_small_max_lineups, select_small_max_lineups, select_three_max_lineups,
+                        validate_small_max_contest, validate_three_max_contest,
+                    )
+                    urls = params.get("contest_urls") or []
+                    if urls or three_max:
+                        if len(urls) != 1:
+                            raise ValueError("Small-max requires exactly one DraftKings contest URL when a contest is supplied")
+                        available = fetch_contests(urls, manual=params.get("manual_contest_metadata"))
+                        from .saved_contests import record_saved_observations
+                        record_saved_observations(self.engine, available, reason="optimizer")
+                        contest_metadata = [validate_three_max_contest(available[0]) if three_max else validate_small_max_contest(available[0])]
+                    else:
+                        contest_metadata = None
+                        try:
+                            generic_entry_limit = int(params.get("small_max_maximum_entries", 5))
+                        except (TypeError, ValueError) as exc:
+                            raise ValueError("Generic small-max entry limit must be 2 through 5") from exc
+                        if not 2 <= generic_entry_limit <= 5:
+                            raise ValueError("Generic small-max entry limit must be 2 through 5")
+                elif strategy == SHOWDOWN_SINGLE_ENTRY_PORTFOLIO_STRATEGY_ID and params.get("contest_urls"):
                     available = fetch_contests(
                         params["contest_urls"], manual=params.get("manual_contest_metadata"),
+                    )
+                    from .saved_contests import record_saved_observations, recover_saved_contest_snapshots
+                    record_saved_observations(self.engine, available, reason="optimizer")
+                    available = recover_saved_contest_snapshots(
+                        self.engine, available, season=season, week=week, slate=slate,
                     )
                     draft_groups = {row.get("draft_group_id") for row in available if row.get("draft_group_id") is not None}
                     if len(draft_groups) > 1:
@@ -6579,8 +8365,19 @@ class OptimizerService:
                         budget=params.get("maximum_total_entry_budget"),
                         maximum=params.get("maximum_contests_to_enter"),
                     )
+                    snapshots = [row for row in available if row.get("source") == "saved_snapshot"]
+                    if snapshots:
+                        contest_selection_report["snapshot_fallbacks"] = [
+                            {"contest_id": row["contest_id"], "observed_at": row["snapshot_observed_at"]}
+                            for row in snapshots
+                        ]
+                        contest_selection_report["note"] += (
+                            " Saved contest snapshots supplied unavailable live facts; "
+                            "their entry counts were not used for near-lock overlay."
+                        )
                 num_contests = (
-                    1 if strategy == SHOWDOWN_SINGLE_ENTRY_GPP_STRATEGY_ID
+                    int(contest_metadata[0]["maximum_entries"]) if (three_max or small_max) and contest_metadata else
+                    generic_entry_limit if small_max else 1 if strategy == SHOWDOWN_SINGLE_ENTRY_GPP_STRATEGY_ID
                     else len(contest_metadata) if contest_metadata is not None
                     else int(params.get("num_single_entry_contests", 3))
                 )
@@ -6591,7 +8388,7 @@ class OptimizerService:
                 num_lineups = num_contests
                 candidates = []
                 excluded = []
-                candidate_limit = max(10, min(50, int(params.get("single_entry_candidate_pool_size", 30))))
+                candidate_limit = max(30 if three_max or small_max else 10, min(50, int(params.get("single_entry_candidate_pool_size", 40 if three_max or small_max else 30))))
                 broad_count = max(10, int(candidate_limit * 0.6))
                 forced_count = (candidate_limit - broad_count) // 2
                 forced_captains = [
@@ -6605,7 +8402,7 @@ class OptimizerService:
                     for team in teams
                 ]
                 for candidate_index in range(candidate_limit):
-                    forced_captain = (
+                    forced_captain = requested_captain_id or (
                         forced_captains[candidate_index - broad_count]
                         if broad_count <= candidate_index < broad_count + forced_count
                         and candidate_index - broad_count < len(forced_captains)
@@ -6619,6 +8416,7 @@ class OptimizerService:
                     )
                     lineup = self._solve_lineup(
                         pool, score_col=score_col, exclude_signatures=excluded,
+                        enforce_single_te=enforce_single_te,
                         contest_type=contest_type, stack_params=stack_cfg,
                         locked_player_ids=locked_ids, flex_only_player_ids=flex_only_ids,
                         rule_profile=rule_profile, include_control_comparison=False,
@@ -6633,7 +8431,32 @@ class OptimizerService:
                     correlation = score_lineup_correlations(lineup, profile=rule_profile)
                     lineup[0]["lineup_correlation_summary"] = _saturated_showdown_correlation_summary(lineup, correlation)
                     candidates.append(lineup)
-                lineup_results, single_entry_report = select_single_entry_lineups(
+                if three_max or small_max:
+                    exposure_rates = {
+                        "captain": params.get("captain_max_exposure", 1.0),
+                        "core": params.get("core_player_max_exposure", 1.0),
+                        "starting_qb": params.get("starting_qb_max_exposure", 1.0),
+                        "cheap_punt": params.get("cheap_punt_max_exposure", 1.0),
+                    }
+                    selection_kwargs = {
+                        "entries_to_use": params.get("entries_to_use", "auto"),
+                        "exposure_rates": exposure_rates,
+                        "weights": params.get("single_entry_objective_weights"),
+                    }
+                    if small_max and contest_metadata is None:
+                        lineup_results, three_max_report = select_generic_small_max_lineups(
+                            candidates, maximum_entries=num_contests, **selection_kwargs,
+                        )
+                    else:
+                        lineup_results, three_max_report = (select_three_max_lineups if three_max else select_small_max_lineups)(
+                            candidates, contest=contest_metadata[0], **selection_kwargs,
+                        )
+                    three_max_report["enforce_single_te"] = enforce_single_te
+                    params.setdefault("strategy_runtime", {})["three_max" if three_max else "small_max"] = three_max_report
+                    status = "completed" if lineup_results else "failed"
+                    message = f"Selected {len(lineup_results)} unique small-max lineup(s) from {len(candidates)} candidates"
+                else:
+                    lineup_results, single_entry_report = select_single_entry_lineups(
                     candidates, num_contests=num_contests,
                     weights=params.get("single_entry_objective_weights"),
                     contest_metadata=contest_metadata,
@@ -6641,11 +8464,12 @@ class OptimizerService:
                                          if row["contest_count"] == num_contests), None)
                                    if contest_selection_report else None),
                 )
-                if contest_selection_report:
-                    single_entry_report["contest_selection"] = contest_selection_report
-                params.setdefault("strategy_runtime", {})["single_entry"] = single_entry_report
-                status = "completed" if lineup_results else "failed"
-                message = f"Selected {len(lineup_results)} single-entry contest lineup(s) from {len(candidates)} candidates"
+                    if contest_selection_report:
+                        single_entry_report["contest_selection"] = contest_selection_report
+                    single_entry_report["enforce_single_te"] = enforce_single_te
+                    params.setdefault("strategy_runtime", {})["single_entry"] = single_entry_report
+                    status = "completed" if lineup_results else "failed"
+                    message = f"Selected {len(lineup_results)} single-entry contest lineup(s) from {len(candidates)} candidates"
             else:
                 lineup_results, status, message = _run_baseline()
                 message += f"; strategy={strategy}"
@@ -6666,6 +8490,8 @@ class OptimizerService:
                     avoid_dst_opponents=avoid_dst_opponents,
                     uniqueness_overlap=uniqueness_overlap,
                     locked_player_ids=locked_ids,
+                    excluded_player_ids=exclude_ids,
+                    excluded_opponent_teams=excluded_opponent_teams,
                 )
                 if not ok:
                     status = "failed"
@@ -6695,10 +8521,14 @@ class OptimizerService:
                     )
                     if control_comparison is not None:
                         lineup[0]["lineup_control_comparison"] = control_comparison
-                    if portfolio_v3 or single_entry:
+                    if small_max or three_max:
+                        place_small_max_metadata_on_captain(lineup)
+                    if portfolio_v3 or single_entry or three_max or small_max:
                         actual_script = classify_showdown_game_script(lineup)
+                        game_environment = summarize_showdown_game_environment(lineup)
                         for row in lineup:
                             row["portfolio_game_script"] = dict(actual_script)
+                            row["showdown_game_environment"] = dict(game_environment)
                     for slot_index, row in enumerate(lineup):
                         row["lineup_slot_index"] = slot_index
                         row["roster_position"] = str(
@@ -6738,13 +8568,15 @@ class OptimizerService:
                 ok, reason = self._validate_showdown_lineups(
                     lineup_results,
                     requested_lineups=num_lineups,
-                    max_exposure=(1.0 if portfolio_v3 or single_entry else max_exposure),
+                    max_exposure=(1.0 if portfolio_v3 or single_entry or three_max or small_max else max_exposure),
+                    enforce_single_te=enforce_single_te,
                     require_qb_captain_receiver=require_qb_captain_receiver,
-                    portfolio_policy=portfolio_v3 or single_entry,
+                    portfolio_policy=portfolio_v3 or single_entry or three_max or small_max,
                     allow_duplicate_lineups=single_entry,
-                    portfolio_exposure_rates=(exposure_rates if portfolio_v3 else None),
+                    portfolio_exposure_rates=(exposure_rates if portfolio_v3 or three_max or small_max else None),
                     locked_player_ids=locked_ids,
                     flex_only_player_ids=flex_only_ids,
+                    excluded_opponent_teams=excluded_opponent_teams,
                 )
                 if not ok:
                     params.setdefault("strategy_runtime", {})["validation"] = {
@@ -6771,6 +8603,7 @@ class OptimizerService:
                         "max_exposure": max_exposure,
                         "captain_slots": 1,
                         "flex_slots": 5,
+                        "enforce_single_te": enforce_single_te,
                         "max_players_per_team": 5,
                         "optimizer_rule_ids": [
                             str(rule["rule_id"]) for rule in optimizer_rules
@@ -6780,6 +8613,21 @@ class OptimizerService:
                         ),
                         "flex_only_player_ids": sorted(flex_only_ids),
                     }
+                    if portfolio_v3 and portfolio_contest:
+                        contest_report = {
+                            key: portfolio_contest.get(key) for key in (
+                                "contest_id", "url", "name", "slate", "entry_fee", "capacity",
+                                "current_entries", "prize_pool", "paid_places", "maximum_entries",
+                                "lock_time", "guaranteed", "observed_at", "source", "payout_ladder",
+                                "economics",
+                            )
+                        }
+                        contest_report["requested_entries"] = 5
+                        contest_report["generated_entries"] = len(lineup_results)
+                        contest_report["requested_entry_cost"] = 5 * float(portfolio_contest["entry_fee"])
+                        contest_report["generated_entry_cost"] = len(lineup_results) * float(portfolio_contest["entry_fee"])
+                        lineup_results[0][0]["portfolio_contest_report"] = contest_report
+                        strategy_runtime["showdown_portfolio_policy"]["contest"] = contest_report
                     message += "; showdown lineup validation=passed"
 
             # Validate stacks/bring-backs for any lineups produced
@@ -6807,7 +8655,62 @@ class OptimizerService:
                         "uniqueness_overlap": uniqueness_overlap,
                     }
                     message += "; lineup validation=passed"
+                if long_shot_mode:
+                    ownership_values = [
+                        row.get("ownership")
+                        for row in lineup_results[0]
+                        if row.get("ownership") is not None
+                        and pd.notna(row.get("ownership"))
+                    ]
+                    ownership_status = (
+                        "available"
+                        if len(ownership_values) == len(lineup_results[0])
+                        else "partial"
+                        if ownership_values
+                        else "unavailable"
+                    )
+                    config_weights = (
+                        params.get("strategy_runtime", {})
+                        .get("config", {})
+                        .get("objective_weights", {})
+                    )
+                    long_shot_report = {
+                        "enabled": True,
+                        "lineup_count": 1,
+                        "ownership_status": ownership_status,
+                        "ownership_sum": (
+                            float(sum(float(value) for value in ownership_values))
+                            if ownership_status == "available" else None
+                        ),
+                        "method": (
+                            "showdown_role_ownership_penalty_and_contrarian_script"
+                            if contest_format == "showdown" and ownership_status == "available"
+                            else "classic_low_ownership_leverage_objective"
+                            if contest_format == "classic" and ownership_status == "available"
+                            else "structural_contrarian_only"
+                            if contest_format == "showdown"
+                            else "contrarian_evidence_unavailable"
+                        ),
+                        "objective_weights": config_weights,
+                        "showdown_ownership_weight": (
+                            float(stack_cfg.get("ownership_weight", 0.0))
+                            if contest_format == "showdown" else None
+                        ),
+                        "note": (
+                            "Football projections are unchanged. The lineup is selected with a stronger low-ownership objective."
+                            if ownership_status == "available"
+                            else "Ownership is incomplete, so contrarian confidence is unavailable; football projections remain unchanged and missing ownership is not scored as zero."
+                        ),
+                    }
+                    for row in lineup_results[0]:
+                        row["lineup_variant"] = "long_shot"
+                        row["long_shot_report"] = dict(long_shot_report)
+                    params.setdefault("strategy_runtime", {})["long_shot"] = dict(long_shot_report)
+                    message += "; standalone long-shot lineup generated"
                 for lineup in lineup_results:
+                    lineup[0]["lineup_controls"] = {
+                        "enforce_single_te": enforce_single_te,
+                    }
                     stack_summary = (
                         summarize_classic_stack(lineup)
                         if contest_format == "classic"
@@ -6819,7 +8722,7 @@ class OptimizerService:
                         profile=rule_profile,
                         objective_multiplier=correlation_objective_multiplier,
                     )
-                    if (portfolio_v3 or single_entry) and contest_format == "showdown":
+                    if (portfolio_v3 or single_entry or three_max or small_max) and contest_format == "showdown":
                         correlation_summary = _saturated_showdown_correlation_summary(
                             lineup, correlation_summary
                         )
@@ -6930,7 +8833,22 @@ class OptimizerService:
                     row.get("pregame_context_observed_at")
                 )
                 role_label = _json_safe(row.get("pregame_role_label"))
+                effective_role_label = (
+                    role_label
+                    if role_label is not None
+                    else _json_safe(safety_context.get("role_label"))
+                )
                 injury_status = _json_safe(row.get("pregame_injury_status"))
+                projection = _safe_float(
+                    row.get("projection", row.get("predicted_mean"))
+                )
+                p90 = _safe_float(row.get("p90", row.get("predicted_p90")))
+                player_exclusion_details = exclusion_details.get(player_id, [])
+                user_preference_exclusions = [
+                    detail
+                    for detail in player_exclusion_details
+                    if detail.get("category") == ExclusionCategory.USER.value
+                ]
                 player_pool_rows.append(
                     {
                         "player_id": player_id,
@@ -6946,12 +8864,8 @@ class OptimizerService:
                         ),
                         "opponent_team": _safe_text(row.get("opponent_team")),
                         "salary": int(_safe_float(row.get("salary"))),
-                        "projection": _safe_float(
-                            row.get("projection", row.get("predicted_mean"))
-                        ),
-                        "p90": _safe_float(
-                            row.get("p90", row.get("predicted_p90"))
-                        ),
+                        "projection": projection,
+                        "p90": p90,
                         "optimizer_context_adjustment": (
                             _safe_float(context_audit.get("adjustment"))
                             if context_audit
@@ -6991,6 +8905,13 @@ class OptimizerService:
                         "pregame_goal_line_share": _json_safe(
                             row.get("pregame_goal_line_share")
                         ),
+                        "opportunity_diagnostic": (
+                            showdown_opportunity_diagnostic(row)
+                            if contest_format == "showdown"
+                            and _safe_text(row.get("position")).upper() in {"RB", "WR", "TE"}
+                            and _safe_float(row.get("salary")) <= 2000
+                            else None
+                        ),
                         "pregame_context_run_id": _json_safe(
                             row.get("pregame_context_run_id")
                         ),
@@ -7003,20 +8924,55 @@ class OptimizerService:
                             else safety_context.get("observed_at")
                         ),
                         "pregame_role_label": _json_safe(
-                            role_label
-                            if role_label is not None
-                            else safety_context.get("role_label")
+                            effective_role_label
                         ),
                         "pregame_injury_status": _json_safe(
                             injury_status
                             if injury_status is not None
                             else safety_context.get("injury_status")
                         ),
+                        "official_availability_status": _json_safe(
+                            row.get("official_availability_status")
+                            or injury_status
+                        ),
+                        "availability_override": _json_safe(
+                            row.get("availability_override") or "default"
+                        ),
+                        "model_availability_used": _json_safe(
+                            row.get("model_availability_used")
+                        ),
+                        "projection_before_scenario": _json_safe(
+                            row.get("projection_before_scenario")
+                        ),
+                        "projection_after_scenario": _json_safe(
+                            row.get("projection_after_scenario")
+                        ),
+                        "opportunity_redistributed": bool(
+                            row.get("opportunity_redistributed", False)
+                        ),
                         "identity_resolved": safety_audit.get(
                             "identity_resolved", bool(player_id)
                         ),
                         "flex_only": player_id in flex_only_ids,
                         "included": player_id in final_pool_ids,
+                        "optimizer_eligibility": (
+                            "excluded_by_user_preference"
+                            if user_preference_exclusions
+                            else "eligible"
+                            if player_id in final_pool_ids
+                            else "excluded"
+                        ),
+                        "model_assessment": {
+                            "projection": projection,
+                            "p90": p90,
+                            "role_label": effective_role_label,
+                            "context_adjustment": (
+                                _safe_float(context_audit.get("adjustment"))
+                                if context_audit
+                                else None
+                            ),
+                        },
+                        "user_preference_exclusions": user_preference_exclusions,
                         "removal_stage": (
                             "pre_opportunity_eligibility"
                             if player_id not in raw_pool_ids
@@ -7027,7 +8983,7 @@ class OptimizerService:
                             else None
                         ),
                         "exclusion_reasons": exclusion_reasons.get(player_id, []),
-                        "exclusion_details": exclusion_details.get(player_id, []),
+                        "exclusion_details": player_exclusion_details,
                         "warnings": player_warnings.get(player_id, []),
                         "rule_evaluation": safety_audit.get("rule_evaluation"),
                         "context_rule_evaluation": context_audit.get(
@@ -7074,6 +9030,53 @@ class OptimizerService:
             "rows": player_pool_rows,
         }
 
+        if lineup_results and projection_market_audit:
+            lineup_results[0][0]["projection_market_audit"] = projection_market_audit
+        if lineup_results and historical_captain_report:
+            report = dict(historical_captain_report)
+            if report.get("slate_count") and historical_qb_pool:
+                family_report = lineup_results[0][0].get("captain_family_coverage_report") or {}
+                try:
+                    qb_history = load_current_qb_prior_features(
+                        self.engine, historical_qb_pool, season=season, week=week,
+                    )
+                    for qb_row in historical_qb_pool:
+                        qb_row.update(qb_history.get(str(qb_row.get("player_master_id") or qb_row.get("player_id")), {}))
+                    report["current_qb_feature_status"] = "prior_games_only"
+                except SQLAlchemyError as exc:
+                    report["current_qb_feature_status"] = f"unavailable: {type(exc).__name__}"
+                report["current_qbs"] = current_qb_analysis(
+                    historical_qb_pool, report, family_report.get("family_rows") or [],
+                )
+                report["shadow_qb_captain"] = add_shadow_qb_family_ranks(
+                    family_report, report,
+                    prior_strength=settings.showdown_captain_prior_strength,
+                )
+                shadow_families = {row["captain_name"]: row for row in family_report.get("family_rows") or []}
+                for qb_row in report["current_qbs"]:
+                    family = shadow_families.get(qb_row["qb"], {})
+                    qb_row.update({key: family.get(key) for key in (
+                        "shadow_qb_cpt_adjustment", "hypothetical_selector", "shadow_rank")})
+                position_by_id = {
+                    str(row.get("player_id")): str(row.get("position") or "").upper()
+                    for row in pool.to_dict(orient="records")
+                }
+                position_rates = {row["label"]: row for row in report.get("positions", [])}
+                qb_rates = {row["qb"]: row for row in report["current_qbs"]}
+                for family in family_report.get("family_rows") or []:
+                    position = position_by_id.get(str(family.get("captain_player_id")), "")
+                    family["captain_position"] = position
+                    family["historical_position_optimal_share"] = (
+                        position_rates.get(position) or {}
+                    ).get("slate_optimal_share")
+                    qb_evidence = qb_rates.get(str(family.get("captain_name")), {})
+                    family["captain_archetype"] = qb_evidence.get("archetype")
+                    family["historical_archetype_optimal_rate"] = qb_evidence.get(
+                        "historical_archetype_rate"
+                    )
+                    family["archetype_prior_adjustment"] = 0.0
+            lineup_results[0][0]["historical_captain_optimality"] = report
+
         job = OptimizerJob(
             job_id=job_id,
             status=status,
@@ -7094,6 +9097,11 @@ class OptimizerService:
         )
         self._jobs[job_id] = job
         job.lineage_persisted = self._persist_optimizer_run(job)
+        if status == "completed" and not job.lineage_persisted:
+            job.status = "failed"
+            job.message = "Optimizer decision snapshot and lineup lineage could not be persisted"
+            job.results = None
+            return job
 
         # Persist results if found (skip captain showdown to avoid schema churn). Disabled by default to avoid
         # schema mismatches; set params.persist_results=True to enable.

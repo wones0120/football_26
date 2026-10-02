@@ -641,6 +641,15 @@ table tbody tr:last-child {
   padding: 0.35rem 0.45rem;
 }
 
+.operations-workspace .learning-contest-table input[type="number"] {
+  width: 5.5rem;
+  min-width: 0;
+}
+
+.operations-workspace .learning-contest-table select {
+  min-width: 9rem;
+}
+
 .missing {
   color: #f87171;
   font-weight: 700;
@@ -820,6 +829,11 @@ table tbody tr:last-child {
   margin: 0 auto;
   padding: 20px 22px 38px;
   color: var(--shell-text);
+}
+
+.learning-workspace {
+  display: grid;
+  gap: 14px;
 }
 
 .operations-command {
@@ -1073,6 +1087,81 @@ table tbody tr:last-child {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.player-decision-controls {
+  margin: 0 0 12px;
+  padding: 12px;
+  border: 1px solid var(--shell-line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.optimizer-injury-preference {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 16px;
+  padding: 12px;
+  border: 1px solid var(--shell-line);
+  border-radius: 10px;
+}
+
+.optimizer-injury-preference label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  line-height: 1.4;
+}
+
+.optimizer-injury-preference input {
+  flex: 0 0 auto;
+  margin: 3px 0 0;
+}
+
+.optimizer-injury-preference small {
+  color: #8795a2;
+  line-height: 1.4;
+}
+
+.player-decision-header,
+.player-decision-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 2fr) minmax(150px, 1fr) minmax(170px, auto) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.player-decision-header {
+  grid-template-columns: 1fr auto;
+  margin-bottom: 10px;
+}
+
+.player-decision-header div {
+  display: grid;
+  gap: 4px;
+}
+
+.player-decision-header small {
+  color: #8795a2;
+}
+
+.player-decision-row + .player-decision-row {
+  margin-top: 8px;
+}
+
+.player-decision-row label {
+  display: grid;
+  gap: 6px;
+  color: #8795a2;
+  font-size: 0.64rem;
+  font-weight: 720;
+}
+
+.player-decision-row .player-preference-checkbox {
+  display: flex;
+  min-height: 36px;
+  align-items: center;
+  flex-direction: row;
+}
+
 .operations-workspace .form-row label,
 .operations-workspace > label {
   gap: 6px;
@@ -1262,6 +1351,19 @@ table tbody tr:last-child {
 
 .operations-optimizer-panel {
   order: 2;
+}
+
+.operations-workspace .classic-portfolio-controls .checkbox-label {
+  flex-direction: row;
+  align-items: center;
+  align-self: end;
+  min-height: 36px;
+}
+
+.classic-portfolio-controls input[type="checkbox"] {
+  flex: 0 0 auto;
+  width: auto;
+  margin: 0;
 }
 
 .operations-workspace .readiness-preflight {
@@ -1530,8 +1632,18 @@ table tbody tr:last-child {
     flex-direction: column;
   }
 
+  .operations-workspace .classic-portfolio-controls .checkbox-label {
+    align-self: stretch;
+  }
+
   .operations-workspace .optimizer-player-controls {
     grid-template-columns: 1fr;
+  }
+
+  .player-decision-header,
+  .player-decision-row {
+    grid-template-columns: 1fr;
+    align-items: stretch;
   }
 
   .operations-workspace button {

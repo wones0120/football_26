@@ -75,7 +75,8 @@ def test_every_product_target_table_has_a_numbered_migration() -> None:
     product_tables = _target_tables_in_product_code()
     migrated_tables = _target_tables_in_migrations()
 
-    assert len(migrated_tables) == 61
+    assert len(migrated_tables) >= 69
+    assert {"market_snapshot", "skill_exposure_decision"} <= migrated_tables
     assert product_tables <= migrated_tables, sorted(product_tables - migrated_tables)
 
 
@@ -111,5 +112,5 @@ def test_latest_target_schema_migration_records_the_contract() -> None:
     ]
     _, sql = target_migrations[-1]
 
-    assert "TRUNCATE TABLE public.target_schema_contract" in sql
     assert "INSERT INTO public.target_schema_contract" in sql
+    assert "ON CONFLICT" in sql

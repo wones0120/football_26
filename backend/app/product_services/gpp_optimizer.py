@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import math
 import uuid
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, datetime
-from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 import pandas as pd
 import pulp
@@ -15,12 +15,14 @@ from sqlalchemy.engine import Engine
 
 from Database.config import get_connection_string
 
+from .cbc_solver import make_cbc_solver
 from .optimizer_control import solve_control, build_comparison
 from .lineup_correlation_scoring import (
     add_format_specific_objective,
     add_lineup_correlation_objective,
     build_format_specific_terms,
     build_lineup_correlation_terms,
+    _threshold_flag,
 )
 from .rule_library import resolve_strategy_profile
 
@@ -38,7 +40,7 @@ class Player:
     salary: int
     projection: float
     ceiling: float
-    ownership: float
+    ownership: float | None
     optimal_lineup_probability: float | None = None
     game_id: str | None = None
     spread: float | None = None
@@ -148,9 +150,9 @@ class SlateConfig:
 class PortfolioStats:
     exposures: Dict[str, float]
     tag_counts: Dict[str, int]
-    avg_total_ownership: float
+    avg_total_ownership: float | None
     stack_summary: Dict[str, int]
-    avg_template_score: float = 0.0
+    avg_template_score: float | None = None
     template_score_counts: Dict[str, int] = field(default_factory=dict)
 
 
@@ -167,6 +169,7 @@ class GPPOptimizerResult:
     portfolio: PortfolioStats
     iterations: int
     control_comparisons: List[dict] = field(default_factory=list)
+    generation_funnel: dict = field(default_factory=dict)
 
 
 VALID_POSITIONS = {"QB", "RB", "WR", "TE", "DST", "D", "DEF"}
@@ -440,11 +443,11 @@ def load_player_pool(engine: Engine, season: int, week: int, slate: str) -> tupl
             continue
         ceiling = _ceiling(row)
         try:
-            ownership_val = float(getattr(row, "projected_ownership", 0.0) or 0.0)
+            ownership_val = float(getattr(row, "projected_ownership", None))
             if not math.isfinite(ownership_val):
-                ownership_val = 0.0
+                ownership_val = None
         except Exception:
-            ownership_val = 0.0
+            ownership_val = None
         player = Player(
             player_id=str(row.player_id),
             name=str(getattr(row, "name", getattr(row, "player_name", row.player_id))),
@@ -456,15 +459,9 @@ def load_player_pool(engine: Engine, season: int, week: int, slate: str) -> tupl
             ceiling=ceiling,
             ownership=ownership_val,
             game_id=str(getattr(row, "game_info", getattr(row, "game_id", ""))),
-            spread=float(getattr(row, "spread", 0.0) or 0.0)
-            if hasattr(row, "spread")
-            else None,
-            game_total=float(getattr(row, "game_total", 0.0) or 0.0)
-            if hasattr(row, "game_total")
-            else None,
-            team_total=float(getattr(row, "team_total", 0.0) or 0.0)
-            if hasattr(row, "team_total")
-            else None,
+            spread=(float(row.spread) if hasattr(row, "spread") and pd.notna(row.spread) else None),
+            game_total=(float(row.game_total) if hasattr(row, "game_total") and pd.notna(row.game_total) else None),
+            team_total=(float(row.team_total) if hasattr(row, "team_total") and pd.notna(row.team_total) else None),
         )
         players.append(player)
     counts.update(
@@ -485,11 +482,11 @@ def tag_players(players: List[Player], thresholds: TagThresholds) -> None:
         p.ceiling_per_k = p.ceiling / max(1, p.salary / 1000)
         p.leverage = (
             p.optimal_lineup_probability - p.ownership
-            if p.optimal_lineup_probability is not None
+            if p.optimal_lineup_probability is not None and p.ownership is not None
             else 0.0
         )
         p.tags = set()
-        if p.projection >= thresholds.chalk_proj and p.ownership >= thresholds.chalk_own:
+        if p.ownership is not None and p.projection >= thresholds.chalk_proj and p.ownership >= thresholds.chalk_own:
             p.tags.add("chalk")
         if (
             p.optimal_lineup_probability is not None
@@ -501,7 +498,9 @@ def tag_players(players: List[Player], thresholds: TagThresholds) -> None:
         p.tags.add(f"own_{ownership_bucket(p.ownership)}")
 
 
-def classic_template_score(lineup: List[Player]) -> int:
+def classic_template_score(lineup: List[Player]) -> int | None:
+    if any(player.ownership is None for player in lineup):
+        return None
     buckets: Dict[str, int] = {bucket: 0 for bucket in OWNERSHIP_BUCKET_ORDER}
     for player in lineup:
         buckets[ownership_bucket(player.ownership)] += 1
@@ -545,7 +544,7 @@ def analyze_slate(players: List[Player], chalk_threshold: float = 20.0) -> Slate
         if p.game_id and p.game_total:
             totals[p.game_id] = max(totals.get(p.game_id, 0.0), p.game_total)
     feature_games = sorted(totals.items(), key=lambda kv: kv[1], reverse=True)[:3]
-    chalky = [p for p in players if p.ownership >= chalk_threshold]
+    chalky = [p for p in players if p.ownership is not None and p.ownership >= chalk_threshold]
     chalk_concentration = len(chalky) / max(1, len(players))
     return SlateAnalysis(
         game_count=len(game_ids) if game_ids else math.ceil(len(players) / 18),  # rough estimate
@@ -594,6 +593,7 @@ def build_large_gpp_config(
     stack_templates: Sequence[Tuple[int, int]] | None = None,
     maximum_exposure_by_player: Dict[str, float] | None = None,
     minimum_exposure_by_player: Dict[str, float] | None = None,
+    candidate_aware_ownership: bool = False,
 ) -> SlateConfig:
     """Build the explicit large-field tournament contract.
 
@@ -605,13 +605,13 @@ def build_large_gpp_config(
     if not templates:
         templates = ((1, 0),)
     mean_weight = 0.35
-    ceiling_weight = 0.45 if ownership_available else 0.48
-    correlation_weight = 0.15 if ownership_available else 0.17
-    leverage_weight = 0.05 if ownership_available else 0.0
+    ceiling_weight = 0.48 if candidate_aware_ownership else (0.45 if ownership_available else 0.48)
+    correlation_weight = 0.17 if candidate_aware_ownership else (0.15 if ownership_available else 0.17)
+    leverage_weight = 0.0 if candidate_aware_ownership else (0.05 if ownership_available else 0.0)
     team_cap = int(max_from_team) if max_from_team is not None else 4
     team_cap = max(1, min(4, team_cap))
     uniqueness = max(1, min(9, int(minimum_uniqueness)))
-    ownership_cap = 160.0 if ownership_available else None
+    ownership_cap = 160.0 if ownership_available and not candidate_aware_ownership else None
     return SlateConfig(
         stack_rules=StackRules(
             min_pass_catchers=min(template[0] for template in templates),
@@ -633,7 +633,7 @@ def build_large_gpp_config(
             correlation=correlation_weight,
         ),
         tag_caps=LineupTagCaps(
-            max_chalk=5 if ownership_available else 9,
+            max_chalk=5 if ownership_available and not candidate_aware_ownership else 9,
             min_leverage=0,
             max_punts=2,
             max_total_ownership=ownership_cap,
@@ -641,7 +641,7 @@ def build_large_gpp_config(
         portfolio_targets=PortfolioTargets(
             max_avg_ownership=ownership_cap,
             min_leverage_count=0,
-            max_chalk_count=5 if ownership_available else 9,
+            max_chalk_count=5 if ownership_available and not candidate_aware_ownership else 9,
             player_exposure_caps=dict(maximum_exposure_by_player or {}),
             player_exposure_mins=dict(minimum_exposure_by_player or {}),
         ),
@@ -649,6 +649,43 @@ def build_large_gpp_config(
         uniqueness_overlap=9 - uniqueness,
         normalize_objective=True,
         stack_templates=templates,
+    )
+
+
+def build_long_shot_config(
+    config: SlateConfig,
+    *,
+    ownership_available: bool,
+) -> SlateConfig:
+    """Return a one-lineup contrarian objective without changing projections.
+
+    Ownership is the only direct evidence that a lineup is contrarian.  When it
+    is unavailable, keep the ordinary football objective and let the caller
+    report that long-shot confidence is unavailable instead of treating missing
+    ownership as zero.
+    """
+    if not ownership_available:
+        return config
+    return replace(
+        config,
+        objective_weights=ObjectiveWeights(
+            projection=0.15,
+            ceiling=0.30,
+            leverage=0.40,
+            correlation=0.15,
+        ),
+        tag_caps=replace(
+            config.tag_caps,
+            max_chalk=config.roster_size,
+            min_leverage=0,
+            max_total_ownership=None,
+        ),
+        portfolio_targets=replace(
+            config.portfolio_targets,
+            max_avg_ownership=None,
+            min_leverage_count=0,
+            max_chalk_count=config.roster_size,
+        ),
     )
 
 
@@ -668,6 +705,17 @@ def _build_lineup(
     stack_rules: StackRules | None = None,
     required_player_ids: set[str] | None = None,
     control_comparisons: List[dict] | None = None,
+    exact_pass_catchers: int | None = None,
+    exact_bring_backs: int | None = None,
+    correlation_rule_multipliers: Mapping[str, float] | None = None,
+    extra_qb_pass_catcher_multiplier: float = 1.0,
+    precomputed_correlation_terms: Sequence[Any] | None = None,
+    precomputed_format_terms: Sequence[Any] | None = None,
+    minimum_mean: float | None = None,
+    minimum_p90: float | None = None,
+    minimum_player_groups: Sequence[tuple[set[str], int]] | None = None,
+    maximum_player_groups: Sequence[tuple[set[str], int]] | None = None,
+    solver_backend: str = "bundled",
 ) -> Optional[List[int]]:
     if not players:
         return None
@@ -713,9 +761,29 @@ def _build_lineup(
     correlation_profile = resolve_strategy_profile(
         contest_format="classic", objective="gpp"
     )
-    correlation_terms = build_lineup_correlation_terms(
+    correlation_terms = list(precomputed_correlation_terms) if precomputed_correlation_terms is not None else build_lineup_correlation_terms(
         players, profile=correlation_profile
     )
+    format_terms = list(precomputed_format_terms) if precomputed_format_terms is not None else build_format_specific_terms(
+        players, profile=correlation_profile
+    )
+    rule_multipliers = dict(correlation_rule_multipliers or {})
+
+    def adjusted_rule_score(evaluation: Any) -> float:
+        return sum(
+            trigger.score_contribution * rule_multipliers.get(trigger.rule_id, 1.0)
+            for trigger in evaluation.triggered_rules
+        )
+
+    if rule_multipliers:
+        correlation_terms = [
+            replace(term, adjustment=adjusted_rule_score(term.evaluation))
+            for term in correlation_terms
+        ]
+        format_terms = [
+            replace(term, adjustment=adjusted_rule_score(term.evaluation))
+            for term in format_terms
+        ]
     correlation_score = add_lineup_correlation_objective(
         model,
         correlation_terms,
@@ -724,22 +792,85 @@ def _build_lineup(
     )
     format_score = add_format_specific_objective(
         model,
-        build_format_specific_terms(players, profile=correlation_profile),
+        format_terms,
         selected_vars=x,
         prefix="gpp_format_rule",
     )
+    resolved_extra_multiplier = float(extra_qb_pass_catcher_multiplier)
+    if not 0.0 <= resolved_extra_multiplier <= 1.0:
+        raise ValueError("extra_qb_pass_catcher_multiplier must be between 0 and 1")
+    extra_stack_adjustments: list[Any] = []
+    if resolved_extra_multiplier < 1.0:
+        qb_pass_catcher_rule = "correlation.qb_pass_catcher_v2"
+        by_qb: dict[int, list[tuple[int, float]]] = {}
+        for term in correlation_terms:
+            trigger = next(
+                (
+                    item
+                    for item in term.evaluation.triggered_rules
+                    if item.rule_id == qb_pass_catcher_rule
+                ),
+                None,
+            )
+            if trigger is None:
+                continue
+            if players[term.left_index].position == "QB":
+                qb_index, catcher_index = term.left_index, term.right_index
+            elif players[term.right_index].position == "QB":
+                qb_index, catcher_index = term.right_index, term.left_index
+            else:
+                continue
+            by_qb.setdefault(qb_index, []).append(
+                (catcher_index, float(trigger.score_contribution))
+            )
+        for qb_index, catcher_rows in by_qb.items():
+            catcher_indexes = tuple(dict.fromkeys(index for index, _score in catcher_rows))
+            if len(catcher_indexes) < 2:
+                continue
+            scores = [score for _index, score in catcher_rows]
+            per_extra_score = sum(scores) / len(scores)
+            catcher_count = pulp.lpSum(x[index] for index in catcher_indexes)
+            for threshold in range(2, len(catcher_indexes) + 1):
+                threshold_flags = _threshold_flag(
+                    model,
+                    catcher_count,
+                    item_count=len(catcher_indexes),
+                    minimum=threshold,
+                    maximum=None,
+                    prefix=f"gpp_extra_qb_pass_catcher_{qb_index}_{threshold}",
+                )
+                if not threshold_flags:
+                    continue
+                active = pulp.LpVariable(
+                    f"gpp_extra_qb_pass_catcher_{qb_index}_{threshold}_active",
+                    lowBound=0,
+                    upBound=1,
+                    cat="Binary",
+                )
+                conditions = [x[qb_index], *threshold_flags]
+                for condition in conditions:
+                    model += active <= condition
+                model += active >= pulp.lpSum(conditions) - (len(conditions) - 1)
+                extra_stack_adjustments.append(
+                    -(1.0 - resolved_extra_multiplier) * per_extra_score * active
+                )
+    extra_stack_score = pulp.lpSum(extra_stack_adjustments)
     model += (
         weights.projection * proj_term
         + weights.ceiling * ceiling_term
         + weights.leverage * lev_term
         + weights.correlation
         * config.correlation_bonus
-        * (correlation_score + format_score)
+        * (correlation_score + format_score + extra_stack_score)
     )
 
     # Salary + roster
     model += pulp.lpSum(players[i].salary * x[i] for i in idx_range) <= config.salary_cap
     model += pulp.lpSum(x[i] for i in idx_range) == config.roster_size
+    if minimum_mean is not None:
+        model += pulp.lpSum(players[i].projection * x[i] for i in idx_range) >= minimum_mean
+    if minimum_p90 is not None:
+        model += pulp.lpSum(players[i].ceiling * x[i] for i in idx_range) >= minimum_p90
 
     qb_idx = _position_indices(players, ["QB"])
     rb_idx = _position_indices(players, ["RB"])
@@ -756,11 +887,11 @@ def _build_lineup(
 
     # Team limits
     active_stack_rules = stack_rules or config.stack_rules
-    for team in {p.team for p in players}:
+    for team in sorted({p.team for p in players}):
         team_idx = [i for i, p in enumerate(players) if p.team == team]
         model += pulp.lpSum(x[i] for i in team_idx) <= active_stack_rules.max_from_team
     if active_stack_rules.max_from_game is not None:
-        for game_id in {p.game_id for p in players if p.game_id}:
+        for game_id in sorted({p.game_id for p in players if p.game_id}):
             game_idx = [i for i, p in enumerate(players) if p.game_id == game_id]
             model += (
                 pulp.lpSum(x[i] for i in game_idx)
@@ -792,6 +923,12 @@ def _build_lineup(
             model += pulp.lpSum(x[j] for j in same_team) >= active_stack_rules.min_pass_catchers * x[i]
         if opp_team:
             model += pulp.lpSum(x[j] for j in opp_team) >= active_stack_rules.min_bring_backs * x[i]
+        if exact_pass_catchers is not None:
+            model += pulp.lpSum(x[j] for j in same_team) >= exact_pass_catchers * x[i]
+            model += pulp.lpSum(x[j] for j in same_team) <= exact_pass_catchers + len(same_team) * (1 - x[i])
+        if exact_bring_backs is not None:
+            model += pulp.lpSum(x[j] for j in opp_team) >= exact_bring_backs * x[i]
+            model += pulp.lpSum(x[j] for j in opp_team) <= exact_bring_backs + len(opp_team) * (1 - x[i])
 
     # Tag constraints
     tag_caps = config.tag_caps
@@ -805,7 +942,11 @@ def _build_lineup(
     if punt_idx:
         model += pulp.lpSum(x[i] for i in punt_idx) <= tag_caps.max_punts
     if tag_caps.max_total_ownership:
-        model += pulp.lpSum(players[i].ownership * x[i] for i in idx_range) <= tag_caps.max_total_ownership
+        known = [i for i in idx_range if players[i].ownership is not None]
+        missing = [i for i in idx_range if players[i].ownership is None]
+        model += pulp.lpSum(players[i].ownership * x[i] for i in known) <= (
+            tag_caps.max_total_ownership + 900.0 * pulp.lpSum(x[i] for i in missing)
+        )
 
     # Exposure caps
     if exposure_remaining:
@@ -815,12 +956,20 @@ def _build_lineup(
             if remaining is not None and remaining <= 0:
                 model += x[i] == 0
     if required_player_ids:
-        for player_id in required_player_ids:
+        for player_id in sorted(required_player_ids):
             required_indexes = [
                 i for i, player in enumerate(players) if player.player_id == player_id
             ]
             if required_indexes:
                 model += pulp.lpSum(x[i] for i in required_indexes) == 1
+    if minimum_player_groups:
+        for player_ids, minimum_count in minimum_player_groups:
+            model += pulp.lpSum(x[i] for i in idx_range
+                                if players[i].player_id in player_ids) >= minimum_count
+    if maximum_player_groups:
+        for player_ids, maximum_count in maximum_player_groups:
+            model += pulp.lpSum(x[i] for i in idx_range
+                                if players[i].player_id in player_ids) <= maximum_count
 
     # Prevent the solver from selecting the same player multiple times when duplicate rows exist
     by_id: Dict[str, List[int]] = {}
@@ -840,9 +989,9 @@ def _build_lineup(
 
     # Uniqueness
     for lineup in exclude_lineups:
-        model += pulp.lpSum(x[i] for i in lineup) <= config.uniqueness_overlap
+        model += pulp.lpSum(x[i] for i in sorted(lineup)) <= config.uniqueness_overlap
 
-    solver = pulp.PULP_CBC_CMD(msg=False)
+    solver = make_cbc_solver(solver_backend)
     status = model.solve(solver)
     if status != pulp.LpStatusOptimal:
         return None
@@ -865,8 +1014,9 @@ def _build_lineup(
     return selected
 
 
-def _lineup_stats(players: List[Player], idxs: List[int]) -> Tuple[float, int, int, int]:
-    total_ownership = sum(players[i].ownership for i in idxs)
+def _lineup_stats(players: List[Player], idxs: List[int]) -> Tuple[float | None, int, int, int]:
+    total_ownership = (sum(players[i].ownership for i in idxs)
+                       if all(players[i].ownership is not None for i in idxs) else None)
     chalk = sum(1 for i in idxs if "chalk" in players[i].tags)
     leverage = sum(1 for i in idxs if "leverage" in players[i].tags)
     punts = sum(1 for i in idxs if "punt" in players[i].tags)
@@ -888,10 +1038,12 @@ def _portfolio_stats(players: List[Player], lineups: List[List[int]]) -> Portfol
             exposure_counts[pid] = exposure_counts.get(pid, 0) + 1
             for tag in players[i].tags:
                 tag_counts[tag] = tag_counts.get(tag, 0) + 1
-        ownership_totals.append(sum(players[i].ownership for i in idxs))
+        if all(players[i].ownership is not None for i in idxs):
+            ownership_totals.append(sum(players[i].ownership for i in idxs))
         template_score = classic_template_score(lineup_players)
-        template_scores.append(template_score)
-        template_score_counts[template_score_bucket(template_score)] += 1
+        if template_score is not None:
+            template_scores.append(template_score)
+            template_score_counts[template_score_bucket(template_score)] += 1
         # Stack type summary: count pass catchers/bring backs for QB
         qbs = [i for i in idxs if players[i].position == "QB"]
         if qbs:
@@ -903,8 +1055,10 @@ def _portfolio_stats(players: List[Player], lineups: List[List[int]]) -> Portfol
 
     total_lineups = max(1, len(lineups))
     exposures = {pid: count / total_lineups for pid, count in exposure_counts.items()}
-    avg_total_ownership = sum(ownership_totals) / total_lineups if ownership_totals else 0.0
-    avg_template_score = sum(template_scores) / total_lineups if template_scores else 0.0
+    avg_total_ownership = (sum(ownership_totals) / len(ownership_totals)
+                           if ownership_totals and len(ownership_totals) == len(lineups) else None)
+    avg_template_score = (sum(template_scores) / len(template_scores)
+                          if template_scores and len(template_scores) == len(lineups) else None)
     return PortfolioStats(
         exposures=exposures,
         tag_counts=tag_counts,
@@ -918,7 +1072,9 @@ def _portfolio_stats(players: List[Player], lineups: List[List[int]]) -> Portfol
 def _adjust_config_for_targets(config: SlateConfig, stats: PortfolioStats, targets: PortfolioTargets) -> SlateConfig:
     cfg = config
     # Adjust lineup ownership cap if average too high
-    if targets.max_avg_ownership and stats.avg_total_ownership > targets.max_avg_ownership and cfg.tag_caps.max_total_ownership:
+    if (targets.max_avg_ownership and stats.avg_total_ownership is not None
+            and stats.avg_total_ownership > targets.max_avg_ownership
+            and cfg.tag_caps.max_total_ownership):
         cfg = SlateConfig(**{**cfg.__dict__})
         cfg.tag_caps = LineupTagCaps(**{**cfg.tag_caps.__dict__})
         cfg.tag_caps.max_total_ownership = max(100.0, cfg.tag_caps.max_total_ownership - 10.0)
@@ -943,6 +1099,12 @@ def generate_portfolio(
     stack_templates: Sequence[Tuple[int, int]] | None = None,
     maximum_exposure_by_player: Dict[str, float] | None = None,
     minimum_exposure_by_player: Dict[str, float] | None = None,
+    include_control_comparisons: bool = True,
+    long_shot_mode: bool = False,
+    candidate_aware_ownership: bool = False,
+    solver_backend: str = "bundled",
+    precompute_correlation_terms: bool = False,
+    maximum_player_groups: Sequence[tuple[set[str], int]] | None = None,
 ) -> GPPOptimizerResult:
     engine = engine or create_engine(get_connection_string())
     if players is None:
@@ -955,7 +1117,7 @@ def generate_portfolio(
             "ownership": int(
                 ownership_available
                 if ownership_available is not None
-                else any(player.ownership > 0 for player in players)
+                else any(player.ownership is not None for player in players)
             ),
             "kept": len(players),
         }
@@ -981,12 +1143,25 @@ def generate_portfolio(
                 stack_templates=stack_templates,
                 maximum_exposure_by_player=maximum_exposure_by_player,
                 minimum_exposure_by_player=minimum_exposure_by_player,
+                candidate_aware_ownership=candidate_aware_ownership,
             )
     else:
         resolved_builder = config_builder
     base_config = resolved_builder(analysis)
     tag_players(players, base_config.tag_thresholds)
     config = resolved_builder(analysis)
+    if long_shot_mode:
+        if num_lineups != 1:
+            raise ValueError("Long-shot mode requires exactly one lineup")
+        if bool(ownership_available) and all(player.ownership is not None for player in players):
+            # Directly optimize low ownership.  This deliberately does not
+            # modify mean, ceiling, role, or any other football input.
+            for player in players:
+                player.leverage = -float(player.ownership)
+        config = build_long_shot_config(
+            config,
+            ownership_available=bool(ownership_available),
+        )
     leverage_available = any(
         player.optimal_lineup_probability is not None for player in players
     )
@@ -1017,6 +1192,18 @@ def generate_portfolio(
             normalize_objective=config.normalize_objective,
             stack_templates=config.stack_templates,
         )
+    correlation_terms = None
+    format_terms = None
+    if precompute_correlation_terms:
+        correlation_profile = resolve_strategy_profile(
+            contest_format="classic", objective="gpp"
+        )
+        correlation_terms = build_lineup_correlation_terms(
+            players, profile=correlation_profile
+        )
+        format_terms = build_format_specific_terms(
+            players, profile=correlation_profile
+        )
     # Small slates (few teams) need a higher per-team cap to satisfy a 9-man roster
     unique_teams = {p.team for p in players if p.team}
     min_team_cap = math.ceil(config.roster_size / max(1, len(unique_teams) or 1))
@@ -1029,6 +1216,8 @@ def generate_portfolio(
     used_counts: Dict[str, int] = {}
     lineups: List[List[int]] = []
     control_comparisons: List[dict] = []
+    solved_count = 0
+    infeasible_count = 0
 
     iterations = 0
     max_iterations = 3
@@ -1119,10 +1308,16 @@ def generate_portfolio(
                 avoid_dst_opponents=avoid_dst_opponents,
                 stack_rules=lineup_stack_rules,
                 required_player_ids=required_now,
-                control_comparisons=control_comparisons,
+                control_comparisons=control_comparisons if include_control_comparisons else None,
+                solver_backend=solver_backend,
+                precomputed_correlation_terms=correlation_terms,
+                precomputed_format_terms=format_terms,
+                maximum_player_groups=maximum_player_groups,
             )
             if not lineup_idxs:
+                infeasible_count += 1
                 break
+            solved_count += 1
             new_lineups.append(lineup_idxs)
             for idx in lineup_idxs:
                 pid = players[idx].player_id
@@ -1179,6 +1374,15 @@ def generate_portfolio(
         portfolio=_portfolio_stats(players, lineups),
         iterations=iterations,
         control_comparisons=control_comparisons,
+        generation_funnel={
+            "requested": num_lineups, "solved": solved_count,
+            "legal": solved_count, "duplicate": 0,
+            "rejected_by_quality": 0, "rejected_by_player_cap": None,
+            "rejected_by_injury_cap": None, "rejected_by_family_constraint": None,
+            "accepted": len(lineups), "remaining_deficit": num_lineups - len(lineups),
+            "infeasible_solver_attempts": infeasible_count,
+            "status": "CANDIDATE_POOL_UNDERFILLED" if len(lineups) < num_lineups else "complete",
+        },
     )
     return result
 
@@ -1210,8 +1414,10 @@ def export_summary_to_md(result: GPPOptimizerResult, path: str) -> None:
         f"- Status: {result.status}",
         f"- Message: {result.message}",
         f"- Lineups: {len(result.lineups)}",
-        f"- Avg total ownership: {result.portfolio.avg_total_ownership:.2f}",
-        f"- Avg ownership-template score: {result.portfolio.avg_template_score:.2f}",
+        f"- Avg total ownership: {result.portfolio.avg_total_ownership:.2f}"
+        if result.portfolio.avg_total_ownership is not None else "- Avg total ownership: unavailable",
+        f"- Avg ownership-template score: {result.portfolio.avg_template_score:.2f}"
+        if result.portfolio.avg_template_score is not None else "- Avg ownership-template score: unavailable",
         "",
         "## Stack Types",
     ]
@@ -1270,6 +1476,12 @@ def run_gpp_pipeline(
     stack_templates: Sequence[Tuple[int, int]] | None = None,
     maximum_exposure_by_player: Dict[str, float] | None = None,
     minimum_exposure_by_player: Dict[str, float] | None = None,
+    include_control_comparisons: bool = True,
+    long_shot_mode: bool = False,
+    candidate_aware_ownership: bool = False,
+    solver_backend: str = "bundled",
+    precompute_correlation_terms: bool = False,
+    maximum_player_groups: Sequence[tuple[set[str], int]] | None = None,
 ) -> GPPOptimizerResult:
     """End-to-end entry point: load slate, build config, generate portfolio, export results."""
     result = generate_portfolio(
@@ -1290,6 +1502,12 @@ def run_gpp_pipeline(
         stack_templates=stack_templates,
         maximum_exposure_by_player=maximum_exposure_by_player,
         minimum_exposure_by_player=minimum_exposure_by_player,
+        include_control_comparisons=include_control_comparisons,
+        long_shot_mode=long_shot_mode,
+        candidate_aware_ownership=candidate_aware_ownership,
+        solver_backend=solver_backend,
+        precompute_correlation_terms=precompute_correlation_terms,
+        maximum_player_groups=maximum_player_groups,
     )
     if export_dir:
         csv_path = f"{export_dir}/lineups_{slate}_{season}w{week}.csv"

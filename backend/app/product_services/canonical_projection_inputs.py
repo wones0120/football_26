@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from bisect import bisect_left
 from datetime import datetime, timezone
+import re
 
 import numpy as np
 import pandas as pd
 from sqlalchemy import inspect, select, text
 
-from ..models import CuratedPlayerGameParticipation, CuratedSalary, PlayerGameFeatureMatrix
+from Database.dst import normalize_team
+from ..models import CuratedPlayerGameParticipation, CuratedSalary, PlayerGameFeatureMatrix, RawNflSchedule
 from .salary_eligibility import (
     INELIGIBLE_SALARY_STATUSES,
     is_salary_status_eligible,
@@ -34,6 +36,10 @@ BASE_FEATURE_COLUMNS = [
     "team_offense_missing_share_lag1", "team_defense_missing_share_lag1",
     "opponent_offense_missing_share_lag1", "opponent_defense_missing_share_lag1",
 ]
+MARKET_FEATURE_COLUMNS = {
+    "game_total_line", "team_spread_line", "team_implied_total",
+    "opponent_implied_total",
+}
 OPPORTUNITY_FEATURE_COLUMNS = [
     "carry_share_mean_3",
     "target_share_mean_3",
@@ -45,6 +51,7 @@ OPPORTUNITY_FEATURE_COLUMNS = [
 FEATURE_COLUMNS = [
     *BASE_FEATURE_COLUMNS,
     "snap_share_mean_3",
+    "offensive_role_importance", "offensive_role_completeness",
     *POSITION_FEATURE_COLUMNS,
 ]
 
@@ -53,6 +60,8 @@ PREGAME_LINEAGE_COLUMNS = [
     "pregame_start_probability",
     "pregame_carry_share",
     "pregame_target_share",
+    "pregame_effective_carry_share", "pregame_effective_target_share",
+    "pregame_effective_carry_share_source", "pregame_effective_target_share_source",
     "pregame_role_label",
     "pregame_injury_status",
     "pregame_expected_snaps",
@@ -68,11 +77,35 @@ PREGAME_LINEAGE_COLUMNS = [
     "pregame_context_row_id",
     "pregame_context_source",
     "pregame_context_observed_at",
+    "official_availability_status", "availability_override",
+    "model_availability_used", "opportunity_redistributed",
+    "projection_before_scenario", "projection_after_scenario",
     "starting_qb_source",
     "starting_qb_evidence_tier",
+    "team_starting_qb_player_id", "team_starting_qb_name",
+    "team_starting_qb_evidence_tier", "team_starting_qb_observed_at",
+    "market_source_system", "market_snapshot_row_id", "market_observed_at",
+    "market_context_updated_from_matrix",
+    "market_team_point_adjustment",
     *OPPORTUNITY_FEATURE_COLUMNS,
+    "offensive_role_importance", "offensive_role_completeness",
+    "offensive_role_evidence", "offensive_role_class", "offensive_role_reason",
+    "offensive_role_confidence", "offensive_role_source",
+    "role_counterfactual_grid",
+    "offensive_role_rank", "team_mean_rank", "team_p90_rank",
+    "role_projection_disagreement", "team_cumulative_target_share",
+    "team_cumulative_rb_carry_share",
+    "projected_carries", "projected_targets", "projected_opportunity_source",
+    "carry_share_mean_3_available", "target_share_mean_3_available",
+    "carries_mean_3_available", "targets_mean_3_available",
+    "team_carries_mean_3_available", "team_targets_mean_3_available",
+    "snap_share_mean_3_available",
+    "snap_share_last", "snap_share_prior3", "snap_share_trend",
+    "target_share_last", "target_share_prior3", "target_share_trend",
+    "rush_share_last", "rush_share_prior3", "rush_share_trend",
     "pregame_base_carries_mean_3",
     "pregame_base_targets_mean_3",
+    "pregame_base_carry_share_mean_3", "pregame_base_target_share_mean_3",
     "pregame_workload_multiplier",
     "pregame_workload_adjustment_source",
     "pregame_opportunity_context_applied",
@@ -81,6 +114,374 @@ PREGAME_LINEAGE_COLUMNS = [
     "pregame_opportunity_point_weight",
     "pregame_point_mean_after_opportunity",
 ]
+
+
+class StaleTrainingOutcomeError(ValueError):
+    """Completed results exist, but their persisted training labels are stale."""
+
+    def __init__(self, periods: list[tuple[int, int]]):
+        self.periods = tuple(sorted(set(periods)))
+        labels = [f"{season}-W{week:02d}" for season, week in self.periods]
+        super().__init__(
+            "Completed weekly stats contain opportunities but the projection feature "
+            "matrix has only zero outcomes for "
+            f"{', '.join(labels)}. Rebuild the player-game feature matrix after "
+            "ingesting results before running projections."
+        )
+
+
+def _control_name(value: object) -> str:
+    return re.sub(r"[^a-z0-9]+", "", str(value or "").casefold())
+
+
+def apply_player_availability_overrides(
+    target: pd.DataFrame,
+    pregame_context: pd.DataFrame | None,
+    overrides: list[dict] | None,
+    *,
+    allow_confirmed_inactive_override: bool = False,
+    assume_questionable_out: bool = False,
+) -> tuple[pd.DataFrame, list[dict]]:
+    """Overlay user scenario evidence before generic opportunity allocation."""
+    context = pregame_context.copy() if pregame_context is not None else pd.DataFrame()
+    requested = [row for row in (overrides or []) if row.get("availability") != "default"]
+    if assume_questionable_out:
+        context_statuses = {}
+        if not context.empty:
+            context_id = "player_master_id" if "player_master_id" in context else "player_id"
+            context_statuses = {
+                str(row[context_id]): normalize_salary_status(row.get("injury_status"))
+                for row in context.to_dict("records")
+            }
+        requested = [*requested, *[
+            {"player_id": str(row.player_id), "availability": "assume_out"}
+            for row in target.itertuples(index=False)
+            if normalize_salary_status(getattr(row, "player_status", None)) in {"Q", "QUESTIONABLE"}
+            or context_statuses.get(str(row.player_id)) in {"Q", "QUESTIONABLE"}
+        ]]
+    if not requested:
+        return context, []
+
+    by_id = {str(row.player_id): row for row in target.itertuples(index=False)}
+    by_name: dict[str, list] = {}
+    for row in target.itertuples(index=False):
+        by_name.setdefault(_control_name(row.player_display_name), []).append(row)
+
+    if context.empty:
+        context = pd.DataFrame(columns=["player_master_id"])
+    id_column = "player_master_id" if "player_master_id" in context.columns else "player_id"
+    if id_column not in context.columns:
+        context[id_column] = None
+    audit: list[dict] = []
+    seen: dict[str, str] = {}
+    zero_fields = (
+        "start_probability", "expected_snaps",
+        "expected_routes", "red_zone_share", "goal_line_share",
+    )
+    for override in requested:
+        player = None
+        player_id = str(override.get("player_id") or "").strip()
+        if player_id:
+            player = by_id.get(player_id)
+            if player is None:
+                raise ValueError(
+                    f"Availability override player_id was not found in the selected slate: {player_id}"
+                )
+        else:
+            supplied_name = str(override.get("player_name") or "").strip()
+            matches = by_name.get(_control_name(supplied_name), [])
+            if len(matches) != 1:
+                reason = "was not found" if not matches else "is ambiguous"
+                raise ValueError(
+                    f"Availability override player {reason} in the selected slate: {supplied_name}"
+                )
+            player = matches[0]
+            player_id = str(player.player_id)
+        if player_id in seen:
+            if seen[player_id] == override["availability"]:
+                continue
+            raise ValueError(f"Conflicting availability overrides for {player.player_display_name}")
+        seen[player_id] = override["availability"]
+
+        matches = context.index[context[id_column].astype(str).eq(player_id)].tolist()
+        context_index = matches[0] if matches else len(context)
+        if not matches:
+            context.loc[context_index, id_column] = player_id
+        official_status = (
+            normalize_salary_status(context.loc[context_index].get("injury_status"))
+            or normalize_salary_status(override.get("official_availability_status"))
+            or normalize_salary_status(getattr(player, "player_status", None))
+        )
+        availability = str(override["availability"])
+        if (
+            availability == "assume_active"
+            and official_status
+            and not is_salary_status_eligible(official_status)
+            and not allow_confirmed_inactive_override
+        ):
+            raise ValueError(
+                f"Assume Active cannot override confirmed inactive status for "
+                f"{player.player_display_name} ({official_status})"
+            )
+        context.loc[context_index, "availability_probability"] = (
+            1.0 if availability == "assume_active" else 0.0
+        )
+        context.loc[context_index, "source"] = "user_availability_scenario"
+        if availability == "assume_out":
+            for field in zero_fields:
+                context.loc[context_index, field] = 0.0
+            # Preserve pre-injury shares and counts until allocation measures
+            # the removed work. Availability zeroes the final allocation.
+        audit.append(
+            {
+                "player_id": player_id,
+                "player_name": str(player.player_display_name),
+                "team": str(player.recent_team),
+                "official_availability_status": official_status or None,
+                "availability_override": availability,
+                "model_availability_used": 1.0 if availability == "assume_active" else 0.0,
+                "opportunity_redistributed": availability == "assume_out",
+            }
+        )
+    return context, audit
+
+
+def apply_latest_market_context(
+    target: pd.DataFrame, market_rows: pd.DataFrame, *, cutoff: datetime | None = None,
+) -> tuple[pd.DataFrame, list[dict]]:
+    """Overlay only captured, pre-cutoff game lines on future projection rows."""
+    updated = target.copy()
+    matrix_market = target.copy()
+    # A feature-matrix zero is a model imputation, not a captured betting line.
+    # Only a timestamped, matched raw schedule row may populate decision data.
+    for column in MARKET_FEATURE_COLUMNS:
+        updated[column] = np.nan
+    for column in ("market_source_system", "market_snapshot_row_id", "market_observed_at"):
+        updated[column] = None
+    updated["market_context_updated_from_matrix"] = False
+    audit: list[dict] = []
+    if market_rows.empty:
+        return updated, audit
+    from backend.app.services.schedule_context import nflverse_team_market_context
+
+    def market_payload(row: dict) -> dict:
+        payload = row.get("raw_row_json")
+        return payload if isinstance(payload, dict) else {}
+
+    def observation_order(row: dict) -> int:
+        observed_value = row.get("observed_at") if pd.notna(row.get("observed_at")) else \
+            market_payload(row).get("observed_at")
+        observed = pd.to_datetime(observed_value,
+                                  utc=True, errors="coerce")
+        return -1 if pd.isna(observed) else observed.value
+
+    ordered_markets = sorted(market_rows.to_dict(orient="records"), key=observation_order)
+    for market in ordered_markets:
+        payload = market_payload(market)
+        normalized = pd.notna(market.get("game_total")) and pd.notna(market.get("home_spread"))
+        snapshot_row_id = market.get("market_snapshot_id") if normalized else market.get("raw_nfl_schedule_id")
+        source_system = market.get("source") if normalized else market.get("source_system")
+        try:
+            total = float(market["game_total"] if normalized else payload["total_line"])
+            home_margin = float(-market["home_spread"] if normalized else payload["spread_line"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if (not np.isfinite(total) or not np.isfinite(home_margin)
+                or not 20 <= total <= 80 or abs(home_margin) > 30
+                or (total - abs(home_margin)) / 2 <= 0):
+            audit.append({"status": "invalid_market_values",
+                          "snapshot_row_id": snapshot_row_id})
+            continue
+        home = normalize_team(str(market.get("home_team") or ""))
+        away = normalize_team(str(market.get("away_team") or ""))
+        observed_at = str(market.get("observed_at") if normalized else payload.get("observed_at") or "")
+        observed = pd.to_datetime(observed_at, utc=True, errors="coerce")
+        kickoff = pd.to_datetime(market.get("kickoff_at") if normalized else market.get("kickoff"),
+                                 utc=True, errors="coerce")
+        ingested = pd.to_datetime(market.get("ingested_at") if normalized else market.get("created_at"),
+                                  utc=True, errors="coerce")
+        if (pd.isna(observed) or
+                cutoff is not None and observed > pd.Timestamp(cutoff).tz_convert("UTC") or
+                pd.isna(kickoff) or observed >= kickoff or
+                cutoff is not None and (pd.isna(ingested) or
+                                        ingested > pd.Timestamp(cutoff).tz_convert("UTC"))):
+            audit.append({"status": "market_timestamp_not_predecision",
+                          "snapshot_row_id": snapshot_row_id,
+                          "observed_at": observed_at})
+            continue
+        home_context, away_context = nflverse_team_market_context(
+            total_line=total, home_margin=home_margin,
+        )
+        for team, opponent, context in ((home, away, home_context),
+                                        (away, home, away_context)):
+            mask = (
+                updated["recent_team"].astype(str).str.upper().eq(team)
+                & updated["opponent_team"].astype(str).str.upper().eq(opponent)
+            )
+            if market.get("season") is not None and "season" in updated:
+                mask &= pd.to_numeric(updated["season"], errors="coerce").eq(int(market["season"]))
+            if market.get("week") is not None and "week" in updated:
+                mask &= pd.to_numeric(updated["week"], errors="coerce").eq(int(market["week"]))
+            if market.get("game_id") and "game_id" in updated:
+                mask &= (updated["game_id"].isna() |
+                         updated["game_id"].astype(str).eq(str(market["game_id"])))
+            if not mask.any():
+                continue
+            if market.get("game_id") and "game_id" in updated:
+                missing_game_id = mask & updated["game_id"].isna()
+                updated.loc[missing_game_id, "game_id"] = str(market["game_id"])
+            previous = {
+                key: float(pd.to_numeric(matrix_market.loc[mask, key], errors="coerce").iloc[0])
+                for key in context
+                if pd.notna(pd.to_numeric(matrix_market.loc[mask, key], errors="coerce").iloc[0])
+            }
+            changed = any(
+                pd.to_numeric(matrix_market.loc[mask, key], errors="coerce")
+                .sub(value).abs().gt(0.001).any()
+                for key, value in context.items()
+            )
+            for key, value in context.items():
+                updated.loc[mask, key] = value
+            updated.loc[mask, "market_source_system"] = source_system
+            updated.loc[mask, "market_snapshot_row_id"] = snapshot_row_id
+            updated.loc[mask, "market_observed_at"] = observed_at
+            updated.loc[mask, "market_context_updated_from_matrix"] = bool(changed)
+            audit.append({
+                "team": team, "opponent": opponent, "source_system": source_system,
+                "snapshot_row_id": snapshot_row_id,
+                "observed_at": observed_at,
+                "game_total": total, "team_spread": context["team_spread_line"],
+                "team_implied_total": context["team_implied_total"],
+                "previous_matrix": previous,
+                "implied_total_delta": (
+                    context["team_implied_total"] - previous["team_implied_total"]
+                    if "team_implied_total" in previous else None
+                ),
+                "changed_from_matrix": bool(changed),
+            })
+    return updated, audit
+
+
+def reconcile_training_market_context(
+    train: pd.DataFrame, market_rows: pd.DataFrame,
+) -> tuple[pd.DataFrame, dict]:
+    """Correct legacy historical spread signs from source-native pregame lines."""
+    if train.empty or market_rows.empty:
+        return train.copy(), {"status": "unavailable", "corrected_players": 0}
+    from backend.app.services.schedule_context import nflverse_team_market_context
+
+    observations: list[dict] = []
+    for market in market_rows.to_dict(orient="records"):
+        payload = market.get("raw_row_json") or {}
+        if not isinstance(payload, dict):
+            continue
+        try:
+            total = float(payload["total_line"])
+            home_margin = float(payload["spread_line"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if not np.isfinite(total) or not np.isfinite(home_margin) or total <= 0:
+            continue
+        home = normalize_team(str(market.get("home_team") or ""))
+        away = normalize_team(str(market.get("away_team") or ""))
+        home_context, away_context = nflverse_team_market_context(
+            total_line=total, home_margin=home_margin,
+        )
+        for team, opponent, context in ((home, away, home_context),
+                                        (away, home, away_context)):
+            observations.append({
+                "season": int(market["season"]), "week": int(market["week"]),
+                "market_team": team, "market_opponent": opponent,
+                **{f"correct_{key}": value for key, value in context.items()},
+            })
+    if not observations:
+        return train.copy(), {"status": "unavailable", "corrected_players": 0}
+    rows = train.copy()
+    rows["market_team"] = rows["team"].map(normalize_team)
+    rows["market_opponent"] = rows["opponent"].map(normalize_team)
+    corrected = rows.merge(
+        pd.DataFrame(observations).drop_duplicates(
+            ["season", "week", "market_team", "market_opponent"], keep="last"
+        ),
+        on=["season", "week", "market_team", "market_opponent"], how="left",
+        sort=False, validate="many_to_one",
+    ).drop(columns=["market_team", "market_opponent"])
+    source_matched = corrected["correct_game_total_line"].notna()
+    mismatch = pd.Series(False, index=corrected.index)
+    for column in ("game_total_line", "team_spread_line", "team_implied_total",
+                   "opponent_implied_total"):
+        source = corrected[f"correct_{column}"]
+        existing = pd.to_numeric(corrected[column], errors="coerce")
+        mismatch |= source.notna() & (existing.isna() | (existing - source).abs().gt(0.001))
+        corrected[column] = source.where(source.notna(), existing)
+        corrected = corrected.drop(columns=[f"correct_{column}"])
+    audit = {
+        "status": "reconciled",
+        "policy": "source-native pregame spread_line is expected home-team margin",
+        "matched_players": int(source_matched.sum()),
+        "corrected_players": int(mismatch.sum()),
+        "corrected_games": int(corrected.loc[mismatch, ["season", "week", "game_id"]]
+                               .drop_duplicates().shape[0]),
+    }
+    return corrected, audit
+
+
+def validate_completed_training_outcomes(
+    train: pd.DataFrame,
+    weekly_stats: pd.DataFrame | None,
+) -> dict[str, object]:
+    """Reject a completed period whose feature matrix still has pregame zero labels."""
+    audit: dict[str, object] = {
+        "status": "unavailable",
+        "periods_checked": 0,
+        "zero_label_periods": [],
+    }
+    target_column = "label_dk_total_points"
+    required_train = {"season", "week", "player_id", target_column}
+    required_stats = {"season", "week", "player_master_id", "carries", "targets"}
+    if train.empty or weekly_stats is None or weekly_stats.empty:
+        return audit
+    if not required_train.issubset(train.columns) or not required_stats.issubset(
+        weekly_stats.columns
+    ):
+        return audit
+
+    stats = weekly_stats.copy()
+    stats["player_master_id"] = stats["player_master_id"].astype(str)
+    stats["actual_opportunities"] = (
+        pd.to_numeric(stats["carries"], errors="coerce").fillna(0.0)
+        + pd.to_numeric(stats["targets"], errors="coerce").fillna(0.0)
+    )
+    labels = train.copy()
+    labels["player_id"] = labels["player_id"].astype(str)
+    labels[target_column] = pd.to_numeric(labels[target_column], errors="coerce")
+    zero_periods: list[tuple[int, int]] = []
+    periods_checked = 0
+    for (period_season, period_week), period in labels.groupby(["season", "week"]):
+        source = stats.loc[
+            (stats["season"] == period_season)
+            & (stats["week"] == period_week)
+            & stats["player_master_id"].isin(period["player_id"])
+        ]
+        if source.empty or not source["actual_opportunities"].gt(0).any():
+            continue
+        periods_checked += 1
+        if period[target_column].fillna(0.0).abs().max() == 0.0:
+            zero_periods.append((int(period_season), int(period_week)))
+
+    audit.update(
+        {
+            "status": "valid" if not zero_periods else "invalid",
+            "periods_checked": periods_checked,
+            "zero_label_periods": [
+                f"{period_season}-W{period_week:02d}"
+                for period_season, period_week in zero_periods
+            ],
+        }
+    )
+    if zero_periods:
+        raise StaleTrainingOutcomeError(zero_periods)
+    return audit
 
 
 def _period_ordinal(season: object, week: object) -> int:
@@ -97,6 +498,9 @@ def attach_lagged_participation_features(
     rows = matrix.copy()
     rows["training_participation_status"] = "unavailable"
     rows["snap_share_mean_3"] = 0.0
+    rows["snap_share_mean_3_available"] = False
+    for column in ("snap_share_last", "snap_share_prior3", "snap_share_trend"):
+        rows[column] = np.nan
     metrics = {
         "source": "public.curated_player_game_participation",
         "available": False,
@@ -167,18 +571,35 @@ def attach_lagged_participation_features(
         )
 
     lagged_values: list[float] = []
+    last_values: list[float] = []
+    prior_values: list[float] = []
     for season, week, player_id in zip(
         rows["season"], rows["week"], rows["player_master_id"], strict=True
     ):
         history = snap_history.get(str(player_id))
         if history is None:
             lagged_values.append(0.0)
+            last_values.append(np.nan)
+            prior_values.append(np.nan)
             continue
         periods, shares = history
         stop = bisect_left(periods, _period_ordinal(season, week))
         recent = shares[max(0, stop - 3):stop]
         lagged_values.append(float(np.mean(recent)) if recent else 0.0)
+        last_values.append(float(shares[stop - 1]) if stop else np.nan)
+        prior = shares[max(0, stop - 4):stop - 1] if stop else []
+        prior_values.append(float(np.mean(prior)) if prior else np.nan)
     rows["snap_share_mean_3"] = lagged_values
+    rows["snap_share_last"] = last_values
+    rows["snap_share_prior3"] = prior_values
+    rows["snap_share_trend"] = rows["snap_share_last"] - rows["snap_share_prior3"]
+    rows["snap_share_mean_3_available"] = [
+        bool((history := snap_history.get(str(player_id))) and
+             bisect_left(history[0], _period_ordinal(season, week)) > 0)
+        for season, week, player_id in zip(
+            rows["season"], rows["week"], rows["player_master_id"], strict=True
+        )
+    ]
     metrics.update(
         {
             "available": True,
@@ -209,6 +630,10 @@ def attach_lagged_opportunity_features(
     }
     for feature in (*player_feature_sources, *team_feature_sources):
         rows[feature] = 0.0
+        rows[f"{feature}_available"] = False
+    for prefix in ("target_share", "rush_share"):
+        for suffix in ("last", "prior3", "trend"):
+            rows[f"{prefix}_{suffix}"] = np.nan
     metrics = {
         "source": "public.raw_nfl_weekly_stat + public.player_alias",
         "available": False,
@@ -249,9 +674,12 @@ def attach_lagged_opportunity_features(
     evidence["week"] = pd.to_numeric(evidence["week"], errors="coerce")
     evidence = evidence.dropna(subset=["season", "week"])
     for column in ("carries", "targets"):
-        if column not in evidence:
-            evidence[column] = 0.0
-        evidence[column] = pd.to_numeric(evidence[column], errors="coerce").fillna(0.0)
+        evidence[column] = pd.to_numeric(evidence[column], errors="coerce")
+        if evidence[column].isna().any():
+            raise ValueError(
+                f"Weekly opportunity source has unavailable {column}; "
+                "do not convert missing role data to measured zero."
+            )
     evidence["team"] = evidence["team"].fillna("").astype(str).str.upper()
     evidence["position"] = evidence["position"].fillna("").astype(str).str.upper()
     evidence["period_ordinal"] = [
@@ -318,18 +746,38 @@ def attach_lagged_opportunity_features(
 
     for feature, source in player_feature_sources.items():
         lagged_values: list[float] = []
+        available_values: list[bool] = []
+        last_values: list[float] = []
+        prior_values: list[float] = []
         for season, week, player_id in zip(
             rows["season"], rows["week"], rows["player_master_id"], strict=True
         ):
             history = histories.get(str(player_id), {}).get(source)
             if history is None:
                 lagged_values.append(0.0)
+                available_values.append(False)
+                last_values.append(np.nan)
+                prior_values.append(np.nan)
                 continue
             periods, values = history
             stop = bisect_left(periods, _period_ordinal(season, week))
             recent = values[max(0, stop - 3):stop]
             lagged_values.append(float(np.mean(recent)) if recent else 0.0)
+            available_values.append(bool(recent))
+            last_values.append(float(values[stop - 1]) if stop else np.nan)
+            prior = values[max(0, stop - 4):stop - 1] if stop else []
+            prior_values.append(float(np.mean(prior)) if prior else np.nan)
         rows[feature] = lagged_values
+        rows[f"{feature}_available"] = available_values
+        prefix = {"target_share_mean_3": "target_share", "carry_share_mean_3": "rush_share"}.get(feature)
+        if prefix:
+            relevant = (
+                rows.get("position", pd.Series("", index=rows.index)).astype(str).str.upper().eq("RB")
+                if prefix == "rush_share" else pd.Series(True, index=rows.index)
+            )
+            rows[f"{prefix}_last"] = np.where(relevant, last_values, np.nan)
+            rows[f"{prefix}_prior3"] = np.where(relevant, prior_values, np.nan)
+            rows[f"{prefix}_trend"] = rows[f"{prefix}_last"] - rows[f"{prefix}_prior3"]
 
     team_histories: dict[str, dict[str, tuple[list[int], list[float]]]] = {}
     for team, team_rows in weekly_team_volume.groupby("team"):
@@ -344,18 +792,22 @@ def attach_lagged_opportunity_features(
     ).fillna("").astype(str).str.upper()
     for feature, source in team_feature_sources.items():
         lagged_values = []
+        available_values = []
         for season, week, team in zip(
             rows["season"], rows["week"], matrix_teams, strict=True
         ):
             history = team_histories.get(str(team), {}).get(source)
             if history is None:
                 lagged_values.append(0.0)
+                available_values.append(False)
                 continue
             periods, values = history
             stop = bisect_left(periods, _period_ordinal(season, week))
             recent = values[max(0, stop - 3):stop]
             lagged_values.append(float(np.mean(recent)) if recent else 0.0)
+            available_values.append(bool(recent))
         rows[feature] = lagged_values
+        rows[f"{feature}_available"] = available_values
 
     metrics.update(
         {
@@ -401,6 +853,10 @@ def apply_pregame_projection_context(
     rows["pregame_start_probability"] = np.nan
     rows["pregame_carry_share"] = np.nan
     rows["pregame_target_share"] = np.nan
+    rows["pregame_effective_carry_share"] = np.nan
+    rows["pregame_effective_target_share"] = np.nan
+    rows["pregame_effective_carry_share_source"] = None
+    rows["pregame_effective_target_share_source"] = None
     rows["pregame_role_label"] = None
     rows["pregame_injury_status"] = None
     rows["pregame_expected_snaps"] = np.nan
@@ -418,12 +874,18 @@ def apply_pregame_projection_context(
     rows["pregame_context_observed_at"] = None
     rows["starting_qb_source"] = None
     rows["starting_qb_evidence_tier"] = None
+    rows["team_starting_qb_player_id"] = None
+    rows["team_starting_qb_name"] = None
+    rows["team_starting_qb_evidence_tier"] = None
+    rows["team_starting_qb_observed_at"] = None
     rows["pregame_base_carries_mean_3"] = pd.to_numeric(
         rows["carries_mean_3"], errors="coerce"
     ).fillna(0.0)
     rows["pregame_base_targets_mean_3"] = pd.to_numeric(
         rows["targets_mean_3"], errors="coerce"
     ).fillna(0.0)
+    rows["pregame_base_carry_share_mean_3"] = rows["carry_share_mean_3"]
+    rows["pregame_base_target_share_mean_3"] = rows["target_share_mean_3"]
     rows["pregame_opportunity_context_applied"] = False
 
     context_rows = pregame_context.copy() if pregame_context is not None else pd.DataFrame()
@@ -509,6 +971,16 @@ def apply_pregame_projection_context(
         starter_id = str(
             evidence.get("player_master_id") or evidence.get("player_id") or ""
         )
+        evidence_details = evidence.get("evidence_json") or {}
+        observed_at = (
+            evidence_details.get("observed_at")
+            if isinstance(evidence_details, dict) else None
+        ) or evidence.get("created_at")
+        team_mask = teams.eq(str(team))
+        rows.loc[team_mask, "team_starting_qb_player_id"] = starter_id
+        rows.loc[team_mask, "team_starting_qb_name"] = evidence.get("player_name")
+        rows.loc[team_mask, "team_starting_qb_evidence_tier"] = evidence.get("evidence_tier")
+        rows.loc[team_mask, "team_starting_qb_observed_at"] = str(observed_at)
         for index in indexes:
             if not explicit.loc[index]:
                 rows.at[index, "pregame_start_probability"] = float(
@@ -570,6 +1042,40 @@ def apply_pregame_projection_context(
                 fallback_weight = salary_weights
 
             explicit_share = pd.to_numeric(group[explicit_column], errors="coerce")
+            expected_column = (
+                "pregame_expected_carries" if opportunity == "carry"
+                else "pregame_expected_targets"
+            )
+            expected_counts = pd.to_numeric(group[expected_column], errors="coerce")
+            known_team_volume = pd.to_numeric(
+                group.get(team_volume_column, pd.Series(np.nan, index=group.index)),
+                errors="coerce",
+            ).dropna().clip(lower=0.0)
+            known_team_volume = known_team_volume.loc[known_team_volume > 0]
+            if not known_team_volume.empty:
+                from_counts = expected_counts / float(known_team_volume.iloc[0])
+                conflicting = (
+                    explicit_share.notna() & from_counts.notna()
+                    & (explicit_share - from_counts).abs().gt(0.02)
+                )
+                if conflicting.any():
+                    raise ValueError(
+                        f"Current {opportunity} share and expected count conflict "
+                        f"for {team}; correct the pregame context evidence."
+                    )
+                explicit_share = explicit_share.where(explicit_share.notna(), from_counts)
+            elif expected_counts.notna().any():
+                raise ValueError(
+                    f"Expected {opportunity} counts for {team} require a measured "
+                    "team-volume estimate."
+                )
+            effective_column = f"pregame_effective_{opportunity}_share"
+            source_column = f"{effective_column}_source"
+            rows.loc[index_list, effective_column] = explicit_share
+            rows.loc[index_list, source_column] = np.where(
+                group[explicit_column].notna(), "explicit_share",
+                np.where(expected_counts.notna(), "expected_count_divided_by_lagged_team_volume", None),
+            )
             explicit_mask = explicit_share.notna()
             assigned = pd.Series(0.0, index=group.index)
             if explicit_mask.any():
@@ -596,8 +1102,21 @@ def apply_pregame_projection_context(
                 group["pregame_availability_probability"], errors="coerce"
             ).fillna(1.0).clip(lower=0.0, upper=1.0)
             available_share = assigned * availability
+            removed_share = assigned * (1.0 - availability)
+            redistribution_fractions = []
+            for context in group["player_id"].astype(str).map(context_by_player).tolist():
+                context = context if isinstance(context, dict) else {}
+                evidence = context.get("evidence_json") or context.get("evidence") or {}
+                fraction = evidence.get(f"{opportunity}_redistribution_fraction", 1.0) if isinstance(evidence, dict) else 1.0
+                fraction = float(fraction)
+                if not 0.0 <= fraction <= 1.0:
+                    raise ValueError(f"{opportunity} redistribution fraction must be between 0 and 1")
+                redistribution_fractions.append(fraction)
+            redistributed_share = float((removed_share * redistribution_fractions).sum())
             if available_share.sum() > 0:
-                available_share = available_share / available_share.sum()
+                available_share = available_share / available_share.sum() * (
+                    float(available_share.sum()) + redistributed_share
+                )
             else:
                 raise ValueError(
                     f"No available {opportunity} players remain for {team}; "
@@ -645,9 +1164,15 @@ def apply_pregame_projection_context(
                     "source": source,
                     "team_volume": team_volume,
                     "team_volume_source": team_volume_source,
+                    "player_projected_volume_sum": float((available_share * team_volume).sum()),
+                    "unallocated_volume": max(
+                        0.0, team_volume - float((available_share * team_volume).sum())
+                    ),
                     "explicit_player_count": int(explicit_mask.sum()),
                     "player_count": len(index_list),
                     "allocated_share": float(available_share.sum()),
+                    "removed_share": float(removed_share.sum()),
+                    "redistributed_share": redistributed_share,
                 }
             )
 
@@ -683,6 +1208,18 @@ def apply_pregame_projection_context(
     rows["pregame_start_probability"] = pd.to_numeric(
         rows["pregame_start_probability"], errors="coerce"
     ).fillna(1.0).clip(lower=0.0, upper=1.0)
+    unavailable = (
+        rows["pregame_availability_probability"].le(0.0)
+        & rows["pregame_context_source"].eq("user_availability_scenario")
+    )
+    rows.loc[
+        unavailable,
+        [
+            "pregame_expected_snaps", "pregame_expected_routes",
+            "pregame_expected_carries", "pregame_expected_targets",
+            "pregame_red_zone_share", "pregame_goal_line_share",
+        ],
+    ] = 0.0
     rows["snap_share_mean_3"] = pd.to_numeric(
         rows["snap_share_mean_3"], errors="coerce"
     ).fillna(0.0).clip(lower=0.0, upper=1.0)
@@ -700,6 +1237,14 @@ def apply_pregame_projection_context(
             "without prior NFL games"
         ),
         "allocations": allocation_metrics,
+        "team_pass_attempts": None,
+        "team_rush_attempts": None,
+        "team_red_zone_opportunities": None,
+        "unavailable_volume_note": (
+            "Full team pass attempts, all-position rush attempts, and red-zone "
+            "opportunities are not independently forecast; target and RB carry "
+            "volumes are lagged team proxies, not complete play-volume models."
+        ),
     }
 
 
@@ -719,12 +1264,16 @@ def prepare_inputs(
     weekly_stats: pd.DataFrame | None = None,
     starting_qbs: pd.DataFrame | None = None,
     pregame_context: pd.DataFrame | None = None,
+    market_rows: pd.DataFrame | None = None,
     *,
     season: int,
     week: int,
     slate: str,
     cutoff: datetime,
     positions: list[str] | None = None,
+    availability_overrides: list[dict] | None = None,
+    allow_confirmed_inactive_override: bool = False,
+    assume_questionable_out: bool = False,
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
     """Return training and scoring rows using canonical UUIDs only."""
     from .predictions import TARGET_COL, select_training_rows_before_cutoff
@@ -825,7 +1374,7 @@ def prepare_inputs(
         roster = roster.loc[roster["player_master_id"].notna()].copy()
         if roster["roster_status"].notna().any():
             roster["player_master_id"] = roster["player_master_id"].astype(str)
-            roster["team_key"] = roster["team"].fillna("").astype(str).str.upper()
+            roster["team_key"] = roster["team"].map(normalize_team)
             sort_columns = [
                 column
                 for column in (
@@ -851,7 +1400,7 @@ def prepare_inputs(
                 roster_lookup.get(
                     (
                         str(player_id),
-                        str(team).strip().upper() if pd.notna(team) else "",
+                        normalize_team(team) if pd.notna(team) else "",
                     ),
                     "MISSING",
                 )
@@ -942,7 +1491,8 @@ def prepare_inputs(
     matrix["recent_team"] = matrix["team"]
     matrix["opponent_team"] = matrix["opponent"]
     for column in BASE_FEATURE_COLUMNS:
-        matrix[column] = pd.to_numeric(matrix[column], errors="coerce").fillna(0.0)
+        numeric = pd.to_numeric(matrix[column], errors="coerce")
+        matrix[column] = numeric if column in MARKET_FEATURE_COLUMNS else numeric.fillna(0.0)
     matrix, participation_metrics = attach_lagged_participation_features(
         matrix,
         participation,
@@ -953,6 +1503,8 @@ def prepare_inputs(
         weekly_stats,
         cutoff=cutoff,
     )
+    from .offensive_role import attach_offensive_role
+    matrix = attach_offensive_role(matrix)
     matrix = add_position_features(matrix)
     # A player can appear in several slate builds; a game is one training sample.
     matrix = matrix.sort_values(["created_at", "player_game_feature_matrix_id"])
@@ -968,6 +1520,7 @@ def prepare_inputs(
                 PLAYED_PARTICIPATION_STATUSES
             )
         ].copy()
+    outcome_audit = validate_completed_training_outcomes(train, weekly_stats)
     participation_metrics.update(
         {
             "training_rows_before_filter": int(
@@ -983,6 +1536,9 @@ def prepare_inputs(
     )
     if train.empty:
         raise ValueError(f"No labeled canonical feature rows before {season} week {week}. Build historical features first.")
+    train, historical_market_audit = reconcile_training_market_context(
+        train, market_rows if market_rows is not None else pd.DataFrame(),
+    )
     target = matrix.loc[
         (matrix["season"] == season) & (matrix["week"] == week)
         & matrix["slate"].fillna("").str.upper().eq(slate.upper())
@@ -996,15 +1552,96 @@ def prepare_inputs(
         )
     target = target.loc[ids].copy().reset_index(drop=True)
     salary_by_id = salaries.set_index("player_master_id")
-    for output, source in [("salary", "salary"), ("recent_team", "team"),
+    for output, source in [("salary", "salary"), ("player_status", "player_status"),
+                           ("recent_team", "team"),
                            ("opponent_team", "opponent"), ("position", "position"),
                            ("player_display_name", "player_name")]:
         target[output] = target["player_id"].map(salary_by_id[source])
     target = add_position_features(target)
+    target, market_audit = apply_latest_market_context(
+        target,
+        (market_rows.loc[
+            market_rows["season"].eq(season) & market_rows["week"].eq(week)
+        ] if market_rows is not None and not market_rows.empty
+         else pd.DataFrame()), cutoff=cutoff,
+    )
+    pregame_context, availability_override_audit = apply_player_availability_overrides(
+        target,
+        pregame_context,
+        availability_overrides,
+        allow_confirmed_inactive_override=allow_confirmed_inactive_override,
+        assume_questionable_out=assume_questionable_out,
+    )
     target, pregame_metrics = apply_pregame_projection_context(
         target,
         starting_qbs=starting_qbs,
         pregame_context=pregame_context,
+    )
+    market_starter_sanity: list[dict] = []
+    for team, team_rows in target.groupby("recent_team"):
+        first = team_rows.iloc[0]
+        starter_at = pd.to_datetime(
+            first.get("team_starting_qb_observed_at"), utc=True, errors="coerce"
+        )
+        market_at = pd.to_datetime(
+            first.get("market_observed_at"), utc=True, errors="coerce"
+        )
+        if pd.isna(starter_at):
+            continue
+        status = (
+            "market_missing_after_starter_evidence" if pd.isna(market_at)
+            else "market_older_than_starter_evidence" if market_at < starter_at
+            else "market_observed_after_starter_evidence"
+        )
+        market_starter_sanity.append({
+            "team": str(team), "starter": first.get("team_starting_qb_name"),
+            "starter_evidence_at": starter_at.isoformat(),
+            "market_observed_at": market_at.isoformat() if pd.notna(market_at) else None,
+            "status": status,
+        })
+    target["official_availability_status"] = None
+    target["availability_override"] = "default"
+    target["model_availability_used"] = target["pregame_availability_probability"]
+    target["opportunity_redistributed"] = False
+    for override in availability_override_audit:
+        mask = target["player_id"].astype(str).eq(str(override["player_id"]))
+        for column in (
+            "official_availability_status", "availability_override",
+            "model_availability_used", "opportunity_redistributed",
+        ):
+            target.loc[mask, column] = override[column]
+    role_inputs = target.copy()
+    for opportunity in ("carry", "target"):
+        share = f"{opportunity}_share_mean_3"
+        explicit = f"pregame_effective_{opportunity}_share"
+        role_inputs[share] = target[explicit].where(
+            target[explicit].notna(), target[f"pregame_base_{share}"]
+        )
+        role_inputs[f"{share}_available"] = (
+            target[f"{share}_available"] | target[explicit].notna()
+        )
+    refreshed_roles = attach_offensive_role(role_inputs)
+    for column in (
+        "offensive_role_importance", "offensive_role_completeness",
+        "offensive_role_evidence", "offensive_role_class", "offensive_role_reason",
+        "offensive_role_confidence", "offensive_role_source",
+    ):
+        target[column] = refreshed_roles[column]
+    # Importance is calculated from prior observed shares, not from the salary
+    # fallback used to allocate this week's incomplete opportunity pool.
+    target["projected_carries"] = target["carries_mean_3"].where(
+        target["team_carries_mean_3_available"]
+        & target["position"].fillna("").astype(str).str.upper().eq("RB"),
+        np.nan,
+    )
+    target["projected_targets"] = target["targets_mean_3"].where(
+        target["team_targets_mean_3_available"]
+        & target["position"].fillna("").astype(str).str.upper().isin({"RB", "WR", "TE"}),
+        np.nan,
+    )
+    target["projected_opportunity_source"] = np.where(
+        target["team_targets_mean_3_available"] | target["team_carries_mean_3_available"],
+        "lagged_team_volume_reconciled_with_salary_fallback", "unavailable",
     )
     # Future matrix rows currently store zero actuals. They are never labels.
     target[TARGET_COL] = float("nan")
@@ -1027,8 +1664,21 @@ def prepare_inputs(
         "unresolved_salary_source_keys": unresolved,
         "excluded_positions": excluded_positions,
         "participation_filter": participation_metrics,
+        "training_outcome_audit": outcome_audit,
         "opportunity_features": opportunity_metrics,
         "pregame_context": pregame_metrics,
+        "market_context": {
+            "source": "public.raw_nfl_schedule latest captured pre-cutoff line",
+            "team_rows": market_audit,
+            "starter_sanity": market_starter_sanity,
+            "historical_training_reconciliation": historical_market_audit,
+        },
+        "availability_scenario": {
+            "overrides": availability_override_audit,
+            "assume_questionable_out": assume_questionable_out,
+            "allow_confirmed_inactive_override": allow_confirmed_inactive_override,
+            "policy": "user scenario before generic team opportunity allocation",
+        },
         "target_season": season, "target_week": week, "target_slate": slate,
         "leakage_policy": (
             "pregame feature allowlist; labeled rows strictly before target season/week; "
@@ -1041,7 +1691,11 @@ def prepare_inputs(
     return train, target, metadata
 
 
-def load_inputs(engine, *, season, week, slate, cutoff, positions=None):
+def load_inputs(
+    engine, *, season, week, slate, cutoff, positions=None,
+    availability_overrides=None, allow_confirmed_inactive_override=False,
+    assume_questionable_out=False,
+):
     if not slate or not slate.strip():
         raise ValueError("A selected slate is required for canonical projections.")
     naive_cutoff = cutoff.astimezone(timezone.utc).replace(tzinfo=None)
@@ -1068,8 +1722,25 @@ def load_inputs(engine, *, season, week, slate, cutoff, positions=None):
             )
         weekly_stats = pd.DataFrame()
         starting_qbs = pd.DataFrame()
+        market_rows = pd.DataFrame()
         pregame_context = pd.DataFrame()
+        injury_statuses = pd.DataFrame()
         db_inspector = inspect(engine)
+        if assume_questionable_out and engine.dialect.name == "postgresql" and db_inspector.has_table(
+            "snapshot_injury_status", schema="target"
+        ):
+            injury_statuses = pd.read_sql(
+                text("""
+                    SELECT DISTINCT ON (player_id) snapshot_injury_id, player_id,
+                           injury_status, as_of, source
+                    FROM target.snapshot_injury_status
+                    WHERE season = :season AND week = :week
+                      AND (slate IS NULL OR UPPER(slate) = UPPER(:slate))
+                      AND as_of IS NOT NULL AND as_of <= :cutoff
+                    ORDER BY player_id, as_of DESC, snapshot_injury_id DESC
+                """), connection,
+                params={"season": season, "week": week, "slate": slate, "cutoff": naive_cutoff},
+            )
         if engine.dialect.name == "postgresql" and db_inspector.has_table(
             "raw_nfl_weekly_stat", schema="public"
         ) and db_inspector.has_table("player_alias", schema="public"):
@@ -1096,13 +1767,9 @@ def load_inputs(engine, *, season, week, slate, cutoff, positions=None):
                         raw.position,
                         COALESCE(
                             NULLIF(raw.raw_row_json ->> 'carries', '')::DOUBLE PRECISION,
-                            NULLIF(raw.raw_row_json ->> 'rushing_attempts', '')::DOUBLE PRECISION,
-                            0.0
+                            NULLIF(raw.raw_row_json ->> 'rushing_attempts', '')::DOUBLE PRECISION
                         ) AS carries,
-                        COALESCE(
-                            NULLIF(raw.raw_row_json ->> 'targets', '')::DOUBLE PRECISION,
-                            0.0
-                        ) AS targets,
+                        NULLIF(raw.raw_row_json ->> 'targets', '')::DOUBLE PRECISION AS targets,
                         raw.created_at
                     FROM latest_weekly_stat raw
                     LEFT JOIN public.player_alias alias
@@ -1140,6 +1807,44 @@ def load_inputs(engine, *, season, week, slate, cutoff, positions=None):
                 },
             ).drop_duplicates("team", keep="first")
         if engine.dialect.name == "postgresql" and db_inspector.has_table(
+            "raw_nfl_schedule", schema="public"
+        ):
+            market_rows = pd.read_sql(
+                text("""
+                    SELECT DISTINCT ON (season, week, home_team, away_team)
+                           raw_nfl_schedule_id, source_system, season, week, game_id,
+                           home_team, away_team, kickoff, raw_row_json, created_at
+                    FROM public.raw_nfl_schedule
+                    WHERE (season < :season OR (season = :season AND week < :week))
+                      AND created_at <= :cutoff
+                      AND raw_row_json ->> 'total_line' IS NOT NULL
+                      AND raw_row_json ->> 'spread_line' IS NOT NULL
+                    ORDER BY season, week, home_team, away_team, created_at DESC,
+                             raw_nfl_schedule_id DESC
+                """),
+                connection,
+                params={"season": season, "week": week, "cutoff": naive_cutoff},
+            )
+        if engine.dialect.name == "postgresql" and db_inspector.has_table(
+            "market_snapshot", schema="target"
+        ):
+            current_markets = pd.read_sql(
+                text("""
+                    SELECT market.market_snapshot_id, market.source, market.season, market.week,
+                           market.game_id, market.home_team, market.away_team,
+                           market.kickoff_at, market.ingested_at, market.observed_at,
+                           market.game_total, market.home_spread
+                    FROM target.market_snapshot market
+                    JOIN public.ingest_run run ON run.ingest_run_id = market.ingest_run_id
+                    WHERE market.season = :season AND market.week = :week
+                      AND run.status = 'completed'
+                      AND market.ingested_at <= :cutoff
+                    ORDER BY market.observed_at, market.market_snapshot_id
+                """), connection,
+                params={"season": season, "week": week, "cutoff": naive_cutoff},
+            )
+            market_rows = pd.concat([market_rows, current_markets], ignore_index=True)
+        if engine.dialect.name == "postgresql" and db_inspector.has_table(
             "pregame_player_context", schema="public"
         ):
             from .pregame_context import load_current_pregame_context
@@ -1153,16 +1858,50 @@ def load_inputs(engine, *, season, week, slate, cutoff, positions=None):
                     cutoff=cutoff,
                 )
             )
-    return prepare_inputs(
+    if not injury_statuses.empty:
+        context_statuses = {
+            str(row["player_master_id"]): normalize_salary_status(row.get("injury_status"))
+            for row in pregame_context.to_dict("records")
+        }
+        slate_ids = set(salaries.loc[
+            salaries["slate"].str.upper().eq(slate.upper()), "player_master_id"
+        ].dropna().astype(str))
+        availability_overrides = [*(availability_overrides or []), *[
+            {"player_id": str(row.player_id), "availability": "assume_out",
+             "official_availability_status": normalize_salary_status(row.injury_status)}
+            for row in injury_statuses.itertuples(index=False)
+            if str(row.player_id) in slate_ids
+            and (context_statuses.get(str(row.player_id)) or normalize_salary_status(row.injury_status))
+            in {"Q", "QUESTIONABLE"}
+        ]]
+    train, target, metadata = prepare_inputs(
         matrix,
         salaries,
         participation,
         weekly_stats,
         starting_qbs,
         pregame_context,
+        market_rows,
         season=season,
         week=week,
         slate=slate,
         cutoff=cutoff,
         positions=positions,
+        availability_overrides=availability_overrides,
+        allow_confirmed_inactive_override=allow_confirmed_inactive_override,
+        assume_questionable_out=assume_questionable_out,
     )
+    if not injury_statuses.empty:
+        used_ids = {
+            str(row["player_id"])
+            for row in metadata["availability_scenario"]["overrides"]
+        }
+        metadata["availability_scenario"]["injury_snapshot_rows"] = [
+            {"snapshot_injury_id": int(row.snapshot_injury_id),
+             "player_id": str(row.player_id),
+             "injury_status": normalize_salary_status(row.injury_status),
+             "observed_at": pd.Timestamp(row.as_of).isoformat(), "source": row.source}
+            for row in injury_statuses.itertuples(index=False)
+            if str(row.player_id) in used_ids
+        ]
+    return train, target, metadata

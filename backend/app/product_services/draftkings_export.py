@@ -115,6 +115,11 @@ class DraftKingsExportService:
         buckets: dict[str, list[dict[str, Any]]] = {key: [] for key in ("QB", "RB", "WR", "TE", "DST")}
         for player in players:
             position = cls._position(player)
+            if position == "FLEX":
+                payload = player.get("player_json") or {}
+                if isinstance(payload, str):
+                    payload = json.loads(payload)
+                position = str(payload.get("position") or player.get("position") or "").upper()
             if position not in buckets:
                 raise ValueError(f"Unsupported classic position: {position or '<missing>'}")
             buckets[position].append(player)
@@ -406,7 +411,7 @@ class DraftKingsExportService:
                 return existing
         with self.engine.begin() as conn:
             context = conn.execute(text("""
-                SELECT portfolio.portfolio_id, portfolio.template_id,
+                SELECT portfolio.portfolio_id, portfolio.template_id, portfolio.optimizer_run_id,
                        portfolio.contest_format, template.columns_json,
                        template.row_count, optimizer.constraint_config_json
                 FROM target.lineup_portfolio portfolio
@@ -418,6 +423,15 @@ class DraftKingsExportService:
             """), {"portfolio_id": portfolio_id}).mappings().first()
             if not context:
                 raise ValueError(f"Portfolio not found: {portfolio_id}")
+            from .optimizer import OptimizerService
+            from .skill_exposure_approval import ensure_classic_export_ready
+
+            optimizer_job = OptimizerService(self.connection_string).get_job(
+                str(context["optimizer_run_id"])
+            )
+            if optimizer_job is None:
+                raise ValueError("Portfolio optimizer run is unavailable")
+            ensure_classic_export_ready(optimizer_job, self.engine)
             assignments = conn.execute(text("""
                 SELECT assignment.template_row_number, assignment.entry_id,
                        assignment.contest_id, assignment.lineup_id,
@@ -494,6 +508,20 @@ class DraftKingsExportService:
         export_id: str | None = None,
         validation_id: str | None = None,
     ) -> DraftKingsExportResult:
+        with self.engine.connect() as conn:
+            run_id = conn.execute(text("""
+                SELECT optimizer_run_id FROM target.lineup_portfolio
+                WHERE portfolio_id = :portfolio_id
+            """), {"portfolio_id": portfolio_id}).scalar_one_or_none()
+        if run_id is None:
+            raise ValueError(f"Portfolio not found: {portfolio_id}")
+        from .optimizer import OptimizerService
+        from .skill_exposure_approval import ensure_classic_export_ready
+
+        optimizer_job = OptimizerService(self.connection_string).get_job(str(run_id))
+        if optimizer_job is None:
+            raise ValueError("Portfolio optimizer run is unavailable")
+        ensure_classic_export_ready(optimizer_job, self.engine)
         if export_id:
             existing = self.get_export(export_id)
             if existing is not None:

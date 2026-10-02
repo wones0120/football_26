@@ -8,6 +8,7 @@ export type ViewMode =
   | "contest-workflow"
   | "war-room"
   | "research"
+  | "learning"
   | "workspace"
   | "preview"
   | "news-brief";
@@ -24,13 +25,14 @@ type AppShellProps = {
   children: ReactNode;
 };
 
-type IconName = "twin" | "models" | "war" | "research" | "delivery" | "news" | "operations" | "vision" | "search" | "spark";
+type IconName = "twin" | "models" | "war" | "research" | "learning" | "delivery" | "news" | "operations" | "vision" | "search" | "spark";
 
 const NAV_ITEMS: Array<{ view: ViewMode; label: string; shortLabel: string; icon: IconName }> = [
   { view: "digital-twin", label: "Digital Twin", shortLabel: "Twin", icon: "twin" },
   { view: "model-workbench", label: "Models", shortLabel: "Models", icon: "models" },
   { view: "war-room", label: "War Room", shortLabel: "War", icon: "war" },
   { view: "research", label: "Research Lab", shortLabel: "Lab", icon: "research" },
+  { view: "learning", label: "Learning", shortLabel: "Learn", icon: "learning" },
   { view: "contest-workflow", label: "Delivery", shortLabel: "Deliver", icon: "delivery" },
   { view: "news-brief", label: "Intelligence", shortLabel: "Intel", icon: "news" },
   { view: "workspace", label: "Operations", shortLabel: "Ops", icon: "operations" },
@@ -62,6 +64,11 @@ const VIEW_META: Record<ViewMode, { eyebrow: string; title: string; description:
     title: "Research Lab",
     description: "Run shocks, historical backtests, and baseline-versus-shock portfolio comparisons.",
   },
+  learning: {
+    eyebrow: "Post-slate review",
+    title: "Learning",
+    description: "Import contest results and compare your predictions with what happened.",
+  },
   "contest-workflow": {
     eyebrow: "Execution",
     title: "Contest Delivery",
@@ -90,6 +97,7 @@ function Icon({ name }: { name: IconName }) {
     models: <><path d="M4 18V9" /><path d="M10 18V5" /><path d="M16 18v-7" /><path d="M3 18h15" /></>,
     war: <><circle cx="10" cy="10" r="6" /><path d="M10 1v3M10 16v3M1 10h3M16 10h3" /><circle cx="10" cy="10" r="2" /></>,
     research: <><path d="M7 2v5l-4 8a2 2 0 0 0 1.8 3h10.4a2 2 0 0 0 1.8-3l-4-8V2" /><path d="M6 11h8M6 2h8" /></>,
+    learning: <><path d="M3 4h5a3 3 0 0 1 3 3v11a3 3 0 0 0-3-3H3z" /><path d="M17 4h-3a3 3 0 0 0-3 3v11a3 3 0 0 1 3-3h3z" /></>,
     delivery: <><path d="M3 6h14v10H3z" /><path d="m3 6 7 5 7-5" /><path d="M14 3h3v3" /></>,
     news: <><path d="M4 3h12v14H4z" /><path d="M7 7h6M7 10h6M7 13h4" /></>,
     operations: <><path d="M4 5h12M4 10h12M4 15h12" /><circle cx="8" cy="5" r="1.5" /><circle cx="13" cy="10" r="1.5" /><circle cx="7" cy="15" r="1.5" /></>,
@@ -125,8 +133,8 @@ export function AppShell({
   const firstCommandRef = useRef<HTMLButtonElement>(null);
   const meta = VIEW_META[activeView];
   const contextLabel = useMemo(
-    () => `${season} · W${week} · ${formatSlate(slate)}`,
-    [season, week, slate],
+    () => `${season} · W${week} · ${activeView === "learning" ? "All slates" : formatSlate(slate)}`,
+    [activeView, season, week, slate],
   );
   const runContextLabel = useMemo(() => {
     const selectedRun = [
@@ -201,7 +209,7 @@ export function AppShell({
           <div className="shell-context-card">
             <span><i /> Active context</span>
             <strong>{season} · Week {week}</strong>
-            <small>{formatSlate(slate)}</small>
+            <small>{activeView === "learning" ? "All slates" : formatSlate(slate)}</small>
             {runContextLabel && <small title={runContextLabel}>Run · {runContextLabel}</small>}
           </div>
         </div>
@@ -215,19 +223,26 @@ export function AppShell({
           </div>
           <div className="shell-top-actions">
             {pendingAction && <span className="shell-pending" aria-live="polite"><i />{pendingAction}</span>}
-            <label className="shell-slate-chip">
-              <span>Live context · {season} W{week}</span>
-              <select
-                aria-label="Active slate"
-                value={slate}
-                onChange={(event) => onSlateChange(event.target.value)}
-              >
-                {SLATE_OPTIONS.map((option) => (
-                  <option key={option} value={option}>{formatSlate(option)}</option>
-                ))}
-              </select>
-              {runContextLabel && <small title={runContextLabel}>{runContextLabel}</small>}
-            </label>
+            {activeView === "learning" ? (
+              <div className="shell-slate-chip shell-week-chip">
+                <span>Review context</span>
+                <strong>{season} · Week {week} · All slates</strong>
+              </div>
+            ) : (
+              <label className="shell-slate-chip">
+                <span>Live context · {season} W{week}</span>
+                <select
+                  aria-label="Active slate"
+                  value={slate}
+                  onChange={(event) => onSlateChange(event.target.value)}
+                >
+                  {SLATE_OPTIONS.map((option) => (
+                    <option key={option} value={option}>{formatSlate(option)}</option>
+                  ))}
+                </select>
+                {runContextLabel && <small title={runContextLabel}>{runContextLabel}</small>}
+              </label>
+            )}
             <button ref={commandTriggerRef} className="shell-command-trigger" type="button" onClick={() => setPaletteOpen(true)} aria-label="Open command palette">
               <Icon name="search" /><span>Jump to</span><kbd>⌘ K</kbd>
             </button>
@@ -263,7 +278,7 @@ export function AppShell({
         >
           <section className="command-palette" role="dialog" aria-modal="true" aria-label="Workspace command palette" onMouseDown={(event) => event.stopPropagation()}>
             <div className="command-search"><Icon name="search" /><span>Go to a workspace</span><kbd>ESC</kbd></div>
-            <div className="command-context"><span>Current slate</span><strong>{contextLabel}</strong></div>
+            <div className="command-context"><span>{activeView === "learning" ? "Review week" : "Current slate"}</span><strong>{contextLabel}</strong></div>
             <div className="command-list">
               {COMMAND_ITEMS.map((item, index) => (
                 <button ref={index === 0 ? firstCommandRef : undefined} type="button" key={item.view} onClick={() => navigate(item.view)}>

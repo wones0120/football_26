@@ -144,7 +144,7 @@ class ClassicCashObjectiveTests(unittest.TestCase):
         service = OptimizerService.__new__(OptimizerService)
         service._jobs = {}
         service.engine = MagicMock()
-        service._resolve_run_lineage = MagicMock(return_value=(None, None, None))
+        service._resolve_run_lineage = MagicMock(return_value=("projection-run-test", None, None))
         pool = pd.DataFrame(
             [
                 {

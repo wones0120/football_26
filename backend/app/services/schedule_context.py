@@ -20,6 +20,35 @@ class UpcomingScheduleContext:
     games_remaining: int
 
 
+def nflverse_team_market_context(
+    *,
+    total_line: float | None,
+    home_margin: float | None,
+) -> tuple[dict[str, float], dict[str, float]]:
+    """Convert nflverse game lines into conventional team-level DFS context.
+
+    nflverse ``spread_line`` is the expected home-team margin: a positive value
+    means the home team is favored.  Downstream projection features use the
+    conventional team-spread sign, where favorites are negative.
+    """
+    home_context: dict[str, float] = {}
+    away_context: dict[str, float] = {}
+    if total_line is not None:
+        home_context["game_total_line"] = total_line
+        away_context["game_total_line"] = total_line
+    if home_margin is not None:
+        home_context["team_spread_line"] = -home_margin
+        away_context["team_spread_line"] = home_margin
+    if total_line is not None and home_margin is not None:
+        home_implied = (total_line / 2.0) + (home_margin / 2.0)
+        away_implied = (total_line / 2.0) - (home_margin / 2.0)
+        home_context["team_implied_total"] = home_implied
+        home_context["opponent_implied_total"] = away_implied
+        away_context["team_implied_total"] = away_implied
+        away_context["opponent_implied_total"] = home_implied
+    return home_context, away_context
+
+
 def next_upcoming_schedule_context(
     session: Session,
     *,

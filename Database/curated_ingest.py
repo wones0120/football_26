@@ -176,8 +176,16 @@ class PlayerResolver:
 def _ensure_unmatched_table(engine, df: pd.DataFrame) -> None:
     """Ensure curated_unmatched has expected columns including add_to_player_master."""
     df_with_flag = df.copy()
-    if "add_to_player_master" not in df_with_flag.columns:
-        df_with_flag["add_to_player_master"] = pd.Series(dtype=object)
+    required_columns = {
+        "source": pd.Series(dtype=object),
+        "season": pd.Series(dtype="Int64"),
+        "week": pd.Series(dtype="Int64"),
+        "slate": pd.Series(dtype=object),
+        "add_to_player_master": pd.Series(dtype=object),
+    }
+    for column, empty_series in required_columns.items():
+        if column not in df_with_flag.columns:
+            df_with_flag[column] = empty_series
     ensure_table_columns(engine, "curated_unmatched", df_with_flag)
     # Ensure a primary key exists for easy editing
     with engine.begin() as conn:
@@ -648,10 +656,24 @@ def curate_injuries(season: int, week: int, slate: str, connection_string: str |
     _ensure_table(engine, "weekly_injuries", weekly_df.head(0))
     with engine.begin() as conn:
         # Allocate ids beyond current max to avoid PK collisions across slates
-        try:
-            max_id = conn.execute(text("SELECT COALESCE(MAX(id), 0) FROM weekly_injuries")).scalar_one()
-        except Exception:
-            max_id = 0
+        id_type = conn.execute(
+            text(
+                "SELECT data_type FROM information_schema.columns "
+                "WHERE table_schema = current_schema() "
+                "AND table_name = 'weekly_injuries' AND column_name = 'id'"
+            )
+        ).scalar_one_or_none()
+        if id_type in {"text", "character varying", "character"}:
+            max_id = conn.execute(
+                text(
+                    "SELECT COALESCE(MAX(CASE WHEN id ~ '^[0-9]+$' "
+                    "THEN id::BIGINT END), 0) FROM weekly_injuries"
+                )
+            ).scalar_one()
+        else:
+            max_id = conn.execute(
+                text("SELECT COALESCE(MAX(id), 0) FROM weekly_injuries")
+            ).scalar_one()
         weekly_df["id"] = pd.Series(range(max_id + 1, max_id + 1 + len(weekly_df)), index=weekly_df.index, dtype="Int64")
         conn.execute(text("DELETE FROM weekly_injuries WHERE season = :season AND week = :week AND slate = :slate"),
                      {"season": season, "week": week, "slate": slate})

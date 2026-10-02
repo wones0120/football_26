@@ -35,6 +35,18 @@ def normalize_team(team: str | None) -> str:
     return TEAM_ALIASES.get(value, value)
 
 
+def canonical_team_sql(expression: str) -> str:
+    """Apply the same current-team aliases in SQL joins."""
+    cases = " ".join(
+        f"WHEN '{alias}' THEN '{canonical}'"
+        for alias, canonical in sorted(TEAM_ALIASES.items())
+    )
+    return (
+        f"CASE UPPER(TRIM({expression})) {cases} "
+        f"ELSE UPPER(TRIM({expression})) END"
+    )
+
+
 def team_aliases(team: str | None) -> tuple[str, ...]:
     canonical = normalize_team(team)
     aliases = {canonical}

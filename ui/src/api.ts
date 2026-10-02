@@ -198,6 +198,9 @@ export type OptimizerResponse = {
   strategy_config: Record<string, unknown>;
   contest_format: "classic" | "showdown";
   objective: "cash" | "gpp";
+  enforce_single_te?: boolean | null;
+  long_shot_mode?: boolean;
+  exclude_opponent_teams?: string[];
   projection_run_id?: string | null;
   rule_run_id?: string | null;
   data_cutoff_at?: string | null;
@@ -244,6 +247,7 @@ export type OptimizerResponse = {
       player_id: string;
       player_name: string;
       position: string;
+      opportunity_diagnostic?: Record<string, unknown> | null;
       team: string;
       opponent_team?: string | null;
       salary: number;
@@ -251,8 +255,27 @@ export type OptimizerResponse = {
       p90: number;
       optimizer_context_adjustment?: number | null;
       optimizer_context_reason_codes?: string[];
+      official_availability_status?: string | null;
+      availability_override?: "default" | "assume_active" | "assume_out" | null;
+      model_availability_used?: number | null;
+      projection_before_scenario?: number | null;
+      projection_after_scenario?: number | null;
+      opportunity_redistributed?: boolean;
       flex_only?: boolean;
       included: boolean;
+      optimizer_eligibility?: "eligible" | "excluded" | "excluded_by_user_preference";
+      model_assessment?: {
+        projection: number;
+        p90: number;
+        role_label?: string | null;
+        context_adjustment?: number | null;
+      };
+      user_preference_exclusions?: Array<{
+        rule_id?: string | null;
+        reason_code: string;
+        description: string;
+        category: "user";
+      }>;
       removal_stage?: string | null;
       exclusion_reasons: string[];
       exclusion_details?: Array<{
@@ -600,6 +623,29 @@ export type StartingQBResponse = {
   rows_written: number;
   message: string;
   completed_at: string;
+  candidates: StartingQBCandidate[];
+};
+
+export type StartingQBCandidate = {
+  player_master_id: string;
+  player_name: string;
+  team: string;
+  salary: number;
+  depth_chart_position?: string | null;
+  roster_status?: string | null;
+  is_stored_starter: boolean;
+  stored_source?: string | null;
+  stored_evidence_tier?: "confirmed" | "inferred" | null;
+};
+
+export type StartingQBSelection = {
+  player_master_id: string;
+  team: string;
+  source: string;
+  source_uri: string;
+  observed_at: string;
+  evidence_tier: "confirmed" | "inferred";
+  note?: string;
 };
 
 export type UnmatchedSalaryRow = {
@@ -1060,6 +1106,32 @@ export type AgentQuestionListResponse = {
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
 
+export type ModelDisagreement = {
+  player_id: string;
+  player: string;
+  position: string;
+  our_mean: number;
+  external_mean: number;
+  delta: number;
+  delta_pct: number | null;
+  position_relative_percentile: number;
+  source: string;
+  captured_at: string;
+  large_disagreement: boolean;
+};
+
+export function fetchProjectionAudit(runId: string): Promise<Record<string, any>> {
+  return getJson(`/predict/audit/${encodeURIComponent(runId)}`);
+}
+
+export function fetchModelDisagreements(runId: string): Promise<{ rows: ModelDisagreement[] }> {
+  return getJson(`/predict/audit/${encodeURIComponent(runId)}/disagreements`);
+}
+
+export function fetchPlayerWhy(runId: string, playerId: string): Promise<Record<string, any>> {
+  return getJson(`/predict/audit/${encodeURIComponent(runId)}/player/${encodeURIComponent(playerId)}`);
+}
+
 export async function downloadOptimizerLineups(jobId: string): Promise<void> {
   const response = await fetch(`${API_BASE}/optimizer/results/${encodeURIComponent(jobId)}/draftkings/download`);
   if (!response.ok) throw new Error(await extractError(response));
@@ -1074,6 +1146,23 @@ export async function downloadOptimizerLineups(jobId: string): Promise<void> {
   link.click();
   link.remove();
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+export type SkillExposureStatus = {
+  required: { player_id: string; player: string; position: string; selected_count: number; selected_total: number }[];
+  approved: { player_id: string }[];
+  pending: { player_id: string }[];
+  decisions?: { player_id: string; decision: string; reason: string; resulting_optimizer_run_id?: string }[];
+};
+
+export function fetchSkillExposureStatus(jobId: string): Promise<SkillExposureStatus> {
+  return getJson(`/optimizer/results/${encodeURIComponent(jobId)}/skill-exposure`);
+}
+
+export function decideSkillExposure(jobId: string, request: {
+  player_id: string; decision: "approve" | "cap"; reason: string; requested_cap?: number;
+}): Promise<{ new_optimizer_run_id?: string }> {
+  return postJson(`/optimizer/results/${encodeURIComponent(jobId)}/skill-exposure`, request);
 }
 
 // Allow long-running operations (feature builds, predictions); 10 minutes default.
@@ -1175,6 +1264,14 @@ export function createWeeklyRun(payload: {
   draftkings_directory?: string;
   recursive?: boolean;
   projection_run_id?: string;
+  availability_overrides?: Array<{
+    player_name?: string;
+    player_id?: string;
+    availability: "default" | "assume_active" | "assume_out";
+  }>;
+  allow_confirmed_inactive_override?: boolean;
+  assume_questionable_out?: boolean;
+  refresh_projections?: boolean;
   contest_format: "classic" | "showdown";
   objective: "cash" | "gpp";
   strategy?: string;
@@ -1226,6 +1323,16 @@ async function getJson<T>(path: string, timeoutMs = DEFAULT_TIMEOUT_MS): Promise
     throw normalizeFetchError(error);
   } finally {
     window.clearTimeout(timeout);
+  }
+}
+
+async function deleteJson<T>(path: string): Promise<T> {
+  try {
+    const res = await fetch(`${API_BASE}${path}`, { method: "DELETE" });
+    if (!res.ok) throw new Error(await extractError(res));
+    return (await res.json()) as T;
+  } catch (error) {
+    throw normalizeFetchError(error);
   }
 }
 
@@ -1319,13 +1426,27 @@ export function loadRawWeekRosters(payload: {
   return postJson("/raw/week/rosters", payload);
 }
 
-export function loadRawSalaries(payload: {
+export async function loadRawSalaries(payload: {
   season: number;
   week: number;
   slate: string;
   path: string;
 }): Promise<LoadResponse> {
-  return postJson("/raw/salaries/load", payload);
+  const result = await postJson<{
+    rows_raw: number;
+    rows_curated: number;
+    rows_unresolved: number;
+  }>("/ingest/salaries", {
+    source_system: "draftkings",
+    ...payload,
+  });
+  return {
+    summaries: [
+      { dataset: "raw_salaries", season: payload.season, week: payload.week, rows_written: result.rows_raw },
+      { dataset: "curated_salaries", season: payload.season, week: payload.week, rows_written: result.rows_curated },
+      { dataset: "unmatched_salaries", season: payload.season, week: payload.week, rows_written: result.rows_unresolved },
+    ],
+  };
 }
 
 export function loadRawInjuries(payload: {
@@ -1333,8 +1454,21 @@ export function loadRawInjuries(payload: {
   week: number;
   slate: string;
   path: string;
-}): Promise<SlateLoadResponse> {
-  return postJson("/raw/injuries/load", payload);
+}): Promise<LoadResponse> {
+  return postJson<{
+    rows_raw: number;
+    rows_curated: number;
+    rows_unresolved: number;
+  }>("/ingest/injuries", {
+    source_system: "fanduel",
+    ...payload,
+  }).then((result) => ({
+    summaries: [
+      { dataset: "raw_injuries", season: payload.season, week: payload.week, rows_written: result.rows_raw },
+      { dataset: "curated_injuries", season: payload.season, week: payload.week, rows_written: result.rows_curated },
+      { dataset: "unmatched_injuries", season: payload.season, week: payload.week, rows_written: result.rows_unresolved },
+    ],
+  }));
 }
 
 export function loadSlateResource(
@@ -1349,14 +1483,54 @@ export function runOptimizer(payload: {
   week: number;
   slate: string;
   strategy: string;
+  optimizer_run_id: string;
   contest_format: "classic" | "showdown";
   objective: "cash" | "gpp";
   projection_run_id?: string;
   rule_run_id?: string;
   data_cutoff_at?: string;
   params?: Record<string, unknown>;
-}): Promise<OptimizerResponse> {
-  return postJson("/optimizer/run", payload);
+}, onDetached?: () => void): Promise<OptimizerResponse> {
+  return startOptimizerAndRecover(payload, onDetached);
+}
+
+const OPTIMIZER_START_TIMEOUT_MS = 30_000;
+const OPTIMIZER_POLL_INTERVAL_MS = 2_000;
+const OPTIMIZER_RECOVERY_TIMEOUT_MS = 60 * 60 * 1_000;
+
+async function fetchOptimizerResultIfReady(jobId: string): Promise<OptimizerResponse | null> {
+  const response = await fetch(
+    `${API_BASE}/optimizer/results/${encodeURIComponent(jobId)}`,
+  );
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(await extractError(response));
+  return (await response.json()) as OptimizerResponse;
+}
+
+async function waitForOptimizerResult(jobId: string): Promise<OptimizerResponse> {
+  const deadline = Date.now() + OPTIMIZER_RECOVERY_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    const result = await fetchOptimizerResultIfReady(jobId);
+    if (result) return result;
+    await new Promise((resolve) => window.setTimeout(resolve, OPTIMIZER_POLL_INTERVAL_MS));
+  }
+  throw new Error(
+    `Optimizer ${jobId} is still running after 60 minutes. Its run ID is saved and can be refreshed without starting another run.`,
+  );
+}
+
+async function startOptimizerAndRecover(
+  payload: Parameters<typeof runOptimizer>[0],
+  onDetached?: () => void,
+): Promise<OptimizerResponse> {
+  try {
+    return await postJson("/optimizer/run", payload, OPTIMIZER_START_TIMEOUT_MS);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.startsWith("Request timed out while contacting")) throw error;
+    onDetached?.();
+    return waitForOptimizerResult(payload.optimizer_run_id);
+  }
 }
 
 export interface ContestPreview {
@@ -1371,8 +1545,96 @@ export function previewOptimizerContests(payload: {
   return postJson("/optimizer/contests/preview", payload);
 }
 
+export type SavedContest = {
+  contest_id: string;
+  url: string;
+  name?: string | null;
+  season: number;
+  week: number;
+  slate: string;
+  contest_format: "classic" | "showdown";
+  contest_type: "gpp" | "cash" | "h2h" | "double_up" | "fifty_fifty" | "other";
+  latest_observed_at?: string | null;
+  latest_error?: string | null;
+  observation_count: number;
+  latest_contest?: Record<string, unknown> | null;
+  latest_successful_contest?: Record<string, unknown> | null;
+};
+
+export type SavedContestType = SavedContest["contest_type"];
+
+export type SavedContestScope = {
+  season: number;
+  week: number;
+  slate: string;
+  contest_format: "classic" | "showdown";
+  contest_type: SavedContestType;
+  contest_count: number;
+  last_updated_at?: string | null;
+};
+
+export function fetchSavedContestScopes(): Promise<{ scopes: SavedContestScope[] }> {
+  return getJson("/optimizer/contests/saved/scopes");
+}
+
+export function fetchSavedOptimizerContests(params: {
+  season: number; week: number; slate: string;
+  contest_format?: "classic" | "showdown";
+  contest_type?: SavedContestType;
+}): Promise<{ contests: SavedContest[] }> {
+  const query = new URLSearchParams({ season: String(params.season), week: String(params.week), slate: params.slate });
+  if (params.contest_format) query.set("contest_format", params.contest_format);
+  if (params.contest_type) query.set("contest_type", params.contest_type);
+  return getJson(`/optimizer/contests/saved?${query}`);
+}
+
+export function saveOptimizerContests(payload: {
+  season: number; week: number; slate: string;
+  contest_format: "classic" | "showdown";
+  contest_type: SavedContestType;
+  urls: string[];
+  manual_contest_metadata?: Array<Record<string, unknown>>;
+}): Promise<{ contests: SavedContest[] }> {
+  return postJson("/optimizer/contests/saved", payload);
+}
+
+export function archiveSavedOptimizerContest(contestId: string): Promise<{ contest_id: string; archived: boolean }> {
+  return deleteJson(`/optimizer/contests/saved/${encodeURIComponent(contestId)}`);
+}
+
+export type SavedContestObservation = {
+  observation_id: string;
+  observed_at: string;
+  observation_reason: "save" | "preview" | "optimizer";
+  source: string;
+  source_sha256?: string | null;
+  error?: string | null;
+  contest: Record<string, unknown>;
+};
+
+export function fetchSavedContestObservations(contestId: string): Promise<{ observations: SavedContestObservation[] }> {
+  return getJson(`/optimizer/contests/saved/${encodeURIComponent(contestId)}/observations`);
+}
+
 export function fetchOptimizerResults(jobId: string): Promise<OptimizerResponse> {
   return getJson(`/optimizer/results/${jobId}`);
+}
+
+export type OptimizerProjectionRun = {
+  projection_run_id: string;
+  created_at: string;
+  row_count: number;
+  data_cutoff_at?: string | null;
+  model_artifact_status?: "stored" | "missing";
+};
+
+export function fetchOptimizerProjectionRuns(params: {
+  season: number; week: number; slate: string;
+}): Promise<{ runs: OptimizerProjectionRun[] }> {
+  const query = new URLSearchParams({
+    season: String(params.season), week: String(params.week), slate: params.slate,
+  });
+  return getJson(`/optimizer/projections?${query.toString()}`);
 }
 
 export function fetchCurrentContext(): Promise<CurrentContext> {
@@ -1385,6 +1647,13 @@ export function runPredictions(payload: {
   positions?: string[];
   slate?: string;
   data_cutoff_at?: string;
+  availability_overrides?: Array<{
+    player_name?: string;
+    player_id?: string;
+    availability: "default" | "assume_active" | "assume_out";
+  }>;
+  allow_confirmed_inactive_override?: boolean;
+  assume_questionable_out?: boolean;
 }): Promise<PredictionResponse> {
   return enqueueAndWait("/predict/run", payload, "projection");
 }
@@ -1395,6 +1664,13 @@ export function queuePredictions(payload: {
   positions?: string[];
   slate?: string;
   data_cutoff_at?: string;
+  availability_overrides?: Array<{
+    player_name?: string;
+    player_id?: string;
+    availability: "default" | "assume_active" | "assume_out";
+  }>;
+  allow_confirmed_inactive_override?: boolean;
+  assume_questionable_out?: boolean;
 }): Promise<OperationalJobCreateResponse> {
   return enqueueOperationalJob("/predict/run", payload, "projection");
 }
@@ -1470,6 +1746,14 @@ export function fetchSlateReadiness(params: {
   });
   if (params.record) query.set("record", "true");
   return getJson(`/slate/readiness?${query.toString()}`);
+}
+
+export function reconcileSlateSalaryIdentities(payload: {
+  season: number;
+  week: number;
+  slate: string;
+}): Promise<{ salary_rows_seen: number; salary_rows_resolved: number; salary_rows_quarantined: number }> {
+  return postJson("/slate/identity-reconcile", payload);
 }
 
 export function fetchSlateWeather(params: {
@@ -1571,6 +1855,7 @@ export function loadStartingQBs(payload: {
   season: number;
   week: number;
   slate: string;
+  starters?: StartingQBSelection[];
 }): Promise<StartingQBResponse> {
   return postJson("/slate/starting-qbs", payload);
 }
@@ -1711,6 +1996,33 @@ export function batchImportDraftKings(payload: {
   return postJson("/imports/draftkings/batch", payload);
 }
 
+export function importWeeklyContestFolder(payload: {
+  directory: string;
+  season: number;
+  week: number;
+  dry_run: boolean;
+  selected_files?: Array<{
+    path: string;
+    source_file_id: string;
+    season: number;
+    week: number;
+    slate: string;
+  }>;
+}): Promise<{
+  batch_id: string;
+  directory: string;
+  discovered: number;
+  imported: number;
+  deduplicated: number;
+  staged: number;
+  skipped: number;
+  failed: number;
+  dry_run: boolean;
+  files: DraftKingsBatchFile[];
+}> {
+  return postJson("/imports/draftkings/weekly-contests", payload);
+}
+
 export type PortfolioAssignment = {
   assignment_id: string;
   portfolio_id: string;
@@ -1790,7 +2102,8 @@ export function runOwnershipModel(payload: {
   slate?: string;
   positions?: string[];
   data_cutoff_at?: string;
-}): Promise<{ season: number; week: number; slate?: string; rows_written: number; message: string; ownership_run_id?: string | null; data_cutoff_at?: string | null; target_persisted?: boolean; model_metrics?: Record<string, unknown> }> {
+  projection_run_id?: string;
+}): Promise<{ season: number; week: number; slate?: string; rows_written: number; message: string; ownership_run_id?: string | null; data_cutoff_at?: string | null; target_persisted?: boolean; model_metrics?: Record<string, unknown>; model_id?: string | null }> {
   return postJson("/ownership/run", payload);
 }
 
@@ -1900,7 +2213,67 @@ export type SlateLearningReport = {
   run_ids: Record<string, string[]>;
   missing_evidence: string[];
   interpretation: string;
+  optimizer_effectiveness?: {
+    contract_id: string;
+    runs: Array<Record<string, unknown>>;
+    field_benchmarks: Record<string, Record<string, unknown>>;
+    entered_field_comparisons?: Array<Record<string, unknown>>;
+    best_entered_slate_actual: number | null;
+    unmatched_entered_entries: string[];
+    unavailable_completed_run_ids?: string[];
+  };
 };
+
+export type WeeklyLearningReport = {
+  report_id: string;
+  contract_id: "weekly_learning_report_v1";
+  builder_version: string;
+  season: number;
+  week: number;
+  entry_user: string;
+  generated_at: string;
+  evidence_hash: string;
+  status: "completed" | "partial";
+  summary: {
+    weekly_stats?: {
+      status: string;
+      season: number;
+      week: number;
+      rows_raw: number;
+      rows_curated: number;
+      rows_unresolved: number;
+      snapshot_id: string;
+      content_sha256: string;
+      observed_at: string;
+      ingest_run_id: string;
+    };
+    slates: number;
+    contests_entered: number;
+    entries: number;
+    identity_complete_entries: number;
+    matched_optimizer_entries: number;
+    entries_with_opt_007: number;
+    duplicate_entries: number;
+    entry_weighted_projection_observations: number;
+    entry_weighted_projection_mae: number | null;
+    entry_weighted_projection_rmse: number | null;
+  };
+  slate_reports: SlateLearningReport[];
+  optimizer_effectiveness_history?: Array<Record<string, unknown>>;
+  optimizer_correlation_aggregate?: Record<string, Record<string, unknown>>;
+  source_file_ids: string[];
+  run_ids: Record<string, string[]>;
+  missing_evidence: string[];
+  interpretation: string;
+};
+
+export function generateWeeklyLearningReport(payload: {
+  season: number;
+  week: number;
+  entry_user: string;
+}): Promise<WeeklyLearningReport> {
+  return postJson("/learning/reports/weekly", payload);
+}
 
 export function generateSlateLearningReport(payload: {
   season: number;

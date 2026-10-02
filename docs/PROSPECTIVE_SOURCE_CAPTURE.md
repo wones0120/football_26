@@ -1,6 +1,6 @@
 # Prospective Source Capture
 
-Last validated: 2026-09-07
+Last validated: 2026-09-29
 
 Contract: `prospective_source_snapshot_v1`
 
@@ -23,6 +23,25 @@ The capture path supports:
 - repeated polling without duplicate files or ingest runs;
 - cutoff selection that excludes an observation made after slate lock.
 
+## Starting-QB evidence for projections
+
+The Operations **Run Projections** action fetches the current timestamped nflverse depth chart
+through nflreadpy. For each slate team, it takes the latest observation available before the
+slate lock and matches rank-one QB by GSIS ID to a canonical DraftKings salary player. The alias
+lookup also requires the same team and QB position, because the database can contain distinct
+players with the same name. The selected QB rows are preserved in a source snapshot and persisted
+as provisional starter evidence. A sourced operator confirmation takes precedence; missing or
+conflicting rank-one evidence remains visible for review.
+If the latest DraftKings salary slice explicitly marks that QB1 OUT, the loader
+can provisionally choose the unique next depth rank when it also matches the
+unique top eligible salary QB. It records the OUT identity, status, next rank,
+and immutable depth snapshot ID. Other conflicts remain blocked.
+
+The same action reconciles unresolved salaries only within the selected week/slate. It requires
+team or position corroboration before linking a name to a canonical player; other rows are
+quarantined and excluded from projections. It refreshes the slate feature matrix after that
+reconciliation so newly resolved players have current input rows.
+
 ## Evidence Contract
 
 Each `source_snapshot` row and adjacent `manifest.json` records:
@@ -36,6 +55,9 @@ Each `source_snapshot` row and adjacent `manifest.json` records:
 
 The snapshot ID is deterministic for source, dataset, slate scope, and content hash. Identical
 content in the same scope reuses the original observation; changed content appends a new version.
+Reusing an observation still verifies its saved artifact and manifest. Reads that
+receive macOS file-provider `EDEADLK` are retried briefly; checksum and manifest
+validation are never skipped.
 PostgreSQL has a trigger that rejects `UPDATE` and `DELETE` on `source_snapshot`. The separate
 append-only `source_snapshot_ingest_run` table links preserved evidence to downstream ingest runs
 without mutating the snapshot.

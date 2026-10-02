@@ -4,6 +4,522 @@ import test from "node:test";
 import type { OptimizerResponse } from "../src/api.ts";
 import { buildOptimizerReportHtml } from "../src/optimizerReport.ts";
 
+test("Showdown report displays scenario coverage and baseline versus conditioned player values", () => {
+  const optimizer = {
+    job_id: "scenario-audit", status: "completed", strategy: "showdown_gpp_portfolio_v3",
+    strategy_config: {}, contest_format: "showdown", objective: "gpp",
+    enforce_single_te: false,
+    results: [[{
+      player_id: "a-rb", name: "A RB", position: "RB", roster_position: "CPT",
+      player_team: "AAA", salary: 12000, projection: 18, p90: 30,
+      baseline_projection: 15, baseline_p90: 26,
+      showdown_scenario_id: "team_a_decisive_win",
+      showdown_scenario: {scenario_id: "team_a_decisive_win", label: "AAA DECISIVE WIN",
+        conditioned_winner: "AAA", decisive_margin_threshold: 14},
+      showdown_scenario_adjustment: {reason: "winning-team rush-volume increase"},
+      showdown_candidate_source: "captain_family",
+      showdown_selection_diagnostic: {global_candidate_rank: 3, mean_loss: 1,
+        p90_loss: 2, selector_loss: 0.5, scenario_diversity_changed_selection: true,
+        selection_reason: "scenario diversity with quality and exposure constraints"},
+      captain_family_coverage_report: {
+        candidate_count: 3, quality_eligible_count: 3, quality_fraction: 0.95,
+        scenario_generation_status: "complete", require_scenario_diversity: true,
+        ordinary_selected_ranks: [1],
+        scenario_definitions: [
+          {scenario_id: "baseline", label: "BASELINE / MARKET SCRIPT", adjustment_method: "market_margin_role_conditioning_v1"},
+          {scenario_id: "team_a_decisive_win", label: "AAA DECISIVE WIN", conditioned_winner: "AAA", decisive_margin_threshold: 14},
+          {scenario_id: "team_b_decisive_win", label: "BBB DECISIVE WIN", conditioned_winner: "BBB", decisive_margin_threshold: 14},
+        ],
+        scenario_family_coverage: [
+          {scenario_id: "baseline", candidate_count: 1, best_rank: 1, best_mean: 70, best_p90: 130, best_selector: 100, best_captain: "B QB", best_team_split: "AAA 3 / BBB 3", best_salary: 49000, selected: false, reason: "selector tradeoff"},
+          {scenario_id: "team_a_decisive_win", candidate_count: 1, best_rank: 3, best_mean: 69, best_p90: 129, best_selector: 99, best_captain: "A RB", best_team_split: "AAA 4 / BBB 2", best_salary: 48000, selected: true, reason: "selected"},
+        ],
+        ranked_metrics: [{rank: 3, scenario_id: "team_a_decisive_win", candidate_source: "captain_family",
+          captain_name: "A RB", team_split: "AAA 4 / BBB 2", salary: 48000,
+          baseline_mean: 65, mean: 69, baseline_p90: 124, p90: 129,
+          selector: 99, quality_eligible: true}],
+      },
+    }]],
+  } as OptimizerResponse;
+  const html = buildOptimizerReportHtml(optimizer, {season: 2026, week: 3, slate: "MONDAY_NIGHT"});
+  assert.match(html, /SHOWDOWN GAME-SCRIPT SCENARIOS/);
+  assert.match(html, /AAA wins by 14\+/);
+  assert.match(html, /Scenario diversity selected a lower-ranked lineup: yes/);
+  assert.match(html, /winning-team rush-volume increase/);
+  assert.match(html, /Baseline lineup mean 15\.00/);
+  assert.match(html, /captain_family/);
+});
+
+test("Showdown report exposes saved market response and team-count context", () => {
+  const optimizer = {
+    job_id: "market-audit", status: "completed", strategy: "showdown_gpp_portfolio_v3",
+    strategy_config: {}, contest_format: "showdown", objective: "gpp",
+    enforce_single_te: false,
+    results: [[{
+      player_id: "qb", name: "Quarterback", position: "QB", roster_position: "CPT",
+      player_team: "PHI", salary: 12000, projection: 20, p90: 35,
+      qb_correlation_multiplier: 0.53,
+      projection_market_audit: {
+        status: "review_required_direction_mismatch",
+        model_response: [{team: "CHI", implied_total_delta: -1.75,
+          offensive_projection_delta: 0.23, direction_mismatch: true}],
+      },
+      captain_family_coverage_report: {
+        candidate_count: 120, quality_eligible_count: 60,
+        quality_fraction: 0.95, ownership_selection_status: "Partial",
+        source_coverage: {"script:PHI_4_2_control_rb": 1},
+        family_rows: [{captain_name: "Quarterback", rank: 1, selected: true}],
+      },
+      showdown_game_environment: {
+        team_counts: "PHI 4 / CHI 2", game_total: 41.5,
+        market_source: "public_market", market_observed_at: "2026-09-28T19:07:12Z",
+        explanation: "Favorite-led construction.",
+        teams: [{team: "PHI", players: 4, spread: -3.5, implied_total: 22.5,
+          projected_mean: 70, selector_contribution: 78}],
+      },
+    }]],
+  } as OptimizerResponse;
+  const html = buildOptimizerReportHtml(optimizer, {season: 2026, week: 3, slate: "MONDAY_NIGHT"});
+  assert.match(html, /Direct model: opposite direction/);
+  assert.match(html, /PHI 4 \/ CHI 2/);
+  assert.match(html, /QB correlation reward factors/);
+  assert.match(html, /public_market/);
+  assert.match(html, /PHI 4 2 control rb/);
+});
+
+test("Showdown report displays measured Captain rates and shadow-only QB archetype status", () => {
+  const optimizer = {
+    job_id: "captain-history", status: "completed", strategy: "showdown_gpp_portfolio_v3",
+    strategy_config: {}, contest_format: "showdown", objective: "gpp",
+    enforce_single_te: false,
+    results: [[{
+      player_id: "qb", name: "Rush QB", position: "QB", roster_position: "CPT",
+      player_team: "AAA", salary: 12000, projection: 20, p90: 35,
+      historical_captain_optimality: {
+        slate_count: 43, positions: [{label: "QB", optimal_count: 11,
+          eligible_opportunities: 290, slate_optimal_share: 11 / 43,
+          optimal_rate: 11 / 290}],
+        qb_archetype_thresholds_recent_carries: [1.67, 3.33],
+        actual_source_counts: {raw_nfl_weekly_stat: 1000, unavailable: 1200},
+        excluded_games: [{season: 2026, week: 3, slate: "MONDAY_NIGHT",
+          reason: "final_actual_usage_incomplete"}],
+        qb_archetypes: [{label: "Pocket-oriented", optimal_count: 0,
+          eligible_opportunities: 105, optimal_rate: 0, wilson_95: [0, 0.035],
+          reliability: "limited"}],
+        starter_identification: {identified: 72, team_opportunities: 86,
+          complete_two_team_games: 30, rule: "Pregame evidence or clear salary and prior volume",
+          methods: {salary_and_prior_pass_volume_inferred: 68, pregame_inferred: 4}},
+        starter_qb_archetypes: [{label: "Pocket-oriented", optimal_count: 0,
+          eligible_opportunities: 16, optimal_rate: 0, wilson_95: [0, 0.194],
+          reliability: "limited"}],
+        starter_qb_game_shares: [{label: "Either identified starting QB", optimal_count: 8,
+          eligible_games: 30, optimal_game_share: 8 / 30, wilson_95: [0.142, 0.444],
+          reliability: "limited"}],
+        qb_buckets: {recent_carries: [{label: "0–2", optimal_count: 0,
+          eligible_opportunities: 105, optimal_rate: 0}]},
+        starter_qb_buckets: {recent_carries: [{label: "0–2", optimal_count: 0,
+          eligible_opportunities: 16, optimal_rate: 0, wilson_95: [0, 0.194],
+          reliability: "limited"}]},
+        current_qbs: [{qb: "Rush QB", team: "AAA", archetype: "High-rush / goal-line unverified",
+          recent_carries: 5.5, recent_carries_source: "carries_mean_3",
+          historical_archetype_rate: 0.08, historical_archetype_count: 6,
+          historical_archetype_opportunities: 75, historical_rush_bucket: "4–6",
+          historical_rush_bucket_rate: 0.1, goal_line_role: "unavailable",
+          historical_starter_archetype_rate: 0.154,
+          historical_starter_archetype_count: 6,
+          historical_starter_archetype_opportunities: 39,
+          historical_starter_reliability: "limited",
+          existing_position_prior_multiplier: 1.08, archetype_prior_adjustment: 0,
+          best_family_rank: 4, best_family_mean: 72, best_family_p90: 135,
+          selected: true}],
+        prior_application: {status: "shadow_only", reason: "Insufficient training events"},
+        shadow_qb_captain: {status: "diagnostic_unvalidated", formula: "Saved candidates only"},
+        qb_statistical_validation: {status: "exploratory_insufficient_training_events",
+          training_period: "2024", training_optimal_qbs: 3, test_optimal_qbs: 8,
+          base: {holdout_brier: 0.049}, with_recent_carries: {holdout_brier: 0.0489}},
+        historical_cpt_ownership: {status: "unavailable"},
+        feature_coverage: {expected_carries: {observed: 237, eligible_qbs: 290}},
+        unavailable_features: ["rushing TD expectation"],
+      },
+    }]],
+  } as OptimizerResponse;
+  const html = buildOptimizerReportHtml(optimizer, {season: 2026, week: 3, slate: "MONDAY_NIGHT"});
+  assert.match(html, /Historical Captain Optimality/);
+  assert.match(html, /Pocket-oriented/);
+  assert.match(html, /0\.0%/);
+  assert.match(html, /Pregame-identified starter QB archetypes/);
+  assert.match(html, /72\/86/);
+  assert.match(html, /salary_and_prior_pass_volume_inferred 68/);
+  assert.match(html, /2026 W3 MONDAY_NIGHT: final_actual_usage_incomplete/);
+  assert.match(html, /26\.7%/);
+  assert.match(html, /diagnostic_unvalidated/);
+  assert.match(html, /Rush QB/);
+  assert.match(html, /shadow_only/);
+  assert.match(html, /Historical CPT field ownership: unavailable/);
+});
+
+test("long-shot report is explicitly labeled and discloses ownership evidence", () => {
+  const optimizer: OptimizerResponse = {
+    job_id: "long-shot", status: "completed", strategy: "classic_large_gpp_v1",
+    strategy_config: {}, contest_format: "classic", objective: "gpp",
+    lineage_persisted: true, long_shot_mode: true,
+    results: [[{
+      player_id: "qb", name: "Contrarian QB", position: "QB", player_team: "AAA",
+      salary: 6000, projection: 18, p90: 30, ownership: 4,
+      lineup_variant: "long_shot",
+      long_shot_report: {
+        enabled: true, ownership_status: "available", ownership_sum: 72.5,
+        method: "classic_low_ownership_leverage_objective",
+        note: "Football projections are unchanged.",
+      },
+    }]],
+  };
+
+  const html = buildOptimizerReportHtml(optimizer, { season: 2026, week: 2, slate: "SUNDAY_MAIN" });
+
+  assert.match(html, /Long-shot selection/);
+  assert.match(html, /Long-shot lineup/);
+  assert.match(html, /ownership sum: 72\.5/);
+  assert.match(html, /Football projections are unchanged/);
+});
+
+test("Classic small-field report exposes candidate scoring and stack diagnostics", () => {
+  const candidate = {
+    rank: 1, roster: [{ name: "QB One", position: "QB" }], salary: 49900,
+    mean: 132.4, p90: 211.5, ownership_sum: 125, relative_chalk: 44,
+    qb: { name: "QB One", label: "moderate rushing QB", basis: "expected carries" },
+    stack: { type: "QB+2+bring-back", bring_backs: [{ name: "Opponent WR" }],
+      game_stack_size: 4, game_stack_salary: 23000, game_stack_ownership: 65 },
+    primary_game: "AAA–BBB", game_environment: { label: "high-total competitive", game_total: 52 },
+    correlation_positive: 1.2, correlation_negative: -0.2,
+    objective_score: 4.5, base_solver: 4.5,
+    components: { mean: 2, p90: 2, context: .2, leverage: .1, qb_stack: .3,
+      bring_back: .1, game_environment: 0, correlation: 0, ownership_chalk: 0,
+      duplication: 0, penalties: -.2, other_residual: 0 },
+    rbs: [], pass_catchers: { salary: 21000, high_owned_count: 1,
+      low_owned_count: 1, one_offs: [], te_in_qb_stack: true, flex_position: "WR" },
+    cheap_skill_opportunity: [], correlation_rules: [],
+    rb_dst_football_sanity_flags: [{ kind: "same_team_rb_dst", key: "rb_dst:rb:dst",
+      label: "RB One + AAA DST: underdog by at least 6", why: "Same-team RB and DST",
+      status: "informational", production_impacting: false, recent_carries: 10,
+      recent_targets: 4, receiving_role_strength: .5,
+      strongest_candidate_without_flag: { rank: 2, mean_cost: 1, p90_cost: 2,
+        selector_cost: .1 } }],
+    football_sanity: { script: "AAA passing through two stack partners", driving_players: [],
+      cheap_players: [], omitted_central_players: [{ name: "Central WR", team: "AAA",
+        explanation: "selection tradeoff unresolved", mean: 18, p90: 29, salary: 7500,
+        candidate_count: 12, candidate_total: 120, selected_count: 0, selected_total: 1 }],
+      role_projection_disagreements: [], flags: [] },
+    mean_loss_vs_best: 0, p90_loss_vs_best: 0,
+    chalk_improvement_vs_best_quality: 0, ownership_objective_gain_vs_best_quality: 0,
+  };
+  const lineup = [{ player_id: "qb", name: "QB One", position: "QB", salary: 6000,
+    projection: 20, p90: 30, player_team: "AAA",
+    classic_small_field_report: { candidate_count: 120, requested_candidate_count: 120,
+      selected_ranks: [1], note: "Existing scoring.", top_20: [candidate],
+      all_candidates: [candidate],
+      production_controls: { mode: "conservative", selection_tradeoffs: {} },
+      production_funnel: { admission_method: "joint_max_count_then_selector_score",
+        status: "complete", requested: 205, solved: 285, legal: 285,
+        rejected_by_player_cap: 64, accepted: 205, remaining_deficit: 0 },
+      highest_p90_candidates_omitted: [{ rank: 2, qb: "QB Two", mean: 130,
+        p90: 230, objective_score: 4.4, stack_family: "QB+1" }],
+      generation_funnel: { eligible_player_pool: 300, sequential_unique: 120,
+        saved_candidates: 120, selected: 1 },
+      pregame_coverage: { qb: [{ name: "QB One", mean: 20, p90: 30,
+        ownership: 5, game_total: 50, team_total: 27,
+        candidate_count: 12, selected_count: 1, families: { "QB+2": 12 } }],
+        games: [{ game: "AAA–BBB", qb: 12, pass_catcher: 30, bring_back: 4 }],
+        players: [{ name: "High P90 WR", p90_percentile: 99,
+          candidate_pct: 1, candidate_count: 1 }],
+        stack_families: { "QB+2": 50 }, bring_back_distribution: { 0: 80, 1: 40 },
+        selected_bring_back_distribution: { 0: 1 },
+        diversity: { unique_roster_count: 120, candidate_count: 120,
+          average_pairwise_overlap: 3.5, effective_family_count: 15 } },
+      strategy_policy_alignment: { requested_strategy: "classic_small_field_gpp",
+        applied_profile_id: "classic_large_gpp_v1", status: "borrowed_unvalidated",
+        warning: "Historical validation pending." },
+      prospective_experiment: {
+        contract: "classic_prospective_structural_coverage_v1",
+        frozen_snapshot_sha256: "abc123",
+        availability_risk: { players: [{ player: "Questionable WR", designation: "Q",
+          evidence_timestamp: "2026-09-26T20:00:00Z", practice_status: "LIMITED",
+          workload_status: null, workload_confidence: "uncertain",
+          bucket: "questionable_elevated", candidate_exposure: 25,
+          selected_exposure: 40, candidate_cap: .25, selected_cap: .4,
+          candidate_cap_binding: true }],
+          production_candidate: { pct_with_at_least: { "1": 90 } },
+          shadow_candidate: { pct_with_at_least: { "1": 25 } },
+          shadow_selected: { pct_with_at_least: { "1": 40 } } },
+        shadow_generation: { candidate_target: 120, candidate_underfill: 0,
+          selected_ranks: [2], risk_policy_tradeoff: { mean_points_sacrificed: 1.2,
+            ceiling_points_sacrificed: 2.3, comparison: "saved pregame comparison" } },
+        shadow_portfolio: { selected_ranks: [3] },
+      },
+      selected_portfolio: { core_players: ["RB One"], constraints: { max_lineup_overlap: 6 },
+        player_exposure: [{ name: "RB One", percent: 100 }],
+        game_exposure: [{ game_id: "AAA-BBB", percent: 100 }], overlap_matrix: [[9]],
+        lineups: [{ lineup: 1, rank: 1, qb: "QB One", primary_game: "AAA-BBB",
+          construction_archetype: "QB+2 / WR FLEX", projected_score: 140,
+          ceiling_proxy: 240, projected_ownership_sum: 55, leverage_proxy: 2,
+          unique_players: [{ name: "QB One" }], selection_reason: "Distinct QB path." }] },
+      rb_dst_diagnostics: { warning_only: true, player_why: [{ name: "RB One",
+        team: "AAA", salary: 7000, mean: 17, p90: 27,
+        role_class: "offensive centerpiece", snap_share_mean_3: .75,
+        carries_mean_3: 10, targets_mean_3: 4, target_share_mean_3: .13,
+        receiving_role_strength: .5, team_implied_total: 18,
+        spread: 7, game_total: 43, model_version: "v4.2-role-opportunity",
+        explanation_limit: "Saved one-feature role counterfactuals",
+        model_explanation: { importance: [{ delta: -1 }, { delta: 0 }] },
+        external_benchmark: { reason: "No saved same-slate benchmark" } }],
+        selected_flag_exposure: [{ key: "rb_dst:rb:dst", appearances: 1,
+          selected_count: 1 }] },
+      selected_football_sanity: [candidate.football_sanity],
+      contest: { contest_id: "123", name: "Sunday GPP", entry_fee: 5, capacity: 1000,
+        current_entries: 800, maximum_entries: 1, payout_ladder: [{ from: 1, to: 1, cash: 1000 }],
+        economics: { paid_percentage: .2, first_place_share: .1, full_field_rake: .15 },
+        unavailable_fields: [] },
+      top_qbs: [{ qb: "QB One", candidate_frequency: 35, average_score: 4.1, best_score: 4.5 }],
+      stack_types: { "QB+2+bring-back": 40 }, primary_games_top_20: { "AAA–BBB": 6 },
+      player_exposures: { top_20: { "QB One": 10 }, top_50: {}, entire_pool: {} },
+      role_exposure: [{ player_id: "rb", name: "RB One", team: "AAA", position: "RB",
+        importance: .55, role_class: "offensive centerpiece", role_confidence: "high",
+        mean: 17, p90: 27, salary: 7000, mean_per_1000_salary: 2.43,
+        ownership: null, candidate_count: 78, candidate_rate: .65,
+        selected_count: 1, selected_rate: 1,
+        role_counterfactual: { baseline_model_mean: 17, importance: [{ input: .45, model_mean: 16.5, delta: -.5 }], completeness: [] },
+        opportunity_validation: { recent_targets_mean_3: 3, projected_targets_proxy: 3, targets_proxy_minus_recent: 0, context_adjusted: false },
+        role_trend: { snap_share_trend: .1, target_share_trend: -.02, rush_share_trend: .05 } }],
+      role_projection_anomalies: [{ name: "RB One", team: "AAA", role_importance: .55,
+        role_class: "offensive centerpiece", team_role_rank: 1, team_mean_rank: 2,
+        team_p90_rank: 2, position_value_rank: 14, position_value_count: 20,
+        mean: 17, p90: 27, salary: 7000, candidate_count: 1, candidate_total: 120,
+        possible_drivers: { matchup_context: { team_total: 21 }, recent_volume: { targets_mean_3: 3 },
+          allocated_volume_proxy: { projected_targets: 3 } } }],
+      historical_role_calibration: { status: "available", method: "held-out",
+        by_position_and_role_class: { "RB|offensive centerpiece": { rows: 80, mean_fantasy_points: 17,
+          mean_projection_error_predicted_minus_actual: 1.1, mae: 6, rmse: 8,
+          ceiling_hit_rate: .12, ceiling_evaluable_rows: 70 } } },
+      team_reconciliation: [{ team: "AAA", expected_pass_attempts: null,
+        expected_rush_attempts: null, lagged_team_targets_proxy: 31,
+        lagged_rb_carries_proxy: 22, role_coverage: 0.8,
+        top_roles: [{ name: "RB One", importance: .55, role_class: "offensive centerpiece" }],
+        target_distribution: [{ name: "WR One", value: 8 }],
+        carry_distribution: [{ name: "RB One", value: 17 }],
+        red_zone_distribution: [], missing_role_players: ["WR Two"] }],
+      candidate_families: [{ qb: "QB One", best_by_stack: [3, 1, 1, null] }],
+      ownership_evidence: { status: "unavailable", source: "target.ownership_projection",
+        covered_players: 0, eligible_players: 317, missing_reason: "No current-slate ownership projections" },
+      concentration: [{ name: "WR One", position: "WR", frequency: 120, salary: 4500,
+        mean: 12, p90: 22, p90_per_1k: 4.89, mean_rank: 5, p90_rank: 6,
+        value_rank: 2, template_boundary_count: 4, one_off_count: 80, no_comparable_swap_count: 115 }],
+      qb_family_coverage: [{ qb: "QB One", salary: 6000, mean: 20, p90: 30,
+        p90_per_1k: 5, rushing: { label: "moderate rushing QB" },
+        families: [{ family: "QB+1", score: 4.2, reason: "legal diagnostic solve" }] }],
+    } }, { player_id: "rb", name: "RB One", position: "RB", salary: 7000,
+      projection: 17, p90: 27, player_team: "AAA" }];
+  const html = buildOptimizerReportHtml({ job_id: "small", status: "completed",
+    strategy: "classic_small_field_gpp", strategy_config: {}, contest_format: "classic",
+    objective: "gpp", message: "done", results: [lineup] } as OptimizerResponse,
+  { season: 2026, week: 2, slate: "SUNDAY_MAIN" });
+  assert.match(html, /Classic small-field GPP diagnostic baseline/);
+  assert.match(html, /not admitted after joint cap\/target selection 64/);
+  assert.match(html, /Strategy and applied policy/);
+  assert.match(html, /borrowed_unvalidated/);
+  assert.match(html, /Selected portfolio paths/);
+  assert.match(html, /Availability risk/);
+  assert.match(html, /Questionable WR/);
+  assert.match(html, /Projected points sacrificed due to availability-risk controls:<\/strong> 1\.20/);
+  assert.match(html, /Original-pool overlap≤6 shadow/);
+  assert.match(html, /Lineup overlap matrix/);
+  assert.match(html, /Pregame candidate coverage and generation funnel/);
+  assert.match(html, /High P90 WR/);
+  assert.match(html, /Highest summed-P90 candidates omitted from selection/);
+  assert.match(html, /120 legal candidates generated/);
+  assert.match(html, /QB\+2\+bring-back/);
+  assert.match(html, /ownership_chalk: 0\.000 inactive as soft term/);
+  assert.match(html, /Sunday GPP/);
+  assert.match(html, /sum of individual player ceilings/);
+  assert.match(html, /Candidate families/);
+  assert.match(html, /covered 0\/317 eligible players/);
+  assert.match(html, /No current-slate ownership projections/);
+  assert.match(html, /Candidate concentration/);
+  assert.match(html, /Offensive role versus lineup exposure/);
+  assert.match(html, /offensive centerpiece/);
+  assert.match(html, /Offense opportunity reconciliation/);
+  assert.match(html, /WR Two/);
+  assert.match(html, /Top 10 QB family coverage/);
+  assert.match(html, /QB\+1: 4\.200/);
+  assert.match(html, /Selected lineup football sanity/);
+  assert.match(html, /Central WR/);
+  assert.match(html, /selection tradeoff unresolved/);
+  assert.match(html, /Controlled role counterfactuals/);
+  assert.match(html, /0\.45 → 16\.50/);
+  assert.match(html, /High-role projection and exposure gaps/);
+  assert.match(html, /High-role opportunity and trend validation/);
+  assert.match(html, /Historical role calibration/);
+  assert.match(html, /Player why · RB projection and role/);
+  assert.match(html, /v4\.2-role-opportunity/);
+  assert.match(html, /Lineup football sanity · warning only/);
+  assert.match(html, /RB One \+ AAA DST/);
+  assert.match(html, /Portfolio flagged-construction exposure/);
+});
+
+test("five-entry report includes verified contest economics and payout ladder", () => {
+  const players = [
+    { player_id: "qb", player_name: "Quarterback", roster_position: "CPT", position: "QB", player_team: "BUF", salary: 12000, projection: 20, p90: 35,
+      showdown_selection_diagnostic: { global_candidate_rank: 3, mean_loss: 1.2, p90_loss: 2.4,
+        selector_loss: 0.8, higher_ranked_skipped: [{ rank: 2, blockers: ["player exposure: core"] }] },
+      captain_family_coverage_report: { candidate_count: 21, quality_eligible_count: 12,
+        quality_fraction: 0.95, ownership_selection_status: "partial role ownership: selector ownership term disabled",
+        family_rows: [{ captain_name: "Jalen Hurts", rank: 2, salary: 49000, mean: 76,
+          p90: 142, correlation: 1.1, captain_ownership: null, lineup_ownership: null,
+          selector: 100, selected: false, reason: "player exposure core" }] },
+      portfolio_contest_report: {
+        name: "Showdown 5 Entry Max", maximum_entries: 5, requested_entries: 5,
+        generated_entries: 5, generated_entry_cost: 5, requested_entry_cost: 5,
+        current_entries: 5529, capacity: 8917, prize_pool: 7500,
+        lock_time: "2026-09-18T00:15:00Z", payout_ladder: [{ from: 1, to: 1, cash: 750 }],
+        economics: { paid_percentage: .2585, minimum_cash: 1.5, full_field_rake: .1589, near_lock: false },
+      } },
+    ...["a", "b", "c", "d", "e"].map((id) => ({ player_id: id, player_name: id, roster_position: "FLEX", position: "WR", player_team: "DET", salary: 5000, projection: 10, p90: 20 })),
+  ];
+  const html = buildOptimizerReportHtml({ job_id: "5max-test", status: "completed", strategy: "showdown_gpp_portfolio_v3",
+    strategy_config: {}, contest_format: "showdown", objective: "gpp", enforce_single_te: true,
+    message: "done", results: [players] } as OptimizerResponse,
+  { season: 2026, week: 2, slate: "THURSDAY_NIGHT" });
+  assert.match(html, /5-max contest: Showdown 5 Entry Max/);
+  assert.match(html, /Verified maximum 5 entries/);
+  assert.match(html, /Full payout ladder/);
+  assert.match(html, /750\.00/);
+  assert.match(html, /Captain family coverage/);
+  assert.match(html, /Jalen Hurts/);
+  assert.match(html, /Global candidate rank #3/);
+  assert.match(html, /player exposure: core/);
+});
+
+test("3-max report shows count comparisons and the best three-entry version", () => {
+  const three = {
+    candidate_ranks: [2, 8, 13], captains: ["Josh Allen", "Jameson Williams", "Jameson Williams"],
+    scripts: ["Shootout", "Shootout", "Shootout"], total_entry_fees: 15,
+    portfolio_objective: .1872, payout_proxy: .155, lineup_quality_contribution: .029,
+    diversification_contribution: .0032, average_mean: 88.3, minimum_mean: 86.7,
+    average_p90: 153.4, minimum_p90: 151.9, average_relative_chalk: 42.5,
+    unique_captains: 2, script_diversity: 1,
+    captain_exposures: { "Josh Allen": 1 / 3, "Jameson Williams": 2 / 3 },
+    player_exposures: { "Josh Allen": 1 },
+    pairwise: [{ candidate_ranks: [8, 13], shared_players: 5, overlap_percentage: 83.3,
+      jaccard_similarity: .714, same_captain: true, same_script: true,
+      same_team_emphasis: true, same_value_player_ids: [], relative_chalk_difference: 2.9,
+      repeated_captain_materially_different: false }],
+    lineups: [{ rank: 2, captain: "Josh Allen", mean: 91.2, p90: 155.8,
+      relative_chalk: 32.8, script: "Shootout", players: [{ slot: "CPT", name: "Josh Allen" }] }],
+  };
+  const report = {
+    selected_count: 1, contest: { name: "Representative 3-max", entry_fee: 5, maximum_entries: 3 },
+    enforce_single_te: true, note: "Uncalibrated heuristic.",
+    qualifying_candidate_count: 40, candidate_count: 40,
+    count_comparisons: [{ ...three, candidate_ranks: [1], total_entry_fees: 5 },
+      { ...three, candidate_ranks: [3, 4], total_entry_fees: 10 }, three],
+    selected: { ...three, candidate_ranks: [1], pairwise: [], unique_captains: 1 },
+    marginal_entries: [], structure_comparisons: { two_captains: three },
+  };
+  const lineup = [
+    { player_id: "p1", player_name: "Josh Allen", roster_position: "CPT", position: "QB", player_team: "BUF", salary: 15000, projection: 20, p90: 35 },
+    ...["p2", "p3", "p4", "p5", "p6"].map((id) => ({ player_id: id, player_name: id, roster_position: "FLEX", position: "WR", player_team: "DET", salary: 5000, projection: 10, p90: 20 })),
+  ];
+  (lineup[1] as any).three_max_report = report;
+  const html = buildOptimizerReportHtml({ job_id: "3max-test", status: "completed", strategy: "showdown_3max_gpp",
+    strategy_config: {}, contest_format: "showdown", objective: "gpp", enforce_single_te: true,
+    message: "done", results: [lineup] } as OptimizerResponse,
+  { season: 2026, week: 2, slate: "THURSDAY_NIGHT" });
+  assert.match(html, /Small-max recommendation: 1 entry/);
+  assert.match(html, /Best three-entry version/);
+  assert.match(html, /Jameson Williams/);
+  assert.match(html, /83\.3% overlap/);
+});
+
+test("small-max report explains the fifth entry's fee, quality, and portfolio change", () => {
+  const report = {
+    selected_count: 4, contest: { name: "Thursday 5-max", entry_fee: 1, maximum_entries: 5 },
+    enforce_single_te: true, note: "Uniform-rank proxy.",
+    qualifying_candidate_count: 5, searched_candidate_count: 5, candidate_count: 5,
+    count_comparisons: [1, 2, 3, 4, 5].map((count) => ({ candidate_ranks: Array.from({ length: count }, (_, i) => i + 1),
+      total_entry_fees: count, portfolio_objective: count === 5 ? .19 : .20,
+      payout_proxy: .17, lineup_quality_contribution: .025,
+      diversification_contribution: .005, average_mean: 85,
+      minimum_mean: 78.45, average_p90: 150, minimum_p90: 141.31,
+      average_relative_chalk: 40, captains: ["Josh Allen"] })),
+    selected: { candidate_ranks: [1, 2, 3, 4], unique_captains: 1, script_diversity: 1,
+      captain_exposures: {}, player_exposures: {}, pairwise: [],
+      lineups: [{ rank: 1, relative_chalk: 63.5 }] },
+    count_marginals: [{ from_count: 4, entry_count: 5, objective_change: -.01,
+      payout_proxy_change: -.008, lineup_quality_change: -.002,
+      diversification_change: 0, added_candidate_ranks: [5], removed_candidate_ranks: [],
+      added_lineups: [{ mean: 78.45, p90: 141.31 }], fee_delta: 1 }],
+    leave_one_out: [{ candidate_rank: 1, captain: "Josh Allen", mean: 90, p90: 155,
+      relative_chalk: 63.5, remaining_candidate_ranks: [2, 3, 4],
+      objective_without_lineup: .18, objective_change_if_removed: -.02 }],
+  };
+  const lineup = [
+    { player_id: "qb", player_name: "Josh Allen", roster_position: "CPT", position: "QB", player_team: "BUF", salary: 15000, projection: 20, p90: 35, small_max_report: report },
+    ...["a", "b", "c", "d", "e"].map((id) => ({ player_id: id, player_name: id, roster_position: "FLEX", position: "WR", player_team: "DET", salary: 5000, projection: 10, p90: 20 })),
+  ];
+  (lineup[1] as any).lineup_duplication_risk = {
+    ownership_available: true, relative_chalk_score: report.selected.lineups[0].relative_chalk,
+    log_probability: -8,
+  };
+  const html = buildOptimizerReportHtml({ job_id: "small-max-test", status: "completed", strategy: "showdown_small_max_gpp",
+    strategy_config: {}, contest_format: "showdown", objective: "gpp", enforce_single_te: true,
+    message: "done", results: [lineup] } as OptimizerResponse,
+  { season: 2026, week: 2, slate: "THURSDAY_NIGHT" });
+  assert.match(html, /Small-max recommendation: 4 entries/);
+  assert.match(html, /Best 5-entry portfolio vs best 4-entry portfolio/);
+  assert.match(html, /objective delta -0\.0100/);
+  assert.match(html, /fee delta \$1\.00/);
+  assert.match(html, /Remove candidate #1/);
+  assert.match(html, /change if removed -0\.0200/);
+  assert.match(html, /Relative chalk: 63\.5\/100/);
+  const forced = { ...report, selection_mode: "configured", entries_to_use: "5",
+    configured_entry_count: 5, selected_count: 5, auto_recommended_count: 1 };
+  (lineup[0] as any).small_max_report = forced;
+  const forcedHtml = buildOptimizerReportHtml({ job_id: "forced-small-max", status: "completed", strategy: "showdown_small_max_gpp",
+    strategy_config: {}, contest_format: "showdown", objective: "gpp", enforce_single_te: true,
+    message: "done", results: [lineup] } as OptimizerResponse,
+  { season: 2026, week: 2, slate: "THURSDAY_NIGHT" });
+  assert.match(forcedHtml, /Configured portfolio: 5 entries/);
+  assert.match(forcedHtml, /Configured entry count: 5/);
+  assert.match(forcedHtml, /Auto recommendation under current heuristic: 1 entry/);
+  assert.doesNotMatch(forcedHtml, /Small-max recommendation: 5 entries/);
+});
+
+test("generic small-max report omits contest economics", () => {
+  const report = {
+    contest_mode: "generic", contest: null, maximum_entries: 3,
+    entries_to_use: "auto", selection_mode: "auto", selected_count: 1,
+    enforce_single_te: true, note: "No contest payout or ROI estimate is made.",
+    qualifying_candidate_count: 3, candidate_count: 3,
+    count_comparisons: [{ candidate_ranks: [1], lineup_quality_contribution: 1,
+      diversification_contribution: 0, average_mean: 76, minimum_mean: 76,
+      average_p90: 142, minimum_p90: 142, captains: ["Player A"], scripts: ["pass-led"] }],
+    selected: { candidate_ranks: [1], unique_captains: 1, script_diversity: 1,
+      captain_exposures: { "Player A": 1 }, player_exposures: { "Player A": 1 }, pairwise: [] },
+  };
+  const lineup = [
+    { player_id: "a", player_name: "Player A", roster_position: "CPT", position: "QB", player_team: "AAA", salary: 15000, projection: 20, p90: 35, small_max_report: report },
+    ...["b", "c", "d", "e", "f"].map((id) => ({ player_id: id, player_name: id, roster_position: "FLEX", position: "WR", player_team: "BBB", salary: 5000, projection: 10, p90: 20 })),
+  ];
+  const html = buildOptimizerReportHtml({ job_id: "generic-small-max", status: "completed", strategy: "showdown_small_max_gpp",
+    strategy_config: {}, contest_format: "showdown", objective: "gpp", enforce_single_te: true,
+    message: "done", results: [lineup] } as OptimizerResponse,
+  { season: 2026, week: 2, slate: "MONDAY_NIGHT" });
+  assert.match(html, /Generic small-max lineup selection: 1 entry/);
+  assert.match(html, /Auto selected one lineup/);
+  assert.match(html, /Quality score/);
+  assert.doesNotMatch(html, /Payout proxy/);
+  assert.doesNotMatch(html, /Entry fees/);
+});
+
 test("builds a readable optimizer report with summaries, players, and controls", () => {
   const optimizer = {
     job_id: "job-123456789",
@@ -12,6 +528,8 @@ test("builds a readable optimizer report with summaries, players, and controls",
     strategy_config: {},
     contest_format: "showdown",
     objective: "gpp",
+    enforce_single_te: true,
+    exclude_opponent_teams: ["DEN"],
     lineage_persisted: true,
     message: "Optimizer completed",
     player_pool: {
@@ -23,6 +541,7 @@ test("builds a readable optimizer report with summaries, players, and controls",
       included_count: 26,
       excluded_count: 13,
       removal_reason_counts: { showdown_cheap_punt_no_opportunity: 13 },
+      prior_eligibility_removal_reason_counts: { user_excluded: 1 },
       warning_player_count: 2,
       rows: [{
         player_id: "punt-1",
@@ -35,6 +554,57 @@ test("builds a readable optimizer report with summaries, players, and controls",
         included: false,
         removal_stage: "opportunity_gate",
         exclusion_reasons: ["showdown_cheap_punt_no_opportunity"],
+      }, {
+        player_id: "jax-1",
+        player_name: "Strong Jacksonville Player",
+        team: "JAX",
+        opponent_team: "DEN",
+        position: "WR",
+        salary: 7000,
+        projection: 18.4,
+        p90: 31.2,
+        included: false,
+        optimizer_eligibility: "excluded_by_user_preference",
+        removal_stage: "optimizer_filter",
+        exclusion_reasons: ["excluded_opponent_team"],
+        exclusion_details: [{
+          rule_id: "user.preference.opponent_exclusion_v1",
+          reason_code: "excluded_opponent_team",
+          description: "User preference — opponent DEN",
+          category: "user",
+        }],
+        user_preference_exclusions: [{
+          rule_id: "user.preference.opponent_exclusion_v1",
+          reason_code: "excluded_opponent_team",
+          description: "User preference — opponent DEN",
+          category: "user",
+        }],
+        model_assessment: { projection: 18.4, p90: 31.2, role_label: "primary option" },
+      }, {
+        player_id: "lar-1",
+        player_name: "Scenario Receiver",
+        team: "LAR",
+        opponent_team: "NYG",
+        position: "WR",
+        salary: 11000,
+        projection: 0,
+        p90: 0,
+        official_availability_status: "QUESTIONABLE",
+        availability_override: "assume_out",
+        model_availability_used: 0,
+        projection_before_scenario: 18.88,
+        projection_after_scenario: 0,
+        opportunity_redistributed: true,
+        included: false,
+        optimizer_eligibility: "excluded",
+        removal_stage: "optimizer_filter",
+        exclusion_reasons: ["pregame_availability_zero"],
+        exclusion_details: [{
+          rule_id: "eligibility.zero_availability_v1",
+          reason_code: "pregame_availability_zero",
+          description: "Zero model availability",
+          category: "eligibility",
+        }],
       }],
     },
     results: [[
@@ -159,6 +729,19 @@ test("builds a readable optimizer report with summaries, players, and controls",
   } satisfies OptimizerResponse;
 
   const html = buildOptimizerReportHtml(optimizer, { season: 2026, week: 2, slate: "THURSDAY_NIGHT" });
+  assert.match(html, /Hard exclude players facing: DEN/);
+  assert.match(html, /User preference exclusions \(1\)/);
+  assert.match(html, /Strong Jacksonville Player/);
+  assert.match(html, /Projection 18\.40 DK · P90 31\.20 · primary option/);
+  assert.match(html, /EXCLUDED/);
+  assert.match(html, /User preference — opponent DEN/);
+  assert.match(html, /Manual player decisions \(2\)/);
+  assert.match(html, /Scenario Receiver/);
+  assert.match(html, /QUESTIONABLE/);
+  assert.match(html, /assume out/);
+  assert.match(html, /18\.88/);
+  assert.match(html, /Opportunity redistributed\?<\/th>/);
+  assert.match(html, /Zero model availability/);
 
   assert.match(html, /2026 Week 2 THURSDAY NIGHT Optimizer Report/);
   assert.match(html, /Individual Ceiling Sum: 159\.46/);
@@ -189,6 +772,7 @@ test("builds a readable optimizer report with summaries, players, and controls",
   assert.match(html, /Jared Goff \(DET\)/);
   assert.match(html, /lower solver objective at available sequential step/);
   assert.match(html, /Raw pool: 39 → opportunity eligible: 26 → optimizer eligible: 26/);
+  assert.match(html, /user excluded \(1\)/);
   assert.match(html, /showdown cheap punt no opportunity \(13\)/);
   assert.match(html, /Opportunity removals \(1\)/);
   assert.match(html, /Low Opportunity Punt · showdown cheap punt no opportunity/);
@@ -206,6 +790,11 @@ test("single-entry report explains A/B/A and featured alternatives", () => {
     jaccard_similarity_vs_a: 5 / 7, quality_loss_vs_a: 0.013,
     diversification_benefit_vs_a: 0.0175,
     players: [{ slot: "CPT", name: "B <Captain>" }],
+    single_entry_score: 0.7,
+    solver_objective: 160,
+    objective_contributions: { mean: 0.3, p90: 0.3, solver: 0.2, correlation: 0.1, context: 0.03, chalk_penalty: -0.03, duplication_uniqueness: 0, script: 0, other_penalties: 0 },
+    solver_objective_components: { p90_ceiling: 150, context: 5, captain_prior: 10, ownership_penalty: -8, correlation_and_format: 3, other_or_unattributed: 0 },
+    quality_sacrifice_for_chalk: { mean_loss_vs_best_mean: 1.29, p90_loss_vs_best_p90: 5.02, chalk_improvement_vs_best_quality: 66.6, chalk_objective_gain_vs_best_quality: 0.02, large_ceiling_sacrifice_for_uniqueness: true, best_p90_candidate_rank: 1, best_quality_candidate_rank: 1 },
   };
   const comparison = {
     structure: "A / B / A", candidate_ranks: [1, 2, 1],
@@ -216,11 +805,14 @@ test("single-entry report explains A/B/A and featured alternatives", () => {
     job_id: "single-entry-run", status: "completed",
     strategy: "showdown_single_entry_portfolio", strategy_config: {},
     contest_format: "showdown", objective: "gpp", lineage_persisted: true,
+    enforce_single_te: true,
     results: [[{
       player_id: "captain", name: "A", roster_position: "CPT",
       position: "QB", player_team: "DET", salary: 12000,
       projection: 20, p90: 35,
+      lineup_controls: { enforce_single_te: true },
       single_entry_report: {
+        enforce_single_te: true,
         recommended_structure: "A / B / A", material_player_change_minimum: 2,
         selected_portfolio_comparison: comparison,
         assignments: [{ contest: 1 }, { contest: 2 }, { contest: 3 }],
@@ -236,11 +828,18 @@ test("single-entry report explains A/B/A and featured alternatives", () => {
   } as OptimizerResponse;
   const html = buildOptimizerReportHtml(optimizer, { season: 2026, week: 2, slate: "THURSDAY_NIGHT" });
   assert.match(html, /Recommended portfolio: A \/ B \/ A/);
+  assert.match(html, /Enforce single TE \(no double-TE lineups\): True/);
+  assert.match(html, /Single-entry objective decomposition/);
+  assert.match(html, /Nested solver objective/);
+  assert.match(html, /0\.3000/);
+  assert.match(html, /150\.000/);
+  assert.match(html, /reduces summed P90 by 5\.02 points/);
   assert.match(html, /The best A \/ B \/ C scores/);
   assert.match(html, /Different Captain, same six players/);
   assert.match(html, /Jaccard/);
   assert.match(html, /B &lt;Captain&gt;/);
   assert.doesNotMatch(html, /B <Captain>/);
+  assert.throws(() => buildOptimizerReportHtml({ ...optimizer, enforce_single_te: null }, { season: 2026, week: 2, slate: "THURSDAY_NIGHT" }), /configuration error.*enforce_single_te/);
 });
 
 test("one selected contest omits diversification-combination language", () => {
@@ -248,6 +847,7 @@ test("one selected contest omits diversification-combination language", () => {
     job_id: "one-contest", status: "completed",
     strategy: "showdown_single_entry_portfolio", strategy_config: {},
     contest_format: "showdown", objective: "gpp", lineage_persisted: true,
+    enforce_single_te: false,
     results: [[{
       player_id: "captain", name: "A", roster_position: "CPT",
       position: "QB", player_team: "DET", salary: 12000,
@@ -262,10 +862,11 @@ test("one selected contest omits diversification-combination language", () => {
           note: "Payout proxy", selection_reason: "One contest has the highest value.",
           search_method: "exhaustive_subsets", evaluated_subsets: 1,
           selected_contest_ids: ["123"],
+          snapshot_fallbacks: [{ contest_id: "123", observed_at: "2026-09-17 12:00:00+00:00" }],
           count_comparisons: [{ contest_count: 1, contest_ids: ["123"], total_entry_fees: 5, heuristic_value: .25, independent_rank_proxy: .25, shared_percentile_proxy: .25 }],
           sensitivity: [{ shared_rank_weight: 0, by_count: [{ contest_count: 1, profitability_proxy: .25 }], recommended_count: 1 }],
           crossovers: [], recommendation_status: "ROBUST", recommendation_status_reason: "One feasible count.",
-          ranked_contests: [{ contest_id: "123", name: "Test contest", contest_score: .25, entry_fee: 5, capacity: 100, economics: {
+          ranked_contests: [{ contest_id: "123", name: "Test contest", source: "saved_snapshot", contest_score: .25, entry_fee: 5, capacity: 100, economics: {
             paid_percentage: .25, minimum_cash: 8, minimum_cash_multiple: 1.6,
             payout_at_field_percentiles: { "1": 50, "5": 8, "10": 8, "20": 8 }, median_paid_payout: 8,
             first_place_share: .1, top_10_share: .4, payout_flatness: .6, full_field_rake: .1,
@@ -281,6 +882,8 @@ test("one selected contest omits diversification-combination language", () => {
   assert.match(html, /Recommended count: 1 · ROBUST/);
   assert.match(html, /Best subset/);
   assert.match(html, /Min cash/);
+  assert.match(html, /Saved snapshot fallback/);
+  assert.match(html, /Snapshot; not applied/);
   assert.doesNotMatch(html, /A \/ A \/ A/);
   assert.doesNotMatch(html, /Diversification benefit/);
   assert.doesNotMatch(html, /candidate combinations with repetition/);

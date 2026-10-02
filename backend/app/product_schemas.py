@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any, List, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class BaseLoadRequest(BaseModel):
@@ -98,6 +98,7 @@ class OptimizerRunRequest(BaseModel):
     week: int
     slate: str
     strategy: str = Field(..., description="Optimizer strategy name")
+    optimizer_run_id: Optional[str] = Field(default=None, min_length=1, max_length=128)
     contest_format: Optional[Literal["classic", "showdown"]] = None
     objective: Optional[Literal["cash", "gpp"]] = None
     projection_run_id: Optional[str] = None
@@ -105,10 +106,38 @@ class OptimizerRunRequest(BaseModel):
     data_cutoff_at: Optional[datetime] = None
     params: dict = Field(default_factory=dict)
 
+    @model_validator(mode="after")
+    def normalize_showdown_te_control(self):
+        showdown = (
+            self.contest_format == "showdown"
+            or self.strategy.startswith("showdown_")
+            or str(self.params.get("contest_type") or "").lower() == "captain"
+        )
+        if showdown:
+            self.params["enforce_single_te"] = False
+        if "long_shot_mode" in self.params and type(self.params["long_shot_mode"]) is not bool:
+            raise ValueError("params.long_shot_mode must be an explicit boolean")
+        return self
+
+
+class SkillExposureDecisionRequest(BaseModel):
+    player_id: str = Field(..., min_length=1)
+    decision: Literal["approve", "cap"]
+    reason: str = Field(..., min_length=1)
+    requested_cap: float | None = Field(default=None, ge=0, le=0.8)
+
 
 class ContestPreviewRequest(BaseModel):
     urls: List[str]
     manual_contest_metadata: List[dict[str, Any]] = Field(default_factory=list)
+
+
+class SavedContestRequest(ContestPreviewRequest):
+    season: int = Field(..., ge=2000)
+    week: int = Field(..., ge=1, le=25)
+    slate: str = Field(..., min_length=1)
+    contest_format: Literal["classic", "showdown"]
+    contest_type: Literal["gpp", "cash", "h2h", "double_up", "fifty_fifty", "other"]
 
 
 class OptimizerStatusResponse(BaseModel):
@@ -118,6 +147,9 @@ class OptimizerStatusResponse(BaseModel):
     strategy_config: dict = Field(default_factory=dict)
     contest_format: str
     objective: str
+    enforce_single_te: Optional[bool] = None
+    long_shot_mode: bool = False
+    exclude_opponent_teams: List[str] = Field(default_factory=list)
     projection_run_id: Optional[str] = None
     rule_run_id: Optional[str] = None
     data_cutoff_at: Optional[datetime] = None
@@ -549,12 +581,30 @@ class SlateLoadResponse(BaseModel):
     completed_at: datetime
 
 
+class PlayerAvailabilityOverride(BaseModel):
+    player_name: Optional[str] = Field(default=None, min_length=1, max_length=160)
+    player_id: Optional[str] = Field(default=None, min_length=1, max_length=64)
+    availability: Literal["default", "assume_active", "assume_out"] = "default"
+
+    @model_validator(mode="after")
+    def require_player_reference(self):
+        if not self.player_name and not self.player_id:
+            raise ValueError("Availability override requires player_name or player_id")
+        return self
+
+
 class PredictionRunRequest(BaseModel):
     season: int
     week: int
     positions: Optional[List[str]] = None
     slate: Optional[str] = None
     data_cutoff_at: Optional[datetime] = None
+    availability_overrides: List[PlayerAvailabilityOverride] = Field(
+        default_factory=list,
+        max_length=50,
+    )
+    allow_confirmed_inactive_override: bool = False
+    assume_questionable_out: bool = False
 
 
 class PredictionRunResponse(BaseModel):
@@ -705,6 +755,7 @@ class OwnershipRunRequest(BaseModel):
     slate: Optional[str] = None
     positions: Optional[List[str]] = None
     data_cutoff_at: Optional[datetime] = None
+    projection_run_id: Optional[str] = None
 
 
 class OwnershipRunResponse(BaseModel):
@@ -719,6 +770,7 @@ class OwnershipRunResponse(BaseModel):
     ownership_run_id: Optional[str] = None
     data_cutoff_at: Optional[datetime] = None
     model_metrics: dict[str, Any] = Field(default_factory=dict)
+    model_id: Optional[str] = None
 
 
 class DraftKingsBatchImportRequest(BaseModel):
@@ -728,6 +780,22 @@ class DraftKingsBatchImportRequest(BaseModel):
     slate: str = Field(..., min_length=1)
     recursive: bool = False
     dry_run: bool = False
+
+
+class SelectedWeeklyContestFile(BaseModel):
+    path: str = Field(..., min_length=1)
+    source_file_id: str = Field(..., min_length=1)
+    season: int = Field(..., ge=2000)
+    week: int = Field(..., ge=1, le=25)
+    slate: str = Field(..., min_length=1)
+
+
+class WeeklyContestFolderImportRequest(BaseModel):
+    directory: str = Field(..., min_length=1)
+    season: int = Field(..., ge=2000)
+    week: int = Field(..., ge=1, le=25)
+    dry_run: bool = True
+    selected_files: Optional[List[SelectedWeeklyContestFile]] = None
 
 
 class DraftKingsBatchFileResponse(BaseModel):
@@ -750,6 +818,7 @@ class DraftKingsBatchImportResponse(BaseModel):
     discovered: int
     imported: int
     deduplicated: int
+    staged: int = 0
     skipped: int
     failed: int
     dry_run: bool
@@ -878,6 +947,45 @@ class SlateLearningReportRequest(BaseModel):
     week: int = Field(..., ge=1, le=25)
     slate: str = Field(..., min_length=1, max_length=64)
     entry_user: str = Field(..., min_length=1, max_length=128)
+
+
+class WeeklyLearningReportRequest(BaseModel):
+    season: int = Field(..., ge=2000)
+    week: int = Field(..., ge=1, le=25)
+    entry_user: str = Field(..., min_length=1, max_length=128)
+
+
+class PlayerOutcomeEventRequest(BaseModel):
+    season: int = Field(..., ge=2000)
+    week: int = Field(..., ge=1, le=25)
+    slate: str = Field(..., min_length=1, max_length=64)
+    player_id: str = Field(..., min_length=1, max_length=128)
+    tag: Literal[
+        "NORMAL_VARIANCE", "IN_GAME_INJURY", "EJECTION", "BENCHED",
+        "WEATHER_EVENT", "ROLE_CHANGED_IN_GAME", "OVERTIME",
+        "OTHER_DISRUPTION", "UNKNOWN",
+    ]
+    evidence: str = Field(..., min_length=1)
+    source_url: str = Field(..., min_length=1)
+    observed_at: datetime
+
+
+class WeeklyLearningReportResponse(BaseModel):
+    report_id: str
+    contract_id: Literal["weekly_learning_report_v1"]
+    builder_version: str
+    season: int
+    week: int
+    entry_user: str
+    generated_at: datetime
+    evidence_hash: str
+    status: Literal["completed", "partial"]
+    summary: dict[str, Any]
+    slate_reports: List[dict[str, Any]]
+    source_file_ids: List[str]
+    run_ids: dict[str, List[str]]
+    missing_evidence: List[str]
+    interpretation: str
 
 
 class SlateLearningReportResponse(BaseModel):
@@ -1119,6 +1227,20 @@ class StartingQBSelectionInput(BaseModel):
     source: str = Field(..., min_length=1, max_length=64)
     source_uri: Optional[str] = None
     observed_at: datetime
+    evidence_tier: Literal["confirmed", "inferred"] = "confirmed"
+    note: Optional[str] = None
+
+
+class StartingQBCandidateResponse(BaseModel):
+    player_master_id: str
+    player_name: str
+    team: str
+    salary: float
+    depth_chart_position: Optional[str] = None
+    roster_status: Optional[str] = None
+    is_stored_starter: bool = False
+    stored_source: Optional[str] = None
+    stored_evidence_tier: Optional[str] = None
 
 
 class StartingQBRequest(BaseModel):
@@ -1135,6 +1257,7 @@ class StartingQBResponse(BaseModel):
     rows_written: int
     message: str
     completed_at: datetime
+    candidates: List[StartingQBCandidateResponse] = Field(default_factory=list)
 
 
 class UnmatchedSalaryRow(BaseModel):

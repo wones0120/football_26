@@ -152,7 +152,7 @@ def test_ingestion_curation_to_backtest_critical_path(
             source_system="draftkings",
             season=2025,
             week=3,
-            slate="main",
+            slate="SUNDAY_MAIN",
             path=str(salary_path),
         )
     )
@@ -182,7 +182,7 @@ def test_ingestion_curation_to_backtest_critical_path(
             source_system="draftkings",
             season=2025,
             week=3,
-            slate="main",
+            slate="sunday_main",
             iterations=500,
             min_history_games=1,
             prior_weight=0.0,

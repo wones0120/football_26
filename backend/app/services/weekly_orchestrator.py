@@ -510,7 +510,14 @@ class DefaultWeeklyStageExecutor:
 
         selected_projection_run_id = request.projection_run_id
         selection_source = "requested"
-        if selected_projection_run_id is None:
+        rebuild = request.refresh_projections or request.assume_questionable_out or any(
+            row.get("availability", "default") != "default"
+            for row in request.availability_overrides
+        )
+        if rebuild:
+            if selected_projection_run_id:
+                raise ValueError("Projection rebuild cannot reuse a requested older projection run.")
+        elif selected_projection_run_id is None:
             report = SlateReadinessService().report(
                 season=request.season,
                 week=request.week,
@@ -611,6 +618,9 @@ class DefaultWeeklyStageExecutor:
             positions=request.positions,
             slate=request.slate,
             data_cutoff_at=request.data_cutoff_at,
+            availability_overrides=request.availability_overrides,
+            allow_confirmed_inactive_override=request.allow_confirmed_inactive_override,
+            assume_questionable_out=request.assume_questionable_out,
         ).model_dump(mode="json")
         result = execute_job_handler(PROJECTION_JOB, nested, payload)
         outcome = StageExecutionResult(

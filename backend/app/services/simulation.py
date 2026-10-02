@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
@@ -466,7 +466,7 @@ class SimulationService:
                     CuratedSalary.source_system == request.source_system,
                     CuratedSalary.season == request.season,
                     CuratedSalary.week == request.week,
-                    CuratedSalary.slate == request.slate,
+                    func.lower(CuratedSalary.slate) == request.slate.strip().lower(),
                 )
             )
         ).scalars().all()
@@ -1095,7 +1095,7 @@ class SimulationService:
                     CuratedSalary.source_system == source_system,
                     CuratedSalary.season == season,
                     CuratedSalary.week == week,
-                    CuratedSalary.slate == slate,
+                    func.lower(CuratedSalary.slate) == slate.strip().lower(),
                 )
             )
         ).scalars().all()
@@ -2053,7 +2053,9 @@ class SimulationService:
             CuratedSalary.season <= season_end,
         ]
         if request.slate:
-            filters.append(CuratedSalary.slate == request.slate)
+            filters.append(
+                func.lower(CuratedSalary.slate) == request.slate.strip().lower()
+            )
 
         if request.reset_existing_calibration:
             delete_filters = [

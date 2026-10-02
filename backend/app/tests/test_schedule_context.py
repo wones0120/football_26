@@ -6,7 +6,27 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 
 from backend.app.models import Base, IngestRun, RawNflSchedule
-from backend.app.services.schedule_context import next_upcoming_schedule_context
+from backend.app.services.schedule_context import (
+    next_upcoming_schedule_context,
+    nflverse_team_market_context,
+)
+
+
+def test_nflverse_market_context_converts_home_margin_to_team_spreads() -> None:
+    home, away = nflverse_team_market_context(total_line=45.5, home_margin=8.5)
+
+    assert home == {
+        "game_total_line": 45.5,
+        "team_spread_line": -8.5,
+        "team_implied_total": 27.0,
+        "opponent_implied_total": 18.5,
+    }
+    assert away == {
+        "game_total_line": 45.5,
+        "team_spread_line": 8.5,
+        "team_implied_total": 18.5,
+        "opponent_implied_total": 27.0,
+    }
 
 
 def _session() -> Session:

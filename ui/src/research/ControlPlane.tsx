@@ -196,9 +196,9 @@ function App({
   const [sourceSystem, setSourceSystem] = useState<"draftkings" | "fanduel">("draftkings");
   const [historyStartSeason, setHistoryStartSeason] = useState(2018);
   const [historyEndSeason, setHistoryEndSeason] = useState(2025);
-  const [salaryPath, setSalaryPath] = useState("~/Downloads/DKSalaries.csv");
-  const [injuryPath, setInjuryPath] = useState("~/Downloads/DKInjuries.csv");
-  const [discoverDirectory, setDiscoverDirectory] = useState("~/Downloads");
+  const [salaryPath, setSalaryPath] = useState("~/NFL/");
+  const [injuryPath, setInjuryPath] = useState("~/NFL/");
+  const [discoverDirectory, setDiscoverDirectory] = useState("~/NFL");
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isIngesting, setIsIngesting] = useState(false);
@@ -497,31 +497,10 @@ function App({
   };
 
   useEffect(() => {
-    Promise.all([refreshOperationalData(), refreshModelDefaults(), refreshBenchmarkRuns()]).catch(
-      (err) =>
-        setError(err instanceof Error ? err.message : String(err))
+    Promise.all([refreshModelDefaults(), refreshBenchmarkRuns()]).catch((err) =>
+      setError(err instanceof Error ? err.message : String(err))
     );
   }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    setDataFreshness(null);
-    fetchDataFreshness({
-      source_system: sourceSystem,
-      season,
-      week,
-      slate,
-    })
-      .then((response) => {
-        if (!cancelled) setDataFreshness(response);
-      })
-      .catch((err) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [sourceSystem, season, week, slate]);
 
   useEffect(() => {
     setSimulationRows([]);
@@ -1509,225 +1488,25 @@ function App({
     <div className="page">
       <header className="hero">
         <div>
-          <p className="eyebrow">football_26</p>
-          <h1>Data Ops Control Plane</h1>
+          <p className="eyebrow">Research Lab</p>
+          <h1>Scenario and backtest research</h1>
           <p className="subtitle">
-            Deterministic identity mapping, ingestion lineage, and unresolved-player triage.
+            Test assumptions, compare scenario portfolios, and evaluate historical model performance.
           </p>
-        </div>
-        <div className="stats">
-          <div className="stat-card">
-            <span>Resolution</span>
-            <strong>{completionPct}%</strong>
-          </div>
-          <div className="stat-card">
-            <span>Open Unresolved</span>
-            <strong>{unresolvedCount}</strong>
-          </div>
-          <div className="stat-card">
-            <span>New Unresolved (24h)</span>
-            <strong>{newUnresolvedCount}</strong>
-          </div>
         </div>
       </header>
 
       <nav className="workspace-nav" aria-label="Control plane sections">
         <span className="workspace-nav-label">Workspace</span>
         <div className="workspace-nav-links">
-          <a href="#ingestion">Ingestion</a>
           <a href="#projection-simulation">Simulation</a>
           <a href="#portfolio-comparison">Portfolio Comparison</a>
           <a href="#analysis-reports">Analysis</a>
           <a href="#lineup-backtests">Lineup Backtests</a>
-          <a href="#unresolved-queue">Unresolved Queue</a>
-          <a href="#curated-salary-slices">Salary Slices</a>
-          <a href="#season-coverage">Coverage</a>
-          <a href="#recent-runs">Recent Runs</a>
         </div>
       </nav>
 
       <main className="layout">
-        <section className="panel" id="ingestion">
-          <h2>Ingestion</h2>
-          <div className="grid">
-            <label>
-              Source
-              <select
-                value={sourceSystem}
-                onChange={(event) => setSourceSystem(event.target.value as "draftkings" | "fanduel")}
-              >
-                <option value="draftkings">DraftKings</option>
-                <option value="fanduel">FanDuel</option>
-              </select>
-            </label>
-            <label>
-              Season
-              <input
-                type="number"
-                value={season}
-                onChange={(event) => onSeasonChange(Number(event.target.value))}
-              />
-            </label>
-            <label>
-              Week
-              <input
-                type="number"
-                value={week}
-                onChange={(event) => onWeekChange(Number(event.target.value))}
-              />
-            </label>
-            <label>
-              Slate
-              <select value={slate} onChange={(event) => onSlateChange(event.target.value)}>
-                {slateOptions.map((value) => (
-                  <option key={value} value={value}>
-                    {value}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <div className="form-stack">
-            <label>
-              Salary CSV Path
-              <input
-                className="wide"
-                type="text"
-                value={salaryPath}
-                onChange={(event) => setSalaryPath(event.target.value)}
-              />
-            </label>
-            <label>
-              Injury CSV Path
-              <input
-                className="wide"
-                type="text"
-                value={injuryPath}
-                onChange={(event) => setInjuryPath(event.target.value)}
-              />
-            </label>
-          </div>
-          <div className="button-row">
-            <button onClick={runSalaries} disabled={isIngesting}>
-              Load Salaries
-            </button>
-            <button onClick={runInjuries} disabled={isIngesting}>
-              Load Injuries
-            </button>
-            <button onClick={runBootstrap} disabled={isIngesting}>
-              Bootstrap nflreadpy
-            </button>
-            <button onClick={runNflSchedules} disabled={isIngesting}>
-              Load Schedules
-            </button>
-            <button onClick={runNflWeeklyStats} disabled={isIngesting}>
-              Load Weekly Stats
-            </button>
-            <button onClick={() => refresh()} disabled={isIngesting}>
-              Refresh
-            </button>
-          </div>
-
-          <div className="subsection freshness-section">
-            <div className="section-header">
-              <h3>Data Freshness</h3>
-              {dataFreshness && (
-                <span className="freshness-context">
-                  {dataFreshness.season} W{dataFreshness.week} · {dataFreshness.slate}
-                </span>
-              )}
-            </div>
-            <p className="hint">
-              Exact selected slice. Schedule and weekly-stat checks use nflreadpy season/week data.
-            </p>
-            {dataFreshness ? (
-              <div className="freshness-grid">
-                {dataFreshness.rows.map((row) => (
-                  <article
-                    className={`freshness-card freshness-card-${row.status}`}
-                    key={row.dataset}
-                  >
-                    <div className="freshness-card-header">
-                      <strong>{FRESHNESS_LABELS[row.dataset]}</strong>
-                      <span className={`freshness-status freshness-status-${row.status}`}>
-                        {row.status}
-                      </span>
-                    </div>
-                    <span className="freshness-source">{row.source_system}</span>
-                    <div className="freshness-count">
-                      <strong>{row.rows.toLocaleString()}</strong>
-                      <span>rows</span>
-                    </div>
-                    <p>
-                      {row.latest_loaded_at && row.age_hours != null
-                        ? `${row.age_hours.toFixed(1)}h old · ${formatDateTime(row.latest_loaded_at)}`
-                        : "No rows loaded for this slice"}
-                    </p>
-                    <small>Stale after {row.stale_after_hours}h</small>
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <p className="hint">Checking selected slice...</p>
-            )}
-          </div>
-
-          <div className="subsection">
-            <h3>Auto-Discover Local CSVs</h3>
-            <p className="hint">Bulk import files by filename pattern from one directory.</p>
-            <label>
-              Discovery Directory
-              <input
-                className="wide"
-                type="text"
-                value={discoverDirectory}
-                onChange={(event) => setDiscoverDirectory(event.target.value)}
-              />
-            </label>
-            <div className="button-row">
-              <button onClick={runAutoDiscoverSalaries} disabled={isIngesting}>
-                Auto Import Salaries
-              </button>
-              <button onClick={runAutoDiscoverInjuries} disabled={isIngesting}>
-                Auto Import Injuries
-              </button>
-            </div>
-          </div>
-
-          <div className="subsection">
-            <h3>Historical nflreadpy Loads</h3>
-            <p className="hint">Run season-range identity bootstrap and game-data backfills from one panel.</p>
-            <div className="range-grid">
-              <label>
-                Start Season
-                <input
-                  type="number"
-                  value={historyStartSeason}
-                  onChange={(event) => setHistoryStartSeason(Number(event.target.value))}
-                />
-              </label>
-              <label>
-                End Season
-                <input
-                  type="number"
-                  value={historyEndSeason}
-                  onChange={(event) => setHistoryEndSeason(Number(event.target.value))}
-                />
-              </label>
-            </div>
-            <div className="button-row">
-              <button onClick={runHistoricalBootstrap} disabled={isIngesting}>
-                Bootstrap Season Range
-              </button>
-              <button onClick={runHistoricalGameData} disabled={isIngesting}>
-                Load Historical Game Data
-              </button>
-            </div>
-          </div>
-          {status && <p className="status">{status}</p>}
-          {error && <p className="error">{error}</p>}
-        </section>
-
         <section className="panel" id="projection-simulation">
           <h2>Projection Simulation</h2>
           <p className="hint">
@@ -3406,6 +3185,8 @@ function App({
           })}
         </section>
 
+        {false && (
+          <>
         <section className="panel wide-panel" id="unresolved-queue">
           <div className="section-header">
             <h2>
@@ -3461,14 +3242,14 @@ function App({
                       </tr>
                     </thead>
                     <tbody>
-                      {!unresolvedTriage || unresolvedTriage.rows.length === 0 ? (
+                      {!unresolvedTriage || unresolvedTriage?.rows.length === 0 ? (
                         <tr>
                           <td colSpan={8} className="empty-row">
                             No open unresolved groups.
                           </td>
                         </tr>
                       ) : (
-                        unresolvedTriage.rows.map((row) => (
+                        unresolvedTriage?.rows.map((row) => (
                           <tr
                             key={[
                               row.source_system,
@@ -3713,6 +3494,8 @@ function App({
             </div>
           )}
         </section>
+          </>
+        )}
       </main>
     </div>
   );

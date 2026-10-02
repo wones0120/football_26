@@ -71,6 +71,7 @@ class SlateReadinessTests(unittest.TestCase):
         ]
         for row in salary_rows:
             row["player_status"] = "OUT" if row["player_id"].startswith("salary-out") else ""
+            row["roster_evidence_available"] = True
 
         eligible, excluded = _eligible_salary_rows(
             salary_rows,
@@ -94,6 +95,32 @@ class SlateReadinessTests(unittest.TestCase):
             salary_pool["details"]["excluded_roster_statuses"],
             {"DEV": 1, "MISSING": 1},
         )
+
+    def test_partial_roster_evidence_does_not_exclude_uncovered_team(self) -> None:
+        eligible, excluded = _eligible_salary_rows(
+            [
+                {
+                    "player_id": "lar-qb",
+                    "position": "QB",
+                    "roster_position": "FLEX",
+                    "player_status": "",
+                    "roster_status": None,
+                    "roster_evidence_available": False,
+                },
+                {
+                    "player_id": "nyg-qb",
+                    "position": "QB",
+                    "roster_position": "FLEX",
+                    "player_status": "",
+                    "roster_status": "ACT",
+                    "roster_evidence_available": True,
+                },
+            ],
+            {"CPT": 2, "FLEX": 2},
+        )
+
+        self.assertEqual({row["player_id"] for row in eligible}, {"lar-qb", "nyg-qb"})
+        self.assertEqual(excluded, {})
 
     def test_complete_slate_passes_every_gate(self) -> None:
         report = evaluate_slate_readiness(_complete_metrics())
@@ -222,14 +249,15 @@ class SlateReadinessTests(unittest.TestCase):
         self.assertTrue(lineage["details"]["selection_is_explicit"])
         self.assertEqual(report["gates"]["replay"]["status"], "pass")
 
-    def test_multiple_projection_versions_require_active_selection(self) -> None:
+    def test_multiple_projection_versions_use_latest_for_optimizer_but_require_exact_replay(self) -> None:
         metrics = _complete_metrics()
         metrics.projection_run_count = 2
 
         report = evaluate_slate_readiness(metrics)
 
+        self.assertEqual(report["gates"]["classic_gpp"]["status"], "pass")
         self.assertEqual(report["gates"]["replay"]["status"], "fail")
-        self.assertIn("projection_run_lineage", report["gates"]["replay"]["blocking_checks"])
+        self.assertIn("replay_projection_run_lineage", report["gates"]["replay"]["blocking_checks"])
 
     def test_showdown_salary_markers_block_classic_only(self) -> None:
         metrics = _complete_metrics()

@@ -110,6 +110,7 @@ def select_single_entry_lineups(
     weights: dict[str, float] | None = None,
     contest_metadata: list[dict] | None = None,
     contest_proxy: dict | None = None,
+    report_candidate_limit: int | None = 10,
 ) -> tuple[list[list[dict]], dict]:
     """Rank unique candidates and assign repeatable entries without exposure caps.
 
@@ -127,7 +128,14 @@ def select_single_entry_lineups(
         raise ValueError("single-entry objective weights must be nonnegative")
     unique = {_signature(lineup): lineup for lineup in lineups if lineup}
     if not unique:
-        return [], {"candidates": [], "assignments": [], "method": "heuristic_v1"}
+        return [], {
+            "candidates": [],
+            "all_candidates": [],
+            "candidate_count": 0,
+            "serialized_candidate_count": 0,
+            "assignments": [],
+            "method": "heuristic_v1",
+        }
     from .optimizer import classify_showdown_game_script, _safe_float
     from .optimizer import add_showdown_lineup_chalk_metrics
 
@@ -140,23 +148,40 @@ def select_single_entry_lineups(
         team_counts = Counter(str(row.get("player_team") or row.get("team") or "") for row in lineup)
         emphasis = max(sorted(team_counts), key=lambda team: team_counts[team])
         chalk = lineup[0]["lineup_duplication_risk"]
+        context_points = sum(_safe_float(row.get("optimizer_context_adjustment")) * (1.5 if row["roster_position"] == "CPT" else 1) for row in lineup)
+        p90_points = sum(_safe_float(row.get("p90")) for row in lineup)
+        captain_prior_multiplier = _safe_float(captain.get("captain_objective_multiplier")) or 1.0
+        captain_context = 1.5 * _safe_float(captain.get("optimizer_context_adjustment"))
+        captain_prior_points = (captain_prior_multiplier - 1.0) * (_safe_float(captain.get("p90")) + captain_context)
+        ownership_penalty = -_safe_float(lineup[0].get("solver_ownership_weight")) * sum(_safe_float(row.get("ownership")) for row in lineup)
+        correlation_points = _safe_float(lineup[0].get("lineup_correlation_summary", {}).get("total_adjustment"))
+        solver_total = _safe_float(lineup[0].get("solver_objective_value"))
+        solver_components = {
+            "p90_ceiling": p90_points,
+            "context": context_points,
+            "captain_prior": captain_prior_points,
+            "ownership_penalty": ownership_penalty,
+            "correlation_and_format": correlation_points,
+        }
+        solver_components["other_or_unattributed"] = solver_total - sum(solver_components.values())
         records.append({
             "signature": _signature(lineup),
             "captain_id": str(captain["player_id"]),
             "captain": str(captain.get("player_name") or captain.get("name") or captain["player_id"]),
             "players": [
-                {"player_id": str(row["player_id"]), "name": str(row.get("player_name") or row.get("name") or row["player_id"]), "slot": str(row["roster_position"])}
+                {"player_id": str(row["player_id"]), "name": str(row.get("player_name") or row.get("name") or row["player_id"]), "slot": str(row["roster_position"]), "position": str(row.get("position") or ""), "salary": _safe_float(row.get("base_salary", row.get("salary")))}
                 for row in lineup
             ],
             "game_script": script,
             "team_emphasis": emphasis,
             "mean": sum(_safe_float(row.get("projection")) for row in lineup),
-            "p90": sum(_safe_float(row.get("p90")) for row in lineup),
-            "solver_objective": _safe_float(lineup[0].get("solver_objective_value")),
+            "p90": p90_points,
+            "solver_objective": solver_total,
+            "solver_objective_components": solver_components,
             "ownership_sum": sum(_safe_float(row.get("ownership")) for row in lineup),
             "relative_chalk": chalk["relative_chalk_score"],
-            "correlation_score": _safe_float(lineup[0].get("lineup_correlation_summary", {}).get("total_adjustment")),
-            "context_score": sum(_safe_float(row.get("optimizer_context_adjustment")) * (1.5 if row["roster_position"] == "CPT" else 1) for row in lineup),
+            "correlation_score": correlation_points,
+            "context_score": context_points,
         })
     maxima = {field: max(abs(row[field]) for row in records) or 1.0 for field in ("mean", "p90", "solver_objective", "correlation_score", "context_score")}
     for row in records:
@@ -167,12 +192,44 @@ def select_single_entry_lineups(
             "mean": "mean", "p90": "p90", "solver_objective": "solver",
             "correlation_score": "correlation", "context_score": "context",
         }
-        row["single_entry_score"] = sum(configured[weight_fields[field]] * components[field] for field in components) - configured["chalk_penalty"] * chalk_fraction
+        row["objective_contributions"] = {
+            "mean": configured["mean"] * components["mean"],
+            "p90": configured["p90"] * components["p90"],
+            "solver": configured["solver"] * components["solver_objective"],
+            "correlation": configured["correlation"] * components["correlation_score"],
+            "context": configured["context"] * components["context_score"],
+            "chalk_penalty": -configured["chalk_penalty"] * chalk_fraction,
+            "duplication_uniqueness": 0.0,
+            "script": 0.0,
+            "other_penalties": 0.0,
+        }
+        row["single_entry_score"] = sum(row["objective_contributions"].values())
     records.sort(key=lambda row: (-row["single_entry_score"], -row["mean"], row["signature"]))
+    best_mean = max(records, key=lambda row: row["mean"])
+    best_p90 = max(records, key=lambda row: row["p90"])
+    best_quality = max(records, key=lambda row: row["objective_contributions"]["mean"] + row["objective_contributions"]["p90"])
     best = records[0]
     best_player_ids = {player_id for player_id, _ in best["signature"]}
     for rank, row in enumerate(records, 1):
         row["rank"] = rank
+        chalk_improvement = (
+            best_quality["relative_chalk"] - row["relative_chalk"]
+            if best_quality["relative_chalk"] is not None and row["relative_chalk"] is not None
+            else None
+        )
+        row["quality_sacrifice_for_chalk"] = {
+            "best_mean_candidate_rank": records.index(best_mean) + 1,
+            "best_p90_candidate_rank": records.index(best_p90) + 1,
+            "best_quality_candidate_rank": records.index(best_quality) + 1,
+            "mean_loss_vs_best_mean": best_mean["mean"] - row["mean"],
+            "p90_loss_vs_best_p90": best_p90["p90"] - row["p90"],
+            "chalk_improvement_vs_best_quality": chalk_improvement,
+            "chalk_objective_gain_vs_best_quality": row["objective_contributions"]["chalk_penalty"] - best_quality["objective_contributions"]["chalk_penalty"],
+            "large_ceiling_sacrifice_for_uniqueness": (
+                best_p90["p90"] - row["p90"] >= 5.0
+                and chalk_improvement is not None and chalk_improvement >= 20.0
+            ),
+        }
         row["quality_loss_vs_a"] = best["single_entry_score"] - row["single_entry_score"]
         player_ids = {player_id for player_id, _ in row["signature"]}
         shared = len(best_player_ids & player_ids)
@@ -353,7 +410,13 @@ def select_single_entry_lineups(
         "payout_metrics_status": "unavailable_without_field_and_payout_simulation",
         "primary_future_metric": "P(total payouts > total entry fees)",
         "contest_metadata": contest_metadata or [],
-        "candidates": records[:10],
+        "candidates": records[:report_candidate_limit],
+        # Keep the complete ranked pool for reproducible selector diagnostics.
+        # ``candidates`` remains the bounded presentation view used by existing
+        # reports and API consumers.
+        "all_candidates": records,
+        "candidate_count": len(records),
+        "serialized_candidate_count": len(records),
         "selected_candidates": list({row["rank"]: row for row in selected}.values()),
         "top_alternates": alternate_examples,
         "assignments": assignments,
