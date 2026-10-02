@@ -3,6 +3,8 @@ import test from "node:test";
 
 import {
   ACTIVE_SLATE_CONTEXT_STORAGE_KEY,
+  RUN_SELECTIONS_STORAGE_KEY,
+  parsePersistedRunSelections,
   DEFAULT_SLATE,
   SLATE_OPTIONS,
   normalizeSlateId,
@@ -18,6 +20,16 @@ test("starts the 2026 Week 1 slate menu with Wednesday night", () => {
   assert.equal(DEFAULT_SLATE, "WEDNESDAY_NIGHT");
   assert.equal(SLATE_OPTIONS[0], DEFAULT_SLATE);
   assert.equal(new Set(SLATE_OPTIONS).size, SLATE_OPTIONS.length);
+});
+
+test("reload restores the optimizer selection by scope before a run completes", () => {
+  const selections = updateRunSelection({}, { season: 2026, week: 4, slate: "SUNDAY_MAIN" }, { optimizerRunId: "still-running" });
+  assert.equal(RUN_SELECTIONS_STORAGE_KEY, "football-26-run-selections");
+  assert.deepEqual(parsePersistedRunSelections(JSON.stringify(selections)), selections);
+  assert.deepEqual(parsePersistedRunSelections("invalid"), {});
+  assert.deepEqual(parsePersistedRunSelections('["invalid"]'), {});
+  assert.deepEqual(parsePersistedRunSelections('{"2026:4:SUNDAY_MAIN":{"optimizerRunId":3,"unknown":"ignore"}}'), { "2026:4:SUNDAY_MAIN": {} });
+  assert.deepEqual(parsePersistedRunSelections('{"2026:99:SUNDAY_MAIN":{"optimizerRunId":"bad-scope"}}'), {});
 });
 
 test("normalizes shell and research slate identifiers at the workspace boundary", () => {

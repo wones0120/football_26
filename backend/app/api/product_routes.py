@@ -49,6 +49,7 @@ from ..job_schemas import OperationalJobCreateResponse
 from ..services.job_queue import (
     FEATURE_MATRIX_JOB,
     PROJECTION_JOB,
+    OPTIMIZER_JOB,
     SLATE_SIMULATION_JOB,
     SYMBOLIC_JOB,
     JobConflictError,
@@ -2065,6 +2066,37 @@ def get_saved_optimizer_contest_observations(
     from ..product_services.saved_contests import list_contest_observations
 
     return {"contest_id": contest_id, "observations": list_contest_observations(service.engine, contest_id, limit=limit)}
+
+
+@router.post("/optimizer/jobs", response_model=OperationalJobCreateResponse, status_code=202)
+def queue_optimizer(
+    request: OptimizerRunRequest,
+    session: Session = Depends(get_db_session),
+) -> OperationalJobCreateResponse:
+    if request.contest_format is None or request.objective is None:
+        raise HTTPException(status_code=422, detail="Queued optimizer requires an explicit format and objective")
+    run_id = request.optimizer_run_id or str(uuid4())
+    payload = request.model_copy(update={"optimizer_run_id": run_id}).model_dump(mode="json")
+    try:
+        job, created = enqueue_job(session, job_type=OPTIMIZER_JOB,
+            idempotency_key=f"optimizer:{run_id}", request_payload=payload, run_id=run_id)
+    except JobConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return OperationalJobCreateResponse(created=created, job=job_response(job))
+
+
+@router.get("/optimizer/runs")
+def get_optimizer_runs(
+    season: int, week: int = Query(ge=1, le=25), slate: str = Query(min_length=1),
+    contest_format: str = Query(pattern="^(classic|showdown)$"),
+    objective: str = Query(pattern="^(cash|gpp)$"),
+    limit: int = Query(default=20, ge=1, le=100),
+    service: OptimizerService = Depends(get_optimizer_service),
+    session: Session = Depends(get_db_session),
+) -> dict:
+    from ..product_services.optimizer_history import list_optimizer_runs
+    return {"runs": list_optimizer_runs(service.engine, session, season=season, week=week,
+        slate=slate, contest_format=contest_format, objective=objective, limit=limit)}
 
 
 @router.post("/optimizer/run", response_model=OptimizerStatusResponse)

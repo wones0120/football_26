@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Recover optimizer runs after refresh
+
+- Add scoped recent optimizer history with statuses, lineup counts, strategies,
+  discovery mode, and worker duration; reopen reports and exports without rerunning.
+- Queue UI optimizer solves on the durable worker and persist the selected run ID
+  before submission. Watch pending solves after refresh and retry failed saved
+  requests. Retain the synchronous API for existing scripts.
+- Use original decision timestamps when displaying legacy optimizer runs whose
+  database timezone conversion shifted their recorded start time.
+
 ### Saved contest details
 
 - Show contest type, entry limit, field capacity/current entries, fee, and prizes

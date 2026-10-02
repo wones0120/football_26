@@ -6,6 +6,7 @@ import { AppShell, type ViewMode } from "./AppShell";
 import { DailyNewsBrief } from "./DailyNewsBrief";
 import { ContestWorkflow } from "./ContestWorkflow";
 import { ContestLibrary } from "./ContestLibrary";
+import { RecentOptimizerRuns } from "./RecentOptimizerRuns";
 import { DesignPreview } from "./DesignPreview";
 import { DigitalTwin } from "./DigitalTwin";
 import { ModelWorkbench } from "./ModelWorkbench";
@@ -13,6 +14,8 @@ import { ResearchWorkspace } from "./ResearchWorkspace";
 import { WarRoom } from "./WarRoom";
 import {
   ACTIVE_SLATE_CONTEXT_STORAGE_KEY,
+  RUN_SELECTIONS_STORAGE_KEY,
+  parsePersistedRunSelections,
   DEFAULT_SLATE,
   SLATE_OPTIONS,
   normalizeSlateId,
@@ -53,6 +56,7 @@ import type {
   SlateLoadResponse,
   OptimizerResponse,
   OptimizerProjectionRun,
+  OptimizerRunSummary,
   ContestPreview,
   SlateReadinessGateKey,
   SlateReadinessResponse,
@@ -75,6 +79,7 @@ import {
   fetchWeeklyRuns,
   fetchDataQualityHistory,
   fetchOptimizerResults,
+  fetchOptimizerRuns,
   previewOptimizerContests,
   fetchSlateReadiness,
   fetchSymbolicBacktest,
@@ -316,7 +321,10 @@ function App() {
   const [week, setWeek] = useState(startupContext?.week ?? FALLBACK_WEEK);
   const [slate, setSlate] = useState(startupContext?.slate ?? DEFAULT_SLATE);
   const [activeContextReady, setActiveContextReady] = useState(Boolean(startupContext));
-  const [runSelections, setRunSelections] = useState<PersistedRunSelections>({});
+  const [runSelections, setRunSelections] = useState<PersistedRunSelections>(() => {
+    try { return parsePersistedRunSelections(window.localStorage.getItem(RUN_SELECTIONS_STORAGE_KEY)); }
+    catch { return {}; }
+  });
   const activeContext = useMemo(
     () => ({ season, week, slate: normalizeSlateId(slate) }),
     [season, slate, week],
@@ -326,7 +334,11 @@ function App() {
   const setActiveSlate = useCallback((value: string) => setSlate(normalizeSlateId(value)), []);
   const updateActiveRunSelection = useCallback(
     (patch: Partial<PersistedRunSelection>) => {
-      setRunSelections((current) => updateRunSelection(current, activeContext, patch));
+      setRunSelections((current) => {
+        const next = updateRunSelection(current, activeContext, patch);
+        try { window.localStorage.setItem(RUN_SELECTIONS_STORAGE_KEY, JSON.stringify(next)); } catch { /* Session still works without storage. */ }
+        return next;
+      });
     },
     [activeContext, activeContextKey],
   );
@@ -357,7 +369,11 @@ function App() {
   const [lastLoadType, setLastLoadType] = useState<string | null>(null);
   const [slateStatus, setSlateStatus] = useState<SlateLoadResponse | null>(null);
   const [optimizerStatuses, setOptimizerStatuses] = useState<Record<string, OptimizerResponse>>({});
-  const optimizerStatus = optimizerStatuses[activeContextKey] ?? null;
+  const optimizerResultsRef = useRef<HTMLDivElement>(null);
+  const [optimizerOpenRequest, setOptimizerOpenRequest] = useState(0);
+  useEffect(() => {
+    if (optimizerOpenRequest > 0) optimizerResultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [optimizerOpenRequest]);
   const setOptimizerStatus = useCallback((status: OptimizerResponse | null) => {
     setOptimizerStatuses((current) => {
       if (status) return { ...current, [activeContextKey]: status };
@@ -517,6 +533,9 @@ function App() {
     contestFormat === "classic"
       ? selectedClassicStrategy.objective
       : optimizerObjective;
+  const storedOptimizerStatus = optimizerStatuses[activeContextKey] ?? null;
+  const optimizerStatus = storedOptimizerStatus?.contest_format === contestFormat
+    && storedOptimizerStatus.objective === effectiveOptimizerObjective ? storedOptimizerStatus : null;
   const selectedOptimizerStrategy = contestFormat === "showdown" && optimizerObjective === "gpp"
     ? showdownGppStrategy
     : optimizerStrategyId(contestFormat, effectiveOptimizerObjective, classicContestStrategy);
@@ -880,11 +899,15 @@ function App() {
 
   useEffect(() => {
     const selectedOptimizerRunId = activeRunSelection.optimizerRunId;
-    if (!selectedOptimizerRunId || optimizerStatus?.job_id === selectedOptimizerRunId) return;
+    if (!selectedOptimizerRunId || optimizerStatus?.job_id === selectedOptimizerRunId || pendingAction) return;
     let cancelled = false;
-    fetchOptimizerResults(selectedOptimizerRunId)
+    fetchOptimizerRuns({ season, week, slate, contest_format: contestFormat, objective: effectiveOptimizerObjective })
+      .then((history) => {
+        const selected = history.runs.find((run) => run.optimizer_run_id === selectedOptimizerRunId);
+        return selected && selected.status !== "completed" ? null : fetchOptimizerResults(selectedOptimizerRunId);
+      })
       .then((response) => {
-        if (!cancelled) setOptimizerStatus(response);
+        if (response && !cancelled && response.contest_format === contestFormat && response.objective === effectiveOptimizerObjective) setOptimizerStatus(response);
       })
       .catch(() => {
         // Delivery performs the authoritative compatibility check when creating a portfolio.
@@ -892,7 +915,17 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [activeRunSelection.optimizerRunId, optimizerStatus?.job_id, setOptimizerStatus]);
+  }, [activeRunSelection.optimizerRunId, optimizerStatus?.job_id, setOptimizerStatus, contestFormat, effectiveOptimizerObjective, pendingAction, season, week, slate]);
+
+  const openRecentOptimizer = useCallback(async (run: OptimizerRunSummary) => {
+    updateActiveRunSelection({ optimizerRunId: run.optimizer_run_id,
+      ...(run.projection_run_id ? { projectionRunId: run.projection_run_id } : {}) });
+    if (run.status === "completed") {
+      const response = await fetchOptimizerResults(run.optimizer_run_id);
+      setOptimizerStatus(response);
+      setOptimizerOpenRequest((current) => current + 1);
+    }
+  }, [updateActiveRunSelection, setOptimizerStatus]);
 
   useEffect(() => {
     if (viewMode !== "workspace") return;
@@ -1301,6 +1334,7 @@ function App() {
       const optimizerRunId = globalThis.crypto?.randomUUID?.()
         ?? `optimizer-${Date.now()}-${Math.random().toString(16).slice(2)}`;
       setPendingAction("Running optimizer...");
+      updateActiveRunSelection({ optimizerRunId, projectionRunId });
       const response = await runOptimizer({
         season,
         week,
@@ -1371,7 +1405,7 @@ function App() {
               }
             : {}),
         },
-      }, () => setPendingAction("Optimizer is still running locally; waiting for its saved result..."));
+      }, () => setPendingAction("Optimizer queued on the durable worker. You can reopen it in Recent optimizer runs."));
       setOptimizerStatus(response);
       updateActiveRunSelection({
         optimizerRunId: response.job_id,
@@ -3794,6 +3828,10 @@ function App() {
             {lastLoadType && <span className="summary-subtitle">{lastLoadType}</span>}
           </div>
           {error && <div className="error inline-error">{error}</div>}
+          <RecentOptimizerRuns season={season} week={week} slate={slate}
+            contestFormat={contestFormat} objective={effectiveOptimizerObjective}
+            selectedRunId={activeRunSelection.optimizerRunId} loadedRunId={optimizerStatus?.job_id}
+            onOpen={openRecentOptimizer} />
           {operationalJobs.length > 0 && (
             <div className="status-card">
               <h3>Durable worker queue</h3>
@@ -3871,7 +3909,7 @@ function App() {
             </div>
           )}
           {optimizerStatus && (
-            <div className="status-card">
+            <div className="status-card" ref={optimizerResultsRef}>
               <h3>
                 Optimizer · {CLASSIC_CONTEST_STRATEGIES.find(
                   (strategy) => strategy.id === optimizerStatus.strategy

@@ -66,6 +66,29 @@ remain lineup constraints. Direct optimizer API exclusions alone do not rebuild 
   marked `contrarian_evidence_unavailable` and retains the ordinary football
   objective. Ownership sum and contrarian confidence remain unavailable.
 
+## Recovering optimizer results
+
+**Operations → Run activity → Recent optimizer runs** lists the newest 20 saved
+or queued runs for the selected season, week, slate, format, and Cash/GPP objective.
+The row retains its actual strategy and discovery mode. **Open results** loads and
+scrolls to the original saved lineup report and its existing export actions; it does not solve
+again or apply current form settings to the saved output. The selected run ID is
+stored before submission and restored after a browser refresh.
+
+UI solves use `POST /api/optimizer/jobs`; the independent worker saves full
+results in the existing optimizer lineage. Browser/API reloads do not own the
+solve. Worker leases recover interrupted attempts using the same run ID and
+pinned request; completed persisted runs are reused. **Watch run** reconnects and
+opens the result when complete. Failed queue items show their error and offer
+**Retry saved request**. Refreshing during the earlier preparation steps cannot
+create optimizer results until a solve has actually been queued.
+
+`GET /api/optimizer/runs` returns lightweight metadata; reports are fetched only
+when opening results. Queue timestamps supply elapsed time while solving and
+measured duration after completion.
+Older runs without completion timestamps explicitly display **Unavailable**.
+Refresh the API and worker after deploying orchestration changes.
+
 ## Saved contest details
 
 Paste one or more DraftKings URLs into **Saved DraftKings contests** and click

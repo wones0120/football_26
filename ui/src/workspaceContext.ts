@@ -16,6 +16,24 @@ export type PersistedRunSelections = Record<string, PersistedRunSelection>;
 
 export const DEFAULT_SLATE = "WEDNESDAY_NIGHT";
 export const ACTIVE_SLATE_CONTEXT_STORAGE_KEY = "football-26-active-slate-context";
+export const RUN_SELECTIONS_STORAGE_KEY = "football-26-run-selections";
+
+export function parsePersistedRunSelections(raw: string | null): PersistedRunSelections {
+  try {
+    const value = JSON.parse(raw ?? "{}");
+    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+    const selections: PersistedRunSelections = {};
+    const fields = ["projectionRunId", "slateSimulationRunId", "researchSimulationRunId", "researchBaselineRunId", "optimizerRunId"];
+    for (const [key, selection] of Object.entries(value)) {
+      const [season, week, slate] = key.split(":");
+      const scope = parsePersistedActiveSlateContext(JSON.stringify({ season: Number(season), week: Number(week), slate }));
+      if (!scope || !selection || typeof selection !== "object" || Array.isArray(selection)) continue;
+      selections[slateContextKey(scope)] = Object.fromEntries(Object.entries(selection).filter(([field, id]) =>
+        fields.includes(field) && typeof id === "string" && id.trim().length > 0 && id.length <= 128));
+    }
+    return selections;
+  } catch { return {}; }
+}
 
 export const SLATE_OPTIONS = [
   "WEDNESDAY_NIGHT",

@@ -19,6 +19,7 @@ from ..models import OperationalJob
 BENCHMARK_JOB = "benchmark_suite"
 FEATURE_MATRIX_JOB = "feature_matrix_build"
 PROJECTION_JOB = "projection_build"
+OPTIMIZER_JOB = "optimizer_run"
 RESEARCH_SIMULATION_JOB = "research_simulation"
 SLATE_SIMULATION_JOB = "slate_simulation"
 SYMBOLIC_JOB = "symbolic_run"
@@ -29,6 +30,7 @@ SUPPORTED_JOB_TYPES = frozenset(
         BENCHMARK_JOB,
         FEATURE_MATRIX_JOB,
         PROJECTION_JOB,
+        OPTIMIZER_JOB,
         RESEARCH_SIMULATION_JOB,
         SLATE_SIMULATION_JOB,
         SYMBOLIC_JOB,

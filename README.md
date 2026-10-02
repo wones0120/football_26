@@ -1,5 +1,12 @@
 # football_26 Decision OS
 
+In **Operations → Run activity → Recent optimizer runs**, reopen the latest 20
+runs for the selected season/week/slate and Classic/Showdown + Cash/GPP type.
+**Open results** restores the saved report and downloads. New UI optimizer solves
+use the durable worker; **Watch run** reconnects after refresh, and failed queued
+requests offer **Retry saved request**. Queued runs show measured worker duration;
+older runs without completion timestamps show **Unavailable**.
+
 **Saved DraftKings contests** now displays contest type, per-person entry limit,
 field capacity/current entries, entry fee, and prize pool immediately after saving
 a URL. Ticket prizes display their ticket value. Failed refreshes label older

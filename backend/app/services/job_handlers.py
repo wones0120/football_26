@@ -16,6 +16,7 @@ from ..product_schemas import (
     BuildFeatureMatrixRequest,
     BuildFeaturesResponse,
     PredictionRunRequest,
+    OptimizerRunRequest,
     PredictionRunResponse,
     SimulationRunRequest,
     SimulationRunResponse,
@@ -41,6 +42,7 @@ from .job_queue import (
     BENCHMARK_JOB,
     FEATURE_MATRIX_JOB,
     PROJECTION_JOB,
+    OPTIMIZER_JOB,
     RESEARCH_SIMULATION_JOB,
     SLATE_SIMULATION_JOB,
     SYMBOLIC_JOB,
@@ -551,10 +553,29 @@ def _weekly_run_handler(
     return result.model_dump(mode="json")
 
 
+def _optimizer_handler(context: ExecutionContext, payload: dict[str, Any]) -> dict[str, Any]:
+    from ..product_services.optimizer import OptimizerService
+
+    if not context.run_id:
+        raise PermanentJobError("Optimizer queue item has no run ID.")
+    request = OptimizerRunRequest.model_validate({**payload, "optimizer_run_id": context.run_id})
+    context.progress("optimizer", 0, 1, "Solving the saved optimizer request.")
+    try:
+        job = OptimizerService().run_job(**request.model_dump())
+    except ValueError as exc:
+        raise PermanentJobError(str(exc)) from exc
+    if job.status != "completed" or not job.lineage_persisted:
+        raise PermanentJobError(job.message or "Optimizer did not save a completed result.")
+    context.progress("optimizer", 1, 1, "Optimizer results saved; ready to reopen.")
+    # Keep queue polling lightweight; the full report lives in optimizer lineage.
+    return {"optimizer_run_id": job.job_id, "status": job.status}
+
+
 HANDLERS = {
     BENCHMARK_JOB: _benchmark_handler,
     FEATURE_MATRIX_JOB: _feature_matrix_handler,
     PROJECTION_JOB: _projection_handler,
+    OPTIMIZER_JOB: _optimizer_handler,
     RESEARCH_SIMULATION_JOB: _research_simulation_handler,
     SLATE_SIMULATION_JOB: _slate_simulation_handler,
     SYMBOLIC_JOB: _symbolic_handler,

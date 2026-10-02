@@ -1494,43 +1494,39 @@ export function runOptimizer(payload: {
   return startOptimizerAndRecover(payload, onDetached);
 }
 
-const OPTIMIZER_START_TIMEOUT_MS = 30_000;
-const OPTIMIZER_POLL_INTERVAL_MS = 2_000;
-const OPTIMIZER_RECOVERY_TIMEOUT_MS = 60 * 60 * 1_000;
-
-async function fetchOptimizerResultIfReady(jobId: string): Promise<OptimizerResponse | null> {
-  const response = await fetch(
-    `${API_BASE}/optimizer/results/${encodeURIComponent(jobId)}`,
-  );
-  if (response.status === 404) return null;
-  if (!response.ok) throw new Error(await extractError(response));
-  return (await response.json()) as OptimizerResponse;
-}
-
-async function waitForOptimizerResult(jobId: string): Promise<OptimizerResponse> {
-  const deadline = Date.now() + OPTIMIZER_RECOVERY_TIMEOUT_MS;
-  while (Date.now() < deadline) {
-    const result = await fetchOptimizerResultIfReady(jobId);
-    if (result) return result;
-    await new Promise((resolve) => window.setTimeout(resolve, OPTIMIZER_POLL_INTERVAL_MS));
-  }
-  throw new Error(
-    `Optimizer ${jobId} is still running after 60 minutes. Its run ID is saved and can be refreshed without starting another run.`,
-  );
-}
-
 async function startOptimizerAndRecover(
   payload: Parameters<typeof runOptimizer>[0],
   onDetached?: () => void,
 ): Promise<OptimizerResponse> {
-  try {
-    return await postJson("/optimizer/run", payload, OPTIMIZER_START_TIMEOUT_MS);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (!message.startsWith("Request timed out while contacting")) throw error;
-    onDetached?.();
-    return waitForOptimizerResult(payload.optimizer_run_id);
-  }
+  const queued = await postJson<OperationalJobCreateResponse>("/optimizer/jobs", payload, 30_000);
+  onDetached?.();
+  await waitForOperationalJob<{ optimizer_run_id: string }>(queued.job.job_id);
+  return fetchOptimizerResults(payload.optimizer_run_id);
+}
+
+export type OptimizerRunSummary = {
+  optimizer_run_id: string;
+  season: number; week: number; slate: string;
+  contest_format: "classic" | "showdown"; objective: "cash" | "gpp";
+  strategy: string; status: string; message?: string | null;
+  created_at: string; updated_at: string;
+  started_at: string | null; completed_at: string | null;
+  operational_job_id: string | null;
+  requested_lineups: number | null; lineup_count: number;
+  expanded_discovery: boolean | null;
+  projection_run_id: string | null;
+};
+
+export function fetchOptimizerRuns(scope: {
+  season: number; week: number; slate: string;
+  contest_format: "classic" | "showdown"; objective: "cash" | "gpp";
+}): Promise<{ runs: OptimizerRunSummary[] }> {
+  const query = new URLSearchParams({ ...scope, season: String(scope.season), week: String(scope.week) });
+  return getJson(`/optimizer/runs?${query}`);
+}
+
+export function retryOptimizerJob(jobId: string): Promise<OperationalJob> {
+  return postJson(`/jobs/${encodeURIComponent(jobId)}/retry`, {});
 }
 
 export interface ContestPreview {
@@ -1616,8 +1612,15 @@ export function fetchSavedContestObservations(contestId: string): Promise<{ obse
   return getJson(`/optimizer/contests/saved/${encodeURIComponent(contestId)}/observations`);
 }
 
+const optimizerResultRequests = new Map<string, Promise<OptimizerResponse>>();
+
 export function fetchOptimizerResults(jobId: string): Promise<OptimizerResponse> {
-  return getJson(`/optimizer/results/${jobId}`);
+  const existing = optimizerResultRequests.get(jobId);
+  if (existing) return existing;
+  const request = getJson<OptimizerResponse>(`/optimizer/results/${encodeURIComponent(jobId)}`)
+    .finally(() => optimizerResultRequests.delete(jobId));
+  optimizerResultRequests.set(jobId, request);
+  return request;
 }
 
 export type OptimizerProjectionRun = {
