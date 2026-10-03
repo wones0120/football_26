@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import uuid
+from copy import deepcopy
 from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
@@ -16,6 +17,7 @@ from sqlalchemy.engine import Engine
 from Database.config import get_connection_string
 
 from .cbc_solver import make_cbc_solver
+from .classic_primary_game import canonical_primary_game, resolve_primary_game_cap
 from .optimizer_control import solve_control, build_comparison
 from .lineup_correlation_scoring import (
     add_format_specific_objective,
@@ -170,6 +172,7 @@ class GPPOptimizerResult:
     iterations: int
     control_comparisons: List[dict] = field(default_factory=list)
     generation_funnel: dict = field(default_factory=dict)
+    selection_trace: list[dict] = field(default_factory=list)
 
 
 VALID_POSITIONS = {"QB", "RB", "WR", "TE", "DST", "D", "DEF"}
@@ -717,6 +720,8 @@ def _build_lineup(
     maximum_player_groups: Sequence[tuple[set[str], int]] | None = None,
     solver_backend: str = "bundled",
     model_capture: Callable[[pulp.LpProblem], None] | None = None,
+    excluded_primary_games: set[str] | None = None,
+    solve_audit: dict | None = None,
 ) -> Optional[List[int]]:
     if not players:
         return None
@@ -879,6 +884,10 @@ def _build_lineup(
     te_idx = _position_indices(players, ["TE"])
     dst_idx = _position_indices(players, ["DST", "D", "DEF"])
     model += pulp.lpSum(x[i] for i in qb_idx) == 1
+    if excluded_primary_games:
+        for i in qb_idx:
+            if canonical_primary_game(players[i].team, players[i].opponent) in excluded_primary_games:
+                model += x[i] == 0
     model += pulp.lpSum(x[i] for i in dst_idx) == 1
     model += pulp.lpSum(x[i] for i in rb_idx) >= 2
     model += pulp.lpSum(x[i] for i in wr_idx) >= 3
@@ -997,6 +1006,12 @@ def _build_lineup(
         return None
     solver = make_cbc_solver(solver_backend)
     status = model.solve(solver)
+    if solve_audit is not None:
+        from .classic_strategy_contract import model_fingerprints
+        solve_audit.update(model_fingerprints(model),
+            solver_status=pulp.LpStatus[status], solution_status=pulp.LpSolution[model.sol_status],
+            proven_optimal=model.sol_status == pulp.LpSolutionOptimal,
+            objective_score=float(pulp.value(model.objective) or 0))
     if status != pulp.LpStatusOptimal:
         return None
 
@@ -1085,6 +1100,63 @@ def _adjust_config_for_targets(config: SlateConfig, stats: PortfolioStats, targe
     return cfg
 
 
+def resolve_portfolio_config(players, config, *, ownership_available, long_shot_mode, num_lineups, ownership_data_available=None):
+    """Resolve the existing runtime adjustments for both serialized contracts and execution."""
+    config = deepcopy(config)
+    tag_players(players, config.tag_thresholds)
+    if long_shot_mode:
+        if num_lineups != 1:
+            raise ValueError("Long-shot mode requires exactly one lineup")
+        if bool(ownership_available) and all(player.ownership is not None for player in players):
+            # Directly optimize low ownership.  This deliberately does not
+            # modify mean, ceiling, role, or any other football input.
+            for player in players:
+                player.leverage = -float(player.ownership)
+        config = build_long_shot_config(
+            config,
+            ownership_available=bool(ownership_available),
+        )
+    leverage_available = any(
+        player.optimal_lineup_probability is not None for player in players
+    )
+    if not leverage_available and config.tag_caps.min_leverage:
+        config = SlateConfig(**{**config.__dict__})
+        config.tag_caps = LineupTagCaps(**{**config.tag_caps.__dict__})
+        config.tag_caps.min_leverage = 0
+        config.portfolio_targets = PortfolioTargets(
+            **{**config.portfolio_targets.__dict__, "min_leverage_count": 0}
+        )
+    # If no ownership data, relax tag constraints so the solver can build lineups
+    if not (ownership_available if ownership_data_available is None else ownership_data_available):
+        config = SlateConfig(
+            stack_rules=config.stack_rules,
+            tag_thresholds=config.tag_thresholds,
+            objective_weights=config.objective_weights,
+            tag_caps=LineupTagCaps(
+                max_chalk=len(players),
+                min_leverage=0,
+                max_punts=(config.tag_caps.max_punts if config.normalize_objective else len(players)),
+                max_total_ownership=None,
+            ),
+            salary_cap=config.salary_cap,
+            roster_size=config.roster_size,
+            portfolio_targets=config.portfolio_targets,
+            correlation_bonus=config.correlation_bonus,
+            uniqueness_overlap=config.uniqueness_overlap,
+            normalize_objective=config.normalize_objective,
+            stack_templates=config.stack_templates,
+        )
+    # Small slates (few teams) need a higher per-team cap to satisfy a 9-man roster
+    unique_teams = {p.team for p in players if p.team}
+    min_team_cap = math.ceil(config.roster_size / max(1, len(unique_teams) or 1))
+    if config.stack_rules.max_from_team < min_team_cap:
+        config = SlateConfig(**{**config.__dict__})
+        config.stack_rules = StackRules(**{**config.stack_rules.__dict__})
+        config.stack_rules.max_from_team = min(4, min_team_cap)
+
+    return config
+
+
 def generate_portfolio(
     season: int,
     week: int,
@@ -1109,7 +1181,10 @@ def generate_portfolio(
     solver_backend: str = "bundled",
     precompute_correlation_terms: bool = False,
     maximum_player_groups: Sequence[tuple[set[str], int]] | None = None,
+    max_lineups_per_primary_game: int | None = None,
+    effective_config: SlateConfig | None = None,
 ) -> GPPOptimizerResult:
+    game_cap = resolve_primary_game_cap(max_lineups_per_primary_game)
     engine = engine or create_engine(get_connection_string())
     if players is None:
         players, counts = load_player_pool(engine, season, week, slate)
@@ -1136,7 +1211,10 @@ def generate_portfolio(
 
     # Tag + analysis + config
     analysis = analyze_slate(players)
-    if config_builder is build_large_gpp_config:
+    if effective_config is not None:
+        def resolved_builder(current_analysis: SlateAnalysis) -> SlateConfig:
+            return deepcopy(effective_config)
+    elif config_builder is build_large_gpp_config:
         def resolved_builder(current_analysis: SlateAnalysis) -> SlateConfig:
             return build_large_gpp_config(
                 current_analysis,
@@ -1154,48 +1232,10 @@ def generate_portfolio(
     base_config = resolved_builder(analysis)
     tag_players(players, base_config.tag_thresholds)
     config = resolved_builder(analysis)
-    if long_shot_mode:
-        if num_lineups != 1:
-            raise ValueError("Long-shot mode requires exactly one lineup")
-        if bool(ownership_available) and all(player.ownership is not None for player in players):
-            # Directly optimize low ownership.  This deliberately does not
-            # modify mean, ceiling, role, or any other football input.
-            for player in players:
-                player.leverage = -float(player.ownership)
-        config = build_long_shot_config(
-            config,
-            ownership_available=bool(ownership_available),
-        )
-    leverage_available = any(
-        player.optimal_lineup_probability is not None for player in players
-    )
-    if not leverage_available and config.tag_caps.min_leverage:
-        config = SlateConfig(**{**config.__dict__})
-        config.tag_caps = LineupTagCaps(**{**config.tag_caps.__dict__})
-        config.tag_caps.min_leverage = 0
-        config.portfolio_targets = PortfolioTargets(
-            **{**config.portfolio_targets.__dict__, "min_leverage_count": 0}
-        )
-    # If no ownership data, relax tag constraints so the solver can build lineups
-    if counts.get("ownership", 0) == 0:
-        config = SlateConfig(
-            stack_rules=config.stack_rules,
-            tag_thresholds=config.tag_thresholds,
-            objective_weights=config.objective_weights,
-            tag_caps=LineupTagCaps(
-                max_chalk=len(players),
-                min_leverage=0,
-                max_punts=(config.tag_caps.max_punts if config.normalize_objective else len(players)),
-                max_total_ownership=None,
-            ),
-            salary_cap=config.salary_cap,
-            roster_size=config.roster_size,
-            portfolio_targets=config.portfolio_targets,
-            correlation_bonus=config.correlation_bonus,
-            uniqueness_overlap=config.uniqueness_overlap,
-            normalize_objective=config.normalize_objective,
-            stack_templates=config.stack_templates,
-        )
+    config = resolve_portfolio_config(players, config, ownership_available=bool(ownership_available),
+        ownership_data_available=bool(counts.get("ownership", 0)),
+        long_shot_mode=long_shot_mode, num_lineups=num_lineups)
+    leverage_available = any(player.optimal_lineup_probability is not None for player in players)
     correlation_terms = None
     format_terms = None
     if precompute_correlation_terms:
@@ -1208,20 +1248,14 @@ def generate_portfolio(
         format_terms = build_format_specific_terms(
             players, profile=correlation_profile
         )
-    # Small slates (few teams) need a higher per-team cap to satisfy a 9-man roster
-    unique_teams = {p.team for p in players if p.team}
-    min_team_cap = math.ceil(config.roster_size / max(1, len(unique_teams) or 1))
-    if config.stack_rules.max_from_team < min_team_cap:
-        config = SlateConfig(**{**config.__dict__})
-        config.stack_rules = StackRules(**{**config.stack_rules.__dict__})
-        config.stack_rules.max_from_team = min(4, min_team_cap)
-
     exclude_lineups: List[set] = []
     used_counts: Dict[str, int] = {}
     lineups: List[List[int]] = []
     control_comparisons: List[dict] = []
     solved_count = 0
     infeasible_count = 0
+    primary_counts: Dict[str, int] = {}
+    selection_trace: List[dict] = []
 
     iterations = 0
     max_iterations = 3
@@ -1303,6 +1337,12 @@ def generate_portfolio(
                     "min_bring_backs": int(template[1]),
                 }
             )
+            blocked_games = {game for game, count in primary_counts.items() if game_cap is not None and count >= game_cap}
+            audit = {"step": len(lineups) + len(new_lineups) + 1,
+                     "stack_template": list(template), "exposure_remaining": dict(remaining),
+                     "excluded_rosters": [[players[i].player_id for i in sorted(roster)] for roster in exclude_lineups],
+                     "primary_game_counts_before": dict(primary_counts),
+                     "blocked_primary_games": sorted(blocked_games)}
             lineup_idxs = _build_lineup(
                 players,
                 config,
@@ -1317,12 +1357,20 @@ def generate_portfolio(
                 precomputed_correlation_terms=correlation_terms,
                 precomputed_format_terms=format_terms,
                 maximum_player_groups=maximum_player_groups,
+                excluded_primary_games=blocked_games,
+                solve_audit=audit,
             )
+            audit["player_ids"] = [players[i].player_id for i in lineup_idxs] if lineup_idxs else []
+            selection_trace.append(audit)
             if not lineup_idxs:
                 infeasible_count += 1
                 break
             solved_count += 1
             new_lineups.append(lineup_idxs)
+            if game_cap is not None:
+                qb = next(players[i] for i in lineup_idxs if players[i].position == "QB")
+                game = canonical_primary_game(qb.team, qb.opponent)
+                primary_counts[game] = primary_counts.get(game, 0) + 1
             for idx in lineup_idxs:
                 pid = players[idx].player_id
                 used_counts[pid] = used_counts.get(pid, 0) + 1
@@ -1387,6 +1435,7 @@ def generate_portfolio(
             "infeasible_solver_attempts": infeasible_count,
             "status": "CANDIDATE_POOL_UNDERFILLED" if len(lineups) < num_lineups else "complete",
         },
+        selection_trace=selection_trace,
     )
     return result
 
@@ -1486,6 +1535,8 @@ def run_gpp_pipeline(
     solver_backend: str = "bundled",
     precompute_correlation_terms: bool = False,
     maximum_player_groups: Sequence[tuple[set[str], int]] | None = None,
+    max_lineups_per_primary_game: int | None = None,
+    effective_config: SlateConfig | None = None,
 ) -> GPPOptimizerResult:
     """End-to-end entry point: load slate, build config, generate portfolio, export results."""
     result = generate_portfolio(
@@ -1512,6 +1563,8 @@ def run_gpp_pipeline(
         solver_backend=solver_backend,
         precompute_correlation_terms=precompute_correlation_terms,
         maximum_player_groups=maximum_player_groups,
+        max_lineups_per_primary_game=max_lineups_per_primary_game,
+        effective_config=effective_config,
     )
     if export_dir:
         csv_path = f"{export_dir}/lineups_{slate}_{season}w{week}.csv"

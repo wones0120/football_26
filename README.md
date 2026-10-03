@@ -770,6 +770,18 @@ candidate policy and generates a portfolio using 35% normalized mean, 45% P90,
 uses 35% mean, 48% P90, 17% correlation, and zero leverage. Its portfolio cycles
 QB+1/QB+2 templates with optional bring-backs and supports maximum/minimum player
 exposure, lineup uniqueness, team/game caps, and caller-supplied stack templates.
+New Large-GPP runs execute a serialized `classic_large_gpp_effective_strategy_v1`
+contract shared by app execution, offline parity, saved replay and reports. This
+strategy selects sequential exact lineup solves; it does not claim a joint
+portfolio optimum. Operations offers **Max lineups per primary game**:
+**No limit / 4 / 3 / 2 / Custom**. No limit preserves the current default;
+opposite QB directions share one sorted team pair. Saved and downloaded reports
+show requested/effective caps, their source and achieved counts. This differs
+from **Max players / game** inside one lineup. Small-field GPP accepts the same
+control through its existing canonical-game selector constraint.
+See [strategy/replay contract](docs/product/classic_large_gpp_strategy_contract.md)
+and the [frozen app parity and cap comparison](CLASSIC_LARGE_GPP_APP_CODEX_PARITY_AND_GAME_CAP.md).
+
 The UI shows eligible/included/excluded counts, player-level exclusion reasons,
 lineup mean, individual ceiling sum, floor where applicable, and realized stack
 structure.

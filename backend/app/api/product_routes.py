@@ -2137,6 +2137,8 @@ def run_optimizer(
         message=job.message,
         results=job.results,
         player_pool=job.params.get("strategy_runtime", {}).get("player_pool"),
+        effective_strategy_contract=job.params.get("effective_strategy_contract"),
+        primary_game_constraint=job.params.get("primary_game_constraint"),
         created_at=job.created_at,
         updated_at=job.updated_at,
     )
@@ -2266,6 +2268,8 @@ def get_optimizer_results(
         message=job.message,
         results=job.results,
         player_pool=job.params.get("strategy_runtime", {}).get("player_pool"),
+        effective_strategy_contract=job.params.get("effective_strategy_contract"),
+        primary_game_constraint=job.params.get("primary_game_constraint"),
         created_at=job.created_at,
         updated_at=job.updated_at,
     )

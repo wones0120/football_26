@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Classic Large-GPP parity and primary-game concentration
+
+- Share serialized effective strategy inputs/configuration across app execution,
+  offline parity, saved replay and reports; record code/CBC fingerprints and
+  numerical solve traces. Keep production sequential selection unchanged.
+- Add optional Max lineups per primary game (No limit / 4 / 3 / 2 / Custom).
+  Canonical QB team pairs group both directions; requested/effective/source and
+  achieved counts survive saved-run recovery and HTML export. Preserve defaults.
+- Reproduce the frozen d0e2ff8f five-lineup app portfolio exactly, evaluate 4/3/2
+  caps at 80% exposure, and retain expanded discovery as explicit research only.
+
+
 ### Recover optimizer runs after refresh
 
 - Add scoped recent optimizer history with statuses, lineup counts, strategies,

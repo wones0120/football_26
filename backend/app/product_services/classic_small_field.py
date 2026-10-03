@@ -905,8 +905,8 @@ def _select_global(
                                            or not isfinite(float(max_objective_loss))
                                            or float(max_objective_loss) < 0):
         raise ValueError("max_objective_loss must be a finite non-negative number")
-    if canonical_game_cap is not None and (type(canonical_game_cap) is not int or not 1 <= canonical_game_cap <= count):
-        raise ValueError("canonical_game_cap must be an integer from 1 through entry count")
+    if canonical_game_cap is not None and (type(canonical_game_cap) is not int or canonical_game_cap < 1):
+        raise ValueError("canonical_game_cap must be a positive integer")
     model = pulp.LpProblem("classic_small_field_selection", pulp.LpMaximize)
     chosen = pulp.LpVariable.dicts("lineup", range(len(candidates)), cat="Binary")
     model += pulp.lpSum(candidates[i]["objective_score"] * chosen[i] for i in chosen)
@@ -923,10 +923,10 @@ def _select_global(
                 if len(left & rosters[j]) > max_lineup_overlap:
                     model += chosen[i] + chosen[j] <= 1
     if canonical_game_cap is not None:
-        from .classic_thesis_shadow import canonical_game
+        from .classic_primary_game import canonical_primary_game
         def game_key(row):
             qb = row["qb"]
-            return row.get("game_key") or canonical_game(None, qb["team"], qb["opponent"])["key"]
+            return canonical_primary_game(qb["team"], qb["opponent"])
         for game in sorted({game_key(row) for row in candidates}):
             model += pulp.lpSum(chosen[i] for i,row in enumerate(candidates) if game_key(row)==game) <= canonical_game_cap
     if distinct_qb_paths:
@@ -1238,7 +1238,8 @@ def portfolio_summary(selected: Sequence[dict], *, candidate_count: int,
     count = len(selected)
     player_counts = Counter(pid for row in selected for pid in set(row["player_ids"]))
     games = Counter(game for row in selected for game in set(row.get("games_represented") or []))
-    primary_games = Counter(row["primary_game"] for row in selected)
+    from .classic_primary_game import candidate_primary_game
+    primary_games = Counter(candidate_primary_game(row) for row in selected)
     name_by_id = {str(p["player_id"]): p["name"] for row in selected for p in row["roster"]}
     lineup_rows = []
     for index, row in enumerate(selected, 1):
@@ -1448,8 +1449,8 @@ def analyze_small_field(
         raise ValueError("Unknown Classic small-field portfolio constraints: " + ", ".join(sorted(unknown)))
     for key in ("canonical_game_cap", "skill_max_appearances"):
         value = portfolio_constraints.get(key)
-        if value is not None and (type(value) is not int or not 1 <= value <= count):
-            raise ValueError(key + " must be an integer from 1 through entry count")
+        if value is not None and (type(value) is not int or value < 1 or (key == "skill_max_appearances" and value > count)):
+            raise ValueError(key + " must be a positive integer")
     if not 1 <= refill_workers <= 4:
         raise ValueError("Classic refill workers must be between 1 and 4")
     if refill_workers > 1 and os.environ.get("PYTHONHASHSEED") != "0":

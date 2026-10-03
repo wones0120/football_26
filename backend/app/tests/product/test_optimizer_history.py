@@ -158,3 +158,22 @@ def test_worker_does_not_claim_unsaved_or_failed_results_are_recoverable(monkeyp
         SimpleNamespace(status="failed", lineage_persisted=False, message="No legal roster")))
     with pytest.raises(PermanentJobError, match="No legal roster"):
         _optimizer_handler(SimpleNamespace(run_id="queued-1", progress=lambda *args: None), request())
+
+
+def test_queued_game_cap_is_saved_exactly_and_invalid_cap_never_enqueues(history_db):
+    engine, factory = history_db
+    app = FastAPI(); app.include_router(router)
+    def session_dependency():
+        with factory() as session:
+            yield session
+    app.dependency_overrides[get_db_session] = session_dependency
+    client = TestClient(app)
+    payload = request(strategy="classic_large_gpp_v1", params={"num_lineups": 5, "max_exposure": .8, "max_lineups_per_primary_game": 3})
+    response = client.post("/api/optimizer/jobs", json=payload)
+    assert response.status_code == 202
+    with factory() as session:
+        claimed = claim_next_job(session, worker_id="cap-test", lease_seconds=300)
+        assert claimed.request_json["params"] == payload["params"]
+    for value in (0, -1, True, 2.5, "3"):
+        invalid = {**payload, "optimizer_run_id": "invalid-cap", "params": {**payload["params"], "max_lineups_per_primary_game": value}}
+        assert client.post("/api/optimizer/jobs", json=invalid).status_code == 422

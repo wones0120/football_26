@@ -205,6 +205,11 @@ export type OptimizerResponse = {
   rule_run_id?: string | null;
   data_cutoff_at?: string | null;
   lineage_persisted: boolean;
+  effective_strategy_contract?: Record<string, unknown> | null;
+  primary_game_constraint?: {
+    requested: number | null; effective: number | null; source: string;
+    achieved_game_exposure: Record<string, number>; validation: string;
+  } | null;
   message?: string;
   results?: unknown;
   player_pool?: {

@@ -117,6 +117,12 @@ class OptimizerRunRequest(BaseModel):
             self.params["enforce_single_te"] = False
         if "long_shot_mode" in self.params and type(self.params["long_shot_mode"]) is not bool:
             raise ValueError("params.long_shot_mode must be an explicit boolean")
+        from .product_services.classic_primary_game import resolve_primary_game_cap
+        cap = resolve_primary_game_cap(self.params.get("max_lineups_per_primary_game"))
+        if cap is not None and self.strategy not in {"classic_large_gpp_v1", "classic_small_field_gpp"}:
+            raise ValueError("Max lineups per primary game requires Classic Large or Small Field GPP")
+        if self.strategy == "classic_large_gpp_v1" and self.params.get("classic_expanded_discovery"):
+            raise ValueError("Expanded Large-GPP discovery requires an explicitly labelled RESEARCH_SHADOW")
         return self
 
 
@@ -157,6 +163,8 @@ class OptimizerStatusResponse(BaseModel):
     message: Optional[str] = None
     results: Optional[list] = None
     player_pool: Optional[dict[str, Any]] = None
+    effective_strategy_contract: Optional[dict[str, Any]] = None
+    primary_game_constraint: Optional[dict[str, Any]] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

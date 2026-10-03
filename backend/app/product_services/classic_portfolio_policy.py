@@ -84,7 +84,8 @@ def validate_portfolio(rows, contract):
         if any(r["objective_score"] < e["selector_frontier"] - float(e["max_objective_loss"]) - 1e-9 for r in rows): reasons.append("quality_floor")
     qbs = Counter(str(r["qb"]["player_id"]) for r in rows)
     if e.get("canonical_game_cap") is not None:
-        games = Counter(tuple(sorted((r["qb"]["team"], r["qb"]["opponent"]))) for r in rows)
+        from .classic_primary_game import canonical_primary_game
+        games = Counter(canonical_primary_game(r["qb"]["team"], r["qb"]["opponent"]) for r in rows)
         if max(games.values(),default=0)>e["canonical_game_cap"]: reasons.append("canonical_game_cap")
     if e.get("skill_max_appearances") is not None:
         skill_ids = {p["player_id"] for r in rows for p in r["roster"] if p["position"] in {"RB","WR","TE"}}

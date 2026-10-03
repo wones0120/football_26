@@ -4906,18 +4906,8 @@ class OptimizerService:
                 "DST": {"top": 10, "min_score": 5.0, "min_value": 0.0},
             },
         }
-        gpp_cfg = {
-            "score_field": "strategy_p90_score",
-            "value_floor": {"default": 3.0, "WR": 3.4, "TE": 3.4, "DST": 0.0},
-            "team_caps": {"WR": 4, "TE": 3, "RB": 2},
-            "positions": {
-                "QB": {"top": 14, "min_score": 17.0, "min_value": 3.0},
-                "RB": {"top": 20, "min_score": 11.0, "min_value": 3.0},
-                "WR": {"top": 34, "min_score": 10.0, "min_value": 3.4},
-                "TE": {"top": 16, "min_score": 8.0, "min_value": 3.4},
-                "DST": {"top": 12, "min_score": 0.0, "min_value": 0.0},
-            },
-        }
+        from .classic_candidate_policy import LARGE_GPP_CANDIDATE_POLICY
+        gpp_cfg = LARGE_GPP_CANDIDATE_POLICY
         cfg = cash_cfg if mode == "cash" else gpp_cfg
         sort_field = cfg["score_field"]
 
@@ -5093,14 +5083,11 @@ class OptimizerService:
             working["ceil_per_k"] = (
                 working["strategy_p90_score"] / salary_k
             ).fillna(0.0)
-            config = {
-                "QB": {"top": 14, "min_score": 17.0, "min_value": 3.0, "value": 3.0},
-                "RB": {"top": 20, "min_score": 11.0, "min_value": 3.0, "value": 3.0},
-                "WR": {"top": 34, "min_score": 10.0, "min_value": 3.4, "value": 3.4},
-                "TE": {"top": 16, "min_score": 8.0, "min_value": 3.4, "value": 3.4},
-                "DST": {"top": 12, "min_score": 0.0, "min_value": 0.0, "value": 0.0},
-            }
-            team_caps = {"RB": 2, "WR": 4, "TE": 3}
+            from .classic_candidate_policy import LARGE_GPP_CANDIDATE_POLICY
+            config = {position: {**values, "value": LARGE_GPP_CANDIDATE_POLICY["value_floor"].get(
+                position, LARGE_GPP_CANDIDATE_POLICY["value_floor"]["default"])}
+                for position, values in LARGE_GPP_CANDIDATE_POLICY["positions"].items()}
+            team_caps = LARGE_GPP_CANDIDATE_POLICY["team_caps"]
             team_field = "player_team" if "player_team" in working.columns else "team"
             working[team_field] = working[team_field].fillna("").astype(str).str.upper()
             for position, group in working.groupby("position"):
@@ -5919,6 +5906,18 @@ class OptimizerService:
             strategy=strategy,
         )
         strategy = str(strategy_config["strategy_id"])
+        from .classic_primary_game import resolve_primary_game_cap
+        primary_game_cap = resolve_primary_game_cap(params.get("max_lineups_per_primary_game"))
+        if strategy == CLASSIC_LARGE_GPP_STRATEGY_ID and params.get("classic_expanded_discovery"):
+            raise ValueError("Expanded Large-GPP discovery requires an explicitly labelled RESEARCH_SHADOW; use the offline research command")
+        if primary_game_cap is not None and (strategy not in {CLASSIC_LARGE_GPP_STRATEGY_ID, CLASSIC_SMALL_FIELD_GPP_STRATEGY_ID}):
+            raise ValueError("Max lineups per primary game is a Classic GPP portfolio constraint")
+        if strategy == CLASSIC_SMALL_FIELD_GPP_STRATEGY_ID and "max_lineups_per_primary_game" in params:
+            portfolio_constraints = dict(params.get("portfolio_constraints") or {})
+            if portfolio_constraints.get("canonical_game_cap") is not None and portfolio_constraints["canonical_game_cap"] != primary_game_cap:
+                raise ValueError("Conflicting primary-game concentration constraints")
+            portfolio_constraints["canonical_game_cap"] = primary_game_cap
+            params["portfolio_constraints"] = portfolio_constraints
         if "long_shot_mode" in params and type(params["long_shot_mode"]) is not bool:
             raise ValueError("params.long_shot_mode must be an explicit boolean")
         long_shot_mode = bool(params.get("long_shot_mode", False))
@@ -8009,7 +8008,7 @@ class OptimizerService:
                             ).encode()).hexdigest(),
                             **frozen_payload,
                         }
-                    gpp_result = run_gpp_pipeline(
+                    generation_request = dict(
                         season=season,
                         week=week,
                         slate=slate,
@@ -8045,6 +8044,19 @@ class OptimizerService:
                             if small_field and risk_controls and elevated_ids else None
                         ),
                     )
+                    generation_request["max_lineups_per_primary_game"] = params.get("max_lineups_per_primary_game") if not small_field else None
+                    if strategy == CLASSIC_LARGE_GPP_STRATEGY_ID:
+                        from .classic_strategy_contract import build_strategy_contract, execute_strategy_contract, portfolio_audit
+                        contract = build_strategy_contract(players=generation_players,
+                            pipeline_options=generation_request, requested=params,
+                            metadata={"optimizer_run_id": job_id, "projection_run_id": projection_run_id,
+                                      "input_snapshot_sha256": params["strategy_runtime"]["classic_run_input_snapshot"]["sha256"]})
+                        gpp_result = execute_strategy_contract(contract, engine=self.engine)
+                        params["effective_strategy_contract"] = contract
+                        params["strategy_runtime"]["strategy_contract_audit"] = portfolio_audit(
+                            contract, gpp_result.lineups, trace=gpp_result.selection_trace)
+                    else:
+                        gpp_result = run_gpp_pipeline(**generation_request)
                     small_field_report = None
                     if small_field:
                         from .classic_small_field import analyze_small_field, expand_candidate_discovery, generate_parallel_seeds
@@ -8252,6 +8264,16 @@ class OptimizerService:
                     lineup_results = [
                         [self._gpp_player_to_dict(p) for p in lineup] for lineup in gpp_result.lineups
                     ]
+                    from .classic_primary_game import primary_game_exposure
+                    effective_game_cap = (params.get("portfolio_constraints") or {}).get("canonical_game_cap") if small_field else primary_game_cap
+                    achieved_games = primary_game_exposure(gpp_result.lineups)
+                    params["primary_game_constraint"] = {
+                        "requested": params.get("max_lineups_per_primary_game"),
+                        "effective": effective_game_cap,
+                        "source": "request" if "max_lineups_per_primary_game" in params else "legacy_portfolio_request" if effective_game_cap is not None else "strategy_default_no_limit",
+                        "achieved_game_exposure": achieved_games,
+                        "validation": "verified" if effective_game_cap is None or max(achieved_games.values(), default=0) <= effective_game_cap else "failed",
+                    }
                     if small_field:
                         for lineup in lineup_results:
                             complete = all(player["ownership"] is not None for player in lineup)

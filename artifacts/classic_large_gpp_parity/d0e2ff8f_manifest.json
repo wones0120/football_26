@@ -1,0 +1,271 @@
+{
+  "source_run_id": "d0e2ff8f-96cd-4fc0-ac7e-8297d4504701",
+  "archive": "artifacts/classic_large_gpp_parity/d0e2ff8f_evidence.tar.gz",
+  "archive_sha256": "fbfb1cceb3fa0c6d08b66478523cfb5ae6c6fe544530571a8a7a842327a2707a",
+  "archive_bytes": 1172136,
+  "files": {
+    "artifacts/classic_large_gpp_parity/d0e2ff8f/A_no_cap_audit.json": {
+      "sha256": "61f25cc63b03d17f49fa66a30ba4c20cf0d1a4ffd8a5168039b103c845bb4f21",
+      "bytes": 197495
+    },
+    "artifacts/classic_large_gpp_parity/d0e2ff8f/A_no_cap_contract.json": {
+      "sha256": "f8ce603cf61b90d3f2f90176176a21ef62b679d1e3c41d460c81ea3951ccef6f",
+      "bytes": 372179
+    },
+    "artifacts/classic_large_gpp_parity/d0e2ff8f/A_no_cap_readable_report.html": {
+      "sha256": "ef0973894cdd5d620391e6275e08f1e56bb3057453a1e20bce0bfcbe102cacc8",
+      "bytes": 34395
+    },
+    "artifacts/classic_large_gpp_parity/d0e2ff8f/B_cap4_audit.json": {
+      "sha256": "d9f8c3108783ab7b2016f586e8bb201b9bdfbb9b396a96fc4e1363327adea682",
+      "bytes": 192662
+    },
+    "artifacts/classic_large_gpp_parity/d0e2ff8f/B_cap4_contract.json": {
+      "sha256": "013f48b428846ae0b05d3732c412692f8260a2e7a2c776a6421481672eda65ee",
+      "bytes": 372270
+    },
+    "artifacts/classic_large_gpp_parity/d0e2ff8f/B_cap4_readable_report.html": {
+      "sha256": "f3a648ffa38f26cb4b2b0b4ae9ed6cbcf2948327a514769e350f8ad7c0a12ce5",
+      "bytes": 33894
+    },
+    "artifacts/classic_large_gpp_parity/d0e2ff8f/C_cap3_audit.json": {
+      "sha256": "cf7c54abaf397596ba89aad48585c1466514bc6b63d5afd40fd770b86b9bb86c",
+      "bytes": 192848
+    },
+    "artifacts/classic_large_gpp_parity/d0e2ff8f/C_cap3_contract.json": {
+      "sha256": "00971a0ba6427f773ffb6085688c819c7a80a79317444823d5b3b8e7019f7851",
+      "bytes": 372270
+    },
+    "artifacts/classic_large_gpp_parity/d0e2ff8f/C_cap3_readable_report.html": {
+      "sha256": "1741c07e3b1c962cf44225d4c6444ebe603b84261b9c52be770ed5f5a81311e9",
+      "bytes": 33938
+    },
+    "artifacts/classic_large_gpp_parity/d0e2ff8f/D_cap2_audit.json": {
+      "sha256": "8845501b38359f46561d0fc835054c73d3886fefa1ab9fab108040e5603ebe69",
+      "bytes": 196631
+    },
+    "artifacts/classic_large_gpp_parity/d0e2ff8f/D_cap2_contract.json": {
+      "sha256": "d9240e2bbab8ab86794c52b103de3f77f28070c8aeba022d7696b9422ed711c6",
+      "bytes": 372270
+    },
+    "artifacts/classic_large_gpp_parity/d0e2ff8f/D_cap2_readable_report.html": {
+      "sha256": "0837a3f453b55c5108494b5a7986c83e9ef938afb60aa73e9ca85198b7738dc0",
+      "bytes": 34175
+    },
+    "artifacts/classic_large_gpp_parity/d0e2ff8f/app_fixture.json": {
+      "sha256": "01b1e2829857939e134969ecc11a824755281a175fb280350c661c3aaaec26e5",
+      "bytes": 7706930
+    },
+    "artifacts/classic_large_gpp_parity/d0e2ff8f/backend_validation.txt": {
+      "sha256": "5868d3ecdb0b40fe728b82418d72251a6fa2e78d6b5d0418a033dd0021c982ce",
+      "bytes": 179
+    },
+    "artifacts/classic_large_gpp_parity/d0e2ff8f/baseline_replay.json": {
+      "sha256": "bb018b2462dcbb823d28b3f6bbbe21a51d1d4fb56fc6caba1af8292c67703044",
+      "bytes": 255089
+    },
+    "artifacts/classic_large_gpp_parity/d0e2ff8f/expanded_candidate_pool.json": {
+      "sha256": "1c588c0806c442f64c29b5ef8e09b749c72b57095228de2228488cbdae693669",
+      "bytes": 3042415
+    },
+    "artifacts/classic_large_gpp_parity/d0e2ff8f/expanded_cap3_audit.json": {
+      "sha256": "1cf3cc85a46ac47f06bfa769c6bd00914a3dbd2dd308dbb79bd9f0c5fce263b3",
+      "bytes": 142208
+    },
+    "artifacts/classic_large_gpp_parity/d0e2ff8f/expanded_cap3_contract.json": {
+      "sha256": "31ad4c2f6ac92e025df42289f6ddc786bb9792aac1e1ceeea5808443a08910a4",
+      "bytes": 372564
+    },
+    "artifacts/classic_large_gpp_parity/d0e2ff8f/expanded_no_cap_audit.json": {
+      "sha256": "7f8f177e442bfff3b597cb37ea322d31f45ec96d354a19981d7a6abc074c42c3",
+      "bytes": 148817
+    },
+    "artifacts/classic_large_gpp_parity/d0e2ff8f/expanded_no_cap_contract.json": {
+      "sha256": "9da5424475a7c6cd74894d2920d2c504942157972b3684ed85517caffea663ea",
+      "bytes": 372544
+    },
+    "artifacts/classic_large_gpp_parity/d0e2ff8f/fixture_manifest.json": {
+      "sha256": "5377c9c65da58954793496ab99df1701aad06dfc1ac5f06fd3c340755745c6b1",
+      "bytes": 735
+    },
+    "artifacts/classic_large_gpp_parity/d0e2ff8f/original_classic_small_field.py.txt": {
+      "sha256": "0a8e8e25162dec91627cb076933ef766e0263bcd5bcff75799b909a54fadd669",
+      "bytes": 119674
+    },
+    "artifacts/classic_large_gpp_parity/d0e2ff8f/original_gpp_optimizer.py.txt": {
+      "sha256": "e35f6c4e715ac393a698cc83a291caeaad92b0b01346d7041ed4019cd47fdef4",
+      "bytes": 63118
+    },
+    "artifacts/classic_large_gpp_parity/d0e2ff8f/original_lineup_correlation_scoring.py.txt": {
+      "sha256": "f4700514a4a2a3e002353dbec43bdeedeff65150538163ffd35fdc16d5344eb4",
+      "bytes": 74833
+    },
+    "artifacts/classic_large_gpp_parity/d0e2ff8f/original_optimizer.py.txt": {
+      "sha256": "a66f80530994f4ccf9d4583fc05b3a72a1d768e2f63f6dc28bcdb6f2c4d6bdd0",
+      "bytes": 478961
+    },
+    "artifacts/classic_large_gpp_parity/d0e2ff8f/original_rule_library.py.txt": {
+      "sha256": "3a9711cd1aa246d6131d59990a6f344b3a4b5bd76ea9bb6be67514d1f4c88b1f",
+      "bytes": 26915
+    },
+    "artifacts/classic_large_gpp_parity/d0e2ff8f/parity.json": {
+      "sha256": "f137974b879bf09de74b98b13c67ab6581f9d4e7cc08fd6b5bdacc3cd41cd6b2",
+      "bytes": 2481
+    },
+    "artifacts/classic_large_gpp_parity/d0e2ff8f/primary_game_control_desktop.jpg": {
+      "sha256": "6206e5d6c0845034f0c0c514c9071677fd81b84f4276712133e4e92959392af9",
+      "bytes": 113221
+    },
+    "artifacts/classic_large_gpp_parity/d0e2ff8f/sensitivity_summary.json": {
+      "sha256": "6bd4161ffcb561edbf100d728e95d173915965a5e6b47ee56c8e653cf929be35",
+      "bytes": 822219
+    },
+    "artifacts/classic_large_gpp_parity/d0e2ff8f/ui_build.txt": {
+      "sha256": "f3abff489b0c7a80d99343b8dfb1e005507f0d5c26f49c5205ac2ab4cd651857",
+      "bytes": 736
+    },
+    "artifacts/classic_large_gpp_parity/d0e2ff8f/ui_validation.txt": {
+      "sha256": "5ee4f62ed68722b31087a46d82af092a955457cd78cc28d9e4f5a5509c57891e",
+      "bytes": 4630
+    }
+  },
+  "parity": {
+    "status": "PASS",
+    "input_match": true,
+    "projection_p90_match": true,
+    "eligibility_ledger_match": true,
+    "config_match": true,
+    "exact_five_rosters": true,
+    "comparisons": [
+      {
+        "step": 1,
+        "roster_match": true,
+        "feasible_region_match": true,
+        "objective_coefficients_match": true,
+        "primary_objective_match": true,
+        "reported_objective_match": true,
+        "saved_primary_score": 5.419170109700969,
+        "replay_primary_score": 5.419170109700969
+      },
+      {
+        "step": 2,
+        "roster_match": true,
+        "feasible_region_match": true,
+        "objective_coefficients_match": true,
+        "primary_objective_match": true,
+        "reported_objective_match": true,
+        "saved_primary_score": 5.415412070292935,
+        "replay_primary_score": 5.415412070292935
+      },
+      {
+        "step": 3,
+        "roster_match": true,
+        "feasible_region_match": true,
+        "objective_coefficients_match": true,
+        "primary_objective_match": true,
+        "reported_objective_match": true,
+        "saved_primary_score": 5.41189906848329,
+        "replay_primary_score": 5.41189906848329
+      },
+      {
+        "step": 4,
+        "roster_match": true,
+        "feasible_region_match": true,
+        "objective_coefficients_match": true,
+        "primary_objective_match": true,
+        "reported_objective_match": true,
+        "saved_primary_score": 5.405767880897914,
+        "replay_primary_score": 5.405767880897914
+      },
+      {
+        "step": 5,
+        "roster_match": true,
+        "feasible_region_match": true,
+        "objective_coefficients_match": true,
+        "primary_objective_match": true,
+        "reported_objective_match": true,
+        "saved_primary_score": 5.19169199882774,
+        "replay_primary_score": 5.19169199882774
+      }
+    ],
+    "saved_candidate_manifest": {
+      "reason": "no_complete_saved_candidate_pool",
+      "status": "unavailable",
+      "contract_id": "candidate_pool_manifest_v1"
+    },
+    "boundary": "Frozen ordered final solver frame and immutable upstream eligibility ledger; no current data loaded",
+    "mismatch_classifications": [],
+    "reconciled_report_only_differences": [
+      "Legacy rule-profile metadata weights differ from actual resolved GPP solver config; effective contract renders executed config",
+      "Legacy stack-policy description says include RB; actual production catcher constraint is WR/TE",
+      "Raw model JSON int/float spelling and term order differ; numerical coefficients/bounds and objective fingerprints match"
+    ]
+  },
+  "sensitivity": {
+    "A_no_cap": {
+      "canonical_primary_games": {
+        "CIN-JAX": 5
+      },
+      "selector_objective_total": 26.843941128202857,
+      "projected_point_sum": 650.684804571814,
+      "summed_marginal_p90": 1146.7254590163673,
+      "maximum_overlap": 7,
+      "status": "completed"
+    },
+    "B_cap4": {
+      "canonical_primary_games": {
+        "CIN-JAX": 4,
+        "DAL-HOU": 1
+      },
+      "selector_objective_total": 26.791249034433836,
+      "projected_point_sum": 656.9944304500075,
+      "summed_marginal_p90": 1153.2011645958394,
+      "maximum_overlap": 7,
+      "status": "completed"
+    },
+    "C_cap3": {
+      "canonical_primary_games": {
+        "CIN-JAX": 3,
+        "DAL-HOU": 2
+      },
+      "selector_objective_total": 26.651544345658273,
+      "projected_point_sum": 656.0146738601345,
+      "summed_marginal_p90": 1149.9377747811395,
+      "maximum_overlap": 7,
+      "status": "completed"
+    },
+    "D_cap2": {
+      "canonical_primary_games": {
+        "CHI-NYJ": 1,
+        "CIN-JAX": 2,
+        "DAL-HOU": 2
+      },
+      "selector_objective_total": 26.408394658425323,
+      "projected_point_sum": 655.7518828249302,
+      "summed_marginal_p90": 1147.863902854822,
+      "maximum_overlap": 7,
+      "status": "completed"
+    },
+    "expanded_no_cap": {
+      "canonical_primary_games": {
+        "CIN-JAX": 5
+      },
+      "selector_objective_total": 26.843941128202857,
+      "projected_point_sum": 650.684804571814,
+      "summed_marginal_p90": 1146.7254590163673,
+      "maximum_overlap": 7,
+      "status": "Optimal"
+    },
+    "expanded_cap3": {
+      "canonical_primary_games": {
+        "CIN-JAX": 3,
+        "DAL-HOU": 2
+      },
+      "selector_objective_total": 26.651544345658273,
+      "projected_point_sum": 656.0146738601345,
+      "summed_marginal_p90": 1149.9377747811395,
+      "maximum_overlap": 7,
+      "status": "Optimal"
+    }
+  }
+}

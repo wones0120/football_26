@@ -7,6 +7,8 @@ import { DailyNewsBrief } from "./DailyNewsBrief";
 import { ContestWorkflow } from "./ContestWorkflow";
 import { ContestLibrary } from "./ContestLibrary";
 import { RecentOptimizerRuns } from "./RecentOptimizerRuns";
+import { ClassicGameConcentrationReport } from "./ClassicGameConcentrationReport";
+import { classicGameCapParams, parseSavedPrimaryGameCap, PRIMARY_GAME_CAP_STORAGE_KEY } from "./classicGameConcentration";
 import { DesignPreview } from "./DesignPreview";
 import { DigitalTwin } from "./DigitalTwin";
 import { ModelWorkbench } from "./ModelWorkbench";
@@ -391,7 +393,6 @@ function App() {
   const [numLineups, setNumLineups] = useState(20);
   const [maxExposure, setMaxExposure] = useState(60);
   const [classicMaxLineupOverlap, setClassicMaxLineupOverlap] = useState("");
-  const [classicPrimaryGameCap, setClassicPrimaryGameCap] = useState("");
   const [classicSkillMaxAppearances, setClassicSkillMaxAppearances] = useState("");
   const [classicExpandedDiscovery, setClassicExpandedDiscovery] = useState(false);
   const [classicDistinctQbPaths, setClassicDistinctQbPaths] = useState(false);
@@ -481,7 +482,7 @@ function App() {
       if (!Number.isInteger(value) || value < 0 || value > 8) throw new Error("Maximum lineup overlap must be 0–8 players.");
       constraints.max_lineup_overlap = value;
     }
-    for (const [key, input] of [["canonical_game_cap", classicPrimaryGameCap], ["skill_max_appearances", classicSkillMaxAppearances]]) {
+    for (const [key, input] of [["skill_max_appearances", classicSkillMaxAppearances]]) {
       if (input.trim()) {
         const value = Number(input);
         if (!Number.isInteger(value) || value < 1 || value > numLineups) throw new Error(`${key} must be 1 through the requested lineup count.`);
@@ -523,6 +524,13 @@ function App() {
   const [minimumUniqueness, setMinimumUniqueness] = useState(2);
   const [maxPlayersPerTeam, setMaxPlayersPerTeam] = useState(4);
   const [maxPlayersPerGame, setMaxPlayersPerGame] = useState(5);
+  const [maxLineupsPerPrimaryGame, setMaxLineupsPerPrimaryGame] = useState<number | null>(() => {
+    try { return parseSavedPrimaryGameCap(window.localStorage.getItem(PRIMARY_GAME_CAP_STORAGE_KEY)); }
+    catch { return null; }
+  });
+  useEffect(() => {
+    try { window.localStorage.setItem(PRIMARY_GAME_CAP_STORAGE_KEY, JSON.stringify(maxLineupsPerPrimaryGame)); } catch { /* Keep the current session choice. */ }
+  }, [maxLineupsPerPrimaryGame]);
   const [enforceSingleTE, setEnforceSingleTE] = useState(true);
   const [avoidDstOpponents, setAvoidDstOpponents] = useState(true);
   const [longShotMode, setLongShotMode] = useState(false);
@@ -978,6 +986,7 @@ function App() {
     setPendingAction("Queueing weekly run...");
     setWeeklyRunError(null);
     try {
+      if (contestFormat === "classic" && ["classic_large_gpp_v1", "classic_small_field_gpp"].includes(selectedOptimizerStrategy)) classicGameCapParams(maxLineupsPerPrimaryGame);
       const availabilityOverrides = configuredAvailabilityOverrides();
       const classicReportingUrls = selectedOptimizerStrategy === CLASSIC_SMALL_FIELD_GPP_STRATEGY_ID
         ? classicContestUrls(classicSmallFieldContestUrl) : [];
@@ -1022,6 +1031,7 @@ function App() {
                 minimum_uniqueness: minimumUniqueness,
                 max_players_per_team: maxPlayersPerTeam,
                 max_players_per_game: maxPlayersPerGame,
+                ...classicGameCapParams(maxLineupsPerPrimaryGame),
               }
             : {}),
           availability_overrides: availabilityOverrides,
@@ -1271,6 +1281,7 @@ function App() {
     setError(null);
     setPendingAction("Reconciling slate player identities...");
     try {
+      if (contestFormat === "classic" && ["classic_large_gpp_v1", "classic_small_field_gpp"].includes(selectedOptimizerStrategy)) classicGameCapParams(maxLineupsPerPrimaryGame);
       const availabilityOverrides = configuredAvailabilityOverrides();
       if (optimizerProjectionOverride) {
         throw new Error("Run Optimizer rebuilds current projections. Select Latest completed (automatic) before running.");
@@ -1374,6 +1385,7 @@ function App() {
                 minimum_uniqueness: minimumUniqueness,
                 max_players_per_team: maxPlayersPerTeam,
                 max_players_per_game: maxPlayersPerGame,
+                ...classicGameCapParams(maxLineupsPerPrimaryGame),
               }
             : {}),
           availability_overrides: availabilityOverrides,
@@ -3399,10 +3411,7 @@ function App() {
                   onChange={(event) => setClassicMaxObjectiveLoss(event.target.value)}
                   placeholder="No quality floor" />
               </label>
-              <label>Max primary QB stacks per game (optional)
-                <input type="number" min={1} max={numLineups} value={classicPrimaryGameCap}
-                  onChange={(event) => setClassicPrimaryGameCap(event.target.value)} placeholder="No game cap" />
-              </label>
+
               <label>Max appearances per skill player (optional)
                 <input type="number" min={1} max={numLineups} value={classicSkillMaxAppearances}
                   onChange={(event) => setClassicSkillMaxAppearances(event.target.value)} placeholder="Existing caps" />
@@ -3578,6 +3587,16 @@ function App() {
             )}
             {contestFormat === "classic" && (classicContestStrategy === CLASSIC_LARGE_GPP_STRATEGY_ID || classicContestStrategy === CLASSIC_SMALL_FIELD_GPP_STRATEGY_ID) && (
               <div className="form-row">
+                <label>Max lineups per primary game
+                  <select value={maxLineupsPerPrimaryGame === null ? "none" : [4, 3, 2].includes(maxLineupsPerPrimaryGame) ? String(maxLineupsPerPrimaryGame) : "custom"}
+                    onChange={(event) => setMaxLineupsPerPrimaryGame(event.target.value === "none" ? null : event.target.value === "custom" ? 1 : Number(event.target.value))}>
+                    <option value="none">No limit</option><option value="4">4</option><option value="3">3</option><option value="2">2</option><option value="custom">Custom</option>
+                  </select>
+                  <small>Portfolio concentration by the QB's canonical game. JAX-CIN and CIN-JAX count together.</small>
+                </label>
+                {maxLineupsPerPrimaryGame !== null && ![4, 3, 2].includes(maxLineupsPerPrimaryGame) && <label>Custom primary-game limit
+                  <input type="number" min={1} step={1} value={maxLineupsPerPrimaryGame} onChange={(event) => setMaxLineupsPerPrimaryGame(Number(event.target.value))} />
+                </label>}
                 <label>
                   Minimum uniqueness
                   <input type="number" min={1} max={9} value={minimumUniqueness}
@@ -3918,6 +3937,7 @@ function App() {
               <p>Job ID: {optimizerStatus.job_id}</p>
               <p>Status: {optimizerStatus.status}</p>
               <p>Strategy: {optimizerStatus.strategy}</p>
+              <ClassicGameConcentrationReport optimizer={optimizerStatus} />
               {typeof optimizerStatus.strategy_config.description === "string" && (
                 <p>{optimizerStatus.strategy_config.description}</p>
               )}

@@ -388,3 +388,26 @@ inputs and roster rules; contest assignments and final inactives still need revi
 
 See [Week 4 Sunday contest decision](../../WEEK4_SUNDAY_CONTEST_PROFILES_AND_PORTFOLIO_DECISION.md)
 for exact reproduction settings, reviewed manifests, and entry-specific clearance.
+
+
+## Classic primary-game concentration and strategy replay
+
+For Classic Large or Small-field GPP, `params.max_lineups_per_primary_game`
+is omitted/null for no portfolio cap or a positive integer. Operations provides
+No limit, 4, 3, 2, and Custom; the user choice persists after refresh. Both QB
+directions of the sorted uppercase team pair consume the same cap. This does
+not change per-lineup `max_players_per_game`, player projections or exposure.
+Conflicting Small-field legacy `portfolio_constraints.canonical_game_cap`
+requests fail explicitly. Invalid values fail before a job is queued.
+
+New Large-GPP runs save the ordered eligible Player frame and resolved execution
+configuration in `params.effective_strategy_contract`. Saved-results API and
+readable reports expose this contract plus `primary_game_constraint` requested,
+effective, source, validation, and achieved counts. Sequential generation blocks
+all QBs in a primary game once its selected budget is full; infeasible portfolios
+fail rather than relaxing player/game caps. Every step retains numerical region
+and objective hashes, template, remaining exposure and CBC status. Production
+selects the best next feasible lineup, not a proven joint portfolio optimum.
+
+See [the strategy contract and replay workflow](classic_large_gpp_strategy_contract.md)
+and [the frozen fixture comparison](../../CLASSIC_LARGE_GPP_APP_CODEX_PARITY_AND_GAME_CAP.md).
