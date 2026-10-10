@@ -476,6 +476,11 @@ class OwnershipService:
         if target_persisted and not ownership_source.empty:
             persist_observations(self.engine, ownership_source)
 
+        shadow_message = ""
+        if target_persisted:
+            from .gpp_shadow_learning import refresh_after_import
+            shadow_message = " " + refresh_after_import(self.engine, season=season, week=week, slate=slate)
+
         return OwnershipLoadResult(
             season=season,
             week=week,
@@ -484,7 +489,7 @@ class OwnershipService:
             message=(
                 f"Loaded {len(standings)} contest standings rows, {len(entries)} entries, "
                 f"and {len(ownership)} ownership rows from {source_path.name}; "
-                f"{len(ownership_source) - len(ownership_source.dropna(subset=['player_id'])) if not ownership_source.empty else 0} identity observations need review"
+                f"{len(ownership_source) - len(ownership_source.dropna(subset=['player_id'])) if not ownership_source.empty else 0} identity observations need review{shadow_message}"
             ),
             contest_id=resolved_contest_id,
             source_file_id=source_info["source_file_id"],
@@ -519,7 +524,10 @@ class OwnershipService:
         if data_cutoff_at is not None:
             params["data_cutoff_at"] = data_cutoff_at
             salary_cutoff_clause = " AND as_of <= :data_cutoff_at"
-            projection_cutoff_clause = " AND created_at <= :data_cutoff_at"
+            projection_cutoff_clause = (" AND (created_at <= :data_cutoff_at OR (projection_run_id = :projection_run_id "
+                "AND projection.season=:season AND projection.week=:week AND UPPER(projection.slate_id)=:target_slate "
+                "AND projection.data_cutoff_at <= :data_cutoff_at AND projection.created_at <= :ownership_evaluated_at))")
+            params['ownership_evaluated_at'] = _utcnow()
             latest_projection_cutoff_clause = " AND latest.created_at <= :data_cutoff_at "
 
         with self.engine.begin() as conn:
@@ -545,6 +553,23 @@ class OwnershipService:
                 conn,
                 params=params,
             )
+            if projection_run_id and inspector.has_table("curated_salary", schema="public"):
+                # Identity review updates the canonical import after upload.
+                # The import-time snapshot can therefore omit newly resolved
+                # players. Use that same canonical pool as the explicit build,
+                # preserving its original clocks; keep historical snapshots.
+                current_salary = pd.read_sql(text("""
+                    SELECT season, week, slate, player_master_id AS player_id,
+                           source_player_key AS site_player_id, salary,
+                           roster_position, team AS team_id, opponent AS opponent_team_id
+                    FROM public.curated_salary
+                    WHERE season=:season AND week=:week AND UPPER(slate)=:target_slate
+                      AND source_system='draftkings' AND player_master_id IS NOT NULL
+                      AND (:data_cutoff_at IS NULL OR created_at AT TIME ZONE 'UTC' <= :data_cutoff_at)
+                """), conn, params={**params, "data_cutoff_at": data_cutoff_at})
+                old_target = ((salary["season"] == season) & (salary["week"] == week)
+                              & salary["slate"].str.upper().eq(str(slate).upper()))
+                salary = pd.concat([salary.loc[~old_target], current_salary], ignore_index=True)
             projections = (
                 pd.read_sql(
                     text(
@@ -850,6 +875,25 @@ class OwnershipService:
             data_cutoff_at=cutoff,
             projection_run_id=projection_run_id,
         )
+        projection_pool_ids = None
+        if projection_run_id and not model_rows.empty:
+            # A dependent build may use only players actually scored by its
+            # explicitly selected new projection. Salary-only fringe rows must
+            # not receive manufactured zero-projection ownership features.
+            with self.engine.connect() as connection:
+                run = connection.execute(text('''
+                    SELECT status,season,week,slate_id FROM target.projection_run
+                    WHERE projection_run_id=:id
+                '''), {'id':projection_run_id}).mappings().one_or_none()
+                if not run or (run['status'],run['season'],run['week'],str(run['slate_id']).upper()) != (
+                        'completed',season,week,str(slate).upper()):
+                    raise ValueError('Ownership requires a completed same-scope explicit projection')
+                projection_pool_ids = sorted(set(connection.execute(text('''
+                    SELECT player_id FROM target.player_projection WHERE projection_run_id=:id
+                '''), {'id':projection_run_id}).scalars()))
+            target_scope = ((model_rows['season'] == season) & (model_rows['week'] == week)
+                & model_rows['slate'].str.upper().eq(str(slate).upper()))
+            model_rows = model_rows.loc[~target_scope | model_rows['player_id'].astype(str).isin(projection_pool_ids)].copy()
         if model_rows.empty:
             return OwnershipLoadResult(
                 season,
@@ -888,6 +932,8 @@ class OwnershipService:
         walk_forward = generate_walk_forward_ownership_predictions(training_rows)
         metrics = ownership_model_metrics(walk_forward)
         metrics["input_provenance"] = {
+            "target_projection_run_id": projection_run_id,
+            "target_projection_player_ids": projection_pool_ids,
             "historical_projection_policy": (
                 "same slate; cutoff no later than creation; created before game kickoff"
             ),

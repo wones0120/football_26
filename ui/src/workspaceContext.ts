@@ -53,6 +53,17 @@ export function normalizeSlateId(slate: string) {
   return slate.trim().replaceAll(" ", "_").toUpperCase();
 }
 
+// Native/imported slates may have more than one game offering on the same day.
+// Labels are identifiers, never evidence that a slate is prepared or playable.
+export function isValidSlateId(slate: string) {
+  return /^[A-Z0-9][A-Z0-9_-]{0,63}$/.test(normalizeSlateId(slate))
+    && !["UNKNOWN", "DEFAULT"].includes(normalizeSlateId(slate));
+}
+
+export function availableSlateOptions(current: string, discovered: string[] = []) {
+  return [...new Set([...SLATE_OPTIONS, current, ...discovered].map(normalizeSlateId).filter(isValidSlateId))];
+}
+
 export function parsePersistedActiveSlateContext(rawValue: string | null): ActiveSlateContext | null {
   if (!rawValue) return null;
   try {
@@ -65,7 +76,7 @@ export function parsePersistedActiveSlateContext(rawValue: string | null): Activ
       || !Number.isInteger(value.week)
       || Number(value.week) < 1
       || Number(value.week) > 25
-      || !SLATE_OPTIONS.includes(slate)
+      || !isValidSlateId(slate)
     ) {
       return null;
     }

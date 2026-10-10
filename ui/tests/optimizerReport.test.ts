@@ -4,6 +4,88 @@ import test from "node:test";
 import type { OptimizerResponse } from "../src/api.ts";
 import { buildOptimizerReportHtml } from "../src/optimizerReport.ts";
 
+test("Showdown exported report uses saved Captain position and effective QB policy", () => {
+  const optimizer = {
+    job_id: "captain-position", status: "completed", strategy: "showdown_cash_baseline_v1",
+    contest_format: "showdown", objective: "cash", enforce_single_te: false, results: [[{
+      player_id: "wr", name: "Receiver", roster_position: "CPT", position: "WR", salary: 9000,
+      showdown_captain_preferences: {allowed_positions: ["WR"]},
+      showdown_qb_preferences: {allow_qb_captain: false, requested_portfolio_size: 1},
+    }]],
+  } as unknown as OptimizerResponse;
+  const html = buildOptimizerReportHtml(optimizer, {season: 2026, week: 4, slate: "THURSDAY_NIGHT"});
+  assert.match(html, /Captain positions: WR only/);
+  assert.match(html, /QB Captain allowed: No/);
+  assert.match(html, /Effective QB-Captain lineup limit: 0/);
+});
+
+test("Classic failure report leads with gate diagnostics and suppresses production lineups", () => {
+  const optimizer = {
+    job_id: "blocked", status: "failed", strategy: "classic_large_gpp_v1", contest_format: "classic", objective: "gpp",
+    results: [[{name: "Must not render", player_id: "p", salary: 5000}]],
+    data_readiness: {status: "NOT_READY", solver_called: false, override_used: false,
+      reason_codes: ["market_game_evidence_missing"], required_sources: {market: {status: "NOT_READY"}},
+      market_coverage: {covered_game_ids: [], required_game_ids: ["a", "b"]},
+      optional_sources: {weather: {status: "NOT_REQUIRED_BY_CURRENT_MODEL", required: false}}},
+  } as unknown as OptimizerResponse;
+  const html = buildOptimizerReportHtml(optimizer, {season: 2026, week: 5, slate: "SUNDAY_MAIN"});
+  assert.match(html, /Generation evidence: NOT_READY/);
+  assert.match(html, /Solver called: no · Override used: no/);
+  assert.match(html, /0\/2 games/);
+  assert.match(html, /market_game_evidence_missing/);
+  assert.match(html, /no · NOT_REQUIRED_BY_CURRENT_MODEL/);
+  assert.doesNotMatch(html, /<h2>Lineup 1<\/h2>|Must not render/);
+});
+
+test("Classic explicit preview cannot imply entry-ready and renders actual objective contribution", () => {
+  const optimizer = {
+    job_id: "preview", status: "completed", strategy: "classic_large_gpp_v1", contest_format: "classic", objective: "gpp",
+    data_readiness: {status: "DEVELOPMENT_PREVIEW", solver_called: true, override_used: true, reason_codes: ["salary_pool_stale"]},
+    entry_readiness: {status: "READY", entry_ready: true, current_entry_clearance: "VERIFIED", checks: {Test: {status: "PASS"}}},
+    results: [[{name: "Player", player_id: "p", salary: 5000, projection: 10, p90: 15,
+      lineup_correlation_summary: {total_adjustment: 0},
+      lineup_objective_components: {projection: 1, ceiling: 2, leverage: .1, context: .2, correlation: .375,
+        total: 3.675, solver_objective: 3.675, reconciliation_delta: 0, weights: {correlation: .15}}}]],
+  } as unknown as OptimizerResponse;
+  const html = buildOptimizerReportHtml(optimizer, {season: 2026, week: 5, slate: "SUNDAY_MAIN"});
+  assert.match(html, /DEVELOPMENT_PREVIEW — explicit incomplete-evidence override/);
+  assert.match(html, /Solver called: yes · Override used: yes/);
+  assert.match(html, /ENTRY READY: NO/);
+  assert.match(html, /Actual solver objective components/);
+  assert.match(html, /<td>correlation<\/td><td>0\.375000<\/td>/);
+  assert.match(html, /Correlation: \+0\.38/);
+  assert.match(html, /solver_objective/);
+});
+
+test("Showdown role audit preserves depth, uncertainty and excluded kicker evidence", () => {
+  const optimizer = {
+    job_id: "roles", status: "completed", strategy: "showdown_gpp_portfolio_v3",
+    contest_format: "showdown", objective: "gpp", enforce_single_te: false, results: [],
+    entry_readiness: {entry_ready: false, status: "BLOCKED", checks: {},
+      current_slate_role_availability_audit: {players: [
+        {player: "Promoted <RB>", team: "NO", position: "RB", role_availability: "rostered",
+          expected_depth_role: "expected_starter", role_starter_evidence: "Coach & chart",
+          role_change: "Starter removed", projection_before: 7.44, projection_change: 8.77,
+          optimizer_eligible: true, role_confidence: "medium", role_resolution_warning: "Workload unresolved"},
+        {player: "Backup kicker", team: "NO", position: "K", role_availability: "unavailable",
+          expected_depth_role: "expected_backup", projection: 0, optimizer_eligible: false,
+          role_confidence: "high"},
+      ]}},
+  } as unknown as OptimizerResponse;
+  const html = buildOptimizerReportHtml(optimizer, {season: 2026, week: 4, slate: "MONDAY_NIGHT"});
+  const section = html.split("CURRENT SLATE ROLE AND AVAILABILITY AUDIT")[1].split("</section>")[0];
+  assert.equal((section.match(/<th>/g) ?? []).length, 10);
+  assert.match(section, /Promoted &lt;RB&gt;/);
+  assert.match(section, /Coach &amp; chart/);
+  assert.match(section, /7\.44 → 8\.77/);
+  assert.match(section, /expected_starter/);
+  assert.match(section, /expected_backup/);
+  assert.match(section, /Excluded/);
+  assert.match(section, /medium · Workload unresolved/);
+  assert.match(section, /overflow-x:auto/);
+  assert.match(html, /ENTRY READY: NO/);
+});
+
 test("Showdown report displays scenario coverage and baseline versus conditioned player values", () => {
   const optimizer = {
     job_id: "scenario-audit", status: "completed", strategy: "showdown_gpp_portfolio_v3",
@@ -893,4 +975,23 @@ test("one selected contest omits diversification-combination language", () => {
   assert.doesNotMatch(html, /A \/ A \/ A/);
   assert.doesNotMatch(html, /Diversification benefit/);
   assert.doesNotMatch(html, /candidate combinations with repetition/);
+});
+
+test("GPP report records one provisional recommendation without inventing returns", () => {
+  const candidate = {candidate_id: 'candidate', lineup_number: 2, rank: 1, projected_points: 120,
+    marginal_upside_sum: 210, salary: 49900, availability_exceptions: []};
+  const optimizer = {job_id: 'gpp', status: 'completed', strategy: 'classic_large_gpp_v1',
+    contest_format: 'classic', objective: 'gpp', results: [], gpp_recommendation: {
+      policy_id: 'gpp_projection_first_recommendation_v1', status: 'provisional',
+      reason: 'Projected points <not paid probability>', recommended: candidate, candidates: [candidate],
+      exceptions: [], limitations: ['Not a lineup percentile'],
+    }} as unknown as OptimizerResponse;
+  const html = buildOptimizerReportHtml(optimizer, {season: 2026, week: 5, slate: 'SUNDAY_MAIN'});
+  assert.match(html, /Recommended lineup #2/);
+  assert.match(html, /Expected return: unavailable/);
+  assert.match(html, /Paid-finish probability: unavailable/);
+  assert.match(html, /Sum of player P90s/);
+  assert.match(html, /&lt;not paid probability&gt;/);
+  assert.doesNotMatch(buildOptimizerReportHtml({...optimizer, status:'failed'},
+    {season:2026,week:5,slate:'SUNDAY_MAIN'}), /Recommended lineup #2/);
 });

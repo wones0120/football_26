@@ -91,6 +91,61 @@ def complete_evidence():
     }
 
 
+def test_report_uses_run_level_decision_snapshot_without_repeating_candidate_pool():
+    evidence = complete_evidence()
+    snapshot = {"contract_id": "decision_snapshot_v1", "source_file_ids": ["source-1"]}
+    config = {"decision_snapshot": snapshot, "strategy_runtime": {"small_max": {
+        "all_candidates": [{"players": [
+            {"player_id": "alpha", "slot": "CPT"},
+            *[{"player_id": player_id, "slot": "FLEX"}
+              for player_id in ("beta", "gamma", "delta", "epsilon", "zeta")],
+        ]}],
+    }}}
+    evidence["optimizer_runs"] = [{
+        "optimizer_run_id": "optimizer-1", "contest_format": "showdown",
+        "strategy": "showdown_gpp_captain_informed_v2", "constraint_config_json": config,
+        "optimizer_created_at": NOW, "data_cutoff_at": NOW,
+    }]
+    baseline = deepcopy(evidence)
+    for row in baseline["lineup_players"]:
+        row["constraint_config_json"] = config
+
+    report = build_slate_learning_report(
+        season=2026, week=1, slate="SUNDAY_NIGHT", entry_user="wones0120",
+        evidence=evidence, generated_at=NOW,
+    )
+    old_layout = build_slate_learning_report(
+        season=2026, week=1, slate="SUNDAY_NIGHT", entry_user="wones0120",
+        evidence=baseline, generated_at=NOW,
+    )
+    assert report["entries"][0]["decision_snapshot"] == snapshot
+    assert report["entries"] == old_layout["entries"]
+    assert report["optimizer_effectiveness"] == old_layout["optimizer_effectiveness"]
+    assert report["optimizer_effectiveness"]["runs"][0]["candidate_pool"]["status"] == "original_candidate_pool"
+    changed = deepcopy(evidence)
+    changed["optimizer_runs"][0]["constraint_config_json"]["decision_snapshot"]["source_file_ids"] = ["source-2"]
+    updated = build_slate_learning_report(
+        season=2026, week=1, slate="SUNDAY_NIGHT", entry_user="wones0120",
+        evidence=changed, generated_at=NOW,
+    )
+    assert updated["evidence_hash"] != report["evidence_hash"]
+
+
+def test_evidence_loader_fetches_full_optimizer_configuration_only_per_run():
+    service = SlateLearningService(engine=MagicMock())
+    service._rows = MagicMock(side_effect=lambda connection, sql, params: (
+        [{"contest_id": "contest-1"}] if "FROM target.dfs_contest c" in sql else []
+    ))
+    service._load_evidence(
+        MagicMock(), season=2026, week=4, slate="SUNDAY_MAIN", entry_user="wones0120",
+    )
+    queries = [call.args[1] for call in service._rows.call_args_list]
+    run_query = next(sql for sql in queries if "FROM target.optimizer_run\n" in sql)
+    player_query = next(sql for sql in queries if "JOIN target.lineup_player player" in sql)
+    assert "constraint_config_json" in run_query
+    assert "constraint_config_json" not in player_query
+
+
 def test_report_links_exact_lineage_and_scores_each_evidence_domain():
     report = build_slate_learning_report(
         season=2026, week=1, slate="sunday_night", entry_user="wones0120",
@@ -570,7 +625,7 @@ def test_weekly_report_refreshes_requested_stats_once_before_all_slates():
     service._refresh_weekly_stats = MagicMock(return_value=stats)
     service.generate = MagicMock(side_effect=lambda **scope: build_slate_learning_report(
         **scope, evidence=complete_evidence(), generated_at=NOW,
-    ))
+    ) | {"telemetry": {"loaded_configuration_count": 1, "candidate_count": 0}})
     calls = MagicMock()
     calls.attach_mock(service._refresh_weekly_stats, "refresh")
     calls.attach_mock(service.generate, "generate")

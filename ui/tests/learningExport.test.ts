@@ -88,4 +88,18 @@ test("ChatGPT export preserves captain weighting, evidence gaps, and full report
   assert.match(markdown, /Candidate selection: best selected 130\.00; observed regret 20\.00/);
   const json = markdown.split("~~~~json\n")[1].split("\n~~~~")[0];
   assert.deepEqual(JSON.parse(json), report);
+
+  const compact: WeeklyLearningReport = JSON.parse(JSON.stringify(report));
+  compact.contract_id = "weekly_learning_report_v2";
+  const effectiveness = compact.slate_reports[0].optimizer_effectiveness!;
+  const run = effectiveness.runs[0];
+  run.candidate_preview = run.candidates;
+  delete run.candidates;
+  run.candidate_detail = { url: "/api/learning/reports/slate-1/optimizer-runs/run-1/candidates", evidence_hash: "frozen-hash" };
+  effectiveness.inclusion_policy = { policy_id: "entry_linked_and_explicit_diagnostics_v1", included_run_count: 1, excluded_run_count: 9 };
+  const compactMarkdown = weeklyLearningReportMarkdown(compact);
+  assert.match(compactMarkdown, /frozen-hash/);
+  assert.match(compactMarkdown, /\/api\/learning\/reports\/slate-1\/optimizer-runs\/run-1\/candidates/);
+  assert.match(compactMarkdown, /150\.00 \| 130\.00 \| 122\.53/);
+  assert.match(compactMarkdown, /1 entry-linked or requested diagnostic runs included; 9 unrelated completed runs excluded/);
 });

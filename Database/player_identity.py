@@ -177,6 +177,10 @@ def repair_salary_identities(
     source = f'"{source_schema}"'
     target = f'"{target_schema}"'
 
+    from sqlalchemy.orm import Session
+    from backend.app.services.matching import find_player_master_id, upsert_alias, utcnow_naive
+    from backend.app.models import UnresolvedPlayerQueue
+
     with engine.begin() as conn:
         inspector = inspect(conn)
         required = (
@@ -232,7 +236,8 @@ def repair_salary_identities(
             {"season": season, "week": week, "slate": slate},
         ).mappings().all()
 
-        decisions: dict[tuple[str, str, str], IdentityDecision] = {}
+        resolver = Session(bind=conn.execution_options(schema_translate_map={None: source_schema}))
+        decisions: dict[tuple, IdentityDecision] = {}
         resolved_player_ids: set[str] = set()
         resolved = 0
         quarantined = 0
@@ -243,15 +248,14 @@ def repair_salary_identities(
             name = str(row["player_name"] or "")
             team = normalize_team(str(row["team"] or ""))
             position = normalize_position(row["position"])
-            key = (strip_name_suffix(name), team, position)
+            key = (row["source_system"], row["source_player_key"], strip_name_suffix(name), team, position)
             decision = decisions.get(key)
             if decision is None:
-                decision = choose_identity(
-                    player_name=name,
-                    team=team,
-                    position=position,
-                    masters=masters,
-                )
+                player_id, reason = find_player_master_id(resolver,
+                    source_system=row["source_system"], source_key=row["source_player_key"],
+                    name=name, team=team, position=position)
+                candidates = choose_identity(player_name=name, team=team, position=position, masters=masters)
+                decision = IdentityDecision(player_id, reason, candidates.candidate_player_ids)
                 decisions[key] = decision
 
             source_record_key = str(row["source_record_key"])
@@ -292,6 +296,19 @@ def repair_salary_identities(
                         "source_record_key": source_record_key,
                     },
                 )
+                if row["source_player_key"]:
+                    upsert_alias(resolver, decision.player_id, row["source_system"], row["source_player_key"],
+                        name, team, position, row["season"], row["week"])
+                    resolver.query(UnresolvedPlayerQueue).filter(
+                        UnresolvedPlayerQueue.source_system == row["source_system"],
+                        UnresolvedPlayerQueue.source_player_key == row["source_player_key"],
+                        UnresolvedPlayerQueue.season == row["season"],
+                        UnresolvedPlayerQueue.week == row["week"],
+                        UnresolvedPlayerQueue.slate == row["slate"],
+                        UnresolvedPlayerQueue.resolution_status == "open",
+                    ).update({"resolution_status": "resolved", "resolved_player_master_id": decision.player_id,
+                              "resolved_by": "shared_identity_resolver", "resolved_at": utcnow_naive(),
+                              "notes": decision.reason}, synchronize_session=False)
                 resolved_player_ids.add(decision.player_id)
                 continue
 
@@ -347,48 +364,11 @@ def repair_salary_identities(
             )
             quarantined += 1
 
-        latest_context_rows = conn.execute(
-            text(
-                f"""
-                SELECT DISTINCT ON (player_master_id)
-                       player_master_id::text AS player_id,
-                       upper(trim(COALESCE(team, ''))) AS team,
-                       upper(trim(COALESCE(NULLIF(position, ''), roster_position, ''))) AS position
-                FROM {source}.curated_salary
-                WHERE player_master_id = ANY(:player_ids)
-                ORDER BY player_master_id, season DESC, week DESC, created_at DESC,
-                         curated_salary_id DESC
-                """
-            ),
-            {"player_ids": sorted(resolved_player_ids)},
-        ).mappings().all() if resolved_player_ids else []
-
+        # A salary identity match must not rewrite football role/team truth.
+        # In particular, a provider's TE label cannot turn an LS into a TE.
+        resolver.flush()
+        resolver.close()
         masters_updated = 0
-        for context in latest_context_rows:
-            player_id = str(context["player_id"])
-            team = normalize_team(str(context["team"] or ""))
-            position = normalize_position(context["position"])
-            if position in _UNKNOWN_POSITIONS:
-                position = ""
-            if not team and not position:
-                continue
-            update = conn.execute(
-                text(
-                    f"""
-                    UPDATE {source}.player_master
-                    SET primary_team = CASE WHEN :team <> '' THEN :team ELSE primary_team END,
-                        position = CASE WHEN :position <> '' THEN :position ELSE position END,
-                        updated_at = now()
-                    WHERE player_master_id::text = :player_id
-                      AND (
-                        (:team <> '' AND COALESCE(primary_team, '') IS DISTINCT FROM :team)
-                        OR (:position <> '' AND COALESCE(position, '') IS DISTINCT FROM :position)
-                      )
-                    """
-                ),
-                {"player_id": player_id, "team": team, "position": position},
-            )
-            masters_updated += int(update.rowcount or 0)
 
     return SalaryIdentityRepairResult(
         salary_rows_seen=len(salary_rows),

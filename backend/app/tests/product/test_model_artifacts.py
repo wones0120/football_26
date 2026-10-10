@@ -71,3 +71,24 @@ def test_tree_paths_and_player_probes_are_reloadable_and_diagnostic_only():
     assert any(item["scenario"] == "League-average team implied total" for item in explanation["counterfactuals"])
     assert explanation["top_positive_model_drivers"] or explanation["top_negative_model_drivers"]
     assert "not SHAP or causal" in explanation["attribution_method"]
+
+
+@pytest.mark.parametrize('market_adjustment', [3.25, -100.0, float('nan')])
+def test_explanation_replays_market_correction_floor_and_participation(market_adjustment):
+    from backend.app.product_services.predictions import blend_point_predictions
+    model, train, target, columns = _fitted_payload()
+    target.attrs = {'source_audit': [{'team': 'MIA', 'volume': 20}]}
+    target['market_team_point_adjustment'] = market_adjustment
+    target['pregame_availability_probability'] = .5
+    data, checksum = serialize_artifact(model=model, train=train, target=target,
+        feature_columns=columns, calibration={}, profiles={})
+    payload = deserialize_artifact(data, checksum)
+    original = payload['target'].copy(deep=True)
+    explanation = explain_player(payload, str(target.iloc[0].player_id))
+    base = blend_point_predictions(model.predict(target[columns]), train, target)[0]
+    adjustment = 0. if pd.isna(market_adjustment) else market_adjustment
+    assert explanation['reloaded_model_mean'] == pytest.approx(max(0., base + adjustment)*.5)
+    assert explanation['opportunity_assessment']['pregame_opportunity_point_reason'] == 'no_current_opportunity_context'
+    assert explanation['opportunity_assessment']['pregame_opportunity_point_anchor'] is None
+    pd.testing.assert_frame_equal(payload['target'], original)
+    assert payload['target'].attrs == original.attrs

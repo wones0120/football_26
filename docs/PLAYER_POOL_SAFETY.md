@@ -65,6 +65,38 @@ remained one and the completed projection count remained one.
 
 ## Current-week context
 
+### Expected kicking duties
+
+`backend/app/product_services/kicker_roles.py` gates kickers before every optimizer
+strategy and annotates new canonical projection inputs. The normal hierarchy is
+explicit sourced pregame primary (`role_label=PRIMARY` or `STARTER`, or
+`evidence.kicker_role=primary`), current ranked `K1`, a unique current `ACT` kicker,
+then a unique kicker with FG/PAT attempts in the most recent prior team game within
+three weeks of the same season. An unranked `K` label identifies a position only.
+Canonical aliases match source IDs and teams; display names and salary are never
+used to choose roles. Competitors outside the salary pool still count.
+
+Roster and stat receipts must precede the projection cutoff; current roster rows
+must match the target season/week, and usage must precede the target week. Context
+observed/received times use the existing cutoff-safe context loader. Unresolved or
+conflicting primary identities are excluded and carry a warning; a usage inference
+also warns that pregame duties require confirmation. No current chart is fetched
+for a historical replay. Historical receipt gaps therefore produce uncertainty.
+
+A backup can qualify only through sourced expected duties: a replacement primary
+designation, or `evidence.expected_kicking_duties=true` with a source URI and
+observation. Explicit shared duties can allow two kickers; generic availability or
+a high salary cannot. New projections zero unsupported roles and all their
+quantiles. Only a role-confirmed primary can use the disclosed eligible-peer
+fallback when its own history is missing. Shared-duty players need their own
+history; no primary distribution is copied to a backup.
+
+Older saved projections remain immutable. New optimizer runs gate those pools and
+retain their original assessments with `kicker_role_*` evidence, warnings and
+`kicker_role_not_eligible` / specific role exclusion reasons. Runtime metadata uses
+`strategy_runtime.kicker_role_gate`. Projection feature lineage and calibration
+metadata retain the same role assessment. Rebuild projections after new evidence.
+
 Migration `0027_pregame_context_opportunity.sql` extends the append-only
 pregame context contract with optional expected snaps, routes, carries,
 targets, red-zone share, and goal-line share. The API validates non-negative
@@ -93,6 +125,16 @@ remain unavailable unless independently supplied; target redistribution alone
 does not establish them.
 
 ## User controls
+
+Classic's automatic questionable-player scenario is built from the eligible
+scoring pool after salary, current-roster, and requested-position filters.
+Injury-snapshot Q rows for already excluded players retain their eligibility
+disposition and are not converted into invalid availability overrides. Explicit
+user assumptions still require a unique player in the selected scoring pool.
+The latest failed Classic Large-GPP preparation rebuild is a visible preflight
+blocker even when broad slate coverage passes. A newer running or completed
+rebuild replaces that failure with **Preparing inputs** or the current coverage
+assessment, respectively; **Refresh Status** reloads the persisted audit.
 
 Optimizer `params` accepts:
 

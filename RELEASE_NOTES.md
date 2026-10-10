@@ -1,6 +1,671 @@
 # Release Notes
 
+## 2026-10-10 — Classic production review
+
+- Confirm current Classic policies remain the supported production choice; reject promotion of the losing upside ranker and retain unvalidated workload/shortlist experiments in shadow.
+- Verify live shadow status and unchanged Sunday Main baseline; 38 targeted tests pass. No production setting changes. See `docs/product/classic_production_decision.md`.
+
+## 2026-10-10 — Captain shortlist shadow
+
+- Audit 174 saved candidates and validate the highest-mean feasible challenger using canonical IDs and native Captain/FLEX salaries.
+- Register the frozen control/challenger pair for imported-outcome tracking. Live Captain and Sunday Main selections remain unchanged; no paid-finish or return improvement is claimed. See `docs/product/captain_shortlist_shadow.md`.
+
+## 2026-10-10 — Sunday-night Captain prepared baseline
+
+- Import verified native salary group, resolve the sourced Matt/Matthew Hibner alias, and complete READY preparation.
+- Validate five returned lineups, native Captain/FLEX IDs and salaries, scoring, export and 100 persisted simulation draws. Register the unconditioned baseline for postgame tracking; no policy changes or contest entries.
+- Sunday Main’s saved selection is unchanged. See `docs/product/sunday_night_captain_baseline.md`.
+
+## 2026-10-10 — Automatic GPP shadow outcome tracking
+
+- Add immutable prelock registrations and versioned reports refreshed by standings/entry-history imports, with canonical actuals, projection errors, paid-finish evidence and conservative returns. Unknowns remain explicit; no live ranking or promotion changes.
+- Add Learning comparison status and retry controls. Register the Sunday Main workload pair and confirm current readiness is READY.
+- Captain core checks pass; upcoming Sunday/Monday-night preparation remains outstanding. Migration: `0049_gpp_shadow_learning.sql`. See `docs/product/gpp_shadow_outcome_tracking.md`.
+
+## 2026-10-10 — Sunday Main workload evidence shadow
+
+- Add a frozen-model workload experiment with raw-source and projection parity gates, same-team evidence review, isolated generation and scores under both models.
+- Reuse the default-off allocation repair; distinguish derived forecasts from missing explicit workload evidence. Both control and shadow pass constraints, but a different research lineup is not proof of improved GPP paid finishes.
+- Verify live selections and all stored projections unchanged. No runtime or policy activation. See `docs/product/sunday_workload_shadow.md`.
+
+## 2026-10-10 — Sunday Main projection audit and generation shadows
+
+- Audit frozen projection consistency, evidence clocks and explicit workload coverage; distinguish missing pregame forecasts from available derived opportunities.
+- Reproduce the exact saved portfolio, then test mean-led scoring and template rotation offline. Both retain the original recommendation; no paid-finish improvement is claimed.
+- Save reproducible inputs, constraints, traces and prelock choices. Live recommendation and strategy contract verified unchanged. See `docs/product/sunday_projection_generation_results.md`.
+
+## 2026-10-10 — Current Classic GPP shadow experiment
+
+- Audit player-pool pruning, normalized generation scoring, sequential exposure/overlap constraints and projection-first final ranking. Current large-GPP generation has no separate broad-pool shortlist.
+- Add a read-only, outcome-independent shadow runner with a fixed mean guardrail/upside challenger, per-slate comparisons and upcoming Sunday Main snapshots. The challenger loses both primary historical comparisons and is not promoted.
+- No live selection, model, constraint or optimizer changes. See `docs/product/current_classic_gpp_ranking_audit.md`.
+
+## 2026-10-10 — Sunday Main paid-finish diagnosis
+
+- Rebuild Weeks 1, 3 and 4 Learning reports with imported personal winnings and paid-place counts; exclude cash contests from GPP conclusions.
+- Extend the historical audit to use exported paid cutoffs without fabricating payout ladders and distinguish final-selection, shortlisting and complete-pool generation misses. Recognize Pylon/Daily Dollar single-entry names with cash precedence.
+- Evidence favors investigating selection/shortlisting first, chiefly in the legacy small-field path. Preserve current optimizer settings; see `docs/product/sunday_main_generation_selection_diagnosis.md` for limits and the recommended shadow evaluation.
+
+## 2026-10-10 — Entry history and winnings in the app
+
+- Add Learning import/validation and saved calendar-year results for DraftKings entry-history CSVs, with separate cash/ticket values, GPP subset, free-entry exclusions and unmatched/conflicting record warnings.
+- Preserve original files as immutable snapshots; deduplicate repeated and overlapping exports by native contest/entry IDs.
+- Rebuilt learning reports use personal winnings and verified exported paid-place counts without requiring screenshots or full payout tables. No optimizer or model-policy changes. Requires migration `0048_draftkings_entry_history.sql`.
+
+## 2026-10-10 — Historical GPP recommendation baseline
+
+- Add a read-only Sunday Main audit that freezes the deployed selector's choice before joining canonical actuals, screens saved clocks, and separates returned-candidate selection gaps from saved search-pool coverage.
+- Report field placement, missing evidence and conservative payout/tie bounds. Require verified GPP classification and reconciled payout ladders before paid-finish or return claims; group related runs by slate and keep results exploratory.
+- Save separate JSON/Markdown research reports. No live policy, model, or worker changes. See `docs/product/gpp_historical_baseline.md`.
+
+## 2026-10-10 — One provisional GPP recommendation
+
+- Evaluate returned GPP candidates, persist one recommendation and its rationale, display alternatives and availability exceptions, and export only the recommended roster on request. Reuse one lineup across the slate's contests without requiring saved contests.
+- Label the projection-first fallback and summed marginal upside accurately; do not claim calibrated paid-finish probability or expected return. GPP generation, user constraints and model projections remain unchanged.
+- Fix the shared-slate UI status-key regression that hid completed optimizer, projection and agent results. Simulation remains scoped by both slate and format.
+- See `docs/product/gpp_candidate_recommendation.md` for acceptance evidence and remaining performance work.
+
+## 2026-10-10 — Shared Classic and Captain workflow repair
+
+- Live Sunday Main preparation exposed a roster/depth supplement dropping an existing official practice report. Preserve sourced risk evidence and original clocks through that step; keep missing, stale and future evidence checks intact.
+- Enable Captain simulation in the durable weekly path and UI, using one CPT/five FLEX, shared physical-player outcomes, native slot salaries and replayable role counts. Keep GPP frequency/return claims separate from simulation diagnostics.
+- Validate projection slate on reuse and simulation request scope on retry; retain prepared ownership and cutoff-safe salary inputs. Discover additional saved contest slate labels without collapsing same-day games.
+- Preserve Sunday Main GPP defaults and optimizer weights; its saved 307-player pool, salaries and projected means match the previous loader. API/worker activation and fresh Sunday Main preparation passed; 100/100 live simulation iterations persisted and reloaded. See `docs/product/shared_classic_captain_path_audit.md` for tests and limitations.
+
+## 2026-10-10 — Multi-slate GPP priority and acceptance scope
+
+- Prioritize paid GPP finishes alongside expected return/upside across Classic Main/early/late and equally important Captain Thursday/Sunday/Monday slates.
+- Record initial slate-context findings and scope-isolation, Captain, export and shared-game leakage acceptance requirements. Put slate certification and GPP performance work before broader automation. Planning only; additional slate support is not yet certified.
+
+## 2026-10-10 — Automated decision workflow design
+
+- Document the proposed GPP decision/quality workflow, tournament contest selection, outcome settlement, and controlled learning architecture in `docs/product/automated_decision_quality_workflow.md`.
+- Map existing services and missing capabilities, including GPP probability calibration and research-only joint simulation, to phased acceptance criteria. Documentation only; no runtime automation, strategy defaults, or model promotion changed.
+
+## 2026-10-10 — Focused projection stabilization
+
+- Fix saved explanation means to include market corrections and the final zero floor before availability scaling.
+- Treat missing support flags as missing evidence; record opportunity-anchor/fallback reasons and review flags for incomplete role history. Preserve allocation defaults and anchor weights.
+- Recover the prelock Week 4 source snapshot and retain a one-week paired diagnostic for later research. Historical expansion is parked; projection defaults and optimizer scoring are unchanged. See `CLASSIC_PROJECTION_VALIDATION_REPORT.md`.
+
+## 2026-10-09 — Research-gated player opportunity allocation repair
+
+- Add `team_window_v2` to exclude former-team and stale-window workloads from current-team opportunity shares, reconcile fullback/RB source positions, and retain genuinely unallocated volume.
+- Gate opportunity anchors on supported current-team evidence; preserve the shared 55% coefficient. Missing history remains an unknown volume forecast.
+- Keep `PLAYER_OPPORTUNITY_ALLOCATION_POLICY=legacy_v1` as the production default. Frozen Week 5 and archived Week 4 validation, optimizer diagnostics and regression results are in `CLASSIC_OPPORTUNITY_PROJECTION_REPAIR.md`; no live runs or active pointers are changed.
+
+
+## 2026-10-09 — Complete capped Classic portfolios and expand lineup volume
+
+- Fit default Classic GPP stack templates to the selected team/game maximums. A two-player team cap now cycles compatible single stacks instead of stopping after two lineups at an impossible QB + two teammates template. Explicit incompatible stack requests fail with a construction explanation.
+- Support 1–500 requested lineups and matching primary-game caps; retain saved counts and explain that team/game limits are maximums.
+- Bulk Classic portfolios above 50 entries reuse correlation terms and retain the first matched control replay, while every selected lineup retains its solver trace and independent portfolio validation.
+
+## 2026-10-09 — Prevent optimizer queue-receipt timeouts
+
+- Move expensive prepared-source auditing behind the durable optimizer queue receipt; the worker still blocks changed or invalid inputs before generation.
+- Retry a lost queue receipt once using the same run ID, distinguish polling interruptions from job failure, and clear the stale selecting message before follow-up status refreshes.
+
+
+## 2026-10-09 — Explain optimizer wait states
+
+- Show an indeterminate progress indicator and readiness-check message beside Run Optimizer while its initial saved-input check is pending.
+- Display preparation progress, check failures/retries and other pending actions beside the button; replace the initial misleading preparation-required label with a checking status.
+
+
+## 2026-10-09 — Restore tournament optimization defaults
+
+- Restore Classic Large GPP and Showdown GPP as the normal strategies, with five lineups by default. Direct and weekly UI requests submit `objective: gpp`.
+- Show explicit tournament labels and require ownership during upstream preparation. Preserve saved lineup controls and historical Cash results.
+- Verified fresh preparation through an actual five-lineup Classic GPP run (`22dd1841-a95d-4213-8041-ad80dd93e9a9`), with legal lineups and no source rebuild during optimization.
+
+
+## 2026-10-09 — Shared identities through optimization
+
+- Use the same source-ID/alias resolver for imports and preparation, refresh roster identities first, and stop unresolved identities before projections. Preserve canonical specialist roles despite salary-position labels.
+- Use repaired canonical salaries for ownership derived from an explicit projection; retain original import clocks.
+- Normalize official Arizona `AZ` reports to `ARI`. Fresh practice evidence supports assessing questionable players while unconfirmed workloads remain elevated uncertainty, without inventing clearance.
+- Verified 2026 week 5 Sunday Main end to end: all 587 salaries resolve consistently; preparation is READY; two cash optimizations each produce five legal lineups from the same build without source refreshes. Saved evidence: `artifacts/shared_identity_pipeline/acceptance_report.json`; 278 targeted regression tests passed.
+
+
+## 2026-10-09 — Classic game-environment research and frozen review
+
+- Add reproduced Classic game-total observations and exploratory salary/projection/stack-adjusted comparisons to Research Lab, explicitly labeled research only. Cash outcomes remain unavailable without historical payout evidence.
+- Add an expandable review to the primary Classic recommendation and readable report, using the existing frozen prelock sources for per-player totals, spreads, implied points, slate-relative tiers, offensive composition and separate DST opponent context. Unusable evidence stays Unavailable.
+- Preserve optimizer inputs, scores, candidate policies and selection; frozen replay returns the identical primary roster and diagnostics.
+
+## 2026-10-09 — Report readiness before optimization
+
+- Separate file loading, slate preparation, and optimization in Operations; show unresolved import identities beside the files and retain them on reload.
+- Distinguish projection completion with unresolved salary warnings from optimizer readiness.
+- Build current-slate features before auditing historical training labels, then freeze the projection cutoff; a missing pre-build feature no longer leaves an obsolete upstream failure.
+- Accept authenticated original salary CSV provenance for generation without requiring a separate draft-group ID; require exact native player IDs and retain all identity/game checks. Contest-entry compatibility remains separate.
+
+## 2026-10-09 — Prepare inputs before optimization
+
+- Add **Prepare slate for optimization** as a durable upstream job for source
+  refresh, identity repair, projections, ownership and readiness checks.
+- Run Optimizer reuses the verified prepared build without starting collectors
+  or rebuilding projections. Failed preparation retains its source audit.
+- Recognize sourced `CUT` roster dispositions and supplement unresolved Classic
+  roster absences from current official transaction registers, retaining event dates
+  and source snapshots. Newer or ambiguous transactions cannot reuse an old exclusion.
+- Disable optimization until preparation is ready; reject changed, stale,
+  superseded or mismatched inputs at the API and worker boundaries.
+
+
+## 2026-10-09 — Restore lineup and player controls
+
+- Restore 1–50 requested lineups, player exposure, overlap, team/game limits,
+  primary-game concentration, elevated-risk limits and Captain exposure controls.
+  Keep Captain and Classic as the only normal strategy choices.
+- Default to one primary cash-oriented recommendation. Additional requested
+  outputs use the same individual ranking and hard user constraints, without a
+  portfolio expected-value or diversification bonus. Report underfilled requests
+  explicitly; preserve readiness, frozen evidence and verified CSV export.
+- Save preferences per format and migrate existing Classic controls. Captain AI
+  packets continue reviewing the primary recommendation.
+
+## 2026-10-09 — Captain and Classic single-lineup strategies
+
+- Replace normal contest-size, GPP and multi-entry strategy choices with
+  `captain_single_lineup_v1` and `classic_single_lineup_v1`, defaulting to one
+  legal lineup from broad internal discovery.
+- Rank with a distinct cash-oriented proxy using correlated downside, bounded
+  upside, availability and supported popularity. Label diagnostics unvalidated;
+  withhold cash probabilities until a supported contest-field model exists.
+- Preserve readiness/source freezing, identity, availability, exclusions,
+  historical runs/research, prelock checklists and immutable audit artifacts.
+  Keep exclusions separate from Assume Out and prevent stale history recovery
+  from undoing a new format choice.
+- Add prominent single-lineup reports and collapsed candidates, one-entry Captain
+  AI exports, mixed-objective saved history and frozen Week 3 proxy comparisons.
+- See `CAPTAIN_CLASSIC_SINGLE_LINEUP_STRATEGY_REDESIGN.md` for validation,
+  comparison limitations and normal run instructions.
+
+## 2026-10-09 — Showdown AI two-entry selection review
+
+- Add AI Candidate Review to saved Showdown runs: unchanged finalists plus ten
+  ceiling outsiders, full-universe construction coverage, canonical player overlap
+  and deterministic quality-preserving lower-overlap alternatives.
+- Import exact-ID ChatGPT recommendations and append immutable prelock decision
+  revisions. Keep displayed and considered candidates distinct; confirm entries
+  only from imported canonical results and evaluate outcomes separately.
+- Add research migration 0047 and prospective tracking in Research Lab. Validate
+  Week5's 75/20/10 universe, rank41 outsider and 5/6 Dak/Bucky overlap without
+  creating historical AI picks or changing production selection.
+- See `SHOWDOWN_AI_SELECTION_REVIEW_IMPLEMENTATION.md` for examples, screenshots,
+  tests, limitations and next-live-slate instructions.
+
+## 2026-10-09 — Classic certified pool and unresolved evidence quarantine
+
+- Measure projection/ownership coverage against the certified generation pool;
+  retain native, unresolved, role-excluded and quarantined populations separately.
+- Allow unknown-status quarantine only with fresh sourced existing specialist or
+  backup-QB exclusion evidence. Material and unassessable opportunity still block.
+  Reassess every refresh and exclude quarantines from projections, ownership and
+  the frozen solver pool without fabricating status or changing strategy controls.
+- Supplement missing canonical facts from audited official club roster/depth
+  tables. Validate existing CSV/hash/raw/curated salary lineage without reimport,
+  retaining original receipt clocks and the missing draft-group blocker.
+- Require explicit completed projection dependencies for ownership and show
+  source-level versus material-player blockers in app and exported reports.
+
+## 2026-10-09 — Showdown research notes and nonbinding prelock review
+
+- Preserve five Captain Contest Consistency observations in Research Lab,
+  each labeled research-only, observational and not production validated,
+  with sample periods, baselines, limitations and source checksum.
+- Reuse the frozen AI packet for a compact app/Markdown/JSON review checklist:
+  Captain, QB and team-split coverage, generation versus quality omissions,
+  receiver-Captain/QB pairing, salary, sourced ownership and two-entry overlap.
+- Add isolation tests for solver arguments, production selection and AI review
+  assessments. Preserve selection-regret/diversity audits and all existing
+  production settings and policy versions.
+
+## 2026-10-09 — Showdown Captain position preference
+
+- Add **Captain position** to Optimizer options with **Any position**,
+  **WR/RB/TE only**, **WR only**, **RB only** and **TE only** choices.
+- Enforce the restriction in direct and weekly Cash/GPP candidate generation and
+  final validation; reject conflicting locked Captains. Keep other positions
+  eligible at FLEX and retain projections, ownership and football assessments.
+- Save the choice and Captain-only exclusion reasons in lineup/runtime audits
+  and show saved restrictions in result and exported reports.
+
+## 2026-10-09 — Showdown selection and portfolio-diversity research audit
+
+- Audit saved Weeks 4–5 candidate pools with frozen counterfactual IDs before
+  outcome joins, explicit leakage tests, canonical physical-player overlap,
+  quality opportunity costs and complete-field evaluation. Keep late-generated
+  Week 4 Sunday descriptive and actual AI decisions unknown without saved records.
+- Deliver `SHOWDOWN_SELECTION_REGRET_AND_PORTFOLIO_DIVERSITY_AUDIT.md` and its
+  JSON companion with reproducible policies and separate prelock/evaluated pair
+  artifacts. No production selector, projection, quality or live review rule changes.
+
+## 2026-10-09 — Classic live readiness and objective audit completion
+
+- Fail closed on every required live refresh failure, omitted native salary
+  assessment, and unresolved questionable practice/workload context. Preserve
+  existing risk buckets, exposure controls and all strategy settings.
+- Persist the effective strategy contract before generation. Explicit internal
+  previews retain source blockers and record the override and solver invocation.
+- Expose actual normalized projection, ceiling, leverage, context and correlation
+  contributions with an assertion against the solver objective. Dynamic and
+  cached correlation construction produce the same verified fixture result.
+- Reports lead with source readiness, solver/override flags, coverage and frozen
+  evidence IDs; blocked normal runs cannot render production lineup sections.
+- See `CLASSIC_GPP_DATA_READINESS_AND_CORRELATION_AUDIT.md` for the new Week 5
+  verification, source limitations and complete correlation trace.
+
+### Classic Large-GPP live pipeline integrity
+
+- Refresh canonical sources and require READY before any candidate generation.
+  Save exact source checks on failure; persist both source evidence and final
+  solver inputs before solving. Supersede stale UI preparation on the worker.
+- Check native salary provenance/freshness, projection dependencies and coverage,
+  availability/roles, every represented game's markets and current ownership.
+  Weather is `NOT_REQUIRED_BY_CURRENT_MODEL`; final entry clearance is separate.
+- Replace misleading Large-GPP preflight readiness labels with the live contract.
+  Preserve archived reports and all strategy parameters. Audit confirms the
+  baseline's 0.15 correlation weight reached the ILP, while absent markets
+  suppressed positive environment-dependent terms.
+- Retain observed players from partial Classic official injury reports without
+  treating missing teams or blank designations as active. Q exclusion is labeled
+  as a lineup preference; explicit availability scenarios remain separate.
+
+### Classic questionable-player rebuild repair
+
+- Apply automatic Q injury-snapshot assumptions to the scoring pool after salary,
+  roster and position filters. Keep excluded-player audits and explicit invalid
+  override errors; do not reintroduce excluded players or change source evidence.
+- Show the latest failed Classic Large-GPP preparation build as **Blocked** in
+  preflight, show **Preparing inputs** while its replacement runs, and refresh
+  persisted status after optimizer attempts and on
+  **Refresh Status**.
+
+### Live Showdown projection refresh after injury imports
+
+- Share the optimizer's player-source collectors with Models **Run projections**
+  so a new injury import is composed with current roster, injury, depth and
+  starter evidence before scoring. Persist the refresh report and set the cutoff
+  after collection; preserve explicit historical cutoffs and Classic behavior.
+- Show player names and recovery guidance when availability remains unresolved.
+  Keep blank injury indicators unknown and retain original source clocks.
+
+### Automatic official Showdown availability refresh
+
+- Capture the official NFL weekly injury report inside **Run Optimizer**, before
+  canonical context and projection rebuilding, so an expired manual article does
+  not leave generation dependent on a lagging nflverse designation feed.
+- Preserve raw HTTP observations and cache clocks, reuse persisted profile keys,
+  and require team/position/normalized-name proof for new mappings. Queue ambiguous
+  or unresolved identities and block rebuilding; blank statuses remain unknown.
+- Name affected players in readiness errors; retain detailed source reason codes
+  in the saved audit. Keep freshness limits and user lineup controls intact.
+
+### Showdown preflight and sourced status repair
+
+- Evaluate current saved Showdown inputs with the generation evidence contract;
+  required missing/stale facts block preflight and identify affected players.
+  Keep Classic and historical coverage checks intact.
+- Label successful assessments **Saved inputs ready**, distinguish unchecked
+  generation readiness from coverage scores, and recheck after optimizer attempts
+  or **Refresh Status**. Preserve failed worker readiness audits in the UI.
+- Append current official TB source observations for the expired Sills IR and
+  Mayfield OUT facts through existing immutable snapshot/context services.
+  Preserve source clocks, canonical identities, user controls and freshness limits.
+- Merge visible original context history so a newly received official report
+  cannot be hidden behind a derived role clock; serialize retained database
+  timestamps without renewing their observations.
+- Confirm the repaired Week 5 TB@DAL run passes generation readiness and persists
+  four lineups; saved exposure caps prevent the fifth. Keep the separate
+  injury-snapshot warning and final entry-clearance assessment visible.
+
+### Showdown sourced specialist roles
+
+- Preserve DraftKings eligibility separately from authoritative football role. Sourced LS depth evidence resolves to `long_snapper`, without any LS-to-TE position alias.
+- Exclude current, affirmatively sourced non-scoring specialists before feature/projection/ownership completeness, with a separate auditable disposition rather than an unavailable status. Keep all native salary rows and source lineage; unknown, stale or conflicting facts still block the solver.
+- See `SHOWDOWN_SPECIALIST_ROLE_RESOLUTION.md` and `SHOWDOWN_PLAYER_POOL_READINESS.json` for validation and the new normal TB@DAL attempt. Generator, finalist/universe policies, scoring and portfolio rules are unchanged.
+
+### Showdown upstream evidence completeness
+
+- Normalize captured roster, injury, depth and starter facts into canonical player contexts with separate source clocks, explicit conflicts and per-player dispositions. Keep unavailable exclusions ahead of feature/projection completeness; unknown facts block generation.
+- Propagate baseline markets by canonical game/team identity independently of projection joins. Preserve the entire native pool in frozen audits while passing only the sourced eligible pool to generation.
+- Refresh stale completed training labels before freezing a new live projection cutoff; retain historical cutoff protections. Save `SHOWDOWN_PLAYER_POOL_READINESS.json` for new normal attempts.
+- See `SHOWDOWN_UPSTREAM_DATA_COMPLETENESS_REPAIR.md` for the exact TB@DAL result and remaining source/role conflicts.
+
+### Live Showdown data-readiness gate
+
+- Refresh existing source collectors and rebuild projections before evaluating
+  required salary identity/eligibility, projection, availability/role, starting-QB
+  and baseline-market inputs. Missing or stale evidence blocks every live
+  Showdown solver path; ownership is conditionally required.
+- Persist `showdown_data_readiness_v1` and a checksum-protected consumed pool
+  before generation. Carry that identity into AI packets and post-slate audits;
+  explicit incomplete-evidence overrides are internal/CLI diagnostics only.
+- Add **AI requested entries** to packet export independently of optimizer
+  lineup count. The UI starts the manual experiment at 2 and permits 2–5.
+- The separate TB@DAL refresh attempt was blocked by incomplete consumed market,
+  projection and current availability coverage. The original run was unchanged;
+  no new candidate universe was generated. See `SHOWDOWN_DATA_READINESS_IMPLEMENTATION.md`.
+
+### AI Showdown Review Universe
+
+- Export every distinct V2 quality-eligible candidate without an additional rank cutoff. Add compact named candidate rows, six deterministic family indexes and prelock summaries, and an **AI Review Universe** Markdown section.
+- Guide manual AI review through football theses and families, with the existing 20 finalists shown as a reference/control. Manual-selection validation accepts eligible universe IDs and preserves finalist-only validation for archived packets.
+- Preserve the V2 classifier, quality/market/similarity policies, frozen lineage, production Showdown selector, and existing finalist audit. Universe contents are covered by the packet hash; no LLM/API integration is added.
+- Export runs with an entirely absent saved baseline market using unknown market context and an explicit warning; retain timestamp checks for existing quotes. Show export progress and persistent errors beside the buttons so automatic run-list refreshes cannot silently erase a failed download.
+
+### AI Showdown finalist policy v2
+
+- Separate football scenarios, construction attributes, primary/all thesis signatures, and saved baseline-market compatibility. Preserve independent quality leaders and reserve three slots for eligible structural outliers; expose coverage and rank distributions.
+- Keep the packet v1 contract and production Showdown selector. Add an isolated post-slate audit with filtering regret and generated-pool/complete-contest-field tail retention. Late-created pools require an explicitly labeled retrospective CLI diagnostic.
+- Freeze both Week 4 packets before loading scores. Neither historical best roster survives; overall tail retention has not demonstrated improvement. See `AI_SHOWDOWN_FINALIST_POLICY_V2_REVIEW.md` before starting AI selection trials.
+
+### Experimental AI Showdown Selection Packet
+
+- Export Markdown or versioned JSON from completed, prelock Showdown v3 runs for manual AI portfolio review. The frozen candidate archive, scenario reasons, diverse finalists, control selections, and similarity warnings are included.
+- Reject runs created after kickoff or with missing/mismatched point-in-time evidence. The production Showdown selector and entry export remain unchanged. See `AI_SHOWDOWN_SELECTION_PACKET_IMPLEMENTATION_REVIEW.md` for Week 4 findings and the forward Thursday validation plan.
+
+### User-controlled Classic slate preparation
+
+- Connect immutable canonical CSV imports, sourced pregame evidence, starter
+  review and existing market/weather collectors to Operations preparation.
+- Run durable feature/projection rebuilds with persisted source and consumed-frame
+  checksums. Classic Large GPP uses the verified prepared set; pending/failed/newer
+  preparation, changed inputs/scenarios and passed lock block reuse.
+- Preserve controls and saved history; distinguish source capture, builds,
+  validation and projection-list reload. Keep unavailable quote-publication,
+  final-availability and weather-consumption clearance visible. No scoring or
+  default changes. See `CLASSIC_SLATE_PREPARATION_UI_HANDOFF.md`.
+
 ## Unreleased
+
+### Current-slate football roles and availability
+
+- Separate roster membership, game availability and expected depth role in saved Showdown reports.
+  Exclude unavailable/practice-squad players without activation evidence and backup QBs without
+  expected packages; remove salary-based starter inference. Important unresolved roles block entry readiness.
+- Remove salary-based opportunity allocation and silent full injury redistribution. Preserve excluded
+  starter history and record vacated, received, expected and unallocated carries/targets.
+- Rebuild ATL–NO projections and portfolios with sourced roles; rerun A–F under unchanged portfolio
+  controls. Numerical backfield splits remain provisional where exact workload evidence is unavailable.
+
+### Kicker role eligibility
+
+- Resolve expected kicking duties from cutoff-visible canonical roster, depth-role,
+  recent FG/PAT usage and sourced pregame evidence across all slates. Exclude backups
+  and unresolved identities, surface uncertainty warnings, and permit shared duties
+  only with explicit evidence. Salary never decides the role.
+- Give unsupported kicker roles zero mean and quantiles on projection rebuild;
+  never copy primary projections to backups. Retain role evidence and exclusions in
+  saved optimizer reports, including runs that use older projections.
+- Rebuild ATL–NO and rerun the controlled QB policies without changing portfolio
+  balancing. See `SHOWDOWN_KICKER_ROLE_AUDIT.md` for results and replay limits.
+
+### Showdown team limits
+
+- Add **Max players per team** options 4 (4–2 or 3–3) and 3 (3–3 only), counting
+  Captain and FLEX together. Preserve the existing 5 default. Apply the limit to
+  direct and weekly Cash/GPP runs, candidate generation and final validation.
+- Save team-limit preference metadata and show it in result/export reports.
+  Reject conflicting locks and invalid values before solving. Preserve projections.
+- Show explicit underfilled realized-exposure warnings without changing caps.
+- Add optional **No QBs in the lineup** for direct and weekly Showdown runs.
+  Enforce zero QBs across CPT/FLEX, override QB-required constructions, preserve
+  model assessments and other constraints, and reject conflicting QB locks.
+
+### Visible optimizer configuration and Showdown QB preferences
+
+- Restore the optimizer configuration section to an always-visible form. Keep
+  preparation/data tools and the weekly pipeline collapsed by default.
+- Add optional **No QB Captain** and **No 2 QBs in the lineup** checkboxes for
+  Showdown Cash and GPP, including weekly runs. Both default off; the latter
+  enforces at most one QB. Preserve model assessments and record user preference
+  reasons in saved reports. Conflicting locks fail explicitly; two-QB script
+  targets are replaced by compatible candidate discovery when requested.
+
+### Historical Showdown QB construction analysis
+
+- Analyze 28 actual standings files (904,278 entries / 12 games), keeping
+  field frequency separate from conditional success and actual-score optimality.
+- Export JSON/CSV tables, game-clustered intervals, starter-evidence and tie
+  sensitivities, duplication, limited payout reconstruction, and saved optimizer
+  attribution. Recover preserved salary identities without database repair.
+- Recommend no new QB penalty or cap: pooled results differ from contest-weighted
+  results and reverse between 2025 and 2026. Optimizer logic is unchanged.
+  See `SHOWDOWN_QB_CONSTRUCTION_ANALYSIS.md`.
+
+### Compact learning reports and bounded memory
+
+- Build v2 learning reports from entry-linked saved pools one run at a time;
+  record excluded runs and support explicit slate diagnostic requests.
+- Freeze full candidate/entry evidence in migration `0046` and retrieve paged
+  candidates on demand. Preserve v1 read compatibility and evidence hashes.
+- Reduce the full Week 4 benchmark to 539 MB peak Python RSS and 383 KB response
+  in 15.6 seconds. Entered-run outcomes match the saved baseline.
+- Bound completed optimizer-result retention (one job / 60-second lazy TTL by
+  default), add report/cache telemetry, and make preparation polling single-flight
+  with backoff. Durable report dispatch remains conditional on slow builds.
+
+### Week learning report evidence loading
+
+- Load optimizer configurations once per run instead of duplicating candidate
+  pools on every lineup player, fixing the oversized Week 4 report query.
+- Preserve decision snapshots, candidate-pool analysis, and immutable evidence
+  lineage with builder `2026-10-05.1`.
+- Compute candidate field ranks with binary search, preserving ties while
+  avoiding repeated full-field scans.
+
+### Auditable soft Showdown scenario selection
+
+- Replace the UI's required-coverage checkbox with **Soft scenario diversity
+  (experimental)**, off by default. Pay bounded marginal coverage credits only
+  for strong, differentiated scenario candidates; preserve the joint 95% screen,
+  player/Captain caps, canonical roster uniqueness, forecasts and availability.
+- Add Scenario portfolio accounting to the app and HTML export, including
+  conditional evidence, quality/constraint survivors, physical selection changes
+  and exact full-portfolio replacement costs. Retain the legacy API flag for old
+  clients, mutually exclusive with the new opt-in policy.
+- Frozen Monday/Sunday Week 4 A/B replays reproduce the original entries.
+  Conditional blending only changes scenario labels. Keep baseline selection as
+  the default pending historical validation; no live imports or optimizer runs.
+  See `docs/showdown_soft_scenario_selection.md`.
+
+### Keep optimizer controls in view when changing formats
+
+- Separate automatic saved-run restoration from explicit **Open results** navigation.
+  Classic/Showdown changes restore compatible saved reports without scrolling past
+  Run Optimizer. Explicit Open/Reopen results still jumps to the report.
+- Verify both format directions with saved-run fixtures, including repeated changes
+  and intentional history navigation. No optimizer settings or run behavior changed.
+
+
+### Reconcile identities before automatic optimizer preparation
+
+- Restore the existing resolve-or-quarantine salary step before Classic Large GPP
+  and Showdown portfolio preparation freezes its sources. A newly loaded unresolved
+  row no longer skips reconciliation and blocks the final run as untracked.
+- Name unresolved salary players in preflight. Preserve accepted identity matching,
+  exclusions, readiness thresholds, source times and projection verification.
+- Regression checks cover reconciliation ordering, failure stopping the run, and
+  the initially unquarantined-player blocker. No guessed mapping or scoring change.
+
+
+### Simple optimizer basics with expandable configuration
+
+- Put **Slate files**, format, strategy, lineup count and **Run Optimizer** at the
+  top of Operations. Show existing salary and injury rows for the selected slate.
+- Group existing settings under **Optimizer options** and ingestion/review actions
+  under **Preparation and data tools**; preserve choices when sections close.
+- Automatically rebuild and verify Classic Large GPP preparation on Run Optimizer,
+  preserving its current availability scenario and pinned dependency checks.
+  Keep readiness, progress and errors visible. Scoring, strategy defaults and
+  Showdown preference semantics are unchanged; no live import, solve or submission.
+
+
+### Showdown questionable-exclusion default
+
+- Default **Exclude questionable (Q) players** to checked for Showdown, as requested.
+  Keep explicit checkbox choices per format during the session and the existing
+  Classic default. Preserve selection-only Showdown semantics and independent
+  availability assumptions; saved optimizer runs remain unchanged.
+- Verify default/override/request propagation in the isolated UI/API/worker fixture;
+  no live preparation, source capture, portfolio, or scoring change.
+
+### Preparation recovers blocked access to verified source copies
+
+- For operating-system access denial or file-provider deadlock, verify an existing
+  local source replica against its immutable snapshot and manifest before use.
+- Preserve original source IDs, dates, paths, checksums and all preparation/lock
+  checks; record replica use in new build lineage. Readable corrupt or missing
+  originals still fail. No market refresh, scoring change or live optimizer run.
+- Use existing source/weather working-storage defaults in the local app to
+  avoid the observed background-worker access failure in the previous on-disk
+  iCloud Drive folder. Files being local does not establish that every process can
+  read them; cloud-only storage or a need to download was not established. Retrying
+  identical legacy evidence on access denial creates only a verified storage copy,
+  preserving immutable source identity and clocks. Current user captures are preserved.
+
+### Showdown Run Optimizer prepares dependencies automatically
+
+- Replace the missing-preparation error for Showdown portfolio v3 with a durable
+  feature/projection preparation build, completion wait, exact-build verification,
+  and continuation to the pinned optimizer request from the same user click.
+- Build from the selected explicit availability assumptions; keep lineup/Q exclusions
+  selection-only. Await in-progress source preparation and preserve source/identity/lock
+  rejection, unchanged preferences, final-clearance limitations and saved history.
+- Classic behavior and source captures remain separate. Verified with focused unit
+  checks and the isolated real UI/API/worker fixture; no live solve or scoring change.
+
+### Sunday Night slate identity diagnosis
+
+- Verify DET at CAR, 2026 Week 4, October 4 8:20 p.m. EDT; native contest 196285050
+  confirms draft group 154098. Existing salary-import group provenance remains unretained.
+- Trace the preparation blocker to incomplete canonical Week 4 schedule coverage after
+  Sunday Main slice ingestion. Correct the handoff to **Load Historical Game Data** for
+  season 2026; **Load Raw Season** writes legacy tables preparation does not read.
+- Verify matching/Eastern conversion/lock rejection in isolation; no runtime/scoring
+  change or live slate refresh. Preserve saved run and add parked Classic C09.
+
+### Sunday Night Showdown application handoff
+
+- Separate Showdown lineup exclusions from explicit availability scenarios; preserve
+  the user's intentional assumptions and unchanged Classic behavior.
+- Connect portfolio v3 to verified preparation lineage through UI/API/worker execution.
+  Save consumed-input readiness with missing/stale/unevaluated evidence distinguished.
+- Correct captain-family explanations using eligible alternatives, display retained
+  conditional discovery values separately from baseline selection, and label independent
+  scenario maxima. Preserve the 95% floor, priors, exposure defaults and disabled missing
+  role-ownership term. The separate CPT credibility gate remains unapproved research.
+- Preserve saved run `686307e6…`; no live source refresh or new user portfolio. See
+  `SUNDAY_NIGHT_SHOWDOWN_FIRST_RUN_REVIEW.md` for findings, fixtures and user actions.
+
+### Sunday Night projection roster coverage
+
+- Scope starter and canonical projection roster eligibility to each salary team,
+  fixing false empty QB pools when only another slate's roster data is loaded.
+- Preserve active-roster requirements for covered teams and report uncovered
+  teams explicitly; missing evidence does not become inactive or confirmed active.
+
+### Normal Classic Large-GPP readiness and game dependence
+
+- Connect established input checks and independent saved-constraint validation
+  to normal worker execution, saved results, live UI and HTML export, without
+  importing Small-field selection policies. Record loaded worker fingerprints.
+- Add separately dated, read-only frozen-input validation for completed saved
+  runs; retain unavailable current clearance checks and original history.
+- Show primary QB-game allocation and actual per-game roster appearances,
+  separating DST from offense. No scoring, defaults, or user portfolio changes.
+
+### Captured construction decision handoff
+
+- Surface the validated exact-two-pass-catcher/one-bring-back replacement with full
+  captured roster, salaries, swaps, frozen risk and validation; export diagnostic
+  HTML/JSON without solving or applying a replacement. Preserve individual RB
+  comparison and exhausted appearance-budget explanations.
+- Document the current Large-GPP readiness integration blocker separately from
+  saved-input feasibility. No scoring, defaults, data refresh or service changes.
+
+### Classic construction review failure diagnosis
+
+- Replace bare review errors with selected-job context, actionable error categories
+  and HTTP/request-ID details. Reject unusable successful-status responses.
+- Add structured backend review failures and an API-only local reload command that
+  leaves the durable worker running. The live API/source route discrepancy is
+  corrected by the API-only reload; real UI acceptance passed on the confirmed
+  saved run with RB/WR/TE comparisons and unchanged portfolio records. See
+  `CLASSIC_CONSTRUCTION_REVIEW_LIVE_FIX.md`. No strategy or portfolio changes.
+
+### Classic construction transparency and explicit review
+
+- Clarify and persist the existing single-TE/FLEX choice without changing its default.
+- Count actual selected roster constructions and portfolio distributions in the UI
+  and HTML report, with explicit DST semantics and historical scope limitations.
+- Add **Review construction tradeoffs** on pinned saved Large-GPP inputs, through
+  the shared production solver. Explicitly label the current single-TE preference
+  against the saved setting; retain every other pinned control. Separate individual
+  feasibility from full replacement
+  constraints; opening a report performs no diagnostic solves.
+- Enforce positive stack minimums even when a QB has no eligible partner. Preserve
+  scoring/defaults and document intentional strategy/template exclusions. No user
+  Sunday portfolio was generated during implementation.
+
+### Operations optimizer layout
+
+- Remove the duplicate Player projections panel and give Portfolio optimizer the
+  full width. Keep a compact automatic-projection status and **Open Model** link;
+  manual projection runs remain on Model. Retain **Run Simulation** in the compact
+  row for Classic slates.
+
+### Large-GPP full-application overlap verification
+
+- Check actual native control values against React state and the shared request
+  snapshot before any preparation write. Preserve click-time diagnostics in the
+  browser and queued request, with server-derived parsed/saved values. Browser
+  regressions block both dropdown/default disagreement and exposure disagreement.
+- Place **Portfolio settings to submit** immediately above Run Optimizer with all
+  six portfolio settings. Compare that same snapshot with the exact serialized
+  fetch body and block mismatches before submission, including lost overlap 5.
+  Strategy default intentionally sends null and still resolves to 7.
+- Show portfolio settings from the same snapshot submitted by Run Optimizer and
+  the weekly pipeline. Reject explicit overlap/contract inconsistencies before
+  backend execution and reject mismatched saved responses in the browser.
+- Add a browser regression against the real Vite production build and Operations
+  form for overlap 4/5/6/7/default, reload/mode persistence, independent controls,
+  a blocked pre-submit serialization fault, and a visible error for a deliberately
+  mismatched synthetic response.
+- Capture live Vite requests without executing portfolios. Current visible 5
+  sends 5; the two earlier requests omitted overlap and new job `8863abc4` sends
+  explicit null. The historical browser trigger remains unproven. No user portfolio generated.
+
+### Large-GPP overlap request propagation
+
+- Serialize Classic controls from the submitted strategy through one shared builder
+  in both optimizer and weekly-run paths; snapshot before asynchronous preparation.
+- Preserve valid overlap preferences when another saved optional field is malformed.
+  Restore Large volume after returning from Showdown; keep Small-field overlap separate.
+- Show next-request settings and lock Large controls/mode during preparation. Saved
+  report settings continue to come solely from each saved request.
+- Add synthetic UI/API/service/solver persistence regression for overlap 4/5/6/7
+  and default 7. Existing frozen parity passes; no new user portfolio generated.
+
+### Classic Large-GPP UI portfolio controls
+
+- Show the separate per-lineup elevated-risk label/current value in the collapsed
+  Advanced row; clarify that overlap and risk limits are independent.
+- Group lineup count, player exposure, primary-game appearances, pairwise overlap
+  and optional elevated-player exposure under Portfolio diversification; keep the
+  optional per-lineup elevated count in Advanced. Persist choices across reloads.
+- Carry explicit values through the shared effective strategy contract, production
+  solver and independent audit; save requested/effective/source/achieved tables in
+  recovered reports and HTML exports. Keep existing defaults and Small-field policy.
+- Enforce floor rounding for explicit elevated-player caps, intersect stricter caps
+  and reject conflicting locks. Underfilled combinations retain all limits and show
+  active constraints/exhausted budgets; persisted failed reports can be reopened.
+- Verify the unchanged frozen no-cap five-lineup parity baseline with automated
+  fixtures. No new user portfolio or sensitivity was generated.
 
 ### Classic Large-GPP parity and primary-game concentration
 

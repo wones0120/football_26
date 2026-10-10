@@ -117,6 +117,9 @@ def explain_player(payload: dict, player_id: str) -> dict:
     if len(matches) != 1:
         raise LookupError(f"Player {player_id} is absent or ambiguous in fitted artifact")
     row = matches.iloc[[0]].copy().reset_index(drop=True)
+    # Run-level allocation audits are already retained in the artifact. Pandas
+    # deep-copies attrs during every single-column probe; they are not scoring inputs.
+    row.attrs = {}
     position = str(row.iloc[0].get("position") or "").upper()
     if position == "K":
         return {"player_id": player_id, "counterfactuals": [],
@@ -134,9 +137,17 @@ def explain_player(payload: dict, player_id: str) -> dict:
         participation = float(frame.iloc[0].get("pregame_availability_probability", 1) or 0)
         if str(frame.iloc[0].get("position")) == "QB":
             participation *= float(frame.iloc[0].get("pregame_start_probability", 1) or 0)
-        return float(mean[0]) * participation
+        market_adjustment = pd.to_numeric(
+            frame.iloc[0].get("market_team_point_adjustment", 0.0), errors="coerce"
+        )
+        market_adjustment = 0.0 if pd.isna(market_adjustment) else float(market_adjustment)
+        return max(0.0, float(mean[0]) + market_adjustment) * participation
 
     baseline = score(row)
+    raw = model.predict(row[columns].apply(pd.to_numeric, errors="coerce").fillna(0.0))
+    _, opportunity_details = apply_opportunity_point_adjustment(
+        blend_point_predictions(raw, train, row), train, row
+    )
     probes: list[dict] = []
     for column, label, value in (
         ("team_spread_line", "Neutral spread", 0.0),
@@ -185,4 +196,9 @@ def explain_player(payload: dict, player_id: str) -> dict:
         "top_negative_model_drivers": [item for item in reversed(drivers) if item["blended_mean_points"] < 0][:8],
         "attribution_method": "tree path contributions to raw model, scaled for 80% model blend; not SHAP or causal",
         "explanation_version": payload["explanation_version"],
+        "opportunity_assessment": {
+            key: None if pd.isna(value) else value
+            for key, value in opportunity_details.iloc[0].to_dict().items()
+        },
+        "market_adjustment_policy": "Saved market correction is held fixed in these diagnostic probes",
     }

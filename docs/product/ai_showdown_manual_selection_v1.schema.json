@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ai_showdown_manual_selection_v1",
+  "title": "Manual AI Showdown portfolio choice v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_id", "packet_hash", "selected_at", "selected_candidate_ids"],
+  "properties": {
+    "contract_id": {"const": "ai_showdown_manual_selection_v1"},
+    "packet_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "selected_at": {"type": "string", "format": "date-time"},
+    "selected_candidate_ids": {"type": "array", "minItems": 2, "maxItems": 5, "uniqueItems": true, "items": {"type": "string"}},
+    "timing_status": {"enum": ["prelock", "retrospective"]},
+    "model_name": {"type": ["string", "null"]},
+    "reasoning": {"type": ["string", "null"]},
+    "football_theses": {"type": "object", "additionalProperties": {"type": "string"}},
+    "rejected_candidates": {"type": "object", "additionalProperties": {"type": "string"}}
+  }
+}

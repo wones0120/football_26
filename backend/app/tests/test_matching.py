@@ -376,3 +376,46 @@ def test_dst_prefers_canonical_master_over_legacy_position_variant() -> None:
 
     assert found_id == canonical.player_master_id
     assert reason == "master_dst_team"
+
+
+def test_normalized_roster_alias_beats_duplicate_master_and_survives_next_source_id():
+    session = _session()
+    canonical = create_player_master(session, "A.J. Example", "MIA", "WR")
+    duplicate = create_player_master(session, "AJ Example", "MIA", "WR")
+    upsert_alias(session, canonical.player_master_id, "nflreadpy", "native-gsis", "A.J. Example", "MIA", "WR", 2026, 5)
+    session.commit()
+    for key in ("salary-week-five", "salary-week-six"):
+        pid, reason = find_player_master_id(session, "draftkings", key, "AJ Example", "MIA", "WR")
+        assert pid == canonical.player_master_id
+        assert pid != duplicate.player_master_id
+        upsert_alias(session, pid, "draftkings", key, "AJ Example", "MIA", "WR", 2026, 5)
+        session.commit()
+        assert find_player_master_id(session, "draftkings", key, "AJ Example", "MIA", "WR")[1] == "alias_source_key"
+
+
+def test_accented_alias_uses_current_sourced_team_and_preserves_football_position():
+    session = _session()
+    canonical = create_player_master(session, "Audric Example", "NO", "RB")
+    upsert_alias(session, canonical.player_master_id, "nflreadpy", "native", "Audric Examplé", "MIN", "RB", 2026, 5)
+    session.commit()
+    assert find_player_master_id(session, "draftkings", "new", "Audric Example", "MIN", "RB")[0] == canonical.player_master_id
+    specialist = create_player_master(session, "Specialist Example", "NO", "LS")
+    upsert_alias(session, specialist.player_master_id, "draftkings", "verified-native", "Specialist Example", "NO", "TE", 2026, 5)
+    session.commit()
+    assert find_player_master_id(session, "draftkings", "verified-native", "Specialist Example", "NO", "TE")[0] == specialist.player_master_id
+    assert specialist.position == "LS"
+
+
+def test_conflicting_vendor_alias_needs_corroboration_from_two_roster_sources():
+    session = _session()
+    native = create_player_master(session, "Roster Player", "ARI", "RB")
+    duplicate = create_player_master(session, "Roster Player", "ARI", "RB")
+    for source, key, pid in [("draftkings", "old", duplicate.player_master_id),
+                             ("draftkings", "recent", native.player_master_id),
+                             ("nflreadpy", "native", native.player_master_id)]:
+        upsert_alias(session, pid, source, key, "Roster Player", "ARI", "RB", 2026, 5)
+    session.commit()
+    assert find_player_master_id(session, "draftkings", "next", "Roster Player", "ARI", "RB")[0] is None
+    upsert_alias(session, native.player_master_id, "nfl_official", "profile", "Roster Player", "ARI", "RB", 2026, 5)
+    session.commit()
+    assert find_player_master_id(session, "draftkings", "next", "Roster Player", "ARI", "RB")[0] == native.player_master_id

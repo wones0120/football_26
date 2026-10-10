@@ -1,0 +1,17 @@
+.showdown-selection-review { min-width: 0; }
+.showdown-selection-review p, .showdown-selection-review small { overflow-wrap: anywhere; }
+.showdown-selection-review table { min-width: 980px; }
+.showdown-selection-review th, .showdown-selection-review td { vertical-align: top; }
+.showdown-selection-review td small { display: inline-block; max-width: 250px; }
+.showdown-selection-review details { margin: 0.8rem 0; }
+.showdown-selection-review summary { cursor: pointer; font-weight: 600; }
+.showdown-selection-review pre { overflow-x: auto; max-width: 100%; padding: 1rem; }
+.selection-input-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem; }
+.showdown-selection-review label { display: flex; flex-direction: column; gap: 0.25rem; margin: 0.5rem 0; }
+.showdown-selection-review label:has(input[type="checkbox"]) { flex-direction: row; align-items: center; }
+.showdown-selection-review input:not([type="checkbox"]), .showdown-selection-review textarea, .showdown-selection-review select { width: 100%; min-width: 0; box-sizing: border-box; }
+.showdown-selection-review button { margin: 0.2rem; max-width: 100%; overflow-wrap: anywhere; white-space: normal; }
+.selection-pair { border-left: 3px solid #649cc3; padding-left: 0.8rem; }
+@media (max-width: 700px) { .selection-input-grid { grid-template-columns: 1fr; } }
+.showdown-selection-review textarea { min-height: 72px; padding: 9px 10px; border: 1px solid var(--shell-line-strong, #34404b); border-radius: 8px; color: #e4ebef; background: rgba(4, 8, 12, 0.54); font: inherit; }
+.showdown-selection-review > details > .saved-contest-scroll { max-height: 560px; }

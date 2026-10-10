@@ -17,6 +17,7 @@ from .salary_eligibility import (
     is_salary_status_eligible,
     normalize_salary_status,
 )
+from .showdown_player_context import CONTEXT_FIELDS, CONTEXT_CONTRACT, PlayerContextUnresolved, assess_availability, is_excluded_specialist
 
 
 SUPPORTED_POSITIONS = {"QB", "RB", "WR", "TE", "K", "DST"}
@@ -56,6 +57,15 @@ FEATURE_COLUMNS = [
 ]
 
 PREGAME_LINEAGE_COLUMNS = [
+    "opportunity_allocation_policy", "opportunity_history_team",
+    "opportunity_history_status", "opportunity_history_observed_games",
+    "opportunity_history_window",
+    *CONTEXT_FIELDS,
+    "role_availability", "expected_depth_role", "role_starter_evidence",
+    "role_change", "role_optimizer_eligible", "role_confidence",
+    "role_resolution_warning", "role_rostered", "role_active",
+    "kicker_role", "kicker_role_eligible", "kicker_role_reason",
+    "kicker_role_evidence", "kicker_role_warning",
     "pregame_availability_probability",
     "pregame_start_probability",
     "pregame_carry_share",
@@ -115,6 +125,9 @@ PREGAME_LINEAGE_COLUMNS = [
     "pregame_opportunity_point_anchor",
     "pregame_opportunity_point_weight",
     "pregame_point_mean_after_opportunity",
+    "pregame_opportunity_point_reason",
+    "pregame_opportunity_evidence_status",
+    "pregame_opportunity_review_required",
 ]
 
 
@@ -134,6 +147,25 @@ class StaleTrainingOutcomeError(ValueError):
 
 def _control_name(value: object) -> str:
     return re.sub(r"[^a-z0-9]+", "", str(value or "").casefold())
+
+
+def _questionable_snapshot_overrides(target, pregame_context, injury_statuses) -> list[dict]:
+    """Automatic assumptions apply only after scoring-pool eligibility filters."""
+    if injury_statuses is None or injury_statuses.empty:
+        return []
+    context_statuses = {
+        str(row["player_master_id"]): normalize_salary_status(row.get("injury_status"))
+        for row in (pregame_context.to_dict("records") if pregame_context is not None else [])
+    }
+    scoring_ids = set(target["player_id"].astype(str))
+    return [
+        {"player_id": str(row.player_id), "availability": "assume_out",
+         "official_availability_status": normalize_salary_status(row.injury_status)}
+        for row in injury_statuses.itertuples(index=False)
+        if str(row.player_id) in scoring_ids
+        and (context_statuses.get(str(row.player_id)) or normalize_salary_status(row.injury_status))
+        in {"Q", "QUESTIONABLE"}
+    ]
 
 
 def apply_player_availability_overrides(
@@ -617,9 +649,12 @@ def attach_lagged_opportunity_features(
     weekly_stats: pd.DataFrame | None,
     *,
     cutoff: pd.Timestamp,
+    policy: str = "legacy_v1",
 ) -> tuple[pd.DataFrame, dict]:
     """Attach prior-only carries, targets, and team-share features."""
     rows = matrix.copy()
+    if policy not in {"legacy_v1", "team_window_v2"}:
+        raise ValueError("Unsupported player opportunity allocation policy")
     player_feature_sources = {
         "carries_mean_3": "carries",
         "targets_mean_3": "targets",
@@ -636,7 +671,14 @@ def attach_lagged_opportunity_features(
     for prefix in ("target_share", "rush_share"):
         for suffix in ("last", "prior3", "trend"):
             rows[f"{prefix}_{suffix}"] = np.nan
+    if policy == "team_window_v2":
+        rows["opportunity_allocation_policy"] = policy
+        rows["opportunity_history_team"] = rows.get("recent_team", rows.get("team", pd.Series("", index=rows.index))).fillna("").map(normalize_team)
+        rows["opportunity_history_status"] = "no_same_team_window_history"
+        rows["opportunity_history_observed_games"] = 0
+        rows["opportunity_history_window"] = pd.Series([[] for _ in range(len(rows))], index=rows.index, dtype=object)
     metrics = {
+        "policy": policy,
         "source": "public.raw_nfl_weekly_stat + public.player_alias",
         "available": False,
         "rows_loaded": 0,
@@ -683,7 +725,12 @@ def attach_lagged_opportunity_features(
                 "do not convert missing role data to measured zero."
             )
     evidence["team"] = evidence["team"].fillna("").astype(str).str.upper()
+    if policy == "team_window_v2":
+        evidence["team"] = evidence["team"].map(normalize_team)
     evidence["position"] = evidence["position"].fillna("").astype(str).str.upper()
+    if policy == "team_window_v2":
+        # DraftKings fullbacks belong to the RB opportunity pool.
+        evidence["position"] = evidence["position"].replace({"FB": "RB"})
     evidence["period_ordinal"] = [
         _period_ordinal(season, week)
         for season, week in zip(evidence["season"], evidence["week"], strict=True)
@@ -735,6 +782,16 @@ def attach_lagged_opportunity_features(
         ]
         .sum()
     )
+
+    if policy == "team_window_v2":
+        from .opportunity_history import attach_team_window_opportunity
+        rows = attach_team_window_opportunity(rows, evidence, weekly_team_volume)
+        for feature in (*player_feature_sources, *team_feature_sources):
+            metrics[f"rows_with_lagged_{feature.removesuffix('_mean_3')}"] = int(rows[f"{feature}_available"].sum())
+        metrics.update(available=True, rows_loaded=len(evidence),
+            unresolved_rows_in_team_volume=int(evidence["player_master_id"].isna().sum()),
+            history_status_counts=rows["opportunity_history_status"].value_counts().to_dict())
+        return rows, metrics
 
     histories: dict[str, dict[str, tuple[list[int], list[float]]]] = {}
     resolved_evidence = evidence.loc[evidence["player_master_id"].notna()].copy()
@@ -845,10 +902,9 @@ def apply_pregame_projection_context(
 ) -> tuple[pd.DataFrame, dict]:
     """Apply cutoff-safe starter, availability, and opportunity evidence.
 
-    Carry and target work is redistributed as team opportunity before the point
-    model runs. Salary is used only as a disclosed fallback weight for active
-    players without prior NFL opportunity; it is never treated as evidence that
-    a player starts.
+    Removed work stays unallocated without evidence-backed recipients. Salary
+    never supplies opportunity weights. Allocation is auditable per recipient,
+    before the point model runs; it does not transfer fantasy points.
     """
     rows = target.copy().reset_index(drop=True)
     rows["pregame_availability_probability"] = 1.0
@@ -943,6 +999,10 @@ def apply_pregame_projection_context(
                 rows.at[index, output] = value
         evidence = context.get("evidence_json") or context.get("evidence") or {}
         if isinstance(evidence, dict):
+            for field in CONTEXT_FIELDS:
+                if field not in rows:
+                    rows[field] = None
+                rows.at[index, field] = evidence.get(field)
             from .pregame_context import risk_evidence_fields
             for field, value in risk_evidence_fields(evidence, context.get("observed_at")).items():
                 rows.at[index, field] = value
@@ -1004,6 +1064,11 @@ def apply_pregame_projection_context(
             "active QBs are present for: " + ", ".join(sorted(missing_qb_teams))
         )
 
+    from .player_roles import resolve_player_roles
+    rows, role_audit = resolve_player_roles(rows, context_rows)
+    unavailable_roles = rows["role_availability"].eq("unavailable")
+    rows.loc[unavailable_roles, "pregame_availability_probability"] = 0.0
+
     allocation_metrics: list[dict] = []
     allocation_specs = (
         (
@@ -1036,18 +1101,15 @@ def apply_pregame_projection_context(
             index_list = list(indexes)
             group = rows.loc[index_list]
             prior_share = pd.to_numeric(group[share_column], errors="coerce").fillna(0.0).clip(lower=0.0)
-            salary = pd.to_numeric(group["salary"], errors="coerce").fillna(0.0).clip(lower=0.0)
-            salary_weights = salary / salary.sum() if salary.sum() > 0 else pd.Series(
-                1.0 / len(group), index=group.index
-            )
-            history = pd.to_numeric(group["player_games_history"], errors="coerce").fillna(0.0)
-            history_confidence = (history / 3.0).clip(lower=0.0, upper=1.0)
-            fallback_weight = (
-                prior_share * history_confidence
-                + salary_weights * (1.0 - history_confidence)
-            )
-            if fallback_weight.sum() <= 0:
-                fallback_weight = salary_weights
+            fallback_weight = prior_share.copy()
+            coherent = group.get("opportunity_allocation_policy", pd.Series("legacy_v1", index=group.index)).eq("team_window_v2").all()
+            policies = group.get("opportunity_allocation_policy", pd.Series("legacy_v1", index=group.index))
+            if policies.eq("team_window_v2").any() and not coherent:
+                raise ValueError("Mixed opportunity history policies in one team allocation")
+            if coherent and not group["opportunity_history_team"].eq(str(team)).all():
+                raise ValueError("Opportunity history team differs from current membership; rebuild same-team features")
+            if coherent and prior_share.sum() > 1.000001:
+                raise ValueError("Same-team opportunity shares exceed team volume; reconcile identities/windows")
 
             explicit_share = pd.to_numeric(group[explicit_column], errors="coerce")
             expected_column = (
@@ -1086,7 +1148,15 @@ def apply_pregame_projection_context(
             )
             explicit_mask = explicit_share.notna()
             assigned = pd.Series(0.0, index=group.index)
-            if explicit_mask.any():
+            if coherent:
+                # Keep measured shares rather than allocating a full remainder
+                # to the subset of players present in this salary pool.
+                assigned = prior_share.copy()
+                assigned.loc[explicit_mask] = explicit_share.loc[explicit_mask]
+                if float(explicit_share.loc[explicit_mask].sum()) > 1.000001:
+                    raise ValueError(f"Effective {opportunity} share exceeds 1.0 for {team}")
+                source = "same_team_common_window_with_explicit_context" if explicit_mask.any() else "same_team_common_window"
+            elif explicit_mask.any():
                 explicit_total = float(explicit_share.loc[explicit_mask].sum())
                 if explicit_total > 1.000001:
                     raise ValueError(
@@ -1099,37 +1169,71 @@ def apply_pregame_projection_context(
                 weights = fallback_weight.loc[unassigned]
                 if unassigned.any() and remainder > 0:
                     if weights.sum() <= 0:
-                        weights = pd.Series(1.0, index=weights.index)
-                    assigned.loc[unassigned] = remainder * weights / weights.sum()
-                source = "explicit_context_with_prior_salary_fallback"
+                        weights = pd.Series(0.0, index=weights.index)
+                    if weights.sum() > 0:
+                        assigned.loc[unassigned] = remainder * weights / weights.sum()
+                source = "explicit_context_with_prior_opportunity"
             else:
-                assigned = fallback_weight / fallback_weight.sum()
-                source = "lagged_opportunity_with_salary_fallback"
+                # Preserve missing opportunity, including QB carries and work
+                # belonging to players omitted from the native salary pool.
+                assigned = fallback_weight / max(1.0, float(fallback_weight.sum()))
+                source = "lagged_opportunity_without_salary_inference"
 
             availability = pd.to_numeric(
                 group["pregame_availability_probability"], errors="coerce"
             ).fillna(1.0).clip(lower=0.0, upper=1.0)
             available_share = assigned * availability
-            removed_share = assigned * (1.0 - availability)
+            # Genuine vacated work is prior same-team work, not an expanded
+            # forward role or a former team's workload.
+            removed_share = (prior_share if coherent else assigned) * (1.0 - availability)
+            if coherent and available_share.sum() > 1.000001:
+                fixed = float(available_share.loc[explicit_mask].sum())
+                if fixed > 1.000001:
+                    raise ValueError(f"Explicit expected {opportunity} volume exceeds team volume for {team}")
+                other = ~explicit_mask
+                total = float(available_share.loc[other].sum())
+                if total > 0:
+                    available_share.loc[other] *= max(0.0, 1.0 - fixed) / total
             redistribution_fractions = []
+            recipient_mask = pd.Series(False, index=group.index)
             for context in group["player_id"].astype(str).map(context_by_player).tolist():
                 context = context if isinstance(context, dict) else {}
                 evidence = context.get("evidence_json") or context.get("evidence") or {}
-                fraction = evidence.get(f"{opportunity}_redistribution_fraction", 1.0) if isinstance(evidence, dict) else 1.0
+                # Existing user scenarios explicitly model full generic team
+                # redistribution. Real injury evidence never implies that.
+                default_fraction = 1.0 if context.get("source") == "user_availability_scenario" else 0.0
+                fraction = evidence.get(f"{opportunity}_redistribution_fraction", default_fraction) if isinstance(evidence, dict) else default_fraction
                 fraction = float(fraction)
                 if not 0.0 <= fraction <= 1.0:
                     raise ValueError(f"{opportunity} redistribution fraction must be between 0 and 1")
                 redistribution_fractions.append(fraction)
             redistributed_share = float((removed_share * redistribution_fractions).sum())
-            if available_share.sum() > 0:
-                available_share = available_share / available_share.sum() * (
-                    float(available_share.sum()) + redistributed_share
-                )
+            requested_redistribution = redistributed_share
+            if coherent:
+                # Explicit recipient counts may already consume vacated work.
+                redistributed_share = min(redistributed_share, max(0.0, 1.0 - float(available_share.sum())))
+            before_redistribution = available_share.copy()
+            for i in index_list:
+                context = context_by_player.get(str(rows.at[i, "player_id"]), {})
+                facts = context.get("evidence_json") or context.get("evidence") or {}
+                recipient_mask.at[i] = bool(
+                    availability.at[i] > 0 and
+                    (opportunity in facts.get("redistribution_opportunities", []) or
+                     context.get("source") == "user_availability_scenario"))
+            # Explicit fractions preserve the existing modeled scenario API;
+            # otherwise use only sourced, named recipients of a promotion.
+            has_fraction = any(f"{opportunity}_redistribution_fraction" in
+                ((context_by_player.get(str(pid), {}).get("evidence_json") or
+                  context_by_player.get(str(pid), {}).get("evidence") or {}))
+                for pid in group["player_id"])
+            user_scenario = any(c.get("source") == "user_availability_scenario" for c in context_by_player.values())
+            if (has_fraction and not recipient_mask.any()) or user_scenario:
+                recipient_mask = availability.gt(0)
+            recipient_weights = available_share.where(recipient_mask, 0.0)
+            if recipient_weights.sum() > 0:
+                available_share += redistributed_share * recipient_weights / recipient_weights.sum()
             else:
-                raise ValueError(
-                    f"No available {opportunity} players remain for {team}; "
-                    "correct the pregame availability evidence."
-                )
+                redistributed_share = 0.0
 
             team_volumes = pd.to_numeric(
                 group.get(
@@ -1161,7 +1265,7 @@ def apply_pregame_projection_context(
             rows.loc[index_list, share_column] = available_share
             rows.loc[index_list, count_column] = available_share * team_volume
             context_applied = bool(
-                explicit_mask.any() or not np.allclose(availability, 1.0)
+                explicit_mask.any() or (removed_share.sum() > 1e-12 if coherent else not np.allclose(availability, 1.0))
             )
             if context_applied:
                 rows.loc[index_list, "pregame_opportunity_context_applied"] = True
@@ -1181,6 +1285,18 @@ def apply_pregame_projection_context(
                     "allocated_share": float(available_share.sum()),
                     "removed_share": float(removed_share.sum()),
                     "redistributed_share": redistributed_share,
+                    "requested_redistribution_share": requested_redistribution,
+                    "history_policy": "team_window_v2" if coherent else "legacy_v1",
+                    "historical_share_sum": float(prior_share.sum()),
+                    "historical_unrepresented_volume": max(0.0, 1.0 - float(prior_share.sum())) * team_volume if coherent else None,
+                    "players": [dict(player_id=str(rows.at[i, "player_id"]),
+                        prior_volume=float(assigned.at[i] * team_volume),
+                        historical_volume=float(prior_share.at[i] * team_volume),
+                        history_status=rows.at[i, "opportunity_history_status"] if coherent else None,
+                        vacated_volume=float(removed_share.at[i] * team_volume),
+                        received_volume=float((available_share.at[i] - before_redistribution.at[i]) * team_volume),
+                        expected_volume=float(available_share.at[i] * team_volume),
+                        recipient_supported=bool(recipient_mask.at[i])) for i in index_list],
                 }
             )
 
@@ -1233,6 +1349,7 @@ def apply_pregame_projection_context(
     ).fillna(0.0).clip(lower=0.0, upper=1.0)
     return rows, {
         "source": "public.starting_qb_evidence + public.pregame_player_context",
+        "role_availability_audit": role_audit,
         "context_player_count": len(context_by_player),
         "context_run_ids": sorted(
             str(value)
@@ -1241,8 +1358,8 @@ def apply_pregame_projection_context(
         "starting_qb_teams": sorted(selected_by_team),
         "allocation_policy": (
             "team carry/target shares before point scoring; explicit context first; "
-            "lagged opportunity plus disclosed DraftKings salary fallback for players "
-            "without prior NFL games"
+            "lagged opportunity without salary inference; removed work unallocated "
+            "unless an explicit redistribution assumption/evidence supplies recipients"
         ),
         "allocations": allocation_metrics,
         "team_pass_attempts": None,
@@ -1282,6 +1399,8 @@ def prepare_inputs(
     availability_overrides: list[dict] | None = None,
     allow_confirmed_inactive_override: bool = False,
     assume_questionable_out: bool = False,
+    injury_statuses: pd.DataFrame | None = None,
+    opportunity_allocation_policy: str = "legacy_v1",
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
     """Return training and scoring rows using canonical UUIDs only."""
     from .predictions import TARGET_COL, select_training_rows_before_cutoff
@@ -1306,12 +1425,60 @@ def prepare_inputs(
     )
     if "player_status" not in salaries.columns:
         salaries["player_status"] = None
+    all_slate_salaries = salaries.copy()
+    canonical_context = {str(r.get("player_master_id") or r.get("player_id")): r
+                         for r in (pregame_context.to_dict("records") if pregame_context is not None else [])
+                         if (r.get("evidence_json") or {}).get("canonical_context_contract") == CONTEXT_CONTRACT}
+    specialist_ids = set()
+    classic_scope = None
+    role_excluded_ids = set()
+    quarantine_ids = set()
+    if canonical_context:
+        from ..config import get_settings
+        classic = not salaries['roster_position'].fillna('').str.upper().eq('CPT').any()
+        max_age = (get_settings().classic_player_status_max_age_hours if classic
+                   else get_settings().showdown_player_status_max_age_hours)
+        if classic:
+            from .classic_player_pool import assess_pool_player
+            classic_scope = {pid: assess_pool_player({**r['evidence_json'], 'position': r.get('position')},
+                cutoff=cutoff, evaluated_at=cutoff, max_age_hours=max_age) for pid, r in canonical_context.items()}
+            role_excluded_ids = {pid for pid, assessment in classic_scope.items() if assessment['role_exclusion_policy']}
+            quarantine_ids = {pid for pid, assessment in classic_scope.items() if assessment['quarantine']}
+        assessed = {pid: assess_availability({**r["evidence_json"], "position": r.get("position")},
+                    cutoff=cutoff, evaluated_at=cutoff, max_age_hours=max_age)[0]
+                    for pid,r in canonical_context.items()}
+        missing_status = sorted({str(pid) for pid in salaries["player_master_id"].dropna() if
+            assessed.get(str(pid), "UNKNOWN") == "UNKNOWN" and str(pid) not in quarantine_ids})
+        if classic_scope:
+            missing_status = sorted(set(missing_status) | {str(pid) for pid in salaries['player_master_id'].dropna()
+                if assessed.get(str(pid)) != 'UNAVAILABLE' and str(pid) not in role_excluded_ids
+                and canonical_context.get(str(pid), {}).get('position') != 'DST'
+                and not classic_scope.get(str(pid), {}).get('role_current')})
+        if missing_status:
+            names = {str(r.player_master_id): str(r.player_name) for r in salaries.itertuples(index=False)}
+            raise PlayerContextUnresolved(
+                "Current player availability needs verification for "
+                + ", ".join(names.get(pid, pid) for pid in missing_status)
+                + ". Refresh current roster and injury evidence, then rerun projections."
+            )
+        specialist_ids = {pid for pid,r in canonical_context.items() if assessed[pid] == "AVAILABLE"
+            and is_excluded_specialist(r["evidence_json"], cutoff=cutoff, evaluated_at=cutoff,
+                                      max_age_hours=max_age)}
+        # Current canonical facts supersede the original salary status only
+        # where their source clocks established a deterministic disposition.
+        salaries["player_status"] = [canonical_context[str(pid)]["evidence_json"].get("availability_status")
+                                     if str(pid) in canonical_context else value
+                                     for pid,value in zip(salaries["player_master_id"],salaries["player_status"],strict=True)]
     salaries["normalized_player_status"] = salaries["player_status"].map(
         normalize_salary_status
     )
-    unavailable = salaries.loc[
-        ~salaries["player_status"].map(is_salary_status_eligible)
-    ].copy()
+    eligibility_mask = salaries["player_status"].map(is_salary_status_eligible)
+    if canonical_context:
+        eligibility_mask = salaries["player_master_id"].map(lambda pid:
+            canonical_context.get(str(pid), {}).get("evidence_json", {}).get("availability_state") == "AVAILABLE")
+    # Unknown quarantines and unresolved identities are not injury facts.
+    unavailable = salaries.loc[~eligibility_mask & salaries["player_master_id"].astype(str).isin(
+        {pid for pid, state in assessed.items() if state == 'UNAVAILABLE'})].copy() if canonical_context else salaries.loc[~eligibility_mask].copy()
     normalized_names = unavailable.get(
         "normalized_name",
         unavailable["player_name"].fillna("").astype(str).str.strip().str.lower(),
@@ -1345,13 +1512,14 @@ def prepare_inputs(
         for row in excluded_status_players.itertuples(index=False)
     ]
     excluded_salary_row_ids = unavailable["curated_salary_id"].astype(int).tolist()
-    salaries = salaries.loc[
-        salaries["player_status"].map(is_salary_status_eligible)
-    ].copy()
+    # Role exclusions are independent of unavailable salary/status exclusions.
+    specialist_mask = salaries["player_master_id"].astype(str).isin(specialist_ids | role_excluded_ids)
+    excluded_specialist_salary_row_ids = salaries.loc[specialist_mask, "curated_salary_id"].astype(int).tolist()
+    salaries = salaries.loc[eligibility_mask & ~specialist_mask].copy()
     if salaries.empty:
         raise ValueError(
             f"No eligible canonical salaries available for {season} week {week} slate {slate}; "
-            "all salary players have unavailable statuses."
+            "all salary players are unavailable or sourced unsupported specialists."
         )
     roster_eligibility_policy = {
         "source": "public.curated_player_game_participation",
@@ -1370,7 +1538,7 @@ def prepare_inputs(
         "team",
         "roster_status",
     }
-    if participation is not None and roster_columns.issubset(participation.columns):
+    if not canonical_context and participation is not None and roster_columns.issubset(participation.columns):
         roster = participation.loc[
             (participation["season"] == season)
             & (participation["week"] == week)
@@ -1404,6 +1572,15 @@ def prepare_inputs(
                 )
                 for row in roster.itertuples(index=False)
             }
+            # Weekly ingestion can cover only one slate. Other teams have no
+            # roster evidence yet; that absence must not become an inactive
+            # designation just because another team has loaded records.
+            covered_teams = set(roster["team_key"].dropna())
+            salary_team_keys = salaries["team"].map(normalize_team)
+            roster_eligibility_policy["covered_teams"] = sorted(covered_teams)
+            roster_eligibility_policy["missing_teams"] = sorted(
+                set(salary_team_keys.dropna()) - covered_teams
+            )
             salaries["current_roster_status"] = [
                 roster_lookup.get(
                     (
@@ -1420,6 +1597,7 @@ def prepare_inputs(
             unavailable_roster_mask = (
                 position_keys.isin(requested)
                 & ~position_keys.isin({"D", "DEF", "DST"})
+                & salary_team_keys.isin(covered_teams)
                 & salaries["current_roster_status"].ne("ACT")
             )
             unavailable_roster = salaries.loc[unavailable_roster_mask].copy()
@@ -1475,7 +1653,10 @@ def prepare_inputs(
                     f"No roster-eligible canonical salaries available for {season} "
                     f"week {week} slate {slate}."
                 )
-    unresolved = salaries.loc[salaries["player_master_id"].isna(), "source_player_key"].tolist()
+    unresolved = all_slate_salaries.loc[all_slate_salaries["player_master_id"].isna(), "source_player_key"].tolist()
+    if unresolved:
+        raise ValueError(f"Resolve {len(unresolved)} salary identities before projections: "
+                         + ", ".join(map(str, unresolved[:20])))
     excluded_positions = sorted(set(salaries["position"].dropna()) - requested)
     salaries = salaries.loc[
         salaries["player_master_id"].notna() & salaries["position"].isin(requested)
@@ -1510,6 +1691,7 @@ def prepare_inputs(
         matrix,
         weekly_stats,
         cutoff=cutoff,
+        policy=opportunity_allocation_policy,
     )
     from .offensive_role import attach_offensive_role
     matrix = attach_offensive_role(matrix)
@@ -1559,6 +1741,26 @@ def prepare_inputs(
             f"build features for this slate before retrying. Player IDs: {', '.join(missing)}"
         )
     target = target.loc[ids].copy().reset_index(drop=True)
+    # Keep excluded starter history in the allocation audit. Removing IR salary
+    # rows before measuring vacated work used to silently normalize it away.
+    removed_salaries = all_slate_salaries.loc[
+        all_slate_salaries["player_master_id"].notna()
+        & ~all_slate_salaries["player_master_id"].astype(str).isin(ids)
+        & all_slate_salaries["position"].isin(requested)
+    ].sort_values(["created_at", "curated_salary_id"]).drop_duplicates("player_master_id", keep="last")
+    removed_ids = set(removed_salaries["player_master_id"].astype(str))
+    removed_features = matrix.loc[
+        matrix["season"].eq(season) & matrix["week"].eq(week)
+        & matrix["slate"].fillna("").str.upper().eq(slate.upper())
+        & matrix["player_id"].astype(str).isin(removed_ids)
+    ].drop_duplicates("player_id", keep="last").copy()
+    removed_salary_lookup = removed_salaries.assign(
+        player_master_id=removed_salaries["player_master_id"].astype(str)).set_index("player_master_id")
+    for output, source in [("salary", "salary"), ("recent_team", "team"),
+                           ("opponent_team", "opponent"), ("position", "position"),
+                           ("player_display_name", "player_name")]:
+        removed_features[output] = removed_features["player_id"].map(removed_salary_lookup[source])
+    removed_features["player_status"] = "OUT"
     salary_by_id = salaries.set_index("player_master_id")
     for output, source in [("salary", "salary"), ("player_status", "player_status"),
                            ("recent_team", "team"),
@@ -1573,6 +1775,9 @@ def prepare_inputs(
         ] if market_rows is not None and not market_rows.empty
          else pd.DataFrame()), cutoff=cutoff,
     )
+    if assume_questionable_out:
+        availability_overrides = [*(availability_overrides or []),
+            *_questionable_snapshot_overrides(target, pregame_context, injury_statuses)]
     pregame_context, availability_override_audit = apply_player_availability_overrides(
         target,
         pregame_context,
@@ -1580,11 +1785,19 @@ def prepare_inputs(
         allow_confirmed_inactive_override=allow_confirmed_inactive_override,
         assume_questionable_out=assume_questionable_out,
     )
-    target, pregame_metrics = apply_pregame_projection_context(
-        target,
+    allocation_input = pd.concat([target, removed_features], ignore_index=True)
+    if opportunity_allocation_policy == "team_window_v2":
+        # Salary/role membership can supersede matrix team; rebuild after that
+        # mapping so old matrix-team evidence cannot enter a current team.
+        allocation_input, _ = attach_lagged_opportunity_features(
+            allocation_input, weekly_stats, cutoff=cutoff, policy=opportunity_allocation_policy)
+    allocation_rows, pregame_metrics = apply_pregame_projection_context(
+        allocation_input,
         starting_qbs=starting_qbs,
         pregame_context=pregame_context,
     )
+    target = allocation_rows.loc[allocation_rows["player_id"].astype(str).isin(ids)].copy().reset_index(drop=True)
+    pregame_metrics["excluded_opportunity_players_without_features"] = sorted(removed_ids - set(removed_features["player_id"].astype(str)))
     market_starter_sanity: list[dict] = []
     for team, team_rows in target.groupby("recent_team"):
         first = team_rows.iloc[0]
@@ -1647,15 +1860,37 @@ def prepare_inputs(
         & target["position"].fillna("").astype(str).str.upper().isin({"RB", "WR", "TE"}),
         np.nan,
     )
+    if opportunity_allocation_policy == "team_window_v2":
+        for kind, count in (("carry", "carries"), ("target", "targets")):
+            supported = target[f"{count}_mean_3_available"] | target[f"pregame_effective_{kind}_share"].notna()
+            target[f"projected_{count}"] = target[f"projected_{count}"].where(supported, np.nan)
     target["projected_opportunity_source"] = np.where(
         target["team_targets_mean_3_available"] | target["team_carries_mean_3_available"],
-        "lagged_team_volume_reconciled_with_salary_fallback", "unavailable",
+        "lagged_team_volume_with_evidence_supported_redistribution", "unavailable",
     )
+    if opportunity_allocation_policy == "team_window_v2":
+        supported = target["projected_carries"].notna() | target["projected_targets"].notna()
+        applicable = target["position"].isin({"RB", "WR", "TE"})
+        target["projected_opportunity_source"] = np.where(
+            applicable, np.where(supported, "same_team_common_window_with_evidence_supported_context",
+                                 "unavailable_same_team_history"), "not_applicable")
     # Future matrix rows currently store zero actuals. They are never labels.
     target[TARGET_COL] = float("nan")
     metadata = {
         "source": "public.player_game_feature_matrix",
         "salary_source": "public.curated_salary",
+        "canonical_player_pool": {
+            "contract_id": CONTEXT_CONTRACT if canonical_context else None,
+            "generation_eligible_player_ids": sorted(salaries["player_master_id"].dropna().astype(str).unique()),
+            "scoring_player_ids": sorted(target["player_id"].dropna().astype(str).unique()),
+            "explicitly_unavailable_player_ids": sorted(excluded_status_players["player_master_id"].dropna().astype(str).unique()),
+            "explicitly_excluded_specialist_player_ids": sorted(specialist_ids),
+            "specialist_exclusion_reason": "unsupported_non_scoring_specialist_role",
+            "excluded_specialist_salary_row_ids": excluded_specialist_salary_row_ids,
+            "quarantined_unresolved_player_ids": sorted(quarantine_ids),
+            "role_ineligible_player_ids": sorted(role_excluded_ids - quarantine_ids),
+            "materiality_assessments": classic_scope,
+        },
         "salary_ingest_run_ids": source_salary_ingest_run_ids,
         "salary_row_ids": salaries["curated_salary_id"].astype(int).tolist(),
         "salary_status_policy": {
@@ -1676,7 +1911,7 @@ def prepare_inputs(
         "opportunity_features": opportunity_metrics,
         "pregame_context": pregame_metrics,
         "market_context": {
-            "source": "public.raw_nfl_schedule latest captured pre-cutoff line",
+            "source": "cutoff-safe market observations; team_rows retain consumed source and snapshot ID",
             "team_rows": market_audit,
             "starter_sanity": market_starter_sanity,
             "historical_training_reconciliation": historical_market_audit,
@@ -1703,7 +1938,11 @@ def load_inputs(
     engine, *, season, week, slate, cutoff, positions=None,
     availability_overrides=None, allow_confirmed_inactive_override=False,
     assume_questionable_out=False,
+    opportunity_allocation_policy=None,
 ):
+    if opportunity_allocation_policy is None:
+        from ..config import get_settings
+        opportunity_allocation_policy = get_settings().player_opportunity_allocation_policy
     if not slate or not slate.strip():
         raise ValueError("A selected slate is required for canonical projections.")
     naive_cutoff = cutoff.astimezone(timezone.utc).replace(tzinfo=None)
@@ -1836,21 +2075,8 @@ def load_inputs(
         if engine.dialect.name == "postgresql" and db_inspector.has_table(
             "market_snapshot", schema="target"
         ):
-            current_markets = pd.read_sql(
-                text("""
-                    SELECT market.market_snapshot_id, market.source, market.season, market.week,
-                           market.game_id, market.home_team, market.away_team,
-                           market.kickoff_at, market.ingested_at, market.observed_at,
-                           market.game_total, market.home_spread
-                    FROM target.market_snapshot market
-                    JOIN public.ingest_run run ON run.ingest_run_id = market.ingest_run_id
-                    WHERE market.season = :season AND market.week = :week
-                      AND run.status = 'completed'
-                      AND market.ingested_at <= :cutoff
-                    ORDER BY market.observed_at, market.market_snapshot_id
-                """), connection,
-                params={"season": season, "week": week, "cutoff": naive_cutoff},
-            )
+            from .market_snapshots import load_current_markets
+            current_markets = pd.DataFrame(load_current_markets(connection,season=season,week=week,cutoff=cutoff))
             market_rows = pd.concat([market_rows, current_markets], ignore_index=True)
         if engine.dialect.name == "postgresql" and db_inspector.has_table(
             "pregame_player_context", schema="public"
@@ -1866,22 +2092,6 @@ def load_inputs(
                     cutoff=cutoff,
                 )
             )
-    if not injury_statuses.empty:
-        context_statuses = {
-            str(row["player_master_id"]): normalize_salary_status(row.get("injury_status"))
-            for row in pregame_context.to_dict("records")
-        }
-        slate_ids = set(salaries.loc[
-            salaries["slate"].str.upper().eq(slate.upper()), "player_master_id"
-        ].dropna().astype(str))
-        availability_overrides = [*(availability_overrides or []), *[
-            {"player_id": str(row.player_id), "availability": "assume_out",
-             "official_availability_status": normalize_salary_status(row.injury_status)}
-            for row in injury_statuses.itertuples(index=False)
-            if str(row.player_id) in slate_ids
-            and (context_statuses.get(str(row.player_id)) or normalize_salary_status(row.injury_status))
-            in {"Q", "QUESTIONABLE"}
-        ]]
     train, target, metadata = prepare_inputs(
         matrix,
         salaries,
@@ -1898,7 +2108,15 @@ def load_inputs(
         availability_overrides=availability_overrides,
         allow_confirmed_inactive_override=allow_confirmed_inactive_override,
         assume_questionable_out=assume_questionable_out,
+        injury_statuses=injury_statuses,
+        opportunity_allocation_policy=opportunity_allocation_policy,
     )
+    from .kicker_roles import assign_kicker_roles, load_kicker_evidence
+    if "position" in target and target["position"].astype(str).str.upper().eq("K").any():
+        target, metadata["kicker_role_gate"] = assign_kicker_roles(
+            target, load_kicker_evidence(engine, season=season, week=week,
+                                       slate=slate, cutoff=cutoff)
+        )
     if not injury_statuses.empty:
         used_ids = {
             str(row["player_id"])

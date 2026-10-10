@@ -70,12 +70,14 @@ def load_current_pregame_context(
     week: int,
     slate: str,
     cutoff: datetime,
+    include_source_history: bool = False,
 ) -> list[dict[str, Any]]:
-    """Return the newest visible evidence row per canonical player."""
+    """Return current contexts, or visible original history for source merging."""
+    distinct = "" if include_source_history else "DISTINCT ON (context.player_master_id)"
     rows = connection.execute(
         text(
-            """
-            SELECT DISTINCT ON (context.player_master_id)
+            f"""
+            SELECT {distinct}
                 context.pregame_player_context_id,
                 context.context_run_id,
                 context.player_master_id,
@@ -109,6 +111,8 @@ def load_current_pregame_context(
               AND run.observed_at <= :cutoff
               AND run.received_at <= :cutoff
             ORDER BY context.player_master_id,
+                     CASE WHEN run.source = 'canonical_showdown_player_context_v1'
+                          THEN run.received_at ELSE run.observed_at END DESC,
                      run.observed_at DESC,
                      run.received_at DESC,
                      context.pregame_player_context_id DESC

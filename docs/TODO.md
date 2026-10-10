@@ -12,6 +12,31 @@ priority or status after repository consolidation.
 
 ## North Star
 
+### Next architecture-led delivery sequence (2026-10-10)
+
+**Next live slate: Sunday Main.** Shared Classic/Captain code repairs and fixture validation are recorded in the [shared-path audit](product/shared_classic_captain_path_audit.md); do not infer live data clearance from those tests. Prioritize Sunday Main readiness and preserve its GPP settings.
+
+Immediate focus: **paid finishes in GPPs, with expected return and tournament upside evaluated alongside them**, across Classic Sunday Main/early/late and Captain Thursday/Sunday/Monday night. Captain has equal priority. Other offered NFL slates should use verified native scope, not weekday assumptions. Prioritize the tasks below over the longer-term DECISION automation sequence and older cash-game backlog; retain existing GPP defaults until improvements pass validation. See the [scope and acceptance design](product/automated_decision_quality_workflow.md).
+
+Delivered comparison layer: [one provisional GPP recommendation](product/gpp_candidate_recommendation.md) ranks returned candidates, saves its evidence, and exports one lineup for all contests in a slate. Its projection-first fallback does not complete GPP-PERF-001/002; calibrated paid-finish and expected-return ranking remain the performance gate.
+
+| ID | Priority | Status | Scope / dependencies | Acceptance check |
+| --- | --- | --- | --- | --- |
+| GPP-SLATE-001 | P0 | Ready | Live-source certification, Sunday Main first; shared-path code audit and six-slate fixtures complete | Fresh preparation/readiness for the actual native salary/game scope; verify final lineup/export compatibility before entry |
+| GPP-PERF-001 | P0 | Research | Frozen GPP policy baselines and paid-finish/return/upside evaluation per slate family; depends on verified prelock inputs and historical standings/payouts | Separate projection, generation, selection and contest-choice findings; time/shared-game-safe validation; unavailable financial evidence and small samples explicit |
+| GPP-PERF-002 | P0 | Blocked | Improve and promote GPP recommendations; depends on supported slate paths and GPP-PERF-001 | Predeclared chronological comparison of paid finishes, return and upside; no concealed family regressions, unsupported probabilities or automatic promotion |
+| GPP-SLATE-003 | P1 | Blocked | Extend to additional offered Classic/Captain slates; depends on GPP-SLATE-001 and verified native contest/salary evidence | Distinct slates on the same day persist independently; unsupported rules fail explicitly; full path passes without requiring a new weekday label |
+
+Longer-term architecture tasks follow; they do not displace the immediate GPP work:
+
+| ID | Priority | Status | Scope / dependencies | Acceptance check |
+| --- | --- | --- | --- | --- |
+| DECISION-001 | P1 | Ready | Durable decision manifest, independent quality gates, grouped exceptions and outcome registration; reuse existing preparation/jobs/optimizer | Retry/restart is idempotent; stale evidence invalidates dependent stages; illegal candidates block; preference/model separation and current strategies remain intact |
+| DECISION-002 | P1 | Blocked | Automatic postgame ledger; depends on DECISION-001 and configured result-source/account scope | Duplicate results are a no-op; corrected results version reports; unentered forecasts score; missing payouts remain incomplete |
+| DECISION-003 | P1 | Research | GPP contest inventory, paid-finish candidate coverage, joint field/outcome calibration and exact payout engine; use frozen decision/history evidence | Deterministic payout/tie/refund fixtures and point-in-time replay pass; predeclared chronological calibration gates support each enabled cohort |
+| DECISION-004 | P2 | Blocked | Contest-aware GPP paid-finish recommendations; depends on DECISION-001/003 and explicit objective/budget preferences | Validated selection with uncertainty, correlated loss limits, abstention, and freshness/lock invalidation passes API/UI acceptance |
+| DECISION-005 | P2 | Blocked | Controlled learning and promotion cycle; depends on DECISION-002 and sufficient eligible chronological evidence | No future labels or automatic promotion; reviewed shadow evidence, versioned registry and rollback preserve the baseline |
+
 Produce an auditable DFS decision chain for every contest entry:
 
 `source snapshots -> canonical identity -> features -> projections -> human/rule adjustments -> simulations -> optimizer -> portfolio -> export -> results -> learning`
@@ -65,6 +90,16 @@ Application behavior was reverified during the 2026 preseason readiness pass on
 See `docs/CONSOLIDATION.md` for the complete contract and verification evidence.
 
 ## Execution Order
+
+### October 4, 2026 — Classic work parked
+
+The user deferred Classic development and strategy experiments while preparing
+Sunday Night Showdown. Keep C01–C08 **Parked** with their original priorities,
+acceptance evidence, preferences and source limitations in the
+[October 4 Classic TODO](CLASSIC_OPTIMIZER_PARKED_TODO_2026_10_04.md).
+The checklist's next-task section records context; saving it does not start that
+work or authorize live preparation, optimizer runs or submissions. Confirmed
+issues affecting tonight's inputs or lineup legality remain blockers.
 
 1. Preserve the time-sensitive 2026 prospective cohort and close its live acceptance gates
    (`WTHR-007`, `DATA-002`).
@@ -151,6 +186,7 @@ modeling, and replay.
 | ID | Status | Work | Dependencies | Acceptance check |
 | --- | --- | --- | --- | --- |
 | LEARN-001 (`DT-803`) | Done | Persist idempotent `slate_learning_report_v1` reviews from normalized results. Reports evaluate user entries, projections, symbolic rules, beliefs, lineups, portfolios, exports, and OPT-007 controls against canonical identities, exact source files, and run IDs. Operations can generate reports explicitly and refreshes them after a successful result load when a username is saved. | Verified result files | Week 1 reports were generated for `WEDNESDAY_NIGHT`, `SUNDAY_MAIN`, and `SUNDAY_NIGHT`; missing fees, payouts, assignments, beliefs, and legacy controls remain explicit. Evidence: `docs/POST_SLATE_LEARNING.md`. |
+| LEARN-MEM | Done; worker conditional | Compact v2 learning, metadata-first bounded pool loading, immutable paged evidence, bounded optimizer cache, single-flight polling, and memory telemetry. Detailed checks and conditional durable dispatch are tracked in `docs/WEEKLY_LEARNING_MEMORY_REDUCTION_TODO.md`. | Migration 0046 | Week 4 full-week benchmark: 539 MB peak app RSS, 383 KB response, 15.6 s. Saved entered-run conclusions match v1; raw optimizer evidence stays immutable. |
 | LEARN-002 (`DT-704`) | Done | Added deterministic `agent_question_voi_v1` questions from immutable DT-703 model/human bundles. The Digital Twin asks at most five questions when projection uncertainty or an approved human/model disagreement crosses declared thresholds. Questions, answers, no-change responses, exact evidence hashes, and inert proposed modifiers persist; nothing silently changes a model or active variant. | Existing guarded belief modifiers, LEARN-001 recommended | Triggers use versioned value-of-information rules; every question, answer, no-change response, and resulting modifier is persisted. Evidence: `docs/AGENT_LEARNING_QUESTIONS.md`. |
 | LEARN-003 (`DT-705`) | Done | `slate_learning_report_v1` builder `2026-09-14.4` scores predecision belief theses and exact approved/rejected belief-impact or LEARN-002 answer counterfactuals. Reports classify helped, hurt, no measurable effect, and unscored overall, by scope, and by confidence band without rewriting source records. Week 1 correctly remains human-unscored because no prospective beliefs or questions existed. | LEARN-001, LEARN-002 | Reports show where intervention helped, hurt, or had no measurable effect by scope and confidence, without rewriting the original belief. Evidence: `docs/HUMAN_OUTCOME_LEARNING.md`. |
 | LEARN-004 (`DT-706`) | Blocked | Learn a guarded personal-policy challenger from accumulated feedback. | LEARN-003, minimum evidence thresholds | Recommendations are replayed against model-only and human-only variants, require approval, and cannot silently change an active rule or model. |

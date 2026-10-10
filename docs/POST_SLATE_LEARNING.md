@@ -1,5 +1,19 @@
 # Post-slate learning reports
 
+For the proposed automatic outcome-registration, settlement, and controlled model-improvement workflow, see [Automated decision, quality control, and learning](product/automated_decision_quality_workflow.md). That architecture is not yet implemented; the behavior below describes the existing report/import workflow.
+
+For preserved Showdown observations, open **Research Lab → Showdown Research**.
+The 2026 Captain Contest Consistency study is available through the read-only
+`GET /api/learning/research/showdown` endpoint and the checked-in
+[`showdown_research_notes_v1` metadata](product/showdown_research_notes.json).
+Each finding records its sample period, comparison baseline and limitations
+and carries `RESEARCH_ONLY / OBSERVATIONAL / NOT PRODUCTION VALIDATED`.
+This metadata is separate from live optimizer inputs, football projections,
+eligibility, candidate scoring and selection. The existing
+[selection-regret and portfolio-diversity audit](../SHOWDOWN_SELECTION_REGRET_AND_PORTFOLIO_DIVERSITY_AUDIT.md)
+remains the source for that retrospective audit; this addition does not repeat it.
+See [app examples and isolation validation](../SHOWDOWN_RESEARCH_NOTES_AND_REVIEW_CHECKLIST.md).
+
 For a cross-slate ownership calibration and Classic correlation/portfolio
 review after Week 3, see [the Week 3 audit](WEEK3_OWNERSHIP_CORRELATION_PORTFOLIO_AUDIT.md).
 The saved-pool versus selection and entry analysis is in the
@@ -43,10 +57,57 @@ apply.
 An analysis failure is shown separately and never changes a successful result
 import into a failed import.
 
+Builder `2026-10-05.3` produces compact v2 slate and weekly reports. It first
+loads run metadata, then decodes the required saved candidate pools one run at a
+time. Decision snapshots, full controls, and evaluated candidates are stored as
+immutable content-addressed evidence by migration `0046_compact_learning_evidence.sql`.
+Apply that migration before deploying the builder. Previously saved v1 reports
+remain readable and their embedded candidate detail can use the same API.
+Candidate field ranks use binary search with the existing tie tolerance.
+
+The default optimizer policy evaluates canonically entry-linked runs. A slate
+request can additionally specify `diagnostic_run_ids` (at most 20), restricted
+to completed runs in the requested slate. Every excluded completed run retains
+its ID, configuration hash, and reason in `optimizer_effectiveness.inclusion_policy`.
+Historical calibration retains complete entry-linked predecision numeric samples.
+The weekly evidence hash includes the historical report IDs and correlations.
+Scores and rankings are unchanged; tied construction frequencies have deterministic
+canonical ordering. Evidence gaps still appear explicitly.
+
+In each slate review, expand **Inspect saved candidate details** to retrieve one run page
+at a time. The default report holds at most 20 preview candidates per run,
+including the best scoreable candidate. Full evidence is frozen to the report:
+
+```text
+GET /api/learning/reports/{report_id}/optimizer-runs/{run_id}/candidates?offset=0&limit=100
+GET /api/learning/reports/{report_id}/entries/{entry_id}/evidence?contest_id={contest_id}
+GET /api/optimizer/cache-status
+```
+
+Candidate pages accept `limit` 1–200 and nonnegative offsets. Entry links open
+the original saved decision and full control evidence. Neither endpoint rescores
+mutable current data; missing frozen evidence fails explicitly.
+
+The full Week 4 benchmark now measures 539 MB peak Python RSS, 383 KB response,
+and 15.6 seconds, with zero additional system swap/pageouts in that measurement.
+See [the memory work plan](WEEKLY_LEARNING_MEMORY_REDUCTION_TODO.md) for commands,
+baseline parity, artifacts, and measurement limits. Durable worker dispatch is
+conditional on repeated duration above 60 seconds and is deferred for this fixture.
+Telemetry records timings, configuration sizes, candidate counts, response size,
+and process lifetime peak RSS. Warning budgets are 2 MB responses, 60 seconds
+weekly duration, and 1 GB process RSS (confirm RSS attribution with a fresh benchmark).
+`OPTIMIZER_RESULT_CACHE_MAX_ENTRIES=1` and
+`OPTIMIZER_RESULT_CACHE_TTL_SECONDS=60` bound completed persisted-result retention;
+TTL is checked on access. Zero disables completed-result retention. Active jobs
+remain available and evictions reload from persisted state. Preparation polling
+allows one pending refresh per scope and backs off on slow or failed responses.
+
 Select **Download report for ChatGPT** after building a week report to save a
 Markdown file locally. The file includes week and slate summaries, entry and
 player comparisons, the captain 1.5 scoring explanation, evidence gaps, and
-the complete structured report JSON. Upload it to ChatGPT yourself for deeper
+the compact structured report JSON and stable full-evidence links.
+The links require the running app; v2 downloads do not embed every raw candidate
+or full decision/control payload. Upload it to ChatGPT yourself for deeper
 analysis. The export does not change or promote any model.
 
 ## Optimizer effectiveness
@@ -63,10 +124,9 @@ the existing complete candidate rows when those rows are available. A missing
 historical pool is labeled `candidate_pool_unavailable`, never reconstructed as
 an original pool. Historical replay requires separately verified point-in-time
 inputs and is not attempted by this report.
-The structured report also evaluates every other completed run on the slate
-with a complete saved pool. `run_scope` separates those research runs from
-entry-linked decisions; completed runs without a saved pool are listed as
-unavailable. The concise week table uses entry-linked decisions.
+Explicit diagnostic requests evaluate additional completed runs in the slate;
+`run_scope` distinguishes them from entry-linked decisions. Excluded run IDs and
+reasons remain visible. The concise week table uses entry-linked decisions.
 Scenario variants of the same Showdown roster remain separate saved candidates;
 the manifest also records the distinct-roster count, and saved selected ranks
 identify the chosen variant.

@@ -150,3 +150,32 @@ class PlayerIdentityTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_salary_repair_uses_shared_resolver_and_persists_alias_without_rewriting_master():
+    from Database.player_identity import repair_salary_identities
+    engine = MagicMock()
+    conn = engine.begin.return_value.__enter__.return_value
+    conn.execution_options.return_value = conn
+    master = dict(player_id="canonical", full_name="Source Name", normalized_name="source name",
+                  name_norm="source name", team="NO", position="LS", aliases=[])
+    salary = dict(source_record_key="1", source_system="draftkings", source_player_key="native",
+                  season=2026, week=5, slate="SUNDAY_MAIN", player_name="Source Name", team="NO", position="TE")
+    def execute(statement, *args, **kwargs):
+        result = MagicMock()
+        sql = str(statement)
+        result.mappings.return_value.all.return_value = [master] if 'FROM "public".player_master' in sql else [salary]
+        result.rowcount = 1
+        return result
+    conn.execute.side_effect = execute
+    with patch("Database.player_identity.inspect") as inspector, \
+         patch("backend.app.services.matching.find_player_master_id", return_value=("canonical", "alias_source_key")) as shared, \
+         patch("backend.app.services.matching.upsert_alias") as save, \
+         patch("sqlalchemy.orm.Session"):
+        inspector.return_value.has_table.return_value = True
+        result = repair_salary_identities(engine, season=2026, week=5, slate="SUNDAY_MAIN")
+    assert result.salary_rows_resolved == 1
+    assert result.masters_updated == 0
+    assert shared.call_args.kwargs["source_key"] == "native"
+    assert save.call_args.args[1:5] == ("canonical", "draftkings", "native", "Source Name")
+    assert not any('UPDATE "public".player_master' in str(c.args[0]) for c in conn.execute.call_args_list)

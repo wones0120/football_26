@@ -38,6 +38,7 @@ from backend.app.services.source_capture import (
     capture_nflreadpy_datasets,
     fetch_nflreadpy_dataset,
     verify_snapshot_artifact,
+    verify_local_snapshot_replica,
 )
 
 
@@ -342,6 +343,8 @@ def test_weekly_roster_fetch_uses_release_when_client_is_one_season_behind(
         "capture_mode": "nflverse_release_csv_fallback",
         "source_uri": source_uri,
         "loader_error": "Season must be between 2002 and 2025",
+        "provider_rows": 1,
+        "provider_weeks": [1],
     }
 
 
@@ -699,7 +702,8 @@ def test_learning_stats_refresh_surfaces_failed_ingest(tmp_path, monkeypatch):
     assert session.query(SourceSnapshotIngestRun).count() == 1
 
 
-def test_deadlocked_existing_capture_returns_verified_replica_without_mutating_row(tmp_path, monkeypatch):
+@pytest.mark.parametrize("access_errno", [errno.EPERM, errno.EACCES, errno.EDEADLK])
+def test_blocked_existing_capture_returns_verified_replica_without_mutating_row(tmp_path, monkeypatch, access_errno):
     import backend.app.services.source_capture as module
     session = _session()
     service=SourceCaptureService(session,snapshot_root=tmp_path/'cloud')
@@ -710,7 +714,7 @@ def test_deadlocked_existing_capture_returns_verified_replica_without_mutating_r
     original_time=first.snapshot.observed_at
     verify=module.verify_snapshot_artifact
     def cloud_error(snapshot):
-        if snapshot.artifact_path==original_paths[0]:raise OSError(errno.EDEADLK,'cloud unavailable')
+        if snapshot.artifact_path==original_paths[0]:raise OSError(access_errno,'cloud unavailable')
         return verify(snapshot)
     monkeypatch.setattr(module,'REPO_ROOT',tmp_path/'local')
     monkeypatch.setattr(module,'verify_snapshot_artifact',cloud_error)
@@ -724,3 +728,102 @@ def test_deadlocked_existing_capture_returns_verified_replica_without_mutating_r
     # A corrupt original is still a hard integrity failure, not a storage repair.
     monkeypatch.setattr(module,'verify_snapshot_artifact',lambda snapshot: (_ for _ in ()).throw(SnapshotIntegrityError('checksum differs')))
     with pytest.raises(SnapshotIntegrityError):service.capture_dataframe(frame,**kwargs)
+
+
+@pytest.mark.parametrize("access_errno", [errno.EPERM, errno.EACCES, errno.EDEADLK])
+@pytest.mark.parametrize("dataset", ["market", "salary"])
+def test_preparation_reads_verified_replica_only_for_access_failure(tmp_path, monkeypatch, access_errno, dataset):
+    import backend.app.services.source_capture as module
+    from backend.app.product_services.slate_preparation import digest, verify_artifacts
+
+    session = _session()
+    monkeypatch.setattr(module, "REPO_ROOT", tmp_path / "local")
+    service = SourceCaptureService(session, snapshot_root=tmp_path / "cloud")
+    snapshot = service.capture_dataframe(pd.DataFrame([{"native_id": "1", "value": 7}]),
+        artifact_name="source.csv", source_system="test", dataset=dataset,
+        season=2026, week=4, slate="sunday_night", source_license=LICENSE).snapshot
+    original = {column.name: getattr(snapshot, column.name) for column in SourceSnapshot.__table__.columns}
+    replica = service._verified_local_replica(snapshot, Path(snapshot.artifact_path).read_bytes(), None)
+    row = {"artifact_path": snapshot.artifact_path, "content_sha256": snapshot.content_sha256,
+           "source_snapshot_id": snapshot.snapshot_id} if dataset == "market" else {
+        "source_path": snapshot.artifact_path, "source_checksum": snapshot.content_sha256,
+        "snapshot_id": snapshot.snapshot_id, "ingest_status": "completed", "ingest_run_id": "import-1"}
+    manifest = {"markets": [row] if dataset == "market" else [],
+                "salaries": [row, dict(row)] if dataset == "salary" else []}
+    original_digest = digest(manifest)
+    read_bytes = Path.read_bytes
+
+    def denied(path):
+        if str(path) == snapshot.artifact_path:
+            raise OSError(access_errno, "Cloud access denied")
+        return read_bytes(path)
+
+    monkeypatch.setattr(Path, "read_bytes", denied)
+    with monkeypatch.context() as unavailable:
+        unavailable.setattr(module, "REPO_ROOT", tmp_path / "no-replica")
+        with pytest.raises(ValueError, match="no valid local copy"):
+            verify_artifacts(manifest, session)
+    used = verify_artifacts(manifest, session)
+    assert used == [{"snapshot_id": snapshot.snapshot_id, "original_artifact_path": snapshot.artifact_path,
+                     "verified_artifact_path": replica.artifact_path, "content_sha256": snapshot.content_sha256}]
+    assert digest(manifest) == original_digest
+    assert {key: getattr(snapshot, key) for key in original} == original
+    assert not session.dirty
+    # The storage fallback is bound to both the DB source path and content digest.
+    row["source_snapshot_id" if dataset == "market" else "snapshot_id"] = "another-snapshot"
+    with pytest.raises(ValueError, match="cannot read the saved source file"):
+        verify_artifacts(manifest, session)
+
+
+@pytest.mark.parametrize("corruption", ["bytes", "clock", "lineage"])
+def test_existing_replica_rejects_corruption(tmp_path, monkeypatch, corruption):
+    import backend.app.services.source_capture as module
+    session = _session()
+    monkeypatch.setattr(module, "REPO_ROOT", tmp_path / "local")
+    service = SourceCaptureService(session, snapshot_root=tmp_path / "cloud")
+    snapshot = service.capture_dataframe(pd.DataFrame([{"id": "1"}]), artifact_name="source.csv",
+        source_system="test", dataset="market", season=2026, week=4,
+        slate="sunday_night", source_license=LICENSE).snapshot
+    replica = service._verified_local_replica(snapshot, Path(snapshot.artifact_path).read_bytes(), None)
+    assert verify_local_snapshot_replica(snapshot).observed_at == snapshot.observed_at
+    if corruption == "bytes":
+        file = Path(replica.artifact_path); file.chmod(0o644); file.write_bytes(b"changed")
+    else:
+        file = Path(replica.manifest_path); file.chmod(0o644)
+        manifest = json.loads(file.read_text())
+        if corruption == "clock":
+            manifest["observed_at"] = "2000-01-01T00:00:00+00:00"
+        else:
+            manifest["storage_replica_of"]["artifact_path"] = "/unrelated/source.csv"
+        file.write_text(json.dumps(manifest))
+    with pytest.raises(SnapshotIntegrityError):
+        verify_local_snapshot_replica(snapshot)
+
+
+def test_preparation_never_replaces_corrupt_or_missing_original_with_replica(tmp_path, monkeypatch):
+    import backend.app.services.source_capture as module
+    from backend.app.product_services.slate_preparation import verify_artifacts
+    session = _session()
+    monkeypatch.setattr(module, "REPO_ROOT", tmp_path / "local")
+    service = SourceCaptureService(session, snapshot_root=tmp_path / "cloud")
+    snapshot = service.capture_dataframe(pd.DataFrame([{"id": "1"}]), artifact_name="source.csv",
+        source_system="test", dataset="market", season=2026, week=4,
+        slate="sunday_night", source_license=LICENSE).snapshot
+    service._verified_local_replica(snapshot, Path(snapshot.artifact_path).read_bytes(), None)
+    manifest = {"salaries": [], "markets": [{"artifact_path": snapshot.artifact_path,
+        "content_sha256": snapshot.content_sha256, "source_snapshot_id": snapshot.snapshot_id}]}
+    file = Path(snapshot.artifact_path); file.chmod(0o644); file.write_bytes(b"changed")
+    with pytest.raises(ValueError, match="checksum mismatch"):
+        verify_artifacts(manifest, session)
+    manifest["markets"][0]["artifact_path"] = str(tmp_path / "missing.csv")
+    with pytest.raises(ValueError, match="missing or checksum mismatch"):
+        verify_artifacts(manifest, session)
+
+
+def test_future_week_absence_retains_provider_publication_metadata():
+    provider = SimpleNamespace(__version__="0.1.5", load_rosters_weekly=lambda seasons:
+        pd.DataFrame([{"season":2026,"week":4,"status":"ACT","gsis_id":"source-id"}]))
+    frame, _ = fetch_nflreadpy_dataset("weekly_rosters",season=2026,week=5,nfl_module=provider)
+    assert frame.empty
+    assert frame.attrs[NFLREADPY_FETCH_METADATA_ATTR]["provider_rows"] == 1
+    assert frame.attrs[NFLREADPY_FETCH_METADATA_ATTR]["provider_weeks"] == [4]

@@ -96,9 +96,13 @@ export function weeklyLearningReportMarkdown(report: WeeklyLearningReport): stri
           points(entry.points_from_top_5_percent), points(entry.points_from_top_10_percent),
           points(entry.points_from_cash)])), "");
     const otherRunCount = rows(effectiveness.runs).filter((run) => run.run_scope === "other_completed_saved_pool").length;
+    const policy = obj(effectiveness.inclusion_policy);
+    if (policy.policy_id) lines.push(`${cell(policy.included_run_count)} entry-linked or requested diagnostic runs included; ${cell(policy.excluded_run_count)} unrelated completed runs excluded. Policy: ${cell(policy.policy_id)}.`, "");
     if (otherRunCount) lines.push("", `${otherRunCount} additional completed runs with original saved pools were evaluated for this slate; their candidate-level diagnostics are in the structured JSON.`, "");
     for (const run of rows(effectiveness.runs).filter((item) => item.run_scope == null || item.run_scope === "entry_linked")) {
-      const candidates = rows(run.candidates);
+      const candidates = rows(run.candidates ?? run.candidate_preview);
+      const detail = obj(run.candidate_detail);
+      if (detail.url) lines.push(`Saved candidate drilldown: ${cell(detail.url)} · ${cell(detail.candidate_count)} candidates · evidence hash ${cell(detail.evidence_hash)}.`, "");
       const selected = candidates.filter((candidate) => obj(candidate.postgame).selected === true);
       const best = [...candidates].filter((candidate) => typeof obj(candidate.postgame).actual_points === "number")
         .sort((a, b) => Number(obj(b.postgame).actual_points) - Number(obj(a.postgame).actual_points))[0];
@@ -218,6 +222,8 @@ export function weeklyLearningReportMarkdown(report: WeeklyLearningReport): stri
     for (const entry of slate.entries) {
       const players = Array.isArray(entry.players) ? entry.players as Row[] : [];
       lines.push("", `### Entry ${cell(entry.entry_id)} · contest ${cell(entry.contest_id)}`, "");
+      const entryEvidence = obj(entry.entry_evidence);
+      if (entryEvidence.url) lines.push(`Saved decision and control evidence: ${cell(entryEvidence.url)} · hash ${cell(entryEvidence.evidence_hash)}.`, "");
       if (players.length) {
         lines.push(
           ...table(
@@ -262,7 +268,7 @@ export function weeklyLearningReportMarkdown(report: WeeklyLearningReport): stri
     "",
     "## Complete structured report",
     "",
-    "The JSON below preserves contest metadata, finances, ownership, belief and agent outcomes, optimizer controls, player rule evaluations, and full lineage that the tables above summarize.",
+    "The JSON below preserves contest metadata, finances, ownership, belief and agent outcomes, optimizer control outcomes, player rule evaluations, and lineage. Compact v2 reports link to frozen candidate pages and exact decision/control evidence instead of embedding large replay payloads. Those links require access to the football app.",
     "",
     "~~~~json",
     JSON.stringify(report, null, 2),

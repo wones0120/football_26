@@ -106,6 +106,8 @@ class PredictionCalibrationTests(unittest.TestCase):
         target = pd.DataFrame(
             {
                 "player_display_name": ["Veteran Kicker", "Rookie Kicker"],
+                "kicker_role_eligible": [True, True],
+                "kicker_role": ["primary", "primary"],
                 "position": ["K", "K"],
                 "player_games_history": [20, 0],
                 "player_roll3_mean": [8.0, None],
@@ -125,6 +127,8 @@ class PredictionCalibrationTests(unittest.TestCase):
         target = pd.DataFrame(
             {
                 "player_display_name": ["Rookie Kicker"],
+                "kicker_role_eligible": [True],
+                "kicker_role": ["primary"],
                 "position": ["K"],
                 "player_games_history": [0],
                 "player_roll3_mean": [None],

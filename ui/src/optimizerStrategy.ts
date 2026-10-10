@@ -1,3 +1,11 @@
+// Cash strategy IDs remain available for saved reports and explicit research.
+export const CAPTAIN_SINGLE_LINEUP_STRATEGY_ID = "captain_single_lineup_v1";
+export const CLASSIC_SINGLE_LINEUP_STRATEGY_ID = "classic_single_lineup_v1";
+export function singleLineupObjective(): "cash" | "gpp" { return "cash"; }
+export function singleLineupStrategyId(format: "classic" | "showdown"): string {
+  return format === "classic" ? CLASSIC_SINGLE_LINEUP_STRATEGY_ID : CAPTAIN_SINGLE_LINEUP_STRATEGY_ID;
+}
+
 export const CLASSIC_GPP_BASELINE_STRATEGY_ID = "classic_gpp_baseline_v1";
 export const CLASSIC_GPP_ADVANCED_STRATEGY_ID = "classic_gpp_slate_aware_v1";
 export const CLASSIC_HEAD_TO_HEAD_STRATEGY_ID = "classic_head_to_head_v1";
@@ -10,6 +18,15 @@ export const SHOWDOWN_CASH_QB_CAPTAIN_STACK_STRATEGY_ID =
 export const SHOWDOWN_GPP_BASELINE_STRATEGY_ID = "showdown_gpp_baseline_v1";
 export const SHOWDOWN_GPP_CAPTAIN_INFORMED_STRATEGY_ID =
   "showdown_gpp_portfolio_v3";
+export const DEFAULT_OPTIMIZER_OBJECTIVE = "gpp" as const;
+export const ACTIVE_OPTIMIZER_STRATEGIES = [
+  { id: SHOWDOWN_GPP_CAPTAIN_INFORMED_STRATEGY_ID, format: "showdown", label: "Captain / Showdown GPP" },
+  { id: CLASSIC_LARGE_GPP_STRATEGY_ID, format: "classic", label: "Classic GPP" },
+] as const;
+export function defaultTournamentStrategyId(format: "classic" | "showdown"): string {
+  return format === "classic" ? CLASSIC_LARGE_GPP_STRATEGY_ID : SHOWDOWN_GPP_CAPTAIN_INFORMED_STRATEGY_ID;
+}
+
 export const SHOWDOWN_SINGLE_ENTRY_GPP_STRATEGY_ID = "showdown_single_entry_gpp";
 export const SHOWDOWN_SINGLE_ENTRY_PORTFOLIO_STRATEGY_ID = "showdown_single_entry_portfolio";
 export const SHOWDOWN_THREE_MAX_GPP_STRATEGY_ID = "showdown_3max_gpp";

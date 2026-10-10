@@ -1034,7 +1034,8 @@ def classic_entry_readiness(*, players: Sequence[Player], selected: Sequence[Seq
                             controls: dict | None, first_kickoff_at: str | None,
                             decision_at: Any, requested_count: int,
                             market_fresh_hours: float = 6, market_stale_hours: float = 24,
-                            market_stale_policy: str = "warning") -> dict:
+                            market_stale_policy: str = "warning",
+                            large_gpp_contract: dict | None = None) -> dict:
     """A saved pre-entry decision, with missing inputs separate from corrupt inputs."""
     from .classic_prospective import _timestamp
 
@@ -1067,7 +1068,8 @@ def classic_entry_readiness(*, players: Sequence[Player], selected: Sequence[Seq
     else:
         add("Kickoff/pre-lock evidence", "PASS")
     projected = [p for p in players if p.projection > 0 and p.ceiling > 0]
-    add("Projection coverage", "PASS" if len(projected) == len(players) and len(players) >= 100
+    add("Projection coverage", "PASS" if len(projected) == len(players) and
+        (bool(players) if large_gpp_contract else len(players) >= 100)
         else "DEVELOPMENT_PREVIEW", f"{len(projected)}/{len(players)} eligible projections")
     eligible_own = sum(p.ownership is not None for p in players)
     candidate_own = sum(all(source.get(pid, {}).get("ownership") is not None
@@ -1151,6 +1153,12 @@ def classic_entry_readiness(*, players: Sequence[Player], selected: Sequence[Seq
                             not item.get("evidence_timestamp")]
     add("Availability evidence", "DEVELOPMENT_PREVIEW" if availability_missing else "PASS",
         f"questionable with undated evidence: {len(availability_missing)}")
+    if large_gpp_contract is not None:
+        from .classic_large_gpp_readiness import finish_large_gpp_readiness
+        return finish_large_gpp_readiness(
+            checks=checks, market_coverage=market_coverage, contract=large_gpp_contract,
+            selected=selected, source=source, decision_at=cutoff,
+        )
     underfill = (production_funnel or {}).get("remaining_deficit", 0)
     add("Candidate-pool size", "BLOCKER" if underfill or len(candidates) < 100 else "PASS",
         f"{len(candidates)} candidates; deficit {underfill}")

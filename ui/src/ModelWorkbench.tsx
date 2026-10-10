@@ -212,15 +212,17 @@ function PipelineResultCard({
   const interrupted = summary.status === "interrupted";
   const latestMessage = attempt?.error_message || attempt?.message;
   const rows = attempt?.rows_written;
+  const coverage = (attempt?.result?.calibration_metrics as { input_coverage?: { unresolved_salary_source_keys?: unknown[] } } | undefined)?.input_coverage;
+  const unresolvedCount = coverage?.unresolved_salary_source_keys?.length ?? 0;
   const lastSuccess = summary.last_success;
   const showLastSuccess = Boolean(
     lastSuccess && (summary.status !== "completed" || lastSuccess.run_id !== attempt?.run_id)
   );
 
   return (
-    <article className={`pipeline-result-card status-${summary.status}`}>
+    <article className={`pipeline-result-card status-${summary.status === "completed" && unresolvedCount > 0 ? "warning" : summary.status}`}>
       <span>{label}</span>
-      <strong>{formatStatus(summary.status)}</strong>
+      <strong>{summary.status === "completed" && unresolvedCount > 0 ? "Completed with warnings" : formatStatus(summary.status)}</strong>
       {reachedAt && <time dateTime={summary.status_at ?? undefined}>{reachedAt}</time>}
       {summary.status === "not_run" ? (
         <small>No stored attempt exists for this season, week, and slate.</small>
@@ -235,6 +237,10 @@ function PipelineResultCard({
           {latestMessage}
         </small>
       )}
+      {summary.operation === "projections" && summary.status === "completed" && <small>
+        {unresolvedCount > 0 ? `${unresolvedCount} unresolved salary records were excluded. ` : ""}
+        Projections completed; optimizer readiness is not certified. Use Operations → Prepare slate to check all required inputs.
+      </small>}
       {attempt?.scope === "season" && (
         <small className="pipeline-result-meta">
           Season-wide build

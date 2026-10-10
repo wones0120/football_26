@@ -6,6 +6,7 @@ separate namespace before postgame scores are attached.
 
 from __future__ import annotations
 
+from bisect import bisect_left, bisect_right
 from collections import Counter, defaultdict
 from datetime import datetime
 import hashlib
@@ -13,11 +14,12 @@ import json
 import math
 import re
 from statistics import median
-from typing import Any, Iterable, Mapping
+from typing import Any, Callable, Iterable, Mapping
 from zoneinfo import ZoneInfo
 
 
 POOL_PATHS = (
+    ("strategy_runtime", "single_lineup", "all_candidates"),
     ("strategy_runtime", "classic_small_field", "all_candidates"),
     ("strategy_runtime", "showdown_portfolio_policy", "candidate_selection", "ranked_metrics"),
     ("strategy_runtime", "single_entry", "all_candidates"),
@@ -26,6 +28,11 @@ POOL_PATHS = (
 )
 THRESHOLD_PCTS = (0.1, 1, 5, 10, 20)
 _LINEUP_PATTERN = re.compile(r"\b(CPT|DST|FLEX|QB|RB|WR|TE)\s+(.+?)(?=\s+(?:CPT|DST|FLEX|QB|RB|WR|TE)\s+|$)")
+
+
+def _frequency(counter: Counter, limit: int | None = None) -> list:
+    # Counter insertion order must not make tied counts depend on Python hash seeds.
+    return sorted(counter.items(), key=lambda item: (-item[1], str(item[0])))[:limit]
 
 
 def _number(value: Any) -> float | None:
@@ -49,8 +56,10 @@ def _mapping(value: Any) -> dict[str, Any]:
 
 
 def _digest(value: Any) -> str:
-    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"),
-                                     default=str).encode()).hexdigest()
+    digest = hashlib.sha256()
+    for chunk in json.JSONEncoder(sort_keys=True, separators=(",", ":"), default=str).iterencode(value):
+        digest.update(chunk.encode())
+    return digest.hexdigest()
 
 
 def _name(value: Any) -> str:
@@ -192,6 +201,10 @@ def field_benchmarks(
     paid = [int(tier["max_rank"]) for tier in payout_tiers
             if _number(tier.get("payout")) is not None and float(tier["payout"]) > 0]
     cash_rank = max(paid, default=None)
+    if cash_rank is None and contest.get('paid_places_source') == 'draftkings_entry_history':
+        exported_paid = contest.get('places_paid')
+        if isinstance(exported_paid, int) and 0 < exported_paid <= size:
+            cash_rank = exported_paid
     cash = ordered[cash_rank - 1] if cash_rank and cash_rank <= size else None
     return {"status": "available", "field_size": size, "winner": ordered[0],
             "median": median(ordered), "thresholds": thresholds, "cash_line": cash,
@@ -200,8 +213,9 @@ def field_benchmarks(
 
 
 def field_rank(points: float, scores_desc: list[float]) -> dict[str, Any]:
-    above = sum(score > points + 0.005 for score in scores_desc)
-    tied_or_above = sum(score >= points - 0.005 for score in scores_desc)
+    # Benchmarks already sort the field descending; avoid scanning it per candidate.
+    above = bisect_left(scores_desc, -(points + 0.005), key=lambda score: -score)
+    tied_or_above = bisect_right(scores_desc, -(points - 0.005), key=lambda score: -score)
     return {"best_rank": above + 1, "worst_rank": max(above + 1, tied_or_above),
             "top_percent_conservative": 100 * tied_or_above / len(scores_desc)}
 
@@ -300,13 +314,13 @@ def top_field_constructions(
         result[f"top_{pct:g}_percent"] = {
             "threshold": threshold, "field_lineups_including_ties": len(top_entries),
             "canonical_lineups_summarized": resolved_count,
-            "qb_frequency": qb_counts.most_common(15),
-            "captain_frequency": captain_counts.most_common(15),
-            "qb_stack_family_frequency": stack_counts.most_common(),
-            "showdown_team_split_frequency": split_counts.most_common(),
+            "qb_frequency": _frequency(qb_counts, 15),
+            "captain_frequency": _frequency(captain_counts, 15),
+            "qb_stack_family_frequency": _frequency(stack_counts),
+            "showdown_team_split_frequency": _frequency(split_counts),
             "qb_stack_status": "not_applicable_showdown" if contest_format == "showdown" else "available_if_team_context_complete",
-            "player_exposure": player_counts.most_common(25),
-            "game_exposure": game_counts.most_common(15),
+            "player_exposure": _frequency(player_counts, 25),
+            "game_exposure": _frequency(game_counts, 15),
             "average_salary_left": sum(salary_left) / len(salary_left) if salary_left else None,
             "average_total_actual_ownership": sum(ownership_sums) / len(ownership_sums) if ownership_sums else None,
             "average_low_owned_players_under_10pct": sum(low_owned_counts) / len(low_owned_counts) if low_owned_counts else None,
@@ -375,11 +389,11 @@ def summarize_construction_signatures(
         if all(value is not None for value in own_values):
             owns.append(sum(own_values))
             lows.append(sum(value < 10 for value in own_values))
-    return {"lineups": len(lineups), "qb_frequency": qbs.most_common(15),
-            "captain_frequency": captains.most_common(15),
-            "qb_stack_family_frequency": stacks.most_common(),
-            "showdown_team_split_frequency": splits.most_common(),
-            "player_exposure": players.most_common(25), "game_exposure": games.most_common(15),
+    return {"lineups": len(lineups), "qb_frequency": _frequency(qbs, 15),
+            "captain_frequency": _frequency(captains, 15),
+            "qb_stack_family_frequency": _frequency(stacks),
+            "showdown_team_split_frequency": _frequency(splits),
+            "player_exposure": _frequency(players, 25), "game_exposure": _frequency(games, 15),
             "average_salary_left": sum(salaries) / len(salaries) if salaries else None,
             "average_total_actual_ownership": sum(owns) / len(owns) if owns else None,
             "average_low_owned_players_under_10pct": sum(lows) / len(lows) if lows else None,
@@ -424,6 +438,14 @@ def metric_correlations(rows: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
         output[field] = {"n": len(valid), "pearson": _pearson(x, y),
                          "spearman": _pearson(_ranks(x), _ranks(y)) if len(valid) >= 3 else None}
     return output
+
+
+def correlation_samples(rows: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Retain only numeric observations needed for exact cross-slate correlations."""
+    fields = ("mean", "p90", "objective_score", "ownership_sum", "leverage_sum",
+              "correlation_adjustment", "context_adjustment")
+    return [{"pregame": {key: row["pregame"].get(key) for key in fields},
+             "postgame": {"actual_points": row["postgame"].get("actual_points")}} for row in rows]
 
 
 def _pregame(candidate: Mapping[str, Any], rank: int, run: Mapping[str, Any]) -> dict[str, Any]:
@@ -629,6 +651,9 @@ def _diagnose(best: float | None, selected: float | None, entered: float | None,
 
 def build_optimizer_effectiveness(
     slate_report: Mapping[str, Any], evidence: Mapping[str, Any],
+    *, run_loader: Callable[[str], Mapping[str, Any]] | None = None,
+    detail_sink: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None,
+    diagnostic_run_ids: Iterable[str] = (),
 ) -> dict[str, Any]:
     """Evaluate runs attached through canonical saved-lineup matching."""
     contests = {str(row["contest_id"]): row for row in evidence.get("contests", [])}
@@ -654,11 +679,14 @@ def build_optimizer_effectiveness(
             "data_cutoff_at", "projection_run_id", "optimizer_created_at",
         )})
     attached = set(slate_report.get("run_ids", {}).get("optimizer_run_ids", []))
-    saved_pool_runs = {run_id for run_id, run in runs.items()
+    requested = set(diagnostic_run_ids)
+    if requested - set(runs):
+        raise ValueError("Diagnostic optimizer runs must be completed runs in the requested slate")
+    saved_pool_runs = set() if run_loader else {run_id for run_id, run in runs.items()
                        if extract_saved_pool(run.get("constraint_config_json"),
                                              str(run.get("contest_format") or "").lower())["status"]
                        == "original_candidate_pool"}
-    evaluated_run_ids = attached | saved_pool_runs
+    evaluated_run_ids = attached | saved_pool_runs | requested
     selected: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for lineup_id, players in saved.items():
         run_id = str(players[0]["optimizer_run_id"])
@@ -685,10 +713,17 @@ def build_optimizer_effectiveness(
         if run is None:
             output.append({"optimizer_run_id": run_id, "status": "saved_run_unavailable"})
             continue
+        if run_loader:
+            run = {**run, **run_loader(run_id)}
         fmt = str(run.get("contest_format") or "").lower()
         actuals = actual_points_by_player(evidence.get("observations", []), fmt)
         evaluated = evaluate_run(run, selected[run_id], entered[run_id], actuals, benchmarks)
-        evaluated["run_scope"] = "entry_linked" if run_id in attached else "other_completed_saved_pool"
+        evaluated["run_scope"] = ("entry_linked" if run_id in attached else
+                                  "explicit_diagnostic" if run_id in requested else "other_completed_saved_pool")
+        if run_loader:
+            evaluated["inclusion_reason"] = ("canonical_entered_lineup_match" if run_id in attached
+                                              else "explicit_diagnostic_request")
+            evaluated["configuration_hash"] = run.get("configuration_hash")
         cutoff = run.get("data_cutoff_at")
         if isinstance(cutoff, str):
             try:
@@ -731,7 +766,24 @@ def build_optimizer_effectiveness(
                                                        if row["actual_points"] is not None), default=None)
             evaluated["best_entered_actual"] = max((_number(row["entry_points"]) for row in entered[run_id]
                                                       if _number(row["entry_points"]) is not None), default=None)
+        if detail_sink:
+            detail = detail_sink(evaluated)
+            candidates = evaluated.pop("candidates", [])
+            preview = [row for row in candidates
+                       if row["postgame"].get("selected") or row["postgame"].get("entered")][:17]
+            for group in (None, "selected", "entered"):
+                best = max((row for row in candidates if row["postgame"].get("actual_points") is not None
+                            and (group is None or row["postgame"].get(group))),
+                           key=lambda row: row["postgame"]["actual_points"], default=None)
+                if best is not None and best not in preview:
+                    preview.append(best)
+            evaluated["candidate_preview"] = preview
+            evaluated["candidate_detail"] = dict(detail)
+            del candidates
+            del preview, best
         output.append(evaluated)
+        # Never carry a decoded full configuration into the next run load.
+        del run
     # Exclude the full field score arrays from the compact persisted report.
     public_benchmarks = {cid: {key: value for key, value in row.items() if key != "field_scores_desc"}
                          for cid, row in benchmarks.items()}
@@ -754,7 +806,16 @@ def build_optimizer_effectiveness(
                               "points_from_top_10_percent": round(points - benchmark["thresholds"]["top_10_percent"], 2),
                               "points_from_cash": round(points - benchmark["cash_line"], 2)
                               if benchmark["cash_line"] is not None else None})
-    return {"contract_id": "optimizer_effectiveness_v1", "runs": output,
+    return {"contract_id": "optimizer_effectiveness_v2" if run_loader else "optimizer_effectiveness_v1", "runs": output,
+            **({"inclusion_policy": {
+                "policy_id": "entry_linked_and_explicit_diagnostics_v1",
+                "completed_run_count": len(runs), "included_run_count": len(evaluated_run_ids),
+                "excluded_run_count": len(set(runs) - evaluated_run_ids),
+                "excluded_runs": [{"optimizer_run_id": run_id, "reason": "unrelated_completed_run",
+                                   "configuration_hash": runs[run_id].get("configuration_hash")}
+                                  for run_id in sorted(set(runs) - evaluated_run_ids)],
+                "historical_policy": "entry_linked_complete_predecision_correlation_samples_only",
+            }} if run_loader else {}),
             "unavailable_completed_run_ids": sorted(set(runs) - evaluated_run_ids),
             "field_benchmarks": public_benchmarks,
             "entered_field_comparisons": entered_field,

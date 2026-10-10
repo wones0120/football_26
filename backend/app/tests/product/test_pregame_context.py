@@ -97,6 +97,20 @@ def test_current_context_query_is_observed_and_received_by_cutoff():
     ]
 
 
+def test_source_merge_can_read_history_without_hiding_earlier_published_new_reports():
+    connection = MagicMock()
+    rows = [{"player_master_id":"canonical-1","context_run_id":"derived"},
+            {"player_master_id":"canonical-1","context_run_id":"new-official-out"}]
+    connection.execute.return_value.mappings.return_value = rows
+    result = load_current_pregame_context(connection, season=2026, week=5,
+        slate="THURSDAY_NIGHT", cutoff=datetime(2026,10,7,12,tzinfo=UTC), include_source_history=True)
+    sql = str(connection.execute.call_args.args[0])
+    assert "DISTINCT ON" not in sql
+    assert "run.observed_at <= :cutoff" in sql
+    assert "run.received_at <= :cutoff" in sql
+    assert result == rows
+
+
 def test_salary_player_pool_applies_status_and_current_roster_gate():
     rows = [
         {

@@ -188,6 +188,11 @@ class SlateAwareOwnershipModelTests(unittest.TestCase):
         service._append_table = MagicMock()
         service._persist_target_ownership_run = MagicMock(return_value=True)
 
+        connection = service.engine.connect.return_value.__enter__.return_value
+        connection.execute.return_value.mappings.return_value.one_or_none.return_value = dict(
+            status='completed',season=2026,week=2,slate_id='THURSDAY_NIGHT')
+        connection.execute.return_value.scalars.return_value = target['player_id'].tolist()
+
         with patch("backend.app.product_services.ownership.ensure_table_columns"):
             result = service.run_projection_model(
                 2026,
@@ -255,3 +260,33 @@ class SlateAwareOwnershipModelTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_explicit_build_ownership_uses_repaired_canonical_salary_pool():
+    from datetime import UTC, datetime
+    from unittest.mock import patch
+    service = OwnershipService.__new__(OwnershipService)
+    service.engine = MagicMock()
+    def read(statement, connection, params=None):
+        sql = str(statement)
+        if 'actual_ownership IS NOT NULL' in sql:
+            return pd.DataFrame([dict(season=2025, week=1, slate='SUNDAY_MAIN', player_id='history',
+                player_master_id='history', player_display_name='History', roster_position='RB', actual_ownership=10.)])
+        if 'FROM target.snapshot_salary' in sql:
+            return pd.DataFrame([dict(season=s,week=1,slate='SUNDAY_MAIN',player_id=p,
+                site_player_id='native',salary=5000,roster_position='RB',team_id='ARI',opponent_team_id='DET')
+                for s,p in [(2025,'history'),(2026,'obsolete-import-id')]])
+        if 'FROM public.curated_salary' in sql:
+            assert "created_at AT TIME ZONE 'UTC' <= :data_cutoff_at" in sql
+            return pd.DataFrame([dict(season=2026,week=1,slate='SUNDAY_MAIN',player_id='repaired',
+                site_player_id='native',salary=5100,roster_position='RB',team_id='ARI',opponent_team_id='DET')])
+        if 'FROM target.dim_player' in sql:
+            return pd.DataFrame([dict(player_id='repaired',player_display_name='Repaired',dimension_position='RB')])
+        return pd.DataFrame()
+    with patch('backend.app.product_services.ownership.inspect') as inspector, \
+         patch('backend.app.product_services.ownership.pd.read_sql', side_effect=read):
+        inspector.return_value.has_table.return_value = True
+        rows = service._load_ownership_model_rows(season=2026,week=1,slate='SUNDAY_MAIN',
+            projection_run_id='explicit-build',data_cutoff_at=datetime(2026,9,1,tzinfo=UTC))
+    assert rows.loc[rows.season.eq(2026),'player_id'].tolist() == ['repaired']
+    assert rows.loc[rows.season.eq(2025),'player_id'].tolist() == ['history']

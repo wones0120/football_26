@@ -1,4 +1,6 @@
+import { ClassicEnvironmentResearch } from "./ClassicEnvironmentResearch";
 import { useEffect, useMemo, useState } from "react";
+import { ShowdownResearchNotes } from "./ShowdownResearchNotes";
 import {
   autoDiscoverInjuryFiles,
   autoDiscoverSalaryFiles,
@@ -1503,10 +1505,14 @@ function App({
           <a href="#portfolio-comparison">Portfolio Comparison</a>
           <a href="#analysis-reports">Analysis</a>
           <a href="#lineup-backtests">Lineup Backtests</a>
+          <a href="#showdown-research-notes">Showdown Research</a>
+          <a href="#classic-environment-research">Classic Game Environment</a>
         </div>
       </nav>
 
       <main className="layout">
+        <ShowdownResearchNotes />
+        <ClassicEnvironmentResearch />
         <section className="panel" id="projection-simulation">
           <h2>Projection Simulation</h2>
           <p className="hint">

@@ -469,6 +469,7 @@ body:has(.model-workbench) #root {
   color: var(--model-green);
 }
 
+.pipeline-result-card.status-warning strong,
 .pipeline-result-card.status-queued strong,
 .pipeline-result-card.status-running strong,
 .pipeline-result-card.status-interrupted strong {

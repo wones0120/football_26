@@ -1,9 +1,11 @@
 from datetime import datetime, timezone
 import unittest
+from unittest.mock import MagicMock, patch
 
 from backend.app.product_schemas import SlateReadinessResponse
 from backend.app.product_services.readiness import (
     SlateReadinessMetrics,
+    SlateReadinessService,
     _eligible_salary_rows,
     evaluate_slate_readiness,
 )
@@ -51,6 +53,73 @@ def _complete_metrics() -> SlateReadinessMetrics:
 
 
 class SlateReadinessTests(unittest.TestCase):
+    def test_live_showdown_preflight_blocks_on_generation_evidence_despite_coverage(self):
+        from backend.app.tests.product.test_showdown_upstream_data import canonical_rows, assess
+        rows = canonical_rows()
+        rows[1].update(canonical_role=None, role_source=None)
+        metrics = _complete_metrics()
+        metrics.injury_rows = metrics.injury_identity_rows = 0
+        metrics.showdown_data_readiness = assess(rows)
+        report = evaluate_slate_readiness(metrics)
+        self.assertEqual(report['gates']['showdown_gpp']['status'], 'fail')
+        self.assertEqual(report['gates']['showdown_cash']['status'], 'fail')
+        self.assertEqual(report['gates']['classic_gpp']['status'], 'warn')
+        self.assertIn('showdown_player_status', report['gates']['showdown_gpp']['blocking_checks'])
+        check = next(c for c in report['checks'] if c['check_id'] == 'showdown_player_status')
+        self.assertIn('Player 1', check['message'])
+        self.assertIn('player_role_missing', check['message'])
+        self.assertEqual(SlateReadinessResponse(**report).showdown_data_readiness['status'], 'NOT_READY')
+
+    def test_generation_ready_sources_do_not_turn_optional_injury_warning_into_blocker(self):
+        from backend.app.tests.product.test_showdown_upstream_data import canonical_rows, assess
+        metrics = _complete_metrics()
+        metrics.injury_rows = metrics.injury_identity_rows = 0
+        metrics.showdown_data_readiness = assess(canonical_rows())
+        report = evaluate_slate_readiness(metrics)
+        self.assertEqual(report['gates']['showdown_gpp']['status'], 'warn')
+        self.assertEqual(report['gates']['showdown_gpp']['blocking_checks'], [])
+        self.assertEqual(report['showdown_data_readiness']['status'], 'READY')
+
+    def test_live_showdown_read_error_fails_closed(self):
+        service = SlateReadinessService.__new__(SlateReadinessService)
+        service.engine = MagicMock()
+        service.connection_string = 'sqlite://'
+        service.collect_metrics = MagicMock(return_value=_complete_metrics())
+        with patch('backend.app.product_services.showdown_data_readiness.is_live_slate', return_value=True), \
+             patch('backend.app.product_services.showdown_data_readiness.assess_current_inputs', side_effect=RuntimeError('source unavailable')):
+            report = service.report(season=2026, week=5, slate='THURSDAY_NIGHT')
+        self.assertEqual(report['showdown_data_readiness']['status'], 'ERROR')
+        self.assertIn('showdown_generation_assessment', report['gates']['showdown_gpp']['blocking_checks'])
+
+    def test_live_preflight_reads_generation_pool_without_refresh_or_solver(self):
+        from backend.app.product_services.showdown_data_readiness import assess_current_inputs
+        from backend.app.tests.product.test_showdown_upstream_data import canonical_rows
+        from backend.app.tests.product.test_showdown_data_readiness import NOW, PROJECTION, service_fixture
+        service = service_fixture(canonical_rows())
+        with patch('backend.app.product_services.showdown_data_readiness.datetime') as clock, \
+             patch('backend.app.product_services.showdown_data_readiness.refresh_live_sources') as refresh:
+            clock.now.return_value = NOW
+            readiness = assess_current_inputs(service, season=NOW.year, week=5,
+                slate='THURSDAY_NIGHT', projection_run_id=PROJECTION)
+        self.assertEqual(readiness['status'], 'READY', readiness['reason_codes'])
+        self.assertEqual(readiness['evaluated_at'], NOW.isoformat())
+        self.assertEqual(service._load_player_pool.call_args.kwargs['evidence_cutoff_at'], NOW)
+        refresh.assert_not_called()
+        service._solve_lineup.assert_not_called()
+        service._persist_optimizer_run.assert_not_called()
+
+    def test_historical_preflight_preserves_the_original_contract(self):
+        service = SlateReadinessService.__new__(SlateReadinessService)
+        service.engine = MagicMock()
+        service.connection_string = 'sqlite://'
+        service.collect_metrics = MagicMock(return_value=_complete_metrics())
+        with patch('backend.app.product_services.showdown_data_readiness.is_live_slate', return_value=False), \
+             patch('backend.app.product_services.showdown_data_readiness.assess_current_inputs') as assess:
+            report = service.report(season=2025, week=11, slate='SUNDAY_MAIN')
+        assess.assert_not_called()
+        self.assertIsNone(report['showdown_data_readiness'])
+        self.assertEqual(report['gates']['showdown_gpp']['status'], 'pass')
+
     def test_showdown_uses_flex_rows_kickers_and_active_roster_status(self) -> None:
         salary_rows = [
             {

@@ -34,9 +34,8 @@ class StartingQBService:
     Operator selections, including sourced provisional inferences, are validated
     against the canonical DraftKings slate pool. Without them, the service
     prefers explicit QB1 depth-chart evidence. The nflreadpy weekly roster
-    currently exposes only a generic QB label,
-    so the documented fallback is the unique highest DraftKings FLEX salary among
-    active QBs on each team.
+    currently exposes only a generic QB label. Missing QB1 evidence requires
+    review; salary never establishes a starting role.
     """
 
     def __init__(self, connection_string: Optional[str] = None) -> None:
@@ -131,7 +130,7 @@ class StartingQBService:
             for row in evidence.get("selected", [])
         )
         qualifier = (
-            f" ({inferred - provisional} inferred from unique top DraftKings salary"
+            f" ({inferred - provisional} inferred from stored football evidence"
             + (f", {provisional} provisional choices" if provisional else "")
             + ")"
             if inferred
@@ -216,25 +215,23 @@ class StartingQBService:
                     conflicts.append(team)
                     continue
                 # An OUT QB1 is stale starter evidence. Advance only when the
-                # unique next depth rank agrees with the unique top eligible salary.
+                # unique next depth rank resolves by source ID to an eligible QB.
                 backups = qbs.loc[qbs["team_key"].eq(team) & qbs["pos_rank"].gt(1)]
                 next_rank = backups["pos_rank"].min() if not backups.empty else None
                 next_rows = backups.loc[backups["pos_rank"].eq(next_rank)] if next_rank is not None else backups
                 team_candidates = candidates.loc[
                     candidates["player_team"].fillna("").astype(str).str.upper().eq(team)
                 ]
-                top_salary = pd.to_numeric(team_candidates["salary"], errors="coerce").max()
-                top_rows = team_candidates.loc[pd.to_numeric(
-                    team_candidates["salary"], errors="coerce").eq(top_salary)]
-                if len(next_rows) != 1 or len(top_rows) != 1 or str(top_rows.iloc[0]["gsis_id"]) != str(next_rows.iloc[0]["gsis_id"]):
+                next_candidates = team_candidates.loc[team_candidates["gsis_id"].astype(str).isin(next_rows["gsis_id"].astype(str))]
+                if len(next_rows) != 1 or len(next_candidates) != 1:
                     conflicts.append(team)
                     continue
                 depth_row = next_rows.iloc[0]
-                match = top_rows
+                match = next_candidates
                 source = "provisional_nflverse_depth_chart_next_active_qb"
                 note = (f"QB1 GSIS {out_qb['gsis_id']} salary status {out_qb['status']}; "
-                        f"next rank {int(next_rank)} GSIS {depth_row['gsis_id']} agrees with unique top "
-                        f"eligible salary; snapshot {capture.snapshot.snapshot_id}")
+                        f"next rank {int(next_rank)} GSIS {depth_row['gsis_id']} resolves to eligible "
+                        f"canonical QB; snapshot {capture.snapshot.snapshot_id}")
             selections.append({
                 "team": team,
                 "player_master_id": str(match.iloc[0]["player_id"]),
@@ -403,13 +400,10 @@ class StartingQBService:
                     "one canonical QB in the selected salary slate."
                 )
             if evidence_tier == "inferred" and not str(selection.get("source") or "").startswith("provisional_"):
-                team_qbs = frame[frame["player_team"] == team]
-                top = team_qbs[team_qbs["salary"] == team_qbs["salary"].max()]
-                if len(top) != 1 or str(top.iloc[0]["player_id"]) != player_id:
-                    raise ValueError(
-                        f"Inferred starting-QB evidence for {team} differs from the unique top salary; "
-                        "use a sourced provisional_ selection for an override."
-                    )
+                raise ValueError(
+                    f"Inferred starting-QB evidence for {team}: salary cannot establish a role; "
+                    "use a sourced provisional_ selection."
+                )
             selections_by_team[team] = selection
             selected_ids.add(player_id)
 
@@ -543,6 +537,7 @@ class StartingQBService:
                 FROM public.curated_player_game_participation roster_evidence
                 WHERE roster_evidence.season = :season
                   AND roster_evidence.week = :week
+                  AND {canonical_team_sql('roster_evidence.team')} = salary.player_team
             )
               OR UPPER(COALESCE(participation.roster_status, '')) = 'ACT')
             ORDER BY salary.player_team, salary.salary DESC, salary.player_id

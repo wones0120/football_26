@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ai_showdown_finalist_set_audit_v1",
+  "title": "Post-slate Showdown finalist-set audit",
+  "type": "object",
+  "required": [
+    "contract_id",
+    "packet_hash",
+    "optimizer_run_id",
+    "status",
+    "best_generated_actual_score",
+    "best_finalist_actual_score",
+    "finalist_selection_regret",
+    "eventual_best_generated_candidate_included",
+    "top_tails",
+    "actual_rank_distribution",
+    "regret_decomposition"
+  ],
+  "properties": {
+    "contract_id": {
+      "const": "ai_showdown_finalist_set_audit_v1"
+    },
+    "packet_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "optimizer_run_id": {
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "complete",
+        "partial_actual_coverage"
+      ]
+    },
+    "top_tails": {
+      "type": "object",
+      "required": [
+        "top_1_percent",
+        "top_5_percent",
+        "top_10_percent"
+      ]
+    },
+    "regret_decomposition": {
+      "type": "object",
+      "required": [
+        "candidate_generation_regret",
+        "finalist_filtering_regret",
+        "ai_manual_selection_regret"
+      ]
+    },
+    "best_generated_actual_score": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "best_finalist_actual_score": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "finalist_selection_regret": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "eventual_best_generated_candidate_included": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    }
+  }
+}

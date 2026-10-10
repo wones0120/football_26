@@ -154,9 +154,12 @@ start_submitted_backend() {
 }
 
 restart_launchd_backend() {
+  local scope="${1:-backend}"
   launchctl setenv PYTHONHASHSEED 0
   local restart_status=0
-  launchctl kickstart -k "gui/$(id -u)/com.football26.worker" || restart_status=$?
+  if [[ "${scope}" != "api" ]]; then
+    launchctl kickstart -k "gui/$(id -u)/com.football26.worker" || restart_status=$?
+  fi
   launchctl kickstart -k "gui/$(id -u)/com.football26.api" || restart_status=$?
   launchctl unsetenv PYTHONHASHSEED
   if [[ "${restart_status}" -ne 0 ]]; then
@@ -166,7 +169,7 @@ restart_launchd_backend() {
   local attempt
   for attempt in {1..50}; do
     if curl -fsS --max-time 1 "http://${APP_HOST}:${APP_PORT}/api/health" >/dev/null 2>&1; then
-      printf 'Launchd-managed API and worker restarted; API is healthy.\n'
+      printf 'Launchd-managed %s restarted; API is healthy.\n' "${scope}"
       return 0
     fi
     sleep 0.2
@@ -273,8 +276,17 @@ case "${ACTION}" in
   status)
     show_status
     ;;
+  reload-api)
+    # Route-only source reload must leave durable worker jobs running.
+    if launchd_backend_available; then
+      restart_launchd_backend api
+    else
+      printf 'API-only reload requires the established launchd-managed local backend; no processes were stopped.\n' >&2
+      exit 1
+    fi
+    ;;
   *)
-    printf 'Usage: %s [start|stop|restart|status]\n' "$0" >&2
+    printf 'Usage: %s [start|stop|restart|status|reload-api]\n' "$0" >&2
     exit 2
     ;;
 esac

@@ -686,6 +686,15 @@ table tbody tr:last-child {
   overflow: auto;
 }
 
+.scenario-portfolio-accounting .scroll-table { max-height: none; }
+.scenario-portfolio-accounting table { min-width: 1800px; }
+.scenario-portfolio-accounting th,
+.scenario-portfolio-accounting td { vertical-align: top; min-width: 95px; }
+.scenario-portfolio-accounting th:first-child,
+.scenario-portfolio-accounting td:first-child { min-width: 150px; }
+.scenario-portfolio-accounting th:nth-child(9),
+.scenario-portfolio-accounting td:nth-child(9) { min-width: 300px; }
+
 .status-card pre {
   background: rgba(15, 23, 42, 0.8);
   padding: 0.75rem;
@@ -1021,6 +1030,77 @@ table tbody tr:last-child {
   margin-top: 14px;
 }
 
+.operations-basic-inputs {
+  margin-top: 14px;
+}
+
+.basic-file-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.basic-file-grid .form-row {
+  margin: 0;
+  align-items: stretch;
+}
+
+.basic-file-grid small,
+.optimizer-settings-summary {
+  overflow-wrap: anywhere;
+}
+
+.basic-loaded-inputs {
+  display: grid;
+  gap: 5px;
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px solid var(--shell-line);
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+}
+
+.operations-disclosure {
+  min-width: 0;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--shell-line);
+  border-radius: 10px;
+  background: rgba(10, 15, 21, 0.6);
+}
+
+.operations-disclosure > summary {
+  cursor: pointer;
+  color: #dce5ea;
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+
+.operations-disclosure > summary:focus-visible {
+  outline: 2px solid #77a9f9;
+  outline-offset: 5px;
+  border-radius: 3px;
+}
+
+.operations-disclosure[open] > summary {
+  margin-bottom: 14px;
+}
+
+.optimizer-settings-summary {
+  color: #aebdc9;
+  font-size: 0.8rem;
+}
+
+@media (max-width: 660px) {
+  .basic-file-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .operations-disclosure {
+    padding: 12px;
+  }
+}
+
 .operations-side-stack {
   display: grid;
   gap: 14px;
@@ -1109,6 +1189,12 @@ table tbody tr:last-child {
   align-items: flex-start;
   gap: 8px;
   line-height: 1.4;
+}
+
+.optimizer-injury-preference .showdown-team-limit {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 8px;
 }
 
 .optimizer-injury-preference input {
@@ -1363,7 +1449,7 @@ table tbody tr:last-child {
 }
 
 .operations-workspace .optimizer-grid {
-  grid-template-columns: minmax(260px, 0.62fr) minmax(0, 1.38fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
 }
 
@@ -1372,13 +1458,30 @@ table tbody tr:last-child {
   padding: 16px;
 }
 
-.operations-projection-panel {
-  order: 1;
-}
-
 .operations-optimizer-panel {
   min-width: 0;
-  order: 2;
+}
+
+.operations-projection-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-bottom: 14px;
+}
+
+.operations-projection-status p {
+  flex: 1 1 280px;
+  margin: 0;
+}
+
+.operations-projection-status small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.operations-projection-status > small {
+  flex-basis: 100%;
 }
 
 .operations-workspace .classic-portfolio-controls .checkbox-label {
@@ -1624,10 +1727,6 @@ table tbody tr:last-child {
     grid-template-columns: 1fr;
   }
 
-  .operations-projection-panel,
-  .operations-optimizer-panel {
-    order: initial;
-  }
 }
 
 @media (max-width: 660px) {
@@ -1727,3 +1826,57 @@ table tbody tr:last-child {
 
 .learning-outcome-summary p { margin: 5px 0 0; }
 .learning-outcome-summary small { display: block; margin-top: 7px; }
+
+.operations-workspace .classic-large-portfolio-controls .form-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.classic-large-portfolio-controls .portfolio-control,
+.classic-large-portfolio-controls label {
+  min-width: 0;
+}
+
+.classic-large-portfolio-controls .portfolio-control small {
+  display: block;
+  margin-top: 0.35rem;
+  color: var(--shell-muted);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 700px) {
+  .operations-workspace .classic-large-portfolio-controls .form-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.portfolio-controls-fields { border: 0; margin: 0; padding: 0; min-width: 0; }
+
+.portfolio-submit-summary { flex-basis: 100%; width: 100%; min-width: 0; }
+.portfolio-submit-summary pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 18rem; overflow: auto; font-size: 0.75rem; }
+.portfolio-submit-summary ul { list-style: none; padding: 0; margin: 0.5rem 0 0; display: grid; gap: 0.25rem; }
+.slate-preparation { min-width: 0; margin: 1rem 0; padding: 1rem; border: 1px solid var(--border-color, #34445b); border-radius: 10px; }
+.slate-preparation pre, [aria-label="Exact next optimizer settings"] pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 24rem; overflow: auto; }
+.slate-preparation textarea { box-sizing: border-box; width: 100%; max-width: 100%; }
+.slate-preparation label { display: block; margin: .5rem 0; }
+.slate-preparation td { vertical-align: top; overflow-wrap: anywhere; }
+.slate-preparation summary { cursor: pointer; overflow-wrap: anywhere; }
+.slate-preparation .scroll-table { max-height: none; }
+
+.identity-preflight-help {
+  grid-column: 1 / -1;
+  flex-basis: 100%;
+  margin: 8px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.optimizer-readiness-status {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin: 0.75rem 0;
+}
+.optimizer-readiness-status progress { width: 6rem; flex-shrink: 0; }
+.optimizer-readiness-status span { flex: 1 1 15rem; overflow-wrap: anywhere; }

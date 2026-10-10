@@ -25,6 +25,7 @@ SLATE_SIMULATION_JOB = "slate_simulation"
 SYMBOLIC_JOB = "symbolic_run"
 ULTIMATE_LINEUP_JOB = "ultimate_lineup"
 WEEKLY_RUN_JOB = "weekly_run"
+PREPARATION_JOB = "slate_preparation"
 SUPPORTED_JOB_TYPES = frozenset(
     {
         BENCHMARK_JOB,
@@ -36,6 +37,7 @@ SUPPORTED_JOB_TYPES = frozenset(
         SYMBOLIC_JOB,
         ULTIMATE_LINEUP_JOB,
         WEEKLY_RUN_JOB,
+        PREPARATION_JOB,
     }
 )
 

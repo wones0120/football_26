@@ -30,3 +30,14 @@ test("conflicting active assumptions and exclusions block the rebuild", () => {
 test("no player decisions leaves the current football scenario unchanged", () => {
   assert.deepEqual(optimizerAvailabilityOverrides([], "", ""), []);
 });
+
+test("Showdown exclusions leave opportunity unchanged and explicit assumptions survive", () => {
+  assert.deepEqual(optimizerAvailabilityOverrides([
+    { playerName: "Preference", availability: "default", excludeFromLineups: true },
+    { playerName: "Scenario", availability: "assume_out", excludeFromLineups: false },
+    { playerName: "Active", availability: "assume_active", excludeFromLineups: true },
+  ], "Other", "canonical-1", "showdown"), [
+    { player_name: "Scenario", availability: "assume_out" },
+    { player_name: "Active", availability: "assume_active" },
+  ]);
+});

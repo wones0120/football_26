@@ -7,7 +7,7 @@ import uuid
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, datetime
-from typing import Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 import pandas as pd
 import pulp
@@ -18,6 +18,7 @@ from Database.config import get_connection_string
 
 from .cbc_solver import make_cbc_solver
 from .classic_primary_game import canonical_primary_game, resolve_primary_game_cap
+from .classic_portfolio_controls import apply_large_gpp_controls, validate_large_gpp_controls, explicit_appearance_limit
 from .optimizer_control import solve_control, build_comparison
 from .lineup_correlation_scoring import (
     add_format_specific_objective,
@@ -30,6 +31,7 @@ from .rule_library import resolve_strategy_profile
 
 
 Position = str
+FULL_CONTROL_COMPARISON_MAX_LINEUPS = 50
 
 
 @dataclass
@@ -604,15 +606,27 @@ def build_large_gpp_config(
     lineups cycle through several stronger templates so the portfolio is not
     forced into one identical construction.
     """
-    templates = tuple(stack_templates or ((1, 0), (1, 1), (2, 0), (2, 1)))
-    if not templates:
-        templates = ((1, 0),)
     mean_weight = 0.35
     ceiling_weight = 0.48 if candidate_aware_ownership else (0.45 if ownership_available else 0.48)
     correlation_weight = 0.17 if candidate_aware_ownership else (0.15 if ownership_available else 0.17)
     leverage_weight = 0.0 if candidate_aware_ownership else (0.05 if ownership_available else 0.0)
     team_cap = int(max_from_team) if max_from_team is not None else 4
     team_cap = max(1, min(4, team_cap))
+    game_cap = max(1, min(9, int(max_from_game))) if max_from_game is not None else None
+    templates = tuple(stack_templates or ((1, 0), (1, 1), (2, 0), (2, 1)))
+    compatible_templates = tuple(
+        template for template in templates
+        if 1 + template[0] <= team_cap
+        and template[1] <= team_cap
+        and (game_cap is None or 1 + sum(template) <= game_cap)
+    )
+    # The QB consumes one team/game slot. Default construction variety must
+    # fit the user's hard caps; explicit stack requests must not be weakened.
+    if stack_templates and compatible_templates != templates:
+        raise ValueError("Requested stack templates exceed max players per team or game")
+    if not compatible_templates:
+        raise ValueError("Classic GPP requires room for a QB and at least one teammate within the team/game limits")
+    templates = compatible_templates
     uniqueness = max(1, min(9, int(minimum_uniqueness)))
     ownership_cap = 160.0 if ownership_available and not candidate_aware_ownership else None
     return SlateConfig(
@@ -620,11 +634,7 @@ def build_large_gpp_config(
             min_pass_catchers=min(template[0] for template in templates),
             min_bring_backs=min(template[1] for template in templates),
             max_from_team=team_cap,
-            max_from_game=(
-                max(1, min(9, int(max_from_game)))
-                if max_from_game is not None
-                else None
-            ),
+            max_from_game=game_cap,
             pass_catcher_positions=("WR", "TE"),
             bring_back_positions=("RB", "WR", "TE"),
         ),
@@ -708,6 +718,7 @@ def _build_lineup(
     stack_rules: StackRules | None = None,
     required_player_ids: set[str] | None = None,
     control_comparisons: List[dict] | None = None,
+    construction: Mapping[str, Any] | None = None,
     exact_pass_catchers: int | None = None,
     exact_bring_backs: int | None = None,
     correlation_rule_multipliers: Mapping[str, float] | None = None,
@@ -931,14 +942,53 @@ def _build_lineup(
         ]
         if same_team:
             model += pulp.lpSum(x[j] for j in same_team) >= active_stack_rules.min_pass_catchers * x[i]
+        elif active_stack_rules.min_pass_catchers > 0:
+            model += x[i] == 0, f"missing_pass_catcher_{i}"
         if opp_team:
             model += pulp.lpSum(x[j] for j in opp_team) >= active_stack_rules.min_bring_backs * x[i]
+        elif active_stack_rules.min_bring_backs > 0:
+            model += x[i] == 0, f"missing_bring_back_{i}"
         if exact_pass_catchers is not None:
             model += pulp.lpSum(x[j] for j in same_team) >= exact_pass_catchers * x[i]
             model += pulp.lpSum(x[j] for j in same_team) <= exact_pass_catchers + len(same_team) * (1 - x[i])
         if exact_bring_backs is not None:
             model += pulp.lpSum(x[j] for j in opp_team) >= exact_bring_backs * x[i]
             model += pulp.lpSum(x[j] for j in opp_team) <= exact_bring_backs + len(opp_team) * (1 - x[i])
+
+    # Explicit diagnostic construction restrictions; absent in production selection.
+    if construction:
+        flex = construction.get("flex")
+        if flex:
+            model += pulp.lpSum(x[j] for j in _position_indices(players, [flex])) == {"RB": 3, "WR": 4, "TE": 2}[flex]
+        for i in qb_idx:
+            qb = players[i]
+            for key, indexes in (
+                ("same_team_rb", [j for j, p in enumerate(players) if p.team == qb.team and p.position == "RB"]),
+                ("opposing_rb", [j for j, p in enumerate(players) if p.team == qb.opponent and p.position == "RB"]),
+            ):
+                if construction.get(key):
+                    model += pulp.lpSum(x[j] for j in indexes) >= x[i]
+            outside = [j for j, p in enumerate(players) if p.position not in {"DST", "D", "DEF"} and p.team not in {qb.team, qb.opponent}]
+            if construction.get("secondary_mini"):
+                pairs = []
+                for a, j in enumerate(outside):
+                    for k in outside[a + 1:]:
+                        if players[j].team == players[k].opponent and players[j].opponent == players[k].team:
+                            pair = pulp.LpVariable(f"review_mini_{i}_{j}_{k}", cat="Binary")
+                            model += pair <= x[j]
+                            model += pair <= x[k]
+                            pairs.append(pair)
+                model += pulp.lpSum(pairs) >= x[i]
+            if construction.get("true_oneoff"):
+                singles = []
+                for j in outside:
+                    same_game = [k for k, p in enumerate(players) if k != j and {p.team, p.opponent} == {players[j].team, players[j].opponent}]
+                    single = pulp.LpVariable(f"review_oneoff_{i}_{j}", cat="Binary")
+                    model += single <= x[j]
+                    for k in same_game:
+                        model += single + x[k] <= 1
+                    singles.append(single)
+                model += pulp.lpSum(singles) >= x[i]
 
     # Tag constraints
     tag_caps = config.tag_caps
@@ -1016,6 +1066,32 @@ def _build_lineup(
         return None
 
     selected = [i for i in idx_range if pulp.value(x[i]) >= 0.9]
+    if solve_audit is not None:
+        projection_scale = max_projection if config.normalize_objective else 1.0
+        ceiling_scale = max_ceiling if config.normalize_objective else 1.0
+        leverage_scale = max_abs_leverage if config.normalize_objective else 1.0
+        multiplier = weights.correlation * config.correlation_bonus
+        components = {
+            "projection": weights.projection * sum(players[i].projection for i in selected) / projection_scale,
+            "ceiling": weights.ceiling * sum(players[i].ceiling for i in selected) / ceiling_scale,
+            "leverage": weights.leverage * sum(players[i].leverage for i in selected) / leverage_scale,
+            "context": context_multiplier * sum(players[i].optimizer_context_adjustment for i in selected),
+            "correlation": multiplier * float(pulp.value(correlation_score + format_score + extra_stack_score) or 0),
+        }
+        total = sum(components.values())
+        solver_value = float(pulp.value(model.objective))
+        if not math.isclose(total, solver_value, rel_tol=1e-9, abs_tol=1e-7):
+            raise ValueError("Classic objective components do not reconcile with the solver objective")
+        solve_audit["objective_components"] = {
+            **components, "total": total, "solver_objective": solver_value,
+            "reconciliation_delta": total - solver_value,
+            "normalization": {"projection": projection_scale, "ceiling": ceiling_scale, "leverage": leverage_scale},
+            "weights": asdict(weights), "correlation_multiplier": multiplier,
+            "pair_term_count": len(correlation_terms), "format_term_count": len(format_terms),
+            "correlation_pairs": multiplier * float(pulp.value(correlation_score) or 0),
+            "correlation_format": multiplier * float(pulp.value(format_score) or 0),
+            "correlation_extra_stack": multiplier * float(pulp.value(extra_stack_score) or 0),
+        }
     if control_comparisons is not None:
         replay = solve_control(model, control_objective)
         replay["variable_players"] = {
@@ -1183,8 +1259,21 @@ def generate_portfolio(
     maximum_player_groups: Sequence[tuple[set[str], int]] | None = None,
     max_lineups_per_primary_game: int | None = None,
     effective_config: SlateConfig | None = None,
+    max_lineup_overlap: int | None = None,
+    elevated_player_max_exposure: float | None = None,
+    max_elevated_players_per_lineup: int | None = None,
+    elevated_player_ids: Sequence[str] | None = None,
 ) -> GPPOptimizerResult:
     game_cap = resolve_primary_game_cap(max_lineups_per_primary_game)
+    controls = dict(max_lineup_overlap=max_lineup_overlap,
+        elevated_player_max_exposure=elevated_player_max_exposure,
+        max_elevated_players_per_lineup=max_elevated_players_per_lineup,
+        elevated_player_ids=list(elevated_player_ids or []))
+    validate_large_gpp_controls(controls)
+    elevated_ids = set(elevated_player_ids or [])
+    maximum_player_groups = list(maximum_player_groups or [])
+    if max_elevated_players_per_lineup is not None and elevated_ids:
+        maximum_player_groups.append((elevated_ids, max_elevated_players_per_lineup))
     engine = engine or create_engine(get_connection_string())
     if players is None:
         players, counts = load_player_pool(engine, season, week, slate)
@@ -1235,10 +1324,13 @@ def generate_portfolio(
     config = resolve_portfolio_config(players, config, ownership_available=bool(ownership_available),
         ownership_data_available=bool(counts.get("ownership", 0)),
         long_shot_mode=long_shot_mode, num_lineups=num_lineups)
+    config = apply_large_gpp_controls(config, controls)
+    if elevated_ids - {p.player_id for p in players}:
+        raise ValueError("Elevated-risk controls reference players outside the candidate pool")
     leverage_available = any(player.optimal_lineup_probability is not None for player in players)
     correlation_terms = None
     format_terms = None
-    if precompute_correlation_terms:
+    if precompute_correlation_terms or num_lineups > FULL_CONTROL_COMPARISON_MAX_LINEUPS:
         correlation_profile = resolve_strategy_profile(
             contest_format="classic", objective="gpp"
         )
@@ -1277,12 +1369,18 @@ def generate_portfolio(
             "Exposure controls reference players outside the candidate pool: "
             + ", ".join(sorted(unknown_exposure_ids))
         )
+    def maximum_appearances(player_id):
+        rate = requested_maximums[player_id]
+        if elevated_player_max_exposure is not None and player_id in elevated_ids:
+            return explicit_appearance_limit(num_lineups, rate)
+        return math.floor(num_lineups * rate)
+
     conflicting_exposure_ids = {
         player_id
         for player_id, minimum in requested_minimums.items()
         if player_id in requested_maximums
         and math.ceil(num_lineups * minimum)
-        > math.floor(num_lineups * requested_maximums[player_id])
+        > maximum_appearances(player_id)
     }
     if conflicting_exposure_ids:
         raise ValueError(
@@ -1295,7 +1393,7 @@ def generate_portfolio(
             num_lineups * requested_minimums.get(player_id, 0.0)
         )
         requested_limit = (
-            math.floor(num_lineups * requested_maximums[player_id])
+            maximum_appearances(player_id)
             if player_id in requested_maximums
             else num_lineups
         )
@@ -1352,7 +1450,12 @@ def generate_portfolio(
                 avoid_dst_opponents=avoid_dst_opponents,
                 stack_rules=lineup_stack_rules,
                 required_player_ids=required_now,
-                control_comparisons=control_comparisons if include_control_comparisons else None,
+                # Bulk portfolios retain the first matched diagnostic replay;
+                # copying a full LP and solving its control for every entry
+                # would dominate memory and runtime. All selection audits stay.
+                control_comparisons=(control_comparisons if include_control_comparisons
+                    and (num_lineups <= FULL_CONTROL_COMPARISON_MAX_LINEUPS or not lineups and not new_lineups)
+                    else None),
                 solver_backend=solver_backend,
                 precomputed_correlation_terms=correlation_terms,
                 precomputed_format_terms=format_terms,
@@ -1402,6 +1505,9 @@ def generate_portfolio(
     message = f"Generated {len(lineups)} lineup(s) after {iterations} iteration(s)"
     if incomplete_portfolio:
         message += f"; requested {num_lineups}"
+    if incomplete_portfolio and any(value is not None for value in (game_cap, max_lineup_overlap,
+            elevated_player_max_exposure, max_elevated_players_per_lineup)):
+        message += "; next lineup infeasible under the combined active portfolio constraints; no limits relaxed"
     if unmet_minimums:
         message += "; unsatisfied minimum exposures: " + ", ".join(
             f"{player_id} {counts['generated']}/{counts['required']}"
@@ -1537,6 +1643,10 @@ def run_gpp_pipeline(
     maximum_player_groups: Sequence[tuple[set[str], int]] | None = None,
     max_lineups_per_primary_game: int | None = None,
     effective_config: SlateConfig | None = None,
+    max_lineup_overlap: int | None = None,
+    elevated_player_max_exposure: float | None = None,
+    max_elevated_players_per_lineup: int | None = None,
+    elevated_player_ids: Sequence[str] | None = None,
 ) -> GPPOptimizerResult:
     """End-to-end entry point: load slate, build config, generate portfolio, export results."""
     result = generate_portfolio(
@@ -1565,6 +1675,10 @@ def run_gpp_pipeline(
         maximum_player_groups=maximum_player_groups,
         max_lineups_per_primary_game=max_lineups_per_primary_game,
         effective_config=effective_config,
+        max_lineup_overlap=max_lineup_overlap,
+        elevated_player_max_exposure=elevated_player_max_exposure,
+        max_elevated_players_per_lineup=max_elevated_players_per_lineup,
+        elevated_player_ids=elevated_player_ids,
     )
     if export_dir:
         csv_path = f"{export_dir}/lineups_{slate}_{season}w{week}.csv"

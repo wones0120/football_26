@@ -1,0 +1,887 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ai_showdown_selection_packet_v1",
+  "title": "AI Showdown Selection Packet v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_id",
+    "classifier_version",
+    "finalist_policy_version",
+    "run",
+    "game",
+    "pool_summary",
+    "control_selection",
+    "baselines",
+    "finalists",
+    "similarity",
+    "evidence_hash",
+    "generated_at"
+  ],
+  "properties": {
+    "contract_id": {
+      "const": "ai_showdown_selection_packet_v1"
+    },
+    "classifier_version": {
+      "type": "string"
+    },
+    "finalist_policy_version": {
+      "type": "string"
+    },
+    "prelock_review_checklist": {
+      "type": "object",
+      "required": [
+        "contract_id",
+        "nonbinding",
+        "evidence_basis",
+        "scopes",
+        "qb_families",
+        "candidate_details",
+        "proposed_pair"
+      ],
+      "properties": {
+        "contract_id": {
+          "const": "showdown_prelock_review_checklist_v1"
+        },
+        "nonbinding": {
+          "const": true
+        },
+        "evidence_basis": {
+          "const": "frozen_prelock_candidate_packet"
+        }
+      }
+    },
+    "data_readiness": {
+      "type": "object",
+      "required": [
+        "contract_id",
+        "status",
+        "incomplete_evidence"
+      ],
+      "properties": {
+        "contract_id": {
+          "const": "showdown_data_readiness_v1"
+        },
+        "status": {
+          "enum": [
+            "READY",
+            "NOT_READY",
+            "ERROR"
+          ]
+        },
+        "incomplete_evidence": {
+          "type": "boolean"
+        },
+        "non_production_override": {
+          "type": "boolean"
+        },
+        "evidence_sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "run": {
+      "type": "object",
+      "required": [
+        "season",
+        "week",
+        "slate",
+        "optimizer_run_id",
+        "projection_run_id",
+        "strategy",
+        "data_cutoff_at",
+        "created_at",
+        "configuration_hash",
+        "candidate_pool_hash",
+        "source_snapshot_ids"
+      ],
+      "properties": {
+        "season": {
+          "type": "integer"
+        },
+        "week": {
+          "type": "integer"
+        },
+        "slate": {
+          "type": "string"
+        },
+        "optimizer_run_id": {
+          "type": "string"
+        },
+        "projection_run_id": {
+          "type": "string"
+        },
+        "strategy": {
+          "type": "string"
+        },
+        "data_cutoff_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "configuration_hash": {
+          "type": "string"
+        },
+        "candidate_pool_hash": {
+          "type": "string"
+        },
+        "source_snapshot_ids": {
+          "type": "object"
+        }
+      }
+    },
+    "game": {
+      "type": "object"
+    },
+    "pool_summary": {
+      "type": "object",
+      "required": [
+        "candidate_variants",
+        "distinct_rosters",
+        "requested_entries",
+        "requested_finalists",
+        "finalist_count",
+        "quality_floor_fraction",
+        "uncovered_eligible_scenarios"
+      ],
+      "properties": {
+        "candidate_variants": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "distinct_rosters": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "requested_entries": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 5
+        },
+        "ai_requested_entries": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 5
+        },
+        "requested_finalists": {
+          "type": "integer",
+          "minimum": 15,
+          "maximum": 30
+        },
+        "finalist_count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 30
+        },
+        "quality_floor_fraction": {
+          "type": "number"
+        },
+        "uncovered_eligible_scenarios": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "control_selection": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "candidate_id",
+          "selector_rank",
+          "objective_score",
+          "projected_mean",
+          "summed_marginal_p90_proxy",
+          "scenario_tags"
+        ]
+      }
+    },
+    "baselines": {
+      "type": "object",
+      "required": [
+        "projection_only",
+        "ceiling_only"
+      ]
+    },
+    "finalists": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "candidate_id",
+          "variant_ranks",
+          "players",
+          "metrics",
+          "construction",
+          "inclusion_reasons"
+        ],
+        "properties": {
+          "candidate_id": {
+            "type": "string"
+          },
+          "variant_ranks": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
+          },
+          "players": {
+            "type": "array",
+            "minItems": 6,
+            "maxItems": 6,
+            "items": {
+              "type": "object",
+              "required": [
+                "player_id",
+                "name",
+                "slot",
+                "team",
+                "position",
+                "salary",
+                "projection",
+                "p90"
+              ]
+            }
+          },
+          "metrics": {
+            "type": "object",
+            "required": [
+              "selector_rank",
+              "objective_score",
+              "projected_mean",
+              "summed_marginal_p90_proxy",
+              "salary_used"
+            ]
+          },
+          "construction": {
+            "type": "object",
+            "required": [
+              "team_split",
+              "captain_player_id",
+              "captain_archetype",
+              "qb_structure",
+              "scenario_tags",
+              "scenario_reason_codes",
+              "risk_flags"
+            ]
+          },
+          "inclusion_reasons": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "similarity": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "candidate_a",
+          "candidate_b",
+          "shared_players",
+          "same_captain",
+          "same_team_split",
+          "same_qb_configuration",
+          "scenario_overlap",
+          "thesis_similarity"
+        ]
+      }
+    },
+    "ai_review_universe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract_id",
+        "ordering",
+        "summary",
+        "candidates",
+        "family_indexes",
+        "family_summaries"
+      ],
+      "properties": {
+        "contract_id": {
+          "const": "ai_showdown_review_universe_v1"
+        },
+        "ordering": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "object",
+          "required": [
+            "generated_distinct_candidates",
+            "quality_eligible_candidates",
+            "deterministic_finalists",
+            "excluded_by_quality_count",
+            "family_counts"
+          ],
+          "properties": {
+            "generated_distinct_candidates": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "quality_eligible_candidates": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "deterministic_finalists": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "excluded_by_quality_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "family_counts": {
+              "type": "object",
+              "required": [
+                "primary_thesis",
+                "captain_script_combination",
+                "football_scenario",
+                "captain_archetype",
+                "team_split",
+                "qb_structure"
+              ],
+              "additionalProperties": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        },
+        "candidates": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/review_candidate"
+          }
+        },
+        "family_indexes": {
+          "type": "object",
+          "required": [
+            "primary_thesis",
+            "captain_script_combination",
+            "football_scenario",
+            "captain_archetype",
+            "team_split",
+            "qb_structure"
+          ],
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "family_summaries": {
+          "type": "object",
+          "required": [
+            "primary_thesis",
+            "captain_script_combination",
+            "football_scenario",
+            "captain_archetype",
+            "team_split",
+            "qb_structure"
+          ],
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/$defs/review_family_summary"
+            }
+          }
+        }
+      }
+    },
+    "evidence_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "single_lineup_objective": {
+      "type": "object",
+      "description": "Cash-oriented unvalidated objective for captain_single_lineup_v1; one entry, no portfolio objective."
+    }
+  },
+  "$defs": {
+    "review_candidate": {
+      "type": "object",
+      "required": [
+        "candidate_id",
+        "metrics",
+        "construction",
+        "flex_player_names",
+        "quality_eligibility",
+        "market_compatibility",
+        "market_compatibility_reason_codes",
+        "market_compatibility_basis",
+        "is_deterministic_finalist",
+        "deterministic_finalist_inclusion_origin"
+      ],
+      "properties": {
+        "candidate_id": {
+          "type": "string"
+        },
+        "metrics": {
+          "$ref": "#/properties/finalists/items/properties/metrics",
+          "required": [
+            "selector_pool_rank",
+            "projection_rank",
+            "ceiling_proxy_rank",
+            "projected_total_ownership"
+          ]
+        },
+        "construction": {
+          "allOf": [
+            {
+              "$ref": "#/properties/finalists/items/properties/construction"
+            },
+            {
+              "$ref": "#/allOf/0/then/properties/finalists/items/properties/construction"
+            }
+          ],
+          "required": [
+            "captain_player_name",
+            "captain_team",
+            "captain_position",
+            "salary_remaining"
+          ]
+        },
+        "flex_player_names": {
+          "type": "array",
+          "minItems": 5,
+          "maxItems": 5,
+          "items": {
+            "type": "string"
+          }
+        },
+        "quality_eligibility": {
+          "$ref": "#/allOf/0/then/properties/finalists/items/properties/quality_eligibility",
+          "properties": {
+            "eligible": {
+              "const": true
+            }
+          }
+        },
+        "market_compatibility": {
+          "enum": [
+            "HIGH",
+            "MEDIUM",
+            "LOW"
+          ]
+        },
+        "market_compatibility_reason_codes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "market_compatibility_basis": {
+          "type": "string"
+        },
+        "is_deterministic_finalist": {
+          "type": "boolean"
+        },
+        "deterministic_finalist_inclusion_origin": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "players": {
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 6,
+          "items": {
+            "type": "object",
+            "required": [
+              "player_id",
+              "slot",
+              "name"
+            ]
+          }
+        },
+        "variant_ranks": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        }
+      },
+      "if": {
+        "properties": {
+          "is_deterministic_finalist": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "deterministic_finalist_inclusion_origin": {
+            "type": "string"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "deterministic_finalist_inclusion_origin": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    "review_metric_range": {
+      "type": "object",
+      "required": [
+        "min",
+        "max",
+        "available_count",
+        "unavailable_count"
+      ],
+      "properties": {
+        "min": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "max": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "available_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unavailable_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "review_family_summary": {
+      "type": "object",
+      "required": [
+        "candidate_count",
+        "top_candidate_ids",
+        "captain_side_distribution",
+        "projected_mean_range",
+        "ceiling_proxy_range",
+        "objective_range",
+        "projected_ownership_range",
+        "market_compatibility_distribution",
+        "deterministic_finalist_count",
+        "distinct_captain_names",
+        "distinct_team_splits",
+        "risk_flag_counts"
+      ],
+      "properties": {
+        "candidate_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "top_candidate_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "captain_side_distribution": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "projected_mean_range": {
+          "$ref": "#/$defs/review_metric_range"
+        },
+        "ceiling_proxy_range": {
+          "$ref": "#/$defs/review_metric_range"
+        },
+        "objective_range": {
+          "$ref": "#/$defs/review_metric_range"
+        },
+        "projected_ownership_range": {
+          "$ref": "#/$defs/review_metric_range"
+        },
+        "market_compatibility_distribution": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "deterministic_finalist_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "distinct_captain_names": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "distinct_team_splits": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "risk_flag_counts": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "finalist_policy_version": {
+            "const": "ai_showdown_finalists_v2"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "run": {
+            "required": [
+              "timing_status",
+              "retrospective_diagnostic"
+            ],
+            "properties": {
+              "timing_status": {
+                "enum": [
+                  "prelock_saved_run",
+                  "retrospective_unverified_generation"
+                ]
+              },
+              "retrospective_diagnostic": {
+                "type": "boolean"
+              }
+            }
+          },
+          "pool_summary": {
+            "required": [
+              "quality_policy",
+              "finalist_coverage",
+              "finalist_algorithm",
+              "candidate_assessments"
+            ],
+            "properties": {
+              "quality_policy": {
+                "type": "object"
+              },
+              "finalist_coverage": {
+                "type": "object"
+              },
+              "finalist_algorithm": {
+                "type": "object"
+              },
+              "uncovered_eligible_primary_theses": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "candidate_assessments": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "finalists": {
+            "items": {
+              "required": [
+                "market_compatibility",
+                "market_compatibility_reason_codes",
+                "quality_eligibility",
+                "inclusion_origin"
+              ],
+              "properties": {
+                "construction": {
+                  "required": [
+                    "primary_thesis_signature",
+                    "primary_football_scenario",
+                    "captain_side",
+                    "normalized_team_split",
+                    "captain_script_combination",
+                    "thesis_signatures",
+                    "football_scenarios",
+                    "construction_attributes",
+                    "thesis_reason_codes",
+                    "construction_reason_codes"
+                  ],
+                  "properties": {
+                    "primary_thesis_signature": {
+                      "type": "string"
+                    },
+                    "primary_football_scenario": {
+                      "type": "string"
+                    },
+                    "captain_side": {
+                      "type": "string"
+                    },
+                    "normalized_team_split": {
+                      "type": "string"
+                    },
+                    "captain_script_combination": {
+                      "type": "string"
+                    },
+                    "thesis_signatures": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "football_scenarios": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "construction_attributes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "thesis_reason_codes": {
+                      "type": "object"
+                    },
+                    "construction_reason_codes": {
+                      "type": "object"
+                    }
+                  }
+                },
+                "market_compatibility": {
+                  "enum": [
+                    "HIGH",
+                    "MEDIUM",
+                    "LOW"
+                  ]
+                },
+                "market_compatibility_reason_codes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "market_compatibility_basis": {
+                  "type": "string"
+                },
+                "inclusion_origin": {
+                  "type": "string"
+                },
+                "quality_eligibility": {
+                  "type": "object",
+                  "required": [
+                    "eligible",
+                    "mean_fraction",
+                    "ceiling_fraction",
+                    "reason_codes"
+                  ],
+                  "properties": {
+                    "eligible": {
+                      "type": "boolean"
+                    },
+                    "mean_fraction": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "ceiling_fraction": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "reason_codes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "similarity": {
+            "items": {
+              "required": [
+                "player_overlap_count",
+                "captain_match",
+                "primary_scenario_match",
+                "team_split_match",
+                "qb_structure_match",
+                "thesis_signature_match",
+                "thesis_similarity_score"
+              ],
+              "properties": {
+                "captain_match": {
+                  "type": "boolean"
+                },
+                "primary_scenario_match": {
+                  "type": "boolean"
+                },
+                "team_split_match": {
+                  "type": "boolean"
+                },
+                "qb_structure_match": {
+                  "type": "boolean"
+                },
+                "thesis_signature_match": {
+                  "type": "boolean"
+                },
+                "player_overlap_count": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 6
+                },
+                "thesis_similarity_score": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

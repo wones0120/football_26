@@ -13,8 +13,11 @@ from backend.app.product_services.optimizer import (
 @pytest.mark.parametrize("contest_format", ["classic", "showdown"])
 @pytest.mark.parametrize("enabled", [False, True])
 def test_run_filters_questionable_before_solving_and_preserves_assessment(
-    contest_format: str, enabled: bool,
+    contest_format: str, enabled: bool, monkeypatch,
 ) -> None:
+    # This synthetic preference-only pool has no live source evidence. Live
+    # readiness and solver ordering are exercised by the readiness suites.
+    monkeypatch.setattr("backend.app.product_services.showdown_data_readiness.is_live_slate", lambda *args, **kwargs: False)
     service = OptimizerService.__new__(OptimizerService)
     service._jobs = {}
     service.engine = MagicMock()

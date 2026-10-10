@@ -1,3 +1,4 @@
+import sqlite3
 import unittest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
@@ -56,8 +57,8 @@ class StartingQBServiceTests(unittest.TestCase):
             mismatched_salary.loc[mismatched_salary.player_id.eq("easton"), "salary"] = 4500
             selected, conflicts, _ = service._depth_chart_selections(
                 candidates=mismatched_salary, season=2026, week=4, slate="SUNDAY_MAIN")
-            self.assertEqual(selected, [])
-            self.assertEqual(conflicts, ["TB"])
+            self.assertEqual(selected[0]["player_master_id"], "jalon")
+            self.assertEqual(conflicts, [])
 
     def test_candidate_query_reuses_stored_confirmed_evidence(self):
         service = StartingQBService.__new__(StartingQBService)
@@ -99,16 +100,55 @@ class StartingQBServiceTests(unittest.TestCase):
         query = str(read_sql.call_args.args[0])
         self.assertIn("CASE UPPER(TRIM(raw.team))", query)
         self.assertIn("CASE UPPER(TRIM(participation_row.team))", query)
-        self.assertEqual(query.count("WHEN 'LA' THEN 'LAR'"), 3)
+        self.assertIn("CASE UPPER(TRIM(roster_evidence.team))", query)
+        self.assertEqual(query.count("WHEN 'LA' THEN 'LAR'"), 4)
+
+    def test_candidate_roster_coverage_is_scoped_to_salary_team(self):
+        service = StartingQBService.__new__(StartingQBService)
+        service.engine = MagicMock()
+        with patch("backend.app.product_services.starters.pd.read_sql",
+                   return_value=pd.DataFrame()) as read_sql:
+            service._load_candidates(season=2026, week=4, slate="SUNDAY_NIGHT")
+
+        query = str(read_sql.call_args.args[0])
+        # Execute the actual correlated coverage predicate with partial roster
+        # data. The surrounding DISTINCT ON / LATERAL query is PostgreSQL-only.
+        coverage_gate = "(NOT EXISTS (" + query.split("AND (NOT EXISTS (", 1)[1]
+        coverage_gate = coverage_gate.split("ORDER BY salary.player_team", 1)[0]
+        coverage_gate = coverage_gate.replace("public.", "")
+        with sqlite3.connect(":memory:") as database:
+            database.execute("CREATE TABLE salary (player_id TEXT, player_team TEXT)")
+            database.execute("""CREATE TABLE curated_player_game_participation
+                (season INT, week INT, player_master_id TEXT, team TEXT, roster_status TEXT)""")
+            database.executemany("INSERT INTO salary VALUES (?, ?)", [
+                ("car-1", "CAR"), ("car-2", "CAR"), ("det-1", "DET"), ("lar-1", "LAR"),
+            ])
+            database.executemany("INSERT INTO curated_player_game_participation VALUES (?, ?, ?, ?, ?)", [
+                (2026, 4, "other-lar-player", "LA", "ACT"),
+                (2026, 3, "det-1", "DET", "DEV"),
+            ])
+            sql = f"""SELECT salary.player_id FROM salary
+                LEFT JOIN curated_player_game_participation participation
+                  ON participation.player_master_id = salary.player_id
+                 AND participation.season = :season AND participation.week = :week
+                 AND participation.team = salary.player_team
+                WHERE {coverage_gate} ORDER BY salary.player_id"""
+            def eligible():
+                return [row[0] for row in database.execute(sql, {"season": 2026, "week": 4})]
+            self.assertEqual(eligible(), ["car-1", "car-2", "det-1"])
+            database.execute("INSERT INTO curated_player_game_participation VALUES (2026, 4, 'car-1', 'CAR', 'DEV')")
+            self.assertEqual(eligible(), ["det-1"])
+            database.execute("UPDATE curated_player_game_participation SET roster_status='ACT' WHERE player_master_id='car-1'")
+            self.assertEqual(eligible(), ["car-1", "det-1"])
 
     def test_derive_starters_persists_one_canonical_qb_per_team(self):
         service = StartingQBService.__new__(StartingQBService)
         service._load_candidates = MagicMock(
             return_value=pd.DataFrame(
                 [
-                    {"player_id": "aaa-qb1", "name": "AAA One", "position": "QB", "player_team": "AAA", "salary": 10000},
+                    {"player_id": "aaa-qb1", "name": "AAA One", "position": "QB", "player_team": "AAA", "salary": 10000, "depth_chart_position": "QB1"},
                     {"player_id": "aaa-qb2", "name": "AAA Two", "position": "QB", "player_team": "AAA", "salary": 6000},
-                    {"player_id": "bbb-qb1", "name": "BBB One", "position": "QB", "player_team": "BBB", "salary": 9800},
+                    {"player_id": "bbb-qb1", "name": "BBB One", "position": "QB", "player_team": "BBB", "salary": 9800, "depth_chart_position": "QB1"},
                     {"player_id": "bbb-qb2", "name": "BBB Two", "position": "QB", "player_team": "BBB", "salary": 5800},
                 ]
             )
@@ -122,7 +162,7 @@ class StartingQBServiceTests(unittest.TestCase):
         )
 
         self.assertEqual(result.rows_written, 2)
-        self.assertIn("inferred from unique top DraftKings salary", result.message)
+        self.assertIn("confirmed by QB1 evidence", result.message)
         persisted = service._persist.call_args.kwargs["starters"]
         self.assertEqual(set(persisted["player_id"]), {"aaa-qb1", "bbb-qb1"})
 
@@ -131,10 +171,10 @@ class StartingQBServiceTests(unittest.TestCase):
         service._load_candidates = MagicMock(
             return_value=pd.DataFrame(
                 [
-                    {"player_id": "aaa-qb1", "name": "AAA One", "position": "QB", "player_team": "AAA", "salary": 10000},
+                    {"player_id": "aaa-qb1", "name": "AAA One", "position": "QB", "player_team": "AAA", "salary": 10000, "depth_chart_position": "QB1"},
                     {"player_id": "aaa-qb2", "name": "AAA Two", "position": "QB", "player_team": "AAA", "salary": 6000},
-                    {"player_id": "bbb-qb1", "name": "BBB One", "position": "QB", "player_team": "BBB", "salary": 9800},
-                    {"player_id": "ccc-qb1", "name": "CCC One", "position": "QB", "player_team": "CCC", "salary": 9600},
+                    {"player_id": "bbb-qb1", "name": "BBB One", "position": "QB", "player_team": "BBB", "salary": 9800, "depth_chart_position": "QB1"},
+                    {"player_id": "ccc-qb1", "name": "CCC One", "position": "QB", "player_team": "CCC", "salary": 9600, "depth_chart_position": "QB1"},
                     {"player_id": "ccc-qb2", "name": "CCC Two", "position": "QB", "player_team": "CCC", "salary": 5800},
                 ]
             )
@@ -215,18 +255,17 @@ class StartingQBServiceTests(unittest.TestCase):
                 }
             ],
         )
-        self.assertEqual(partial.rows_written, 2)
-        partial_starters = service._persist.call_args.kwargs["starters"]
-        self.assertEqual(set(partial_starters["player_id"]), {"aaa-qb1", "bbb-qb1"})
+        self.assertEqual(partial.rows_written, 0)
+        self.assertIn("salary cannot establish", partial.message)
 
     def test_derive_starters_does_not_persist_ambiguous_evidence(self):
         service = StartingQBService.__new__(StartingQBService)
         service._load_candidates = MagicMock(
             return_value=pd.DataFrame(
                 [
-                    {"player_id": "aaa-qb1", "name": "AAA One", "position": "QB", "player_team": "AAA", "salary": 10000},
-                    {"player_id": "aaa-qb2", "name": "AAA Two", "position": "QB", "player_team": "AAA", "salary": 10000},
-                    {"player_id": "bbb-qb1", "name": "BBB One", "position": "QB", "player_team": "BBB", "salary": 9800},
+                    {"player_id": "aaa-qb1", "name": "AAA One", "position": "QB", "player_team": "AAA", "salary": 10000, "depth_chart_position": "QB1"},
+                    {"player_id": "aaa-qb2", "name": "AAA Two", "position": "QB", "player_team": "AAA", "salary": 10000, "depth_chart_position": "QB1"},
+                    {"player_id": "bbb-qb1", "name": "BBB One", "position": "QB", "player_team": "BBB", "salary": 9800, "depth_chart_position": "QB1"},
                 ]
             )
         )
@@ -289,14 +328,14 @@ class StartingQBServiceTests(unittest.TestCase):
              "evidence_tier": "inferred", "observed_at": "2026-09-17T20:00:00Z"},
         ])
         self.assertEqual(non_top.rows_written, 0)
-        self.assertIn("unique top salary", non_top.message)
+        self.assertIn("salary cannot establish", non_top.message)
 
     def test_partial_provisional_override_resolves_only_the_ambiguous_team(self):
         service = StartingQBService.__new__(StartingQBService)
         service._load_candidates = MagicMock(return_value=pd.DataFrame([
             {"player_id": "atl-one", "name": "ATL One", "position": "QB", "player_team": "ATL", "salary": 4700},
             {"player_id": "atl-two", "name": "ATL Two", "position": "QB", "player_team": "ATL", "salary": 4700},
-            {"player_id": "gb-high", "name": "GB High", "position": "QB", "player_team": "GB", "salary": 5400},
+            {"player_id": "gb-high", "name": "GB High", "position": "QB", "player_team": "GB", "salary": 5400, "depth_chart_position": "QB1"},
             {"player_id": "gb-backup", "name": "GB Backup", "position": "QB", "player_team": "GB", "salary": 4900},
         ]))
         service._persist = MagicMock()

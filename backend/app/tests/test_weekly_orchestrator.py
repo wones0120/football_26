@@ -282,6 +282,7 @@ def test_predict_stage_reuses_the_active_immutable_projection_run(
         lambda _self, _projection_run_id: {
             "season": 2025,
             "week": 11,
+            "slate_id": "SUNDAY_MAIN",
             "rows_written": 473,
             "feature_run_id": "feature-active-1",
             "model_run_id": "model-active-1",
@@ -309,3 +310,67 @@ def test_predict_stage_reuses_the_active_immutable_projection_run(
         "selection_source": "active",
         "calibration_metrics": {},
     }
+
+
+@pytest.mark.parametrize('slate,format', [
+    ('SUNDAY_MAIN', 'classic'), ('SUNDAY_EARLY', 'classic'), ('SUNDAY_LATE', 'classic'),
+    ('THURSDAY_NIGHT', 'showdown'), ('SUNDAY_NIGHT', 'showdown'), ('MONDAY_NIGHT', 'showdown'),
+])
+def test_default_simulation_stage_dispatches_each_slate_and_prepared_ownership(tmp_path, monkeypatch, slate, format):
+    from types import SimpleNamespace
+    from backend.app.product_services.simulations import SimulationService
+    request = WeeklyRunRequest(season=2026, week=5, slate=slate, contest_format=format, ownership_run_id='old')
+    assert request.objective == 'gpp'
+    expected_strategy = 'classic_large_gpp_v1' if format == 'classic' else 'showdown_gpp_portfolio_v3'
+    assert request.strategy == expected_strategy
+    def run(_self, **kwargs):
+        assert kwargs['slate'] == slate and kwargs['contest_format'] == format
+        assert kwargs['projection_run_id'] == 'projection-prepared'
+        assert kwargs['ownership_run_id'] == 'ownership-prepared'
+        return SimpleNamespace(**kwargs, message='done', successful_simulations=10, rows=[], simulation_model_id='fixture')
+    monkeypatch.setattr(SimulationService, 'run', run)
+    outcome = DefaultWeeklyStageExecutor(_factory(tmp_path))._simulate(request, {'simulation_run_id': 'sim'}, {
+        'predict': {'projection_run_id': 'projection-prepared'}, 'readiness': {'ownership_run_id': 'ownership-prepared'}})
+    assert outcome.artifact_ids['ownership_run_id'] == 'ownership-prepared'
+
+
+def test_prediction_reuse_rejects_another_slate_in_same_week(tmp_path, monkeypatch):
+    from backend.app.services.weekly_orchestrator import WeeklyStageBlockedError
+    request = WeeklyRunRequest(season=2026, week=5, slate='SUNDAY_LATE', projection_run_id='main-projection')
+    monkeypatch.setattr(PredictionsService, 'fetch_completed_run_summary', lambda *_: {
+        'season': 2026, 'week': 5, 'slate_id': 'SUNDAY_MAIN', 'rows_written': 100})
+    with pytest.raises(WeeklyStageBlockedError, match='different or unknown slate'):
+        DefaultWeeklyStageExecutor(_factory(tmp_path))._predict(request, allocate_stage_artifacts(request)['predict'], {})
+
+
+@pytest.mark.parametrize('slate,format', [
+    ('SUNDAY_MAIN', 'classic'), ('SUNDAY_EARLY', 'classic'), ('SUNDAY_LATE', 'classic'),
+    ('THURSDAY_NIGHT', 'showdown'), ('SUNDAY_NIGHT', 'showdown'), ('MONDAY_NIGHT', 'showdown'),
+])
+def test_weekly_chain_reaches_export_with_real_format_simulation(tmp_path, monkeypatch, slate, format):
+    """Synthetic source stages; real default simulation stage and MILP solver."""
+    from backend.app.product_services.simulations import SimulationService
+    from backend.app.tests.product.test_simulations import classic_pool
+    from backend.app.tests.product.test_showdown_simulations import showdown_pool
+    factory = _factory(tmp_path)
+    request = WeeklyRunRequest(season=2026, week=5, slate=slate, contest_format=format, num_simulations=2)
+    monkeypatch.setattr(SimulationService, 'fetch_by_id', lambda *a: None)
+    monkeypatch.setattr(SimulationService, '_load_pool', lambda *a, **kw: (
+        showdown_pool() if kw['contest_format'] == 'showdown' else classic_pool(),
+        kw['projection_run_id'], None, None))
+    persisted = []
+    monkeypatch.setattr(SimulationService, '_persist', lambda _, result, **kw: persisted.append(result))
+    default = DefaultWeeklyStageExecutor(factory)
+    class SharedExecutor(RecordingExecutor):
+        def execute(self, stage, *, request, artifact_ids, completed_artifacts):
+            if stage == 'simulate':
+                self.calls[stage] += 1
+                return default.execute(stage, request=request, artifact_ids=artifact_ids, completed_artifacts=completed_artifacts)
+            return super().execute(stage, request=request, artifact_ids=artifact_ids, completed_artifacts=completed_artifacts)
+    executor = SharedExecutor()
+    result = WeeklyOrchestrator(factory, executor=executor).run(_create_run(factory, request), request)
+    assert result.status == 'completed'
+    assert executor.calls == Counter({stage: 1 for stage in WEEKLY_STAGES})
+    assert persisted[0].contest_format == format
+    assert persisted[0].successful_simulations == 2
+    assert result.artifact_ids['export']['export_artifact_id'] == 'artifact-export'

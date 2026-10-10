@@ -1,0 +1,183 @@
+{
+  "$defs": {
+    "Rejection": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_id": {
+          "title": "Candidate Id",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "candidate_id",
+        "reason"
+      ],
+      "title": "Rejection",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "idempotency_key": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Idempotency Key",
+      "type": "string"
+    },
+    "previous_decision_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Previous Decision Id"
+    },
+    "review_hash": {
+      "title": "Review Hash",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "PROPOSED",
+        "SELECTED",
+        "USER_APPROVED"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "proposed_candidate_ids": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 2,
+      "minItems": 2,
+      "title": "Proposed Candidate Ids",
+      "type": "array"
+    },
+    "explicitly_considered_ids": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 10000,
+      "title": "Explicitly Considered Ids",
+      "type": "array"
+    },
+    "other_displayed_candidate_ids": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 10000,
+      "title": "Other Displayed Candidate Ids",
+      "type": "array"
+    },
+    "alternative_candidate_ids_considered": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 10000,
+      "title": "Alternative Candidate Ids Considered",
+      "type": "array"
+    },
+    "rejected_candidates": {
+      "items": {
+        "$ref": "#/$defs/Rejection"
+      },
+      "maxItems": 10000,
+      "title": "Rejected Candidates",
+      "type": "array"
+    },
+    "reasoning": {
+      "maxLength": 12000,
+      "minLength": 1,
+      "title": "Reasoning",
+      "type": "string"
+    },
+    "football_theses": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 2,
+      "minItems": 2,
+      "title": "Football Theses",
+      "type": "array"
+    },
+    "complementarity_reason": {
+      "maxLength": 8000,
+      "minLength": 1,
+      "title": "Complementarity Reason",
+      "type": "string"
+    },
+    "accepted_high_overlap_exception": {
+      "anyOf": [
+        {
+          "maxLength": 4000,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Accepted High Overlap Exception"
+    },
+    "reviewer_type": {
+      "default": "HUMAN",
+      "enum": [
+        "HUMAN",
+        "AI_ASSISTED",
+        "AI"
+      ],
+      "title": "Reviewer Type",
+      "type": "string"
+    },
+    "reviewer_identity": {
+      "anyOf": [
+        {
+          "maxLength": 200,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reviewer Identity"
+    },
+    "model_name": {
+      "anyOf": [
+        {
+          "maxLength": 200,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Model Name"
+    }
+  },
+  "required": [
+    "idempotency_key",
+    "review_hash",
+    "status",
+    "proposed_candidate_ids",
+    "reasoning",
+    "football_theses",
+    "complementarity_reason"
+  ],
+  "title": "DecisionRequest",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "showdown_selection_decision_request_v1"
+}

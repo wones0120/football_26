@@ -281,11 +281,14 @@ def historical_role_calibration(residuals: pd.DataFrame) -> dict[str, Any]:
 def kicker_point_estimates(
     target_df: pd.DataFrame,
 ) -> tuple[pd.Series, dict[str, Any]]:
-    """Use prior-only kicker history, with a current-slate peer fallback."""
+    """Estimate expected kickers only; never lend a primary's history to a backup."""
     positions = target_df.get(
         "position", pd.Series("UNKNOWN", index=target_df.index)
     ).fillna("UNKNOWN").astype(str).str.upper()
     kicker_rows = positions.eq("K")
+    eligible = kicker_rows & target_df.get(
+        "kicker_role_eligible", pd.Series(False, index=target_df.index)
+    ).eq(True)
     history = pd.to_numeric(
         target_df.get(
             "player_games_history", pd.Series(0.0, index=target_df.index)
@@ -305,8 +308,12 @@ def kicker_point_estimates(
         errors="coerce",
     )
     estimates = (HISTORY_ROLL3_WEIGHT * roll3) + (HISTORY_ROLL8_WEIGHT * roll8)
-    veteran_rows = kicker_rows & history.ge(1.0) & estimates.notna()
-    fallback_rows = kicker_rows & ~veteran_rows
+    veteran_rows = eligible & history.ge(1.0) & estimates.notna()
+    fallback_rows = eligible & ~veteran_rows
+    estimates.loc[kicker_rows & ~eligible] = 0.0
+    primary = target_df.get("kicker_role", pd.Series("", index=target_df.index)).eq("primary")
+    if (fallback_rows & ~primary).any():
+        raise ValueError("Kickers with shared duties require their own history; primary projections cannot be copied to backups")
     if fallback_rows.any():
         peer_estimates = estimates.loc[veteran_rows]
         if peer_estimates.empty:
@@ -337,10 +344,12 @@ def kicker_point_estimates(
         "peer_history_count": int(veteran_rows.sum()),
         "fallback_player_count": int(fallback_rows.sum()),
         "fallback_players": fallback_names,
+        "role_excluded_player_count": int((kicker_rows & ~eligible).sum()),
         "reason": (
             "Historical kickers are absent from the shared training matrix. "
-            "Veterans use their prior-only rolling history; kickers without NFL "
-            "history use the median prior-only anchor of current-slate peers."
+            "Expected kickers use their own prior-only rolling history; expected "
+            "kickers without NFL history use the median eligible peer anchor. "
+            "Backups and unresolved roles receive zero, never peer projections."
         ),
     }
 
@@ -450,10 +459,47 @@ def apply_opportunity_point_adjustment(
     adjusted = base.copy()
     anchors = np.full(len(base), np.nan, dtype=float)
     weights = np.zeros(len(base), dtype=float)
+    reasons = ["no_current_opportunity_context"] * len(base)
+    evidence_status = [
+        "legacy_player_history" if position in {"RB", "WR", "TE"} else "not_applicable"
+        for position in positions
+    ]
+    review_required = [False] * len(base)
     for index in range(len(base)):
         position = str(positions.iloc[index])
+        row = target_df.iloc[index]
+        if str(row.get("opportunity_allocation_policy", "legacy_v1")) == "team_window_v2":
+            sources = ("carry", "target") if position == "RB" else ("target",)
+            supported = any(
+                (pd.notna(row.get(f"{kind}_share_mean_3_available"))
+                 and bool(row.get(f"{kind}_share_mean_3_available")))
+                or pd.notna(row.get(f"pregame_effective_{kind}_share"))
+                for kind in sources
+            )
+            if position in {"RB", "WR", "TE"}:
+                window = row.get("opportunity_history_window", [])
+                window = window if isinstance(window, list) else []
+                observed = pd.to_numeric(row.get("opportunity_history_observed_games"), errors="coerce")
+                explicit = any(pd.notna(row.get(f"pregame_effective_{kind}_share")) for kind in sources)
+                evidence_status[index] = (
+                    "explicit_current_workload" if explicit else
+                    "missing_same_team_history" if not supported else
+                    "prior_season_window" if any(g["season"] < row.get("season", g["season"]) for g in window) else
+                    "partial_same_team_window" if window and pd.notna(observed) and observed < len(window) else
+                    "same_team_window"
+                )
+                review_required[index] = evidence_status[index] in {
+                    "missing_same_team_history", "prior_season_window", "partial_same_team_window"
+                }
+                if not supported:
+                    reasons[index] = "historical_model_fallback_without_current_workload_support"
         if not bool(context_applied.iloc[index]) or position not in models:
             continue
+        if str(row.get("opportunity_allocation_policy", "legacy_v1")) == "team_window_v2":
+            # No same-team window history is missing evidence. Only a sourced
+            # forward count/share can activate an anchor for that new role.
+            if not supported:
+                continue
         anchor = max(
             0.0,
             float(models[position].predict([float(units.iloc[index])])[0]),
@@ -465,6 +511,7 @@ def apply_opportunity_point_adjustment(
         )
         anchors[index] = anchor
         weights[index] = weight
+        reasons[index] = "current_opportunity_anchor_blended"
         adjusted[index] = ((1.0 - weight) * base[index]) + (weight * anchor)
 
     details = pd.DataFrame(
@@ -473,6 +520,9 @@ def apply_opportunity_point_adjustment(
             "pregame_opportunity_point_anchor": anchors,
             "pregame_opportunity_point_weight": weights,
             "pregame_point_mean_after_opportunity": adjusted,
+            "pregame_opportunity_point_reason": reasons,
+            "pregame_opportunity_evidence_status": evidence_status,
+            "pregame_opportunity_review_required": review_required,
         }
     )
     return np.maximum(0.0, adjusted), details
@@ -905,6 +955,7 @@ def prediction_code_hash() -> str:
     return hashlib.sha256(
         Path(__file__).read_bytes()
         + Path(__file__).with_name("canonical_projection_inputs.py").read_bytes()
+        + Path(__file__).with_name("kicker_roles.py").read_bytes()
         + Path(__file__).with_name("offensive_role.py").read_bytes()
         + Path(__file__).with_name("model_artifacts.py").read_bytes()
     ).hexdigest()
@@ -1106,7 +1157,7 @@ class PredictionsService:
                 text(
                     """
                     SELECT pr.projection_run_id, pr.model_run_id,
-                           mr.feature_run_id, pr.season, pr.week, pr.row_count,
+                           mr.feature_run_id, pr.season, pr.week, pr.slate_id, pr.row_count,
                            pr.data_cutoff_at, mr.params_json
                     FROM target.projection_run pr
                     JOIN target.model_run mr
@@ -1133,6 +1184,7 @@ class PredictionsService:
         return {
             "season": int(row["season"]),
             "week": int(row["week"]),
+            "slate_id": row.get("slate_id"),
             "rows_written": int(row["row_count"]),
             "message": "Predictions generated",
             "feature_run_id": str(row["feature_run_id"]),
@@ -1633,6 +1685,7 @@ class PredictionsService:
         metrics["opportunity_features"] = sources.get("opportunity_features", {})
         metrics["pregame_context"] = sources.get("pregame_context", {})
         metrics["availability_scenario"] = sources.get("availability_scenario", {})
+        metrics["kicker_role_gate"] = sources.get("kicker_role_gate", {})
         kicker_rows = target["position"].astype(str).str.upper().eq("K")
         kicker_estimates = pd.Series(np.nan, index=target.index, dtype=float)
         if kicker_rows.any():
@@ -1745,6 +1798,8 @@ class PredictionsService:
                 if position == "QB"
                 else availability_probability
             )
+            if position == "K" and not bool(row.get("kicker_role_eligible", False)):
+                participation_probability = 0.0
             conditional_mean = max(0.0, float(means[index]))
             if position == "K":
                 conditional_mean = max(0.0, float(kicker_estimates.loc[index]))

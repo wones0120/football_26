@@ -14,6 +14,7 @@ export function optimizerAvailabilityOverrides(
   decisions: PlayerDecision[],
   excludedNames: string,
   excludedIds: string,
+  contestFormat: "classic" | "showdown" = "classic",
 ): AvailabilityOverride[] {
   const byReference = new Map<string, AvailabilityOverride>();
   const add = (row: AvailabilityOverride) => {
@@ -27,17 +28,17 @@ export function optimizerAvailabilityOverrides(
   for (const decision of decisions) {
     const player_name = decision.playerName.trim();
     if (!player_name) continue;
-    if (decision.excludeFromLineups && decision.availability === "assume_active") {
+    if (contestFormat === "classic" && decision.excludeFromLineups && decision.availability === "assume_active") {
       throw new Error(`Cannot assume ${player_name} active and exclude them as assumed out.`);
     }
-    if (decision.excludeFromLineups || decision.availability !== "default") {
-      add({ player_name, availability: decision.excludeFromLineups ? "assume_out" : decision.availability });
+    if ((contestFormat === "classic" && decision.excludeFromLineups) || decision.availability !== "default") {
+      add({ player_name, availability: contestFormat === "classic" && decision.excludeFromLineups ? "assume_out" : decision.availability });
     }
   }
-  for (const player_name of excludedNames.split(",").map((value) => value.trim()).filter(Boolean)) {
+  for (const player_name of (contestFormat === "classic" ? excludedNames : "").split(",").map((value) => value.trim()).filter(Boolean)) {
     add({ player_name, availability: "assume_out" });
   }
-  for (const player_id of excludedIds.split(",").map((value) => value.trim()).filter(Boolean)) {
+  for (const player_id of (contestFormat === "classic" ? excludedIds : "").split(",").map((value) => value.trim()).filter(Boolean)) {
     add({ player_id, availability: "assume_out" });
   }
   return [...byReference.values()];

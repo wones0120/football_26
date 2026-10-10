@@ -12,6 +12,7 @@ from pathlib import Path
 
 import nflreadpy
 import polars as pl
+from nflreadpy.config import CacheMode, update_config
 from sqlalchemy import select, text
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -34,7 +35,10 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
-    # Fetch exactly once; the captured bytes, not a later upstream refresh, are parsed.
+    # A capture must fetch the provider, even if filesystem caching is configured.
+    # This verifies a download, not the publication time of sportsbook quotes.
+    update_config(cache_mode=CacheMode.OFF, verbose=False)
+    # Fetch exactly once; the captured values, not a later upstream refresh, are parsed.
     frame = nflreadpy.load_schedules(args.season).filter(
         (pl.col("season") == args.season) & (pl.col("week") == args.week)
     )
@@ -91,8 +95,8 @@ def main() -> int:
                               "observed_at": check_at.isoformat(), "dry_run": True}))
             return 0
 
-        # Include fetch time in the immutable artifact so unchanged lines can be
-        # observed again and receive a genuinely new freshness timestamp.
+        # Retain a genuinely new capture clock even for unchanged numerical values.
+        # Upstream quote publication remains unavailable; never claim quote currency.
         raw = frame.to_pandas()
         raw["capture_observed_at"] = check_at.isoformat()
         capture = SourceCaptureService(session).capture_dataframe(
@@ -100,10 +104,11 @@ def main() -> int:
             source_system="nflverse", dataset="schedule_market_snapshot",
             season=args.season, week=args.week, slate=args.slate,
             source_license="nflverse/nfldata schedule data; upstream terms apply",
-            source_uri="https://github.com/nflverse/nfldata/blob/master/data/games.csv",
+            source_uri="https://github.com/nflverse/nflverse-data/releases/download/schedules/games.parquet",
             slate_lock_at=min(row.kickoff_at for row in valid),
             observation_basis="capture_clock",
-            metadata={"spread_semantics": "positive_home_margin", "source_loader": "nflreadpy.load_schedules"},
+            metadata={"spread_semantics": "positive_home_margin", "source_loader": "nflreadpy.load_schedules",
+                      "cache_mode": "off", "quote_publication_time": None},
         )
         observed_at = capture.snapshot.observed_at
         ingested_at = datetime.now(UTC)

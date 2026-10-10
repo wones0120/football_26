@@ -1,0 +1,59 @@
+{
+  "$defs": {
+    "EntryReference": {
+      "additionalProperties": false,
+      "properties": {
+        "contest_id": {
+          "title": "Contest Id",
+          "type": "string"
+        },
+        "entry_id": {
+          "title": "Entry Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "contest_id",
+        "entry_id"
+      ],
+      "title": "EntryReference",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "idempotency_key": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Idempotency Key",
+      "type": "string"
+    },
+    "previous_decision_id": {
+      "title": "Previous Decision Id",
+      "type": "string"
+    },
+    "learning_report_id": {
+      "title": "Learning Report Id",
+      "type": "string"
+    },
+    "entries": {
+      "items": {
+        "$ref": "#/$defs/EntryReference"
+      },
+      "maxItems": 2,
+      "minItems": 2,
+      "title": "Entries",
+      "type": "array"
+    }
+  },
+  "required": [
+    "idempotency_key",
+    "previous_decision_id",
+    "learning_report_id",
+    "entries"
+  ],
+  "title": "ExecutionRequest",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "showdown_selection_execution_request_v1"
+}

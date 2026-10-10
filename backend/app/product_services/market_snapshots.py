@@ -26,6 +26,52 @@ NFL_TEAM_NAMES = {
 CANONICAL_TEAMS = frozenset(NFL_TEAM_NAMES.values())
 
 
+def load_current_markets(connection, *, season, week, cutoff):
+    """Canonical game observations, independent of any player/feature join."""
+    from sqlalchemy import text
+    return [dict(r) for r in connection.execute(text("""
+        SELECT market.* FROM target.market_snapshot market
+        JOIN public.ingest_run run ON run.ingest_run_id=market.ingest_run_id
+        WHERE market.season=:season AND market.week=:week AND run.status='completed'
+          AND market.observed_at <= :cutoff AND market.ingested_at <= :cutoff
+        ORDER BY market.observed_at,market.market_snapshot_id
+    """), {"season":season,"week":week,"cutoff":cutoff}).mappings()]
+
+
+def attach_pool_market_context(frame, observations, *, season, week, cutoff):
+    """Apply the projection transform through canonical game/team relationships.
+
+    Native DK game_info remains available for slate-lock validation. The model
+    transform uses the matched canonical game ID, never a player projection ID.
+    """
+    import pandas as pd
+    from .canonical_projection_inputs import apply_latest_market_context, MARKET_FEATURE_COLUMNS
+    from .replay import parse_slate_lock
+    rows = frame.copy()
+    target = rows.rename(columns={"player_team":"recent_team"}).copy()
+    target["season"], target["week"] = season,week
+    target["game_id"] = None
+    for field in MARKET_FEATURE_COLUMNS:
+        if field not in target:
+            target[field] = float("nan")
+    safe = []
+    for observation in observations:
+        native = rows.loc[rows["player_team"].map(normalize_team).isin({observation["home_team"],observation["away_team"]}),"game_id"]
+        lock = parse_slate_lock(native)
+        if lock and abs((utc_time(observation["kickoff_at"]) - utc_time(lock)).total_seconds()) <= 60:
+            safe.append(observation)
+    target,audit = apply_latest_market_context(target,pd.DataFrame(safe),cutoff=cutoff)
+    for field in ("game_total_line","team_spread_line","team_implied_total","opponent_implied_total",
+                  "market_source_system","market_snapshot_row_id","market_observed_at"):
+        if field in target: rows[field] = target[field]
+    rows["canonical_game_id"] = target["game_id"]
+    rows["market_context_point_in_time_safe"] = target["market_snapshot_row_id"].notna()
+    snapshots = {str(r["market_snapshot_id"]):r.get("source_snapshot_id") for r in safe}
+    rows["market_source_snapshot_id"] = rows["market_snapshot_row_id"].astype(str).map(snapshots)
+    rows.attrs["canonical_market_association"] = audit
+    return rows
+
+
 def utc_time(value: datetime | str) -> datetime:
     result = value if isinstance(value, datetime) else datetime.fromisoformat(value.replace("Z", "+00:00"))
     if result.tzinfo is None or result.utcoffset() is None:

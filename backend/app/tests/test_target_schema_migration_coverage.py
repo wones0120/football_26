@@ -10,7 +10,7 @@ TARGET_TABLE_PATTERN = re.compile(
     r"CREATE TABLE IF NOT EXISTS (?:target|\{s\})\.([a-z_]+)"
 )
 MIGRATED_TARGET_TABLE_PATTERN = re.compile(
-    r'CREATE TABLE IF NOT EXISTS (?:target|"target")\.([a-z_]+)'
+    r'CREATE TABLE (?:IF NOT EXISTS )?(?:target|"target")\.([a-z_]+)'
 )
 TARGET_MIGRATION_PATTERN = re.compile(
     r"(?:CREATE|ALTER|DROP)\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?"

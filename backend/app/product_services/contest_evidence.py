@@ -22,6 +22,8 @@ _GPP_NAME_MARKERS = (
     "play-action",
     "play action",
     "fair catch",
+    "pylon [single entry]",
+    "daily dollar [single entry]",
 )
 
 

@@ -1,3 +1,9 @@
+import { recoverOptimizerReceipt, isOptimizerTransportError } from "./optimizerQueue";
+import type { ConstructionSummary } from "./classicConstruction";
+import { requestConstructionReview } from "./classicConstructionReview";
+import { assertLargeGppOverlapResult, assertPortfolioSummaryMatchesRequest } from "./classicOverlapConsistency";
+import { recordPortfolioTrace } from "./portfolioSubmissionTrace";
+
 export type LoadSummary = {
   dataset: string;
   season: number;
@@ -62,6 +68,8 @@ export type SlateReadinessResponse = {
   summary: Record<SlateReadinessStatus, number>;
   gates: Record<SlateReadinessGateKey, SlateReadinessGate>;
   checks: SlateReadinessCheck[];
+  showdown_data_readiness?: Record<string, unknown> | null;
+  classic_data_readiness?: Record<string, unknown> | null;
 };
 
 export type SlateWeatherState = "available" | "indoor" | "stale" | "missing" | "error";
@@ -198,6 +206,15 @@ export type OptimizerResponse = {
   strategy_config: Record<string, unknown>;
   contest_format: "classic" | "showdown";
   objective: "cash" | "gpp";
+  construction_summary?: ConstructionSummary | null;
+  entry_readiness?: Record<string, unknown> | null;
+  data_readiness?: Record<string, unknown> | null;
+  single_lineup_selection?: Record<string, unknown> | null;
+  gpp_recommendation?: import("./GppRecommendation").GppRecommendationReport | null;
+  classic_game_environment_review?: import("./classicGameEnvironment").GameEnvironmentReview | null;
+  readiness_assessment?: Record<string, unknown> | null;
+  game_appearances?: Record<string, unknown> | null;
+  execution_runtime?: Record<string, unknown> | null;
   enforce_single_te?: boolean | null;
   long_shot_mode?: boolean;
   exclude_opponent_teams?: string[];
@@ -206,6 +223,12 @@ export type OptimizerResponse = {
   data_cutoff_at?: string | null;
   lineage_persisted: boolean;
   effective_strategy_contract?: Record<string, unknown> | null;
+  portfolio_submission_trace?: Record<string, unknown> | null;
+  portfolio_controls_report?: {
+    settings: Array<{ key: string; setting: string; requested: unknown; effective: unknown; source: string; achieved: unknown }>;
+    validation: { status: string; violations: string[] };
+    feasibility: { status: string; explanation?: string | null; active_constraints: Record<string, unknown>; saturated_primary_games: string[]; saturated_player_ids: string[] };
+  } | null;
   primary_game_constraint?: {
     requested: number | null; effective: number | null; source: string;
     achieved_game_exposure: Record<string, number>; validation: string;
@@ -267,6 +290,7 @@ export type OptimizerResponse = {
       projection_after_scenario?: number | null;
       opportunity_redistributed?: boolean;
       flex_only?: boolean;
+      captain_user_preference_exclusions?: Array<{ reason_code: string; reason: string; category: string }>;
       included: boolean;
       optimizer_eligibility?: "eligible" | "excluded" | "excluded_by_user_preference";
       model_assessment?: {
@@ -314,6 +338,10 @@ export type OptimizerResponse = {
   created_at?: string;
   updated_at?: string;
 };
+
+export function assessSavedOptimizerReadiness(jobId: string): Promise<Record<string, unknown>> {
+  return postJson(`/optimizer/results/${encodeURIComponent(jobId)}/readiness`, {});
+}
 
 export type OperationalJob = {
   job_id: string;
@@ -599,6 +627,11 @@ export type SimulationPlayerRow = {
   optimal_lineup_count: number;
   optimal_lineup_probability: number;
   field_ownership?: number | null;
+  captain_salary?: number | null;
+  captain_optimal_count?: number | null;
+  captain_optimal_probability?: number | null;
+  flex_optimal_count?: number | null;
+  flex_optimal_probability?: number | null;
   leverage_score?: number | null;
 };
 
@@ -1137,12 +1170,44 @@ export function fetchPlayerWhy(runId: string, playerId: string): Promise<Record<
   return getJson(`/predict/audit/${encodeURIComponent(runId)}/player/${encodeURIComponent(playerId)}`);
 }
 
-export async function downloadOptimizerLineups(jobId: string): Promise<void> {
-  const response = await fetch(`${API_BASE}/optimizer/results/${encodeURIComponent(jobId)}/draftkings/download`);
+export async function downloadOptimizerLineups(jobId: string, recommendedOnly = false): Promise<void> {
+  const response = await fetch(`${API_BASE}/optimizer/results/${encodeURIComponent(jobId)}/draftkings/download${recommendedOnly ? "?recommended_only=true" : ""}`);
   if (!response.ok) throw new Error(await extractError(response));
   const blob = await response.blob();
   const filename = response.headers.get("Content-Disposition")?.match(/filename="([^"]+)"/)?.[1]
     ?? `draftkings_${jobId}.${blob.type.includes("zip") ? "zip" : "csv"}`;
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+export function fetchShowdownResearchNotes(): Promise<import("./showdownResearch").ShowdownResearchNotes> {
+  return getJson("/learning/research/showdown");
+}
+
+export async function fetchAiShowdownChecklist(jobId: string, aiRequestedEntries: number): Promise<{ prelock_review_checklist: import("./showdownResearch").ShowdownPrelockChecklist }> {
+  const query = new URLSearchParams({ format: "json", ai_requested_entries: String(aiRequestedEntries) });
+  const packet = await getJson<{ prelock_review_checklist: import("./showdownResearch").ShowdownPrelockChecklist }>(
+    `/optimizer/results/${encodeURIComponent(jobId)}/ai-showdown-packet/download?${query}`);
+  if (packet.prelock_review_checklist?.contract_id !== "showdown_prelock_review_checklist_v1" || packet.prelock_review_checklist.nonbinding !== true) {
+    throw new Error("This packet has no supported nonbinding checklist. Refresh the app and backend version.");
+  }
+  return packet;
+}
+
+export async function downloadAiShowdownPacket(jobId: string, format: "md" | "json" = "md", aiRequestedEntries?: number): Promise<void> {
+  const query = new URLSearchParams({ format });
+  if (aiRequestedEntries !== undefined) query.set("ai_requested_entries", String(aiRequestedEntries));
+  const response = await fetch(`${API_BASE}/optimizer/results/${encodeURIComponent(jobId)}/ai-showdown-packet/download?${query}`);
+  if (!response.ok) throw new Error(await extractError(response));
+  const blob = await response.blob();
+  const filename = response.headers.get("Content-Disposition")?.match(/filename="([^"]+)"/)?.[1]
+    ?? `AI_SHOWDOWN_SELECTION_PACKET_${jobId}.${format}`;
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -1187,18 +1252,21 @@ async function postJson<T>(
   path: string,
   body: unknown,
   timeoutMs = DEFAULT_TIMEOUT_MS,
-  extraHeaders: Record<string, string> = {}
+  extraHeaders: Record<string, string> = {},
+  assertSerializedBody?: (serializedBody: string) => void,
 ): Promise<T> {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
+    const serializedBody = JSON.stringify(body);
+    assertSerializedBody?.(serializedBody);
     const res = await fetch(`${API_BASE}${path}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         ...extraHeaders,
       },
-      body: JSON.stringify(body),
+      body: serializedBody,
       signal: controller.signal,
     });
     if (!res.ok) {
@@ -1217,7 +1285,35 @@ function newIdempotencyKey(jobType: string): string {
   return `${jobType}:${nonce}`;
 }
 
-async function waitForOperationalJob<T>(jobId: string): Promise<T> {
+export type PreparationScope = { season: number; week: number; slate: string };
+export type PreparedBuild = PreparationScope & {
+  action?: string; contest_format?: "classic" | "showdown"; data_readiness?: { status: string };
+  availability_overrides?: unknown[]; assume_questionable_out?: boolean;
+  prepared_input_job_id: string; projection_run_id: string; feature_run_id: string;
+  source_sha256: string; consumption: Record<string, unknown>; limitations: string[];
+  rows_written?: number;
+};
+export type PreparationStatus = {
+  scope: PreparationScope; server_time: string; inputs: Record<string, Array<Record<string, unknown>>>;
+  weather?: { games?: Array<Record<string, unknown>> }; load_freshness?: unknown;
+  jobs: Array<{ job_id: string; action: string; status: string; stage: string; message?: string; error?: string; result?: unknown; checkpoint?: unknown }>;
+  latest_build: PreparedBuild | null; build_current?: boolean; build_issue?: string | null; limitations: string[]; entry_ready: false;
+  lock_at?: string; prelock?: boolean;
+};
+export function fetchPreparation(scope: PreparationScope): Promise<PreparationStatus> {
+  return getJson(`/slate/preparation?${new URLSearchParams({ season: String(scope.season), week: String(scope.week), slate: scope.slate })}`);
+}
+export function queuePreparation(payload: PreparationScope & {
+  ownership_required?: boolean;
+  action: "salary" | "injuries" | "markets" | "weather" | "rebuild" | "prepare";
+  contest_format?: "classic" | "showdown";
+  path?: string; native_draft_group?: string; injury_source?: "draftkings" | "fanduel";
+  allow_free_weather_evaluation?: boolean; availability_overrides?: unknown[]; assume_questionable_out?: boolean;
+}): Promise<OperationalJobCreateResponse> {
+  return enqueueOperationalJob("/slate/preparation/jobs", payload, "slate-preparation");
+}
+
+export async function waitForOperationalJob<T>(jobId: string): Promise<T> {
   for (;;) {
     const job = await getJson<OperationalJob>(`/jobs/${encodeURIComponent(jobId)}`, 30_000);
     if (job.status === "completed") {
@@ -1495,18 +1591,37 @@ export function runOptimizer(payload: {
   rule_run_id?: string;
   data_cutoff_at?: string;
   params?: Record<string, unknown>;
-}, onDetached?: () => void): Promise<OptimizerResponse> {
-  return startOptimizerAndRecover(payload, onDetached);
+}, onDetached?: () => void, portfolioSummaryParams?: Record<string, number | null>): Promise<OptimizerResponse> {
+  return startOptimizerAndRecover(payload, onDetached, portfolioSummaryParams);
 }
 
 async function startOptimizerAndRecover(
   payload: Parameters<typeof runOptimizer>[0],
   onDetached?: () => void,
+  portfolioSummaryParams?: Record<string, number | null>,
 ): Promise<OptimizerResponse> {
-  const queued = await postJson<OperationalJobCreateResponse>("/optimizer/jobs", payload, 30_000);
+  let serializedTrace: Record<string, unknown> | undefined;
+  const queued = await recoverOptimizerReceipt(() => postJson<OperationalJobCreateResponse>("/optimizer/jobs", payload, 30_000, {},
+    portfolioSummaryParams ? serialized => {
+      const trace = payload.params?.portfolio_submission_trace as Record<string, unknown> | undefined;
+      const value = JSON.parse(serialized).params?.max_lineup_overlap;
+      if (trace) recordPortfolioTrace({ ...trace, serialized_request_object_value: value ?? null, serialized_field_present: value !== undefined });
+      assertPortfolioSummaryMatchesRequest(portfolioSummaryParams, serialized);
+      if (trace) {
+        serializedTrace = { ...trace, serialized_request_object_value: value, serialized_field_present: true, fetch_body_overlap: value };
+        recordPortfolioTrace(serializedTrace);
+      }
+    } : undefined));
   onDetached?.();
-  await waitForOperationalJob<{ optimizer_run_id: string }>(queued.job.job_id);
-  return fetchOptimizerResults(payload.optimizer_run_id);
+  try { await waitForOperationalJob<{ optimizer_run_id: string }>(queued.job.job_id); }
+  catch (error) {
+    if (isOptimizerTransportError(error)) throw new Error(`Connection interrupted while following optimizer ${payload.optimizer_run_id}. The job is queued and may still be running. Reopen it in Recent optimizer runs; do not start another copy.`);
+    throw error;
+  }
+  const response = await fetchOptimizerResults(payload.optimizer_run_id);
+  if (response.portfolio_submission_trace) recordPortfolioTrace({ ...serializedTrace, ...response.portfolio_submission_trace });
+  assertLargeGppOverlapResult(payload.strategy, payload.params ?? {}, response);
+  return response;
 }
 
 export type OptimizerRunSummary = {
@@ -1519,14 +1634,17 @@ export type OptimizerRunSummary = {
   operational_job_id: string | null;
   requested_lineups: number | null; lineup_count: number;
   expanded_discovery: boolean | null;
+  saved_report_available?: boolean;
   projection_run_id: string | null;
 };
 
 export function fetchOptimizerRuns(scope: {
   season: number; week: number; slate: string;
-  contest_format: "classic" | "showdown"; objective: "cash" | "gpp";
+  contest_format: "classic" | "showdown"; objective?: "cash" | "gpp";
 }): Promise<{ runs: OptimizerRunSummary[] }> {
-  const query = new URLSearchParams({ ...scope, season: String(scope.season), week: String(scope.week) });
+  const query = new URLSearchParams({ season: String(scope.season), week: String(scope.week),
+    slate: scope.slate, contest_format: scope.contest_format,
+    ...(scope.objective ? { objective: scope.objective } : {}) });
   return getJson(`/optimizer/runs?${query}`);
 }
 
@@ -1618,6 +1736,10 @@ export function fetchSavedContestObservations(contestId: string): Promise<{ obse
 }
 
 const optimizerResultRequests = new Map<string, Promise<OptimizerResponse>>();
+
+export function reviewClassicConstructions(jobId: string, entry: number, enforceSingleTE: boolean): Promise<Record<string, any>> {
+  return requestConstructionReview(API_BASE, jobId, entry, enforceSingleTE);
+}
 
 export function fetchOptimizerResults(jobId: string): Promise<OptimizerResponse> {
   const existing = optimizerResultRequests.get(jobId);
@@ -2229,12 +2351,13 @@ export type SlateLearningReport = {
     best_entered_slate_actual: number | null;
     unmatched_entered_entries: string[];
     unavailable_completed_run_ids?: string[];
+    inclusion_policy?: Record<string, unknown>;
   };
 };
 
 export type WeeklyLearningReport = {
   report_id: string;
-  contract_id: "weekly_learning_report_v1";
+  contract_id: "weekly_learning_report_v1" | "weekly_learning_report_v2";
   builder_version: string;
   season: number;
   week: number;
@@ -2274,6 +2397,17 @@ export type WeeklyLearningReport = {
   missing_evidence: string[];
   interpretation: string;
 };
+
+export type LearningCandidatePage = {
+  contract_id: "learning_candidate_page_v1"; report_id: string; optimizer_run_id: string;
+  evidence_hash: string | null; offset: number; limit: number; total: number;
+  rows: Array<{ pregame: Record<string, unknown>; postgame: Record<string, unknown> }>;
+  next_offset: number | null;
+};
+
+export function fetchLearningCandidates(reportId: string, runId: string, offset = 0): Promise<LearningCandidatePage> {
+  return getJson(`/learning/reports/${encodeURIComponent(reportId)}/optimizer-runs/${encodeURIComponent(runId)}/candidates?offset=${offset}&limit=100`);
+}
 
 export function generateWeeklyLearningReport(payload: {
   season: number;
@@ -2572,4 +2706,80 @@ export function answerAgentQuestion(
     answer,
     answer_text: answerText || null,
   });
+}
+
+export function fetchShowdownSelectionReview(runId: string): Promise<import("./showdownSelectionContracts").ReviewResponse> {
+  return getJson(`/optimizer/results/${encodeURIComponent(runId)}/selection-review`);
+}
+export function compareShowdownSelection(runId: string, reviewHash: string, candidateIds: string[]): Promise<import("./showdownSelectionContracts").PairComparison> {
+  return postJson(`/optimizer/results/${encodeURIComponent(runId)}/selection-review/compare`, { review_hash: reviewHash, candidate_ids: candidateIds });
+}
+export function recordShowdownSelection(runId: string, request: import("./showdownSelectionContracts").DecisionInput): Promise<import("./showdownSelectionContracts").SelectionDecision> {
+  return postJson(`/optimizer/results/${encodeURIComponent(runId)}/selection-review/decisions`, request);
+}
+export function confirmShowdownSelectionExecution(runId: string, request: {
+  idempotency_key: string; previous_decision_id: string; learning_report_id: string;
+  entries: { contest_id: string; entry_id: string }[];
+}): Promise<import("./showdownSelectionContracts").SelectionDecision> {
+  return postJson(`/optimizer/results/${encodeURIComponent(runId)}/selection-review/execution`, request);
+}
+export function evaluateShowdownSelection(decisionId: string, learningReportId: string): Promise<unknown> {
+  return postJson(`/learning/research/showdown-selection-review/${encodeURIComponent(decisionId)}/evaluate`, { learning_report_id: learningReportId });
+}
+export function fetchShowdownSelectionResearch(): Promise<{
+  valid_prelock_slates: number; recorded_runs: number; limitations: string;
+  outcomes_by_overlap_bucket: Record<string, { slates: number; evaluated_slates: number; mean_regret: number | null }>;
+  runs: { decision_id: string; run_identity: import("./showdownSelectionContracts").ReviewIdentity; status: string;
+    proposed_pair_overlap: number; alternative_pair_overlap: number | null; tracking: { explicitly_considered: number;
+    quality_eligible: number; attention_coverage_fraction: number; outsider_selected: boolean; ceiling_outsider_selected: boolean }; outcome: unknown }[];
+}> {
+  return getJson("/learning/research/showdown-selection-review");
+}
+export async function downloadShowdownSelectionArtifact(runId: string, decisions = false): Promise<void> {
+  const path = `/optimizer/results/${encodeURIComponent(runId)}/selection-review/${decisions ? "decisions/" : ""}download`;
+  const response = await fetch(`${API_BASE}${path}`);
+  if (!response.ok) throw new Error(await extractError(response));
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = response.headers.get("Content-Disposition")?.match(/filename="([^"]+)"/)?.[1] ?? `SHOWDOWN_SELECTION_REVIEW_${runId}.json`;
+  document.body.appendChild(link); link.click(); link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+export async function fetchClassicEnvironmentResearch(): Promise<import("./classicGameEnvironment").ClassicEnvironmentResearch> {
+  return getJson("/learning/research/classic-game-environment");
+}
+
+export type EntryHistoryTotals = {
+  entries: number; paid_finishes: number; paid_finish_rate: number | null;
+  entry_fees: number; cash_winnings: number; cash_net_return: number; ticket_winnings: number;
+};
+export type EntryHistoryReport = {
+  year: number; snapshot_count: number; summary: EntryHistoryTotals; gpp_summary: EntryHistoryTotals;
+  unknown_type_entries: number; free_entries: number; unmatched_contest_ids: string[];
+  conflicts: {contest_id: string; entry_id: string}[]; limitations: string[];
+};
+export const fetchEntryHistory = (year: number) =>
+  getJson<EntryHistoryReport>(`/imports/draftkings/entry-history?year=${year}`);
+export const importEntryHistory = (path: string, year: number, dry_run = false) =>
+  postJson<{status: string; rows: number; report?: EntryHistoryReport; shadow_comparison_status?: string}>(
+    '/imports/draftkings/entry-history', {path, year, dry_run});
+
+export type ShadowComparison = {
+  experiment_id: string; label: string; slate: string; evaluated_at: string | null;
+  report_json: null | { status: string; interpretation: string; arms: {
+    label: string; actual_points: number | null; missing_player_ids: string[];
+    forecast_points?: number; projection_error?: number | null;
+    known_paid_finishes: number; known_non_paid_finishes: number; unknown_finishes: number;
+    contests: { contest_id: string; contest_name: string; paid_finish: boolean | null;
+      net_return_bounds: number[] | null; top_one_percent: boolean | null;
+      payout_evidence_reason: string | null }[];
+  }[] };
+};
+export function fetchShadowComparisons(season: number, week: number) {
+  return getJson<{experiments: ShadowComparison[]}>(`/learning/shadow-comparisons?season=${season}&week=${week}`);
+}
+export function refreshShadowComparisons(season: number, week: number) {
+  return postJson<{experiments: ShadowComparison[]}>(`/learning/shadow-comparisons/refresh?season=${season}&week=${week}`, {});
 }

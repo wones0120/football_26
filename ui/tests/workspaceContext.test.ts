@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  availableSlateOptions,
   ACTIVE_SLATE_CONTEXT_STORAGE_KEY,
   RUN_SELECTIONS_STORAGE_KEY,
   parsePersistedRunSelections,
@@ -91,4 +92,24 @@ test("treats slate casing as compatible and clears only the requested run type",
   assert.deepEqual(selections[slateContextKey(context)], {
     projectionRunId: "projection-1",
   });
+});
+
+test("restores distinct native slate labels on the same day without merging runs", () => {
+  const first = { season: 2026, week: 5, slate: "DK_123456" };
+  const second = { ...first, slate: "DK_789012" };
+  let rows = updateRunSelection({}, first, { optimizerRunId: "captain-first" });
+  rows = updateRunSelection(rows, second, { optimizerRunId: "captain-second" });
+  assert.deepEqual(parsePersistedRunSelections(JSON.stringify(rows)), rows);
+  assert.deepEqual(parsePersistedActiveSlateContext(serializeActiveSlateContext(first)), first);
+  assert.equal(parsePersistedActiveSlateContext('{"season":2026,"week":5,"slate":"bad:key"}'), null);
+});
+
+
+test("offers saved contest slates without treating arbitrary labels as prepared evidence", () => {
+  const options = availableSlateOptions("SUNDAY_MAIN", ["dk_game_1", "DK_GAME_2", "DK_GAME_1", "bad:key", "UNKNOWN"]);
+  assert.ok(options.includes("DK_GAME_1"));
+  assert.ok(options.includes("DK_GAME_2"));
+  assert.equal(options.filter(value => value === "DK_GAME_1").length, 1);
+  assert.ok(!options.includes("BAD:KEY"));
+  assert.ok(!options.includes("UNKNOWN"));
 });

@@ -307,6 +307,26 @@ def verify_snapshot_artifact(snapshot: SourceSnapshot) -> None:
         )
 
 
+def verify_local_snapshot_replica(snapshot: SourceSnapshot) -> SourceSnapshot:
+    """Verify an already provisioned storage copy against immutable DB evidence.
+
+    This does not capture, copy, or change clocks/paths on the persisted snapshot.
+    Callers must still reject a readable but corrupt original artifact.
+    """
+    root = REPO_ROOT / "data" / "source_snapshot_replicas" / snapshot.snapshot_id
+    replica = SourceSnapshot(**{column.name: getattr(snapshot, column.name)
+                                for column in SourceSnapshot.__table__.columns})
+    replica.artifact_path = str(root / Path(snapshot.artifact_path).name)
+    replica.manifest_path = str(root / "manifest.json")
+    verify_snapshot_artifact(replica)
+    manifest = json.loads(Path(replica.manifest_path).read_text(encoding="utf-8"))
+    if manifest.get("storage_replica_of") != {
+        "artifact_path": snapshot.artifact_path, "manifest_path": snapshot.manifest_path
+    }:
+        raise SnapshotIntegrityError("Replica lineage differs from immutable evidence")
+    return replica
+
+
 class SourceCaptureService:
     def _verified_local_replica(self, snapshot, payload, payload_path):
         """Return a detached storage view; never mutate the immutable DB row."""
@@ -497,7 +517,9 @@ class SourceCaptureService:
                 verify_snapshot_artifact(existing)
             except (OSError, SnapshotIntegrityError) as exc:
                 cause = exc if isinstance(exc, OSError) else exc.__cause__
-                if not isinstance(cause, OSError) or cause.errno != errno.EDEADLK:
+                if not isinstance(cause, OSError) or cause.errno not in {
+                    errno.EPERM, errno.EACCES, errno.EDEADLK,
+                }:
                     raise
                 storage_view = self._verified_local_replica(existing, payload, payload_path)
             if existing.source_license != source_license:
@@ -765,7 +787,9 @@ class SourceCaptureService:
                 pd.to_numeric(frame["week"], errors="coerce").isin(selected_weeks)
             ].reset_index(drop=True)
         if frame.empty:
-            raise RuntimeError("nflreadpy weekly rosters returned no records.")
+            raise RuntimeError(f"nflreadpy weekly rosters returned no records for season {request.season}, "
+                               f"weeks {selected_weeks}. Provider weeks: {fetch_metadata.get('provider_weeks', [])}; "
+                               f"provider rows: {fetch_metadata.get('provider_rows', 0)}.")
 
         scope_suffix = ""
         if single_week is not None:
@@ -795,6 +819,8 @@ class SourceCaptureService:
                 ),
                 "nflreadpy_version": version,
                 "selected_weeks": selected_weeks or None,
+                "provider_weeks": fetch_metadata.get("provider_weeks"),
+                "provider_rows": fetch_metadata.get("provider_rows"),
                 **(
                     {"loader_error": fetch_metadata["loader_error"]}
                     if fetch_metadata.get("loader_error")
@@ -909,6 +935,8 @@ def fetch_nflreadpy_dataset(
     season_column = "season" if "season" in frame.columns else None
     if season_column:
         frame = frame[pd.to_numeric(frame[season_column], errors="coerce") == season]
+    fetch_metadata["provider_rows"] = len(frame)
+    fetch_metadata["provider_weeks"] = sorted(pd.to_numeric(frame["week"], errors="coerce").dropna().astype(int).unique().tolist()) if "week" in frame else []
     if week is not None and dataset != "depth_charts":
         if "week" not in frame.columns:
             raise RuntimeError(f"nflreadpy {dataset} output has no week column")
@@ -964,6 +992,8 @@ def capture_nflreadpy_datasets(
                         "nflreadpy_fetch",
                     ),
                     "nflreadpy_version": version,
+                    "provider_weeks": fetch_metadata.get("provider_weeks"),
+                    "provider_rows": fetch_metadata.get("provider_rows"),
                     **(
                         {"loader_error": fetch_metadata["loader_error"]}
                         if fetch_metadata.get("loader_error")

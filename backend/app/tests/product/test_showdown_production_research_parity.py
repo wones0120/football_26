@@ -72,6 +72,8 @@ def test_underfill_reports_binding_exposure_and_both_denominators():
     assert exposure['cap_denominator']==5 and exposure['realized_exposure_denominator']==4
     assert core['maximum_allowed_appearances']==4 and core['final_generated_portfolio_exposure']==1
     assert core['cap_respected']
+    assert core['underfill_realized_exceeds_configured']
+    assert 'UNDERFILLED PORTFOLIO' in core['realized_exposure_warning']
 
 
 def test_cle_baseline_underdog_cannot_trigger_favorite_five_one():

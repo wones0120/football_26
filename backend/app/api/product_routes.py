@@ -35,6 +35,7 @@ from Database.curated_ingest import (
     curate_injuries,
     _ensure_table,
 )
+from ..product_services.classic_construction import construction_summary
 from ..product_services.predictions import PredictionsService
 from ..product_services.projection_audit import (
     capture_benchmark, disagreement_rows, player_why, projection_audit,
@@ -44,8 +45,11 @@ import polars as pl
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from ..db import get_db_session
+from ..db import get_db_session, engine
+from ..product_schemas import EntryHistoryImportRequest
+from ..product_services.entry_history import EntryHistoryService
 from ..job_schemas import OperationalJobCreateResponse
+from ..product_services.slate_preparation import SlatePreparationRequest
 from ..services.job_queue import (
     FEATURE_MATRIX_JOB,
     PROJECTION_JOB,
@@ -855,6 +859,19 @@ def load_ownership(
     return OwnershipRunResponse(**payload)
 
 
+@router.get("/imports/draftkings/entry-history")
+def get_entry_history(year: int = Query(..., ge=2000, le=2100)):
+    return EntryHistoryService(engine).report(year)
+
+
+@router.post("/imports/draftkings/entry-history")
+def import_entry_history(request: EntryHistoryImportRequest):
+    try:
+        return EntryHistoryService(engine).import_file(request.path, request.year, request.dry_run)
+    except (ValueError, OSError, UnicodeError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 @router.post("/imports/draftkings/batch", response_model=DraftKingsBatchImportResponse)
 def batch_import_draftkings(
     request: DraftKingsBatchImportRequest,
@@ -1054,6 +1071,33 @@ def analyze_past_ownership(
     return PastSlateAnalysisResponse(**result)
 
 
+@router.get("/learning/research/classic-game-environment")
+def get_classic_environment_research() -> dict:
+    from ..product_services.classic_environment_research import get_research_notes
+    return get_research_notes()
+
+
+@router.get("/learning/research/showdown")
+def get_showdown_research_notes() -> dict:
+    """Read-only observations, isolated from optimizer configuration and scoring."""
+    from ..product_services.showdown_research_notes import get_showdown_research_notes as read_notes
+    return read_notes()
+
+
+@router.get("/learning/shadow-comparisons")
+def get_shadow_comparisons(season: int, week: int):
+    from ..product_services.gpp_shadow_learning import ShadowLearningService
+    return {"experiments": ShadowLearningService(engine).latest(season, week)}
+
+
+@router.post("/learning/shadow-comparisons/refresh")
+def refresh_shadow_comparisons(season: int, week: int):
+    from ..product_services.gpp_shadow_learning import ShadowLearningService
+    service = ShadowLearningService(engine)
+    service.refresh(season=season, week=week)
+    return {"experiments": service.latest(season, week)}
+
+
 @router.post("/learning/reports", response_model=SlateLearningReportResponse)
 def generate_slate_learning_report(
     request: SlateLearningReportRequest,
@@ -1065,6 +1109,7 @@ def generate_slate_learning_report(
             week=request.week,
             slate=request.slate,
             entry_user=request.entry_user,
+            **({"diagnostic_run_ids": request.diagnostic_run_ids} if request.diagnostic_run_ids else {}),
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -1083,6 +1128,39 @@ def generate_weekly_learning_report(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return WeeklyLearningReportResponse(**result)
+
+
+@router.get("/learning/reports/{report_id}/optimizer-runs/{run_id}/candidates")
+def get_learning_candidate_detail(
+    report_id: str, run_id: str, offset: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=200),
+    service: SlateLearningService = Depends(get_slate_learning_service),
+) -> dict:
+    try:
+        result = service.candidate_detail(report_id, run_id, offset=offset, limit=limit)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Saved learning run evidence not found")
+    return result
+
+
+@router.get("/learning/reports/{report_id}/entries/{entry_id}/evidence")
+def get_learning_entry_evidence(
+    report_id: str, entry_id: str, contest_id: str,
+    service: SlateLearningService = Depends(get_slate_learning_service),
+) -> dict:
+    try:
+        result = service.entry_detail(report_id, entry_id, contest_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Saved learning entry evidence not found")
+    return result
+
+
+@router.get("/optimizer/cache-status")
+def get_optimizer_cache_status(service: OptimizerService = Depends(get_optimizer_service)) -> dict:
+    return service.cache_status()
 
 
 @router.post("/learning/outcome-events")
@@ -2068,6 +2146,45 @@ def get_saved_optimizer_contest_observations(
     return {"contest_id": contest_id, "observations": list_contest_observations(service.engine, contest_id, limit=limit)}
 
 
+@router.get("/slate/preparation")
+def get_slate_preparation(
+    season: int = Query(..., ge=2000), week: int = Query(..., ge=1, le=25), slate: str = Query(..., min_length=1),
+    session: Session = Depends(get_db_session),
+) -> dict:
+    from ..product_services.slate_preparation import preparation_status
+    request = SlatePreparationRequest(season=season, week=week, slate=slate, action="rebuild")
+    try:
+        return preparation_status(session, request)
+    except ValueError as exc:
+        return {"scope": {"season": season, "week": week, "slate": slate},
+                "server_time": datetime.now(UTC).isoformat(), "inputs": {}, "jobs": [],
+                "latest_build": None, "entry_ready": False, "limitations": [str(exc)]}
+
+
+@router.post("/slate/preparation/jobs", response_model=OperationalJobCreateResponse, status_code=202)
+def queue_slate_preparation(
+    request: SlatePreparationRequest,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key", min_length=1, max_length=255),
+    session: Session = Depends(get_db_session),
+) -> OperationalJobCreateResponse:
+    # Validate availability choices before enqueue, using the ordinary schema.
+    try:
+        prediction = PredictionRunRequest(season=request.season, week=request.week, slate=request.slate,
+            availability_overrides=request.availability_overrides,
+            assume_questionable_out=request.assume_questionable_out)
+        normalized = request.model_copy(update={"availability_overrides": [
+            r.model_dump(mode="json") for r in prediction.availability_overrides]})
+        job, created = enqueue_job(session, job_type="slate_preparation",
+            idempotency_key=idempotency_key or f"slate-preparation:{uuid4()}",
+            request_payload=normalized.model_dump(mode="json"), run_id=str(uuid4()),
+            max_attempts=1, checkpoint={})
+    except JobConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return OperationalJobCreateResponse(created=created, job=job_response(job))
+
+
 @router.post("/optimizer/jobs", response_model=OperationalJobCreateResponse, status_code=202)
 def queue_optimizer(
     request: OptimizerRunRequest,
@@ -2077,19 +2194,71 @@ def queue_optimizer(
         raise HTTPException(status_code=422, detail="Queued optimizer requires an explicit format and objective")
     run_id = request.optimizer_run_id or str(uuid4())
     payload = request.model_copy(update={"optimizer_run_id": run_id}).model_dump(mode="json")
+    params = payload.get("params") or {}
+    trace = params.get("portfolio_submission_trace")
+    if request.strategy == "classic_large_gpp_v1" and isinstance(trace, dict):
+        params["portfolio_submission_trace"] = {**trace, "backend_parsed_request_value": params.get("max_lineup_overlap")}
     try:
+        from ..product_services.slate_preparation import validate_prepared_optimizer
+        params.pop("prepared_input_evidence", None)
+        validate_prepared_optimizer(session, payload, verify_current=False)
         job, created = enqueue_job(session, job_type=OPTIMIZER_JOB,
             idempotency_key=f"optimizer:{run_id}", request_payload=payload, run_id=run_id)
     except JobConflictError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     return OperationalJobCreateResponse(created=created, job=job_response(job))
+
+
+@router.post("/optimizer/results/{job_id}/construction-review")
+def review_classic_constructions(
+    job_id: str, response: Response, entry: int = Query(default=1),
+    enforce_single_te: bool | None = Query(default=None),
+    service: OptimizerService = Depends(get_optimizer_service),
+) -> dict:
+    """Explicit user action only. GET reports never trigger diagnostic solves."""
+    from ..product_services.classic_construction_review import review_constructions
+    request_id = str(uuid4())
+    response.headers['X-Construction-Review-Request-ID'] = request_id
+    def fail(status, code, message):
+        logger.warning('construction_review request_id=%s job_id=%s entry=%s single_te=%s status=%s code=%s',
+            request_id, job_id, entry, enforce_single_te, status, code)
+        raise HTTPException(status_code=status, detail={'code': code, 'message': message,
+            'job_id': job_id, 'entry': entry, 'request_id': request_id},
+            headers={'X-Construction-Review-Request-ID': request_id})
+    try:
+        job = service.get_job(job_id)
+        if not job:
+            fail(404, 'saved_run_not_found', 'Saved run not found or inaccessible in this backend.')
+        if job.strategy != "classic_large_gpp_v1" or job.status != "completed":
+            fail(422, 'incompatible_contract', 'Review requires a completed saved Classic Large-GPP run.')
+        if not job.results:
+            fail(422, 'frozen_inputs_missing', 'The saved portfolio is missing; no alternatives were searched.')
+        if not 1 <= entry <= len(job.results):
+            fail(422, 'invalid_entry', 'Select an existing entry, numbered from 1.')
+        result = review_constructions(job.params.get("effective_strategy_contract"),
+            [[str(p["player_id"]) for p in lineup] for lineup in job.results], entry=entry, enforce_single_te=enforce_single_te)
+        if result.get('status') == 'unavailable':
+            fail(422, result.get('code', 'frozen_inputs_missing'), result['reason'])
+        logger.info('construction_review request_id=%s job_id=%s entry=%s single_te=%s status=200 comparisons=%s',
+            request_id, job_id, entry, enforce_single_te, len(result.get('comparisons', [])))
+        return {**result, 'request_id': request_id, 'job_id': job_id}
+    except HTTPException:
+        raise
+    except (KeyError, TypeError, ValueError) as exc:
+        logger.warning('construction_review incompatible saved input request_id=%s exception_type=%s', request_id, type(exc).__name__)
+        fail(422, 'incompatible_contract', 'Saved review inputs are malformed or fail checksum validation; no valid review was produced.')
+    except Exception:
+        logger.exception('construction_review calculation failed request_id=%s', request_id)
+        fail(500, 'calculation_failure', 'Construction calculation failed. See the backend log using the request ID.')
 
 
 @router.get("/optimizer/runs")
 def get_optimizer_runs(
     season: int, week: int = Query(ge=1, le=25), slate: str = Query(min_length=1),
     contest_format: str = Query(pattern="^(classic|showdown)$"),
-    objective: str = Query(pattern="^(cash|gpp)$"),
+    objective: str | None = Query(default=None, pattern="^(cash|gpp)$"),
     limit: int = Query(default=20, ge=1, le=100),
     service: OptimizerService = Depends(get_optimizer_service),
     session: Session = Depends(get_db_session),
@@ -2103,8 +2272,16 @@ def get_optimizer_runs(
 def run_optimizer(
     request: OptimizerRunRequest,
     service: OptimizerService = Depends(get_optimizer_service),
+    session: Session = Depends(get_db_session),
 ) -> OptimizerStatusResponse:
+    from ..product_services.classic_portfolio_controls import saved_portfolio_submission_trace
+    from ..product_services.classic_game_environment import review_job
+    from ..product_services.classic_large_gpp_readiness import game_appearance_summary
     try:
+        from ..product_services.slate_preparation import validate_prepared_optimizer
+        preparation = validate_prepared_optimizer(session, request.model_dump(mode="json"))
+        if preparation:
+            request.params["prepared_input_evidence"] = preparation
         job = service.run_job(
             season=request.season,
             week=request.week,
@@ -2127,6 +2304,14 @@ def run_optimizer(
         strategy_config=job.params.get("strategy_config", {}),
         contest_format=job.contest_format,
         objective=job.objective,
+        construction_summary=construction_summary(job.results or [], job.params.get("effective_strategy_contract")) if job.contest_format == "classic" else None,
+        entry_readiness=job.params.get("entry_readiness"),
+        data_readiness=job.params.get("data_readiness"),
+        single_lineup_selection=(job.params.get("strategy_runtime") or {}).get("single_lineup") if not job.results else None,
+        gpp_recommendation=job.params.get("gpp_recommendation") if job.status == "completed" else None,
+        classic_game_environment_review=review_job(job),
+        execution_runtime=job.params.get("execution_runtime"),
+        game_appearances=game_appearance_summary(job.results or [], job.params.get("effective_strategy_contract")) if job.strategy == "classic_large_gpp_v1" else None,
         enforce_single_te=job.params.get("enforce_single_te") if type(job.params.get("enforce_single_te")) is bool else None,
         long_shot_mode=bool(job.params.get("long_shot_mode", False)),
         exclude_opponent_teams=job.params.get("exclude_opponent_teams", []),
@@ -2139,6 +2324,8 @@ def run_optimizer(
         player_pool=job.params.get("strategy_runtime", {}).get("player_pool"),
         effective_strategy_contract=job.params.get("effective_strategy_contract"),
         primary_game_constraint=job.params.get("primary_game_constraint"),
+        portfolio_controls_report=job.params.get("portfolio_controls_report"),
+        portfolio_submission_trace=saved_portfolio_submission_trace(job.params),
         created_at=job.created_at,
         updated_at=job.updated_at,
     )
@@ -2248,6 +2435,9 @@ def get_optimizer_results(
     job_id: str,
     service: OptimizerService = Depends(get_optimizer_service),
 ) -> OptimizerStatusResponse:
+    from ..product_services.classic_portfolio_controls import saved_portfolio_submission_trace
+    from ..product_services.classic_game_environment import review_job
+    from ..product_services.classic_large_gpp_readiness import game_appearance_summary
     job = service.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -2258,6 +2448,14 @@ def get_optimizer_results(
         strategy_config=job.params.get("strategy_config", {}),
         contest_format=job.contest_format,
         objective=job.objective,
+        construction_summary=construction_summary(job.results or [], job.params.get("effective_strategy_contract")) if job.contest_format == "classic" else None,
+        entry_readiness=job.params.get("entry_readiness"),
+        data_readiness=job.params.get("data_readiness"),
+        single_lineup_selection=(job.params.get("strategy_runtime") or {}).get("single_lineup") if not job.results else None,
+        gpp_recommendation=job.params.get("gpp_recommendation") if job.status == "completed" else None,
+        classic_game_environment_review=review_job(job),
+        execution_runtime=job.params.get("execution_runtime"),
+        game_appearances=game_appearance_summary(job.results or [], job.params.get("effective_strategy_contract")) if job.strategy == "classic_large_gpp_v1" else None,
         enforce_single_te=job.params.get("enforce_single_te") if type(job.params.get("enforce_single_te")) is bool else None,
         long_shot_mode=bool(job.params.get("long_shot_mode", False)),
         exclude_opponent_teams=job.params.get("exclude_opponent_teams", []),
@@ -2270,9 +2468,23 @@ def get_optimizer_results(
         player_pool=job.params.get("strategy_runtime", {}).get("player_pool"),
         effective_strategy_contract=job.params.get("effective_strategy_contract"),
         primary_game_constraint=job.params.get("primary_game_constraint"),
+        portfolio_controls_report=job.params.get("portfolio_controls_report"),
+        portfolio_submission_trace=saved_portfolio_submission_trace(job.params),
         created_at=job.created_at,
         updated_at=job.updated_at,
     )
+
+
+@router.post("/optimizer/results/{job_id}/readiness")
+def assess_saved_optimizer_readiness(job_id: str, service: OptimizerService = Depends(get_optimizer_service)) -> dict:
+    from ..product_services.classic_large_gpp_readiness import assess_saved_job
+    job = service.get_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Saved optimizer job not found")
+    try:
+        return assess_saved_job(job, service.engine)
+    except (ValueError, KeyError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/optimizer/results/{job_id}/skill-exposure")
@@ -2346,6 +2558,7 @@ def decide_skill_exposure(
 def download_optimizer_lineups(
     job_id: str,
     service: OptimizerService = Depends(get_optimizer_service),
+    recommended_only: bool = False,
 ) -> Response:
     job = service.get_job(job_id)
     if not job:
@@ -2355,15 +2568,65 @@ def download_optimizer_lineups(
     try:
         from ..product_services.skill_exposure_approval import ensure_classic_export_ready
 
+        if getattr(job, "strategy", None) in {"captain_single_lineup_v1", "classic_single_lineup_v1"}:
+            from ..product_services import classic_data_readiness, showdown_data_readiness
+            captain = job.contest_format == "showdown"
+            gate = showdown_data_readiness if captain else classic_data_readiness
+            frozen = job.params.get("showdown_evidence_snapshot" if captain else "classic_evidence_snapshot") or {}
+            if (len(job.results or []) != job.params.get("num_lineups", 1) or not job.results or frozen.get("optimizer_run_id") != job.job_id
+                    or gate.validate_frozen_evidence(frozen).get("status") != "READY"):
+                raise ValueError("Lineup export requires the requested count and verified frozen generation evidence")
         if job.contest_format == "classic" and getattr(job, "strategy", None) == "classic_small_field_gpp":
             ensure_classic_export_ready(job, service.engine)
+        lineups = job.results or []
+        if recommended_only:
+            from ..product_services.gpp_recommendation import recommended_lineup
+            lineups = [recommended_lineup(job)]
         filename, media_type, content = DraftKingsExportService.build_lineup_download(
-            contest_format=job.contest_format, lineups=job.results or [], run_id=job.job_id,
+            contest_format=job.contest_format, lineups=lineups,
+            run_id=job.job_id + ("_recommended" if recommended_only else ""),
             allow_duplicate_lineups=getattr(job, "strategy", None) == "showdown_single_entry_portfolio",
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return Response(content=content, media_type=media_type,
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+@router.get("/optimizer/results/{job_id}/ai-showdown-packet/download")
+def download_ai_showdown_packet(
+    job_id: str,
+    format: str = Query("md", pattern="^(md|json)$"),
+    finalists: int = Query(20, ge=15, le=30),
+    entries: int | None = Query(None, ge=1, le=5),
+    service: OptimizerService = Depends(get_optimizer_service),
+    ai_requested_entries: int | None = Query(None, ge=1, le=5),
+) -> Response:
+    """Export frozen candidates for manual AI review without a new solve."""
+    from ..product_services.ai_showdown_packet import build_packet, render_markdown
+    import json
+
+    job = service.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Optimizer run not found")
+    source = {"job_id": job.job_id, "status": job.status, "season": job.season,
+              "week": job.week, "slate": job.slate, "strategy": job.strategy,
+              "contest_format": job.contest_format, "created_at": job.created_at,
+              "data_cutoff_at": job.data_cutoff_at, "projection_run_id": job.projection_run_id,
+              "params": job.params, "results": job.results,
+              "player_pool": (job.params.get("strategy_runtime") or {}).get("player_pool")}
+    try:
+        requested = ai_requested_entries if isinstance(ai_requested_entries, int) else entries
+        packet = build_packet(source, finalist_count=finalists, ai_requested_entries=requested)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    content = json.dumps(packet, indent=2, sort_keys=True) + "\n" if format == "json" else render_markdown(packet)
+    if format == "md" and requested == 2:
+        from ..product_services.showdown_selection_review import build_review, review_markdown
+        content += review_markdown(build_review(packet))
+    safe_slate = "".join(c if c.isalnum() or c in "-_" else "-" for c in job.slate)
+    filename = f"AI_SHOWDOWN_SELECTION_PACKET_{safe_slate}_{job.job_id}.{format}"
+    return Response(content=content, media_type="application/json" if format == "json" else "text/markdown",
                     headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 
@@ -2645,3 +2908,7 @@ def start_postgres() -> PostgresStartResponse:
         stdout=result.stdout.strip(),
         stderr=result.stderr.strip(),
     )
+
+# Research selection records are isolated from production optimizer routes.
+from .showdown_selection_routes import router as showdown_selection_router
+router.include_router(showdown_selection_router)

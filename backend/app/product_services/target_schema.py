@@ -10,7 +10,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
 
 
-TARGET_SCHEMA_MIGRATION = "0039_classic_prospective_experiment.sql"
+TARGET_SCHEMA_MIGRATION = "0048_draftkings_entry_history.sql"
 
 ContractKey: TypeAlias = tuple[str, str, str]
 SchemaContract: TypeAlias = dict[ContractKey, str]

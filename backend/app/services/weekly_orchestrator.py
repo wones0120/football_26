@@ -103,7 +103,7 @@ def allocate_stage_artifacts(request: WeeklyRunRequest) -> dict[str, dict[str, A
         ingest["injury_ingest_run_id"] = str(uuid4())
     return {
         "ingest": ingest,
-        "readiness": {},
+        "readiness": {"preparation_key": str(uuid4())},
         "predict": {
             "projection_run_id": request.projection_run_id or str(uuid4()),
             "feature_run_id": str(uuid4()),
@@ -464,6 +464,40 @@ class DefaultWeeklyStageExecutor:
         artifact_ids: dict[str, Any],
         _completed: dict[str, dict[str, Any]],
     ) -> StageExecutionResult:
+        from ..product_services.showdown_data_readiness import is_live_slate
+        from ..product_services.slate_preparation import SlatePreparationRequest, run_weekly_preparation, validate_prepared_optimizer
+        if (request.contest_format == "showdown" or request.strategy in
+                {"classic_single_lineup_v1", "classic_large_gpp_v1"}) and is_live_slate(
+                    OptimizerService(), season=request.season, week=request.week, slate=request.slate):
+            preparation = SlatePreparationRequest(season=request.season, week=request.week,
+                slate=request.slate, action="prepare", contest_format=request.contest_format,
+                availability_overrides=request.availability_overrides,
+                assume_questionable_out=request.assume_questionable_out,
+                ownership_required=bool(request.optimizer_params.get("ownership_required") or request.optimizer_params.get("use_role_ownership")))
+            # Existing readiness stage owns source work; optimize only consumes it.
+            job = run_weekly_preparation(self.session_factory, preparation,
+                idempotency_key=str(artifact_ids.get("preparation_key") or uuid4()))
+            artifacts = {**artifact_ids, "prepared_input_job_id": job.job_id}
+            if job.status != "completed":
+                raise WeeklyStageBlockedError(StageExecutionResult(
+                    message=job.error_message or "Slate preparation is still running; retry readiness after it finishes.",
+                    artifact_ids=artifacts, result=job.checkpoint_json))
+            try:
+                with self.session_factory() as session:
+                    validate_prepared_optimizer(session, {"season": request.season, "week": request.week,
+                        "slate": request.slate, "contest_format": request.contest_format,
+                        "projection_run_id": job.result_json["projection_run_id"],
+                        "params": {"prepared_input_job_id": job.job_id,
+                                   "availability_overrides": request.availability_overrides,
+                                   "assume_questionable_out": request.assume_questionable_out}})
+            except ValueError as exc:
+                raise WeeklyStageBlockedError(StageExecutionResult(
+                    message=f"Weekly preparation needs renewal; start a new weekly run. {exc}",
+                    artifact_ids=artifacts)) from exc
+            return StageExecutionResult(message="Slate prepared and verified before optimization.",
+                artifact_ids={**artifacts, **{k: job.result_json[k] for k in
+                    ("projection_run_id", "feature_run_id", "model_run_id", "ownership_run_id")}},
+                result=job.result_json["data_readiness"])
         report = SlateReadinessService().report(
             season=request.season,
             week=request.week,
@@ -508,6 +542,12 @@ class DefaultWeeklyStageExecutor:
     ) -> StageExecutionResult:
         from .job_handlers import execute_job_handler
 
+        prepared = _completed.get("readiness", {})
+        if prepared.get("prepared_input_job_id"):
+            return StageExecutionResult(message="Using the upstream prepared projection.",
+                artifact_ids={**artifact_ids, **{k: prepared[k] for k in
+                    ("projection_run_id", "feature_run_id", "model_run_id")}},
+                result={"target_persisted": True, "selection_source": "slate_preparation"})
         selected_projection_run_id = request.projection_run_id
         selection_source = "requested"
         rebuild = request.refresh_projections or request.assume_questionable_out or any(
@@ -556,6 +596,12 @@ class DefaultWeeklyStageExecutor:
                             artifact_ids=artifact_ids,
                         )
                     )
+                if str(recovered.get("slate_id") or "").upper() not in {request.slate.upper(), "DEFAULT"}:
+                    raise WeeklyStageBlockedError(StageExecutionResult(
+                        message="Selected projection run belongs to a different or unknown slate.",
+                        errors=[f"Projection run {selected_projection_run_id} is not verified for {request.slate}."],
+                        artifact_ids=artifact_ids,
+                    ))
                 if int(recovered.get("rows_written") or 0) <= 0:
                     raise WeeklyStageBlockedError(
                         StageExecutionResult(
@@ -707,16 +753,6 @@ class DefaultWeeklyStageExecutor:
         artifact_ids: dict[str, Any],
         completed: dict[str, dict[str, Any]],
     ) -> StageExecutionResult:
-        if request.contest_format != "classic":
-            raise WeeklyStageBlockedError(
-                StageExecutionResult(
-                    message="Showdown weekly simulation is not yet supported.",
-                    errors=[
-                        "The current persisted slate simulator supports classic contests only."
-                    ],
-                    artifact_ids=artifact_ids,
-                )
-            )
         result = SimulationService().run(
             season=request.season,
             week=request.week,
@@ -726,7 +762,7 @@ class DefaultWeeklyStageExecutor:
             seed=request.seed,
             salary_cap=request.salary_cap,
             projection_run_id=str(completed["predict"]["projection_run_id"]),
-            ownership_run_id=request.ownership_run_id,
+            ownership_run_id=completed.get("readiness", {}).get("ownership_run_id") or request.ownership_run_id,
             simulation_run_id=str(artifact_ids["simulation_run_id"]),
         )
         return StageExecutionResult(
@@ -785,7 +821,11 @@ class DefaultWeeklyStageExecutor:
             week=request.week,
             slate=request.slate,
             strategy=request.strategy,
-            params=request.optimizer_params,
+            params={**request.optimizer_params, **({
+                "prepared_input_job_id": completed["readiness"]["prepared_input_job_id"],
+                "availability_overrides": request.availability_overrides,
+                "assume_questionable_out": request.assume_questionable_out,
+            } if completed.get("readiness", {}).get("prepared_input_job_id") else {})},
             contest_format=request.contest_format,
             objective=request.objective,
             projection_run_id=str(completed["predict"]["projection_run_id"]),

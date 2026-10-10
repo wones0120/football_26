@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "showdown_two_lineup_review_v1",
+  "title": "Frozen nonbinding two-lineup review",
+  "type": "object",
+  "required": [
+    "contract_id",
+    "protocol",
+    "nonbinding",
+    "run_identity",
+    "attention_shortlist",
+    "candidates",
+    "coverage",
+    "counts"
+  ],
+  "properties": {
+    "contract_id": {
+      "const": "showdown_two_lineup_review_v1"
+    },
+    "protocol": {
+      "const": "showdown_ai_selection_review_v1"
+    },
+    "nonbinding": {
+      "const": true
+    },
+    "run_identity": {
+      "type": "object",
+      "required": [
+        "optimizer_run_id",
+        "projection_run_id",
+        "evidence_cutoff",
+        "candidate_pool_hash",
+        "ai_packet_hash",
+        "frozen_source_evidence_hash",
+        "review_policy_version"
+      ]
+    },
+    "attention_shortlist": {
+      "type": "object"
+    },
+    "candidates": {
+      "type": "array"
+    },
+    "coverage": {
+      "type": "object"
+    },
+    "counts": {
+      "type": "object"
+    }
+  }
+}

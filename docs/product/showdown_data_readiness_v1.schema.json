@@ -1,0 +1,256 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "showdown_data_readiness_v1",
+  "title": "Live Showdown pre-generation data readiness",
+  "type": "object",
+  "required": [
+    "contract_id",
+    "slate_identifier",
+    "matchup",
+    "kickoff_at",
+    "evaluated_at",
+    "evidence_cutoff",
+    "status",
+    "reason_codes",
+    "required_sources",
+    "optional_sources",
+    "ownership",
+    "baseline_market",
+    "refresh"
+  ],
+  "properties": {
+    "contract_id": {
+      "const": "showdown_data_readiness_v1"
+    },
+    "status": {
+      "enum": [
+        "READY",
+        "NOT_READY",
+        "ERROR"
+      ]
+    },
+    "slate_identifier": {
+      "type": "object",
+      "required": [
+        "season",
+        "week",
+        "slate"
+      ],
+      "properties": {
+        "season": {
+          "type": "integer"
+        },
+        "week": {
+          "type": "integer"
+        },
+        "slate": {
+          "type": "string"
+        }
+      }
+    },
+    "matchup": {
+      "type": "string"
+    },
+    "kickoff_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "evaluated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "evidence_cutoff": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "reason_codes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "required_sources": {
+      "type": "object",
+      "required": [
+        "salary_pool",
+        "projection",
+        "player_status",
+        "starting_qb",
+        "market"
+      ],
+      "additionalProperties": {
+        "$ref": "#/$defs/source"
+      }
+    },
+    "optional_sources": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/source"
+      }
+    },
+    "ownership": {
+      "type": "object",
+      "required": [
+        "ownership_available",
+        "ownership_attempted",
+        "ownership_source",
+        "ownership_observed_at",
+        "ownership_fresh",
+        "required"
+      ]
+    },
+    "baseline_market": {
+      "type": "object"
+    },
+    "refresh": {
+      "type": "object"
+    },
+    "player_pool_readiness": {
+      "type": "object",
+      "required": [
+        "contract_id",
+        "summary",
+        "players"
+      ],
+      "properties": {
+        "contract_id": {
+          "const": "showdown_player_pool_readiness_v1"
+        },
+        "summary": {
+          "type": "object"
+        },
+        "players": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "canonical_id",
+              "disposition",
+              "generation_eligible",
+              "blockers"
+            ],
+            "properties": {
+              "dfs_position": {
+                "type": ["string", "null"],
+                "description": "Original native salary eligibility position; never inferred from canonical football role."
+              },
+              "canonical_role": {
+                "type": ["string", "null"],
+                "description": "Sourced canonical football role, including long_snapper for affirmative LS depth evidence."
+              },
+              "role_source_position": {
+                "type": ["string", "null"],
+                "description": "Original football-role provider position, retained separately from DFS eligibility."
+              },
+              "exclusion_reason": {
+                "type": ["string", "null"]
+              },
+              "disposition": {
+                "enum": [
+                  "generation_eligible",
+                  "explicitly_unavailable",
+                  "explicitly_excluded_specialist",
+                  "unknown_availability",
+                  "invalid_salary_or_identity"
+                ]
+              },
+              "generation_eligible": {
+                "type": "boolean"
+              },
+              "blockers": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "generation_eligible_player_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "$defs": {
+    "source": {
+      "type": "object",
+      "required": [
+        "status",
+        "reason_codes",
+        "oldest_observed_at",
+        "newest_observed_at",
+        "source_ids",
+        "sources",
+        "affected_player_ids",
+        "max_age_hours",
+        "action"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "READY",
+            "NOT_READY",
+            "OPTIONAL_MISSING",
+            "OPTIONAL_STALE"
+          ]
+        },
+        "reason_codes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "source_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "max_age_hours": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "READY"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "reason_codes": {
+            "maxItems": 0
+          },
+          "required_sources": {
+            "additionalProperties": {
+              "properties": {
+                "status": {
+                  "const": "READY"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

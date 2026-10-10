@@ -11,6 +11,7 @@ from sqlalchemy import inspect, text
 
 DST_POSITIONS = frozenset({"D", "DEF", "DST"})
 TEAM_ALIASES = {
+    "AZ": "ARI",
     "JAC": "JAX",
     "LA": "LAR",
     "OAK": "LV",

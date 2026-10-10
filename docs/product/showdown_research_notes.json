@@ -1,0 +1,74 @@
+{
+  "contract_id": "showdown_research_notes_v1",
+  "study_id": "captain_contest_consistency_2026",
+  "title": "2026 Captain Contest Consistency",
+  "label": "RESEARCH_ONLY / OBSERVATIONAL / NOT PRODUCTION VALIDATED",
+  "purpose": "Preserve historical observations for future human/AI research review. Research metadata has no production consumer.",
+  "sample_period": "2026-09-09 through 2026-10-08; imported 2026 Weeks 1–5, captured 2026-10-09",
+  "sample": {
+    "games": 10,
+    "contests": 30,
+    "entries": 690212,
+    "resolved_entries": 687279,
+    "unresolved_entries": 2933
+  },
+  "success_definition": "rank <= floor(full contest field*0.10); competition-rank boundary ties all count. Fractional credit allocates only remaining top-decile slots across the boundary tie.",
+  "limitations": "10 games and 30 imported contests are a partial convenience sample; four other primetime games are missing. Entries and account-game rosters are dependent, boundary ties affect top-decile counts, and the watchlist was screened on the same sample. This is descriptive, not a causal effect, future edge or production rule. No payout/ROI claim is supported.",
+  "source": {
+    "path": "artifacts/captain_consistency_2026/analysis.json",
+    "sha256": "3e2fb5000fee26635a5b47a111930c199feb94c797f6e2bb6eb4b3e3ab6f84b5",
+    "captured_at": "2026-10-09T10:51:28.217876+00:00",
+    "supporting_files": [
+      "artifacts/captain_consistency_2026/early_late_pattern_results.csv",
+      "artifacts/captain_consistency_2026/construction_comparisons.csv",
+      "artifacts/captain_consistency_2026/early_selection_later_results.csv"
+    ]
+  },
+  "findings": [
+    {
+      "id": "receiver_captain_own_qb",
+      "title": "WR/TE Captain paired with own QB",
+      "observation": "Successful WR/TE Captain lineups paired with their own QB in 88.9% of watchlist successes versus 81.1% of reference-field successes.",
+      "comparison_baseline": "104 of 117 successful watchlist WR/TE account-game rosters versus 26,289 of 32,418 successful reference-field WR/TE account-game rosters. Success means a top-decile contest finish; roster copies within account/game are deduplicated. Watchlist: 19 robustness-screened accounts.",
+      "limitations": "The watchlist was selected retrospectively; small receiver subset, repeated players/games and varying field composition prevent a pairing requirement or causal inference.",
+      "label": "RESEARCH_ONLY / OBSERVATIONAL / NOT PRODUCTION VALIDATED",
+      "sample_period": "2026-09-09 through 2026-10-08; imported 2026 Weeks 1–5, captured 2026-10-09"
+    },
+    {
+      "id": "qb_construction_by_period",
+      "title": "QB construction varies by game period",
+      "observation": "One-QB versus two-QB construction performance varies materially by game period. Early: one QB 11.9%, two QBs 7.6%; later: one QB 9.2%, two QBs 12.3%.",
+      "comparison_baseline": "Tie-adjusted top-decile hit rates in the largest imported contest per game: first six games (2026-09-09 through 2026-09-24) versus later four (2026-10-01 through 2026-10-08). One-QB denominators: 189,712 early / 155,861 later; two-QB: 115,303 / 89,732.",
+      "limitations": "Only six early and four later game environments; entrants and game conditions differ, and no universal QB-count preference is justified.",
+      "label": "RESEARCH_ONLY / OBSERVATIONAL / NOT PRODUCTION VALIDATED",
+      "sample_period": "2026-09-09 through 2026-10-08; imported 2026 Weeks 1–5, captured 2026-10-09"
+    },
+    {
+      "id": "team_split_by_period",
+      "title": "Team splits vary by game period",
+      "observation": "5–1 versus 3–3/4–2 performance varies; no universal preferred split is justified. Early: 5–1 15.0%, 3–3 8.4%, 4–2 9.2%; later: 5–1 6.8%, 3–3 11.8%, 4–2 10.2%.",
+      "comparison_baseline": "Same largest-contest-per-game, tie-adjusted early-six versus later-four comparison. 5–1 denominators: 63,443 / 54,974; 3–3: 111,884 / 89,071; 4–2: 158,048 / 129,374.",
+      "limitations": "Game/entrant composition and small period samples confound the comparison; neither a split quota nor a preferred construction follows from it.",
+      "label": "RESEARCH_ONLY / OBSERVATIONAL / NOT PRODUCTION VALIDATED",
+      "sample_period": "2026-09-09 through 2026-10-08; imported 2026 Weeks 1–5, captured 2026-10-09"
+    },
+    {
+      "id": "unused_salary",
+      "title": "Unused salary does not establish a target",
+      "observation": "Successful watchlist and reference-field lineups both had approximately $400 median unused salary; no fixed salary-left target is justified.",
+      "comparison_baseline": "Known-salary successful account-game rosters: 230 watchlist versus 66,590 reference-field rosters; each has $400 median salary left.",
+      "limitations": "A median is a descriptive center, not an optimal target. Salary coverage is incomplete for eight successful field rosters; no controlled salary experiment or future validation was performed.",
+      "label": "RESEARCH_ONLY / OBSERVATIONAL / NOT PRODUCTION VALIDATED",
+      "sample_period": "2026-09-09 through 2026-10-08; imported 2026 Weeks 1–5, captured 2026-10-09"
+    },
+    {
+      "id": "early_account_holdout",
+      "title": "Early account performance did not persist collectively",
+      "observation": "Accounts selected from early strong performance did not outperform the later field collectively: 9.7% versus 10.0%.",
+      "comparison_baseline": "Later four games: pooled tie-adjusted entry hit rate 9.6778% for the early-selected cohort versus 9.9974% for the later field. Select on first six games only: at least four games, 20 known distinct account-game rosters, 20% tie-adjusted roster hit rate and hits in at least three games. 95 selected accounts; 89 appeared later.",
+      "limitations": "Short holdout with unequal entry volume and dependent entries. Handles identify platform accounts, not verified people; participation/survivorship and selection bias remain. Account rankings must not become live features.",
+      "label": "RESEARCH_ONLY / OBSERVATIONAL / NOT PRODUCTION VALIDATED",
+      "sample_period": "2026-09-09 through 2026-10-08; imported 2026 Weeks 1–5, captured 2026-10-09"
+    }
+  ]
+}

@@ -18,6 +18,7 @@ type AppShellProps = {
   season: number;
   week: number;
   slate: string;
+  slateOptions?: string[];
   runSelection?: PersistedRunSelection;
   pendingAction?: string | null;
   onSlateChange: (slate: string) => void;
@@ -122,6 +123,7 @@ export function AppShell({
   season,
   week,
   slate,
+  slateOptions,
   runSelection,
   pendingAction,
   onSlateChange,
@@ -236,7 +238,7 @@ export function AppShell({
                   value={slate}
                   onChange={(event) => onSlateChange(event.target.value)}
                 >
-                  {SLATE_OPTIONS.map((option) => (
+                  {(slateOptions ?? SLATE_OPTIONS).map((option) => (
                     <option key={option} value={option}>{formatSlate(option)}</option>
                   ))}
                 </select>

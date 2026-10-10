@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -34,6 +35,7 @@ REQUIRED_CLASSIC_POSITIONS = {"QB": 1, "RB": 2, "WR": 3, "TE": 1, "DST": 1}
 ELIGIBLE_POSITIONS = frozenset(REQUIRED_CLASSIC_POSITIONS)
 SHOWDOWN_ELIGIBLE_POSITIONS = ELIGIBLE_POSITIONS | {"K"}
 ACCEPTED_IDENTITY_QUARANTINE_REASONS = frozenset({"ambiguous", "no_match"})
+logger = logging.getLogger(__name__)
 
 
 def _normalized_position(value: object) -> str:
@@ -139,6 +141,8 @@ class SlateReadinessMetrics:
     normalized_contest_rows: int = 0
     legacy_contest_entry_rows: int = 0
     source_errors: list[str] = field(default_factory=list)
+    showdown_data_readiness: dict[str, Any] | None = None
+    classic_data_readiness: dict[str, Any] | None = None
 
 
 def _check(
@@ -588,6 +592,40 @@ def evaluate_slate_readiness(metrics: SlateReadinessMetrics) -> dict[str, Any]:
             )
         )
 
+    if metrics.classic_data_readiness is not None:
+        generation = metrics.classic_data_readiness
+        for source, result in generation.get("required_sources", {}).items():
+            ready = result["status"] == "READY"
+            checks.append(_check(f"classic_live_{source}", "classic_generation", "pass" if ready else "fail",
+                f"Classic {source.replace('_', ' ')}: current saved evidence is ready." if ready else
+                f"Classic {source.replace('_', ' ')}: {', '.join(result['reason_codes'])}.",
+                applies_to=[], blocks=[], value=result["status"],
+                threshold="READY under classic_large_gpp_data_readiness_v1", details=result))
+        if generation["status"] == "ERROR":
+            checks.append(_check("classic_generation_assessment", "classic_generation", "fail",
+                "Classic live evidence could not be assessed; generation is blocked.",
+                applies_to=[], blocks=[], details=generation))
+    if metrics.showdown_data_readiness is not None:
+        generation = metrics.showdown_data_readiness
+        players = {row["canonical_id"]: row for row in
+                   generation.get("player_pool_readiness", {}).get("players", [])}
+        for source, result in generation.get("required_sources", {}).items():
+            ready = result["status"] == "READY"
+            affected = [players[pid].get("player") or pid
+                        for pid in result.get("affected_player_ids", []) if pid in players]
+            detail = f" Affected players: {', '.join(affected)}." if affected else ""
+            checks.append(_check(f"showdown_{source}", "showdown_generation",
+                "pass" if ready else "fail",
+                f"Showdown {source.replace('_', ' ')}: current saved evidence is ready." if ready else
+                f"Showdown {source.replace('_', ' ')}: {', '.join(result['reason_codes'])}.{detail} {result.get('action', '')}",
+                applies_to=SHOWDOWN_GATES, blocks=SHOWDOWN_GATES,
+                value=result["status"], threshold="READY under showdown_data_readiness_v1", details=result))
+        if generation["status"] == "ERROR":
+            checks.append(_check("showdown_generation_assessment", "showdown_generation", "fail",
+                "Showdown generation readiness could not be assessed. Retry Refresh Status; generation remains blocked until its required evidence can be verified.",
+                applies_to=SHOWDOWN_GATES, blocks=SHOWDOWN_GATES,
+                details={"reason_codes": generation["reason_codes"]}))
+
     gates: dict[str, dict[str, Any]] = {}
     for gate in GATES:
         relevant = [check for check in checks if gate in check["applies_to"]]
@@ -642,6 +680,8 @@ def evaluate_slate_readiness(metrics: SlateReadinessMetrics) -> dict[str, Any]:
         "summary": {"pass": counts["pass"], "warn": counts["warn"], "fail": counts["fail"]},
         "gates": gates,
         "checks": checks,
+        "showdown_data_readiness": metrics.showdown_data_readiness,
+        "classic_data_readiness": metrics.classic_data_readiness,
     }
 
 
@@ -937,4 +977,34 @@ class SlateReadinessService:
         return metrics
 
     def report(self, *, season: int, week: int, slate: str) -> dict[str, Any]:
-        return evaluate_slate_readiness(self.collect_metrics(season=season, week=week, slate=slate))
+        metrics = self.collect_metrics(season=season, week=week, slate=slate)
+        if {"CPT", "FLEX"}.issubset(metrics.roster_position_counts):
+            from .optimizer import OptimizerService
+            from .showdown_data_readiness import assess_current_inputs, is_live_slate
+            service = OptimizerService(self.connection_string)
+            # Reuse the existing database engine for all preflight reads.
+            service.engine = self.engine
+            if is_live_slate(service, season=season, week=week, slate=slate):
+                try:
+                    metrics.showdown_data_readiness = assess_current_inputs(service,
+                        season=season, week=week, slate=slate,
+                        projection_run_id=metrics.projection_run_id)
+                except Exception:  # Read errors must never turn into READY.
+                    logger.exception("Unable to assess saved Showdown inputs for %s W%s %s", season, week, slate)
+                    metrics.showdown_data_readiness = {"status": "ERROR",
+                        "reason_codes": ["showdown_generation_assessment_unavailable"], "required_sources": {}}
+        else:
+            from .optimizer import OptimizerService
+            from .showdown_data_readiness import is_live_slate
+            from .classic_data_readiness import assess_current_inputs
+            service = OptimizerService(self.connection_string)
+            service.engine = self.engine
+            if is_live_slate(service, season=season, week=week, slate=slate):
+                try:
+                    metrics.classic_data_readiness = assess_current_inputs(service,
+                        season=season, week=week, slate=slate, projection_run_id=metrics.projection_run_id)
+                except Exception:
+                    logger.exception("Unable to assess saved Classic inputs for %s W%s %s", season, week, slate)
+                    metrics.classic_data_readiness = {"status": "ERROR",
+                        "reason_codes": ["classic_generation_assessment_unavailable"], "required_sources": {}}
+        return evaluate_slate_readiness(metrics)

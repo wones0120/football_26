@@ -108,6 +108,18 @@ class OptimizerRunRequest(BaseModel):
 
     @model_validator(mode="after")
     def normalize_showdown_te_control(self):
+        from .product_services.single_lineup import SINGLE_LINEUP_STRATEGIES, normalize_single_lineup_params
+        if self.strategy in SINGLE_LINEUP_STRATEGIES:
+            expected_format = SINGLE_LINEUP_STRATEGIES[self.strategy]
+            if self.contest_format not in {None, expected_format} or self.objective not in {None, "cash"}:
+                raise ValueError("Single-lineup strategy requires its matching format and cash objective")
+            self.contest_format, self.objective = expected_format, "cash"
+            normalize_single_lineup_params(self.params, contest_format=expected_format)
+        if self.strategy in {"classic_large_gpp_v1", "classic_single_lineup_v1"}:
+            if "allow_incomplete_evidence" in self.params:
+                raise ValueError("Incomplete evidence override is restricted to internal/offline callers")
+            if "refresh_ownership" in self.params and type(self.params["refresh_ownership"]) is not bool:
+                raise ValueError("params.refresh_ownership must be an explicit boolean")
         showdown = (
             self.contest_format == "showdown"
             or self.strategy.startswith("showdown_")
@@ -115,12 +127,31 @@ class OptimizerRunRequest(BaseModel):
         )
         if showdown:
             self.params["enforce_single_te"] = False
+            if "allow_incomplete_evidence" in self.params:
+                raise ValueError("Incomplete evidence override is restricted to internal/offline callers")
+            for key in ("ownership_required", "refresh_ownership", "use_role_ownership"):
+                if key in self.params and type(self.params[key]) is not bool:
+                    raise ValueError(f"params.{key} must be an explicit boolean")
+            if "ai_requested_entries" in self.params:
+                entries = self.params["ai_requested_entries"]
+                bounds = (1, 1) if self.strategy == "captain_single_lineup_v1" else (2, 5)
+                if type(entries) is not int or not bounds[0] <= entries <= bounds[1]:
+                    raise ValueError(f"ai_requested_entries must be an integer from {bounds[0]} to {bounds[1]}")
+        from .product_services.showdown_qb_preferences import validate_showdown_qb_preferences
+        validate_showdown_qb_preferences(self.params, showdown=showdown)
+        from .product_services.showdown_captain_preferences import validate_showdown_captain_preferences
+        validate_showdown_captain_preferences(self.params, showdown=showdown)
+        if showdown:
+            from .product_services.showdown_team_constraints import showdown_team_limit
+            showdown_team_limit(self.params)
         if "long_shot_mode" in self.params and type(self.params["long_shot_mode"]) is not bool:
             raise ValueError("params.long_shot_mode must be an explicit boolean")
+        from .product_services.classic_portfolio_controls import validate_large_gpp_controls
+        validate_large_gpp_controls(self.params, self.strategy)
         from .product_services.classic_primary_game import resolve_primary_game_cap
         cap = resolve_primary_game_cap(self.params.get("max_lineups_per_primary_game"))
-        if cap is not None and self.strategy not in {"classic_large_gpp_v1", "classic_small_field_gpp"}:
-            raise ValueError("Max lineups per primary game requires Classic Large or Small Field GPP")
+        if cap is not None and self.strategy not in {"classic_large_gpp_v1", "classic_small_field_gpp", "classic_single_lineup_v1"}:
+            raise ValueError("Max lineups per primary game requires Classic")
         if self.strategy == "classic_large_gpp_v1" and self.params.get("classic_expanded_discovery"):
             raise ValueError("Expanded Large-GPP discovery requires an explicitly labelled RESEARCH_SHADOW")
         return self
@@ -153,6 +184,14 @@ class OptimizerStatusResponse(BaseModel):
     strategy_config: dict = Field(default_factory=dict)
     contest_format: str
     objective: str
+    construction_summary: Optional[dict[str, Any]] = None
+    entry_readiness: Optional[dict[str, Any]] = None
+    data_readiness: Optional[dict[str, Any]] = None
+    single_lineup_selection: Optional[dict[str, Any]] = None
+    gpp_recommendation: Optional[dict[str, Any]] = None
+    classic_game_environment_review: Optional[dict[str, Any]] = None
+    game_appearances: Optional[dict[str, Any]] = None
+    execution_runtime: Optional[dict[str, Any]] = None
     enforce_single_te: Optional[bool] = None
     long_shot_mode: bool = False
     exclude_opponent_teams: List[str] = Field(default_factory=list)
@@ -165,6 +204,8 @@ class OptimizerStatusResponse(BaseModel):
     player_pool: Optional[dict[str, Any]] = None
     effective_strategy_contract: Optional[dict[str, Any]] = None
     primary_game_constraint: Optional[dict[str, Any]] = None
+    portfolio_controls_report: Optional[dict[str, Any]] = None
+    portfolio_submission_trace: Optional[dict[str, Any]] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -200,6 +241,11 @@ class SimulationPlayerResponse(BaseModel):
     optimal_lineup_probability: float
     field_ownership: Optional[float] = None
     leverage_score: Optional[float] = None
+    captain_salary: Optional[int] = None
+    captain_optimal_count: Optional[int] = None
+    captain_optimal_probability: Optional[float] = None
+    flex_optimal_count: Optional[int] = None
+    flex_optimal_probability: Optional[float] = None
 
 
 class SimulationRunResponse(BaseModel):
@@ -280,6 +326,8 @@ class SlateReadinessResponse(BaseModel):
     summary: dict[str, int]
     gates: dict[str, SlateReadinessGateResponse]
     checks: List[SlateReadinessCheckResponse]
+    showdown_data_readiness: Optional[dict[str, Any]] = None
+    classic_data_readiness: Optional[dict[str, Any]] = None
 
 
 class DataQualityCheckResponse(BaseModel):
@@ -781,6 +829,12 @@ class OwnershipRunResponse(BaseModel):
     model_id: Optional[str] = None
 
 
+class EntryHistoryImportRequest(BaseModel):
+    path: str = Field(..., min_length=1)
+    year: int = Field(..., ge=2000, le=2100)
+    dry_run: bool = False
+
+
 class DraftKingsBatchImportRequest(BaseModel):
     directory: str
     season: int = Field(..., ge=2000)
@@ -955,6 +1009,7 @@ class SlateLearningReportRequest(BaseModel):
     week: int = Field(..., ge=1, le=25)
     slate: str = Field(..., min_length=1, max_length=64)
     entry_user: str = Field(..., min_length=1, max_length=128)
+    diagnostic_run_ids: List[str] = Field(default_factory=list, max_length=20)
 
 
 class WeeklyLearningReportRequest(BaseModel):
@@ -979,8 +1034,9 @@ class PlayerOutcomeEventRequest(BaseModel):
 
 
 class WeeklyLearningReportResponse(BaseModel):
+    telemetry: dict[str, Any] = Field(default_factory=dict)
     report_id: str
-    contract_id: Literal["weekly_learning_report_v1"]
+    contract_id: Literal["weekly_learning_report_v1", "weekly_learning_report_v2"]
     builder_version: str
     season: int
     week: int
@@ -994,6 +1050,8 @@ class WeeklyLearningReportResponse(BaseModel):
     run_ids: dict[str, List[str]]
     missing_evidence: List[str]
     interpretation: str
+    optimizer_effectiveness_history: List[dict[str, Any]] = Field(default_factory=list)
+    optimizer_correlation_aggregate: dict[str, Any] = Field(default_factory=dict)
 
 
 class SlateLearningReportResponse(BaseModel):
@@ -1029,6 +1087,8 @@ class SlateLearningReportResponse(BaseModel):
     run_ids: dict[str, List[str]] = Field(default_factory=dict)
     missing_evidence: List[str] = Field(default_factory=list)
     interpretation: str
+    optimizer_effectiveness: dict[str, Any] = Field(default_factory=dict)
+    telemetry: dict[str, Any] = Field(default_factory=dict)
 
 
 AgentQuestionAnswer = Literal[

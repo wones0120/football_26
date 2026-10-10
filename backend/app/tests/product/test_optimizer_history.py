@@ -168,7 +168,8 @@ def test_queued_game_cap_is_saved_exactly_and_invalid_cap_never_enqueues(history
             yield session
     app.dependency_overrides[get_db_session] = session_dependency
     client = TestClient(app)
-    payload = request(strategy="classic_large_gpp_v1", params={"num_lineups": 5, "max_exposure": .8, "max_lineups_per_primary_game": 3})
+    payload = request(strategy="classic_large_gpp_v1", params={"num_lineups": 5, "max_exposure": .8, "max_lineups_per_primary_game": 3,
+        "max_lineup_overlap": 4, "elevated_player_max_exposure": .4, "max_elevated_players_per_lineup": 0})
     response = client.post("/api/optimizer/jobs", json=payload)
     assert response.status_code == 202
     with factory() as session:
@@ -177,3 +178,48 @@ def test_queued_game_cap_is_saved_exactly_and_invalid_cap_never_enqueues(history
     for value in (0, -1, True, 2.5, "3"):
         invalid = {**payload, "optimizer_run_id": "invalid-cap", "params": {**payload["params"], "max_lineups_per_primary_game": value}}
         assert client.post("/api/optimizer/jobs", json=invalid).status_code == 422
+
+
+def test_invalid_large_portfolio_controls_never_enqueue(history_db):
+    engine, factory = history_db
+    app = FastAPI(); app.include_router(router)
+    def session_dependency():
+        with factory() as session:
+            yield session
+    app.dependency_overrides[get_db_session] = session_dependency
+    client = TestClient(app)
+    for key, value in [("max_lineup_overlap", 9), ("elevated_player_max_exposure", 40),
+                       ("max_elevated_players_per_lineup", True)]:
+        assert client.post("/api/optimizer/jobs", json=request(strategy="classic_large_gpp_v1",
+            params={key: value})).status_code == 422
+    with factory() as session:
+        assert list_optimizer_runs(engine, session, **scope()) == []
+
+
+def test_saved_underfilled_failure_has_a_reopenable_report(history_db):
+    engine, factory = history_db
+    saved(engine, "underfilled", status="failed", message="Generated 2/5; no limits relaxed")
+    with factory() as session:
+        enqueue_job(session, job_type=OPTIMIZER_JOB, idempotency_key="optimizer:underfilled",
+                    request_payload=request(optimizer_run_id="underfilled"), run_id="underfilled")
+        rows = list_optimizer_runs(engine, session, **scope())
+        # Pending retry does not expose a terminal result until it finishes.
+        assert rows[0]["saved_report_available"] is True
+        assert rows[0]["lineup_count"] == 2
+        from backend.app.models import OperationalJob
+        from sqlalchemy import select
+        job = session.scalar(select(OperationalJob))
+        job.status = "failed"; session.commit()
+        row = list_optimizer_runs(engine, session, **scope())[0]
+        assert row["saved_report_available"] is True and row["status"] == "failed"
+
+
+def test_normal_history_retains_original_objectives_and_strategies(history_db):
+    engine, factory = history_db
+    saved(engine, "legacy-gpp")
+    saved(engine, "active-cash", objective="cash", strategy="classic_single_lineup_v1", params={"num_lineups": 1})
+    query = scope(); query.pop("objective")
+    with factory() as session:
+        rows = list_optimizer_runs(engine, session, **query)
+    assert {(r["strategy"], r["objective"]) for r in rows} == {
+        ("classic_small_field_gpp", "gpp"), ("classic_single_lineup_v1", "cash")}

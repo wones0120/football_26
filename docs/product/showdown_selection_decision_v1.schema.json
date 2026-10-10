@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "showdown_selection_decision_v1",
+  "title": "Immutable Showdown selection decision record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_id",
+    "protocol",
+    "decision_id",
+    "revision",
+    "previous_decision_id",
+    "decision_timestamp",
+    "timestamp_basis",
+    "selection_frozen_at",
+    "run_identity",
+    "review_hash",
+    "status",
+    "proposed_candidate_ids",
+    "attention",
+    "rosters",
+    "alternative_candidate_ids_considered",
+    "rejected_candidates",
+    "reasoning",
+    "football_theses",
+    "complementarity_reason",
+    "accepted_high_overlap_exception",
+    "reviewer",
+    "user_approval_status",
+    "proposed_pair",
+    "alternative_portfolio",
+    "execution",
+    "research_tracking",
+    "record_hash"
+  ],
+  "properties": {
+    "contract_id": {
+      "const": "showdown_selection_decision_v1"
+    },
+    "protocol": {
+      "const": "showdown_ai_selection_review_v1"
+    },
+    "decision_id": {
+      "type": "string"
+    },
+    "revision": {
+      "type": "integer"
+    },
+    "previous_decision_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "decision_timestamp": {
+      "type": "string"
+    },
+    "timestamp_basis": {
+      "type": "string"
+    },
+    "selection_frozen_at": {
+      "type": "string"
+    },
+    "run_identity": {
+      "type": "object"
+    },
+    "review_hash": {
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "PROPOSED",
+        "SELECTED",
+        "USER_APPROVED",
+        "ENTERED_CONFIRMED"
+      ]
+    },
+    "proposed_candidate_ids": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "uniqueItems": true,
+      "items": {
+        "type": "string"
+      }
+    },
+    "attention": {
+      "type": "object"
+    },
+    "rosters": {
+      "type": "array"
+    },
+    "alternative_candidate_ids_considered": {
+      "type": "array"
+    },
+    "rejected_candidates": {
+      "type": "array"
+    },
+    "reasoning": {
+      "type": "string"
+    },
+    "football_theses": {
+      "type": "array"
+    },
+    "complementarity_reason": {
+      "type": "string"
+    },
+    "accepted_high_overlap_exception": {
+      "type": "string"
+    },
+    "reviewer": {
+      "type": "object"
+    },
+    "user_approval_status": {
+      "type": "string"
+    },
+    "proposed_pair": {
+      "type": "object"
+    },
+    "alternative_portfolio": {
+      "type": "object"
+    },
+    "execution": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "research_tracking": {
+      "type": "object"
+    },
+    "record_hash": {
+      "type": "string"
+    }
+  }
+}

@@ -21,6 +21,7 @@ from .target_schema import validate_target_schema
 
 
 SIMULATION_MODEL_ID = "independent_quantile_lineup_v1"
+SHOWDOWN_SIMULATION_MODEL_ID = "independent_quantile_showdown_v1"
 VALID_CLASSIC_POSITIONS = {"QB", "RB", "WR", "TE", "DST"}
 MIN_CLASSIC_SALARY = 2_000
 
@@ -146,6 +147,7 @@ def build_simulation_rows(
     counts: np.ndarray,
     *,
     successful_simulations: int,
+    captain_counts: np.ndarray | None = None,
 ) -> list[dict[str, Any]]:
     """Build player results with probability and ownership in percentage units."""
     rows: list[dict[str, Any]] = []
@@ -177,6 +179,15 @@ def build_simulation_rows(
                 "leverage_score": leverage,
             }
         )
+        if captain_counts is not None:
+            captain_count = int(captain_counts[sampling_index])
+            rows[-1].update({
+                "captain_salary": int(player["captain_salary"]),
+                "captain_optimal_count": captain_count,
+                "captain_optimal_probability": round(captain_count / denominator * 100, 6),
+                "flex_optimal_count": int(count) - captain_count,
+                "flex_optimal_probability": round((int(count) - captain_count) / denominator * 100, 6),
+            })
     return sorted(
         rows,
         key=lambda row: (
@@ -185,6 +196,62 @@ def build_simulation_rows(
             row["player_display_name"],
         ),
     )
+
+
+def simulate_showdown_lineups(
+    pool: pd.DataFrame, *, num_simulations: int, seed: int, salary_cap: int = 50_000,
+) -> tuple[np.ndarray, np.ndarray, int]:
+    """One shared draw per physical player; one CPT and five FLEX, both teams.
+
+    These are independent-marginal optimal roster frequencies, not estimates of
+    tournament paid finishes, field ranks, or returns.
+    """
+    size = len(pool)
+    if size < 6 or pool["player_id"].isna().any() or pool["player_id"].duplicated().any():
+        raise ValueError("Showdown simulation requires at least six unique canonical players.")
+    teams = pool["team_id"].fillna("").astype(str)
+    games = pool["game_id"].fillna("").astype(str)
+    if teams.eq("").any() or teams.nunique() != 2 or games.eq("").any() or games.nunique() != 1:
+        raise ValueError("Showdown simulation requires exactly one verified game and two teams.")
+    salaries = pool[["captain_salary", "salary"]].to_numpy(dtype=float)
+    if not np.isfinite(salaries).all() or (salaries <= 0).any():
+        raise ValueError("Showdown simulation requires native CPT and FLEX salaries for every player.")
+    # First half of the variables are Captain assignments, second half FLEX.
+    team = (teams == teams.iloc[0]).to_numpy(dtype=float)
+    matrix = np.vstack([
+        np.r_[np.ones(size), np.zeros(size)],
+        np.r_[np.zeros(size), np.ones(size)],
+        np.r_[salaries[:, 0], salaries[:, 1]],
+        np.r_[team, team],
+        np.hstack([np.eye(size), np.eye(size)]),
+    ])
+    constraints = LinearConstraint(
+        matrix, np.r_[1, 5, 0, 1, np.zeros(size)],
+        np.r_[1, 5, salary_cap, 5, np.ones(size)],
+    )
+    outcomes = sample_independent_outcomes(pool, num_simulations=num_simulations, seed=seed)
+    counts, captain_counts = np.zeros(size, dtype=int), np.zeros(size, dtype=int)
+    successful = 0
+    tie_breaker = np.arange(2 * size, 0, -1, dtype=float) * 1e-9
+    for outcome in outcomes:
+        result = milp(
+            c=-(np.r_[outcome * 1.5, outcome] + tie_breaker),
+            integrality=np.ones(2 * size, dtype=int),
+            bounds=Bounds(np.zeros(2 * size), np.ones(2 * size)),
+            constraints=constraints, options={"presolve": True},
+        )
+        if not result.success or result.x is None:
+            continue
+        captain, flex = result.x[:size] >= .5, result.x[size:] >= .5
+        chosen = captain | flex
+        if (captain.sum() != 1 or flex.sum() != 5 or chosen.sum() != 6
+                or teams[chosen].nunique() != 2
+                or salaries[captain, 0].sum() + salaries[flex, 1].sum() > salary_cap):
+            continue
+        counts += chosen.astype(int)
+        captain_counts += captain.astype(int)
+        successful += 1
+    return counts, captain_counts, successful
 
 
 class SimulationService:
@@ -274,6 +341,7 @@ class SimulationService:
         slate: str,
         projection_run_id: str | None,
         ownership_run_id: str | None,
+        contest_format: str = "classic",
     ) -> tuple[pd.DataFrame, str, str | None, datetime | None]:
         inspector = inspect(self.engine)
         required = (
@@ -294,6 +362,25 @@ class SimulationService:
             has_player = inspector.has_table("dim_player", schema="target")
             name_expression = "COALESCE(NULLIF(d.full_name, ''), p.player_id)" if has_player else "p.player_id"
             player_join = "LEFT JOIN target.dim_player d ON d.player_id = p.player_id" if has_player else ""
+            if contest_format == "showdown" and not has_player:
+                raise ValueError("Showdown simulation requires canonical player positions.")
+            position_expression = (
+                "COALESCE(NULLIF(CASE WHEN UPPER(s.roster_position) IN ('CPT', 'FLEX') "
+                "THEN '' ELSE s.roster_position END, ''), d.primary_position)"
+                if has_player else "s.roster_position"
+            )
+            salary_slot_filter = (
+                "AND UPPER(roster_position) = 'FLEX'" if contest_format == "showdown"
+                else "AND UPPER(roster_position) NOT IN ('CPT', 'FLEX')"
+            )
+            captain_salary_expression = """(SELECT c.salary FROM target.snapshot_salary c
+                WHERE c.season = :season AND c.week = :week
+                  AND UPPER(COALESCE(c.slate, c.slate_id)) = UPPER(:slate)
+                  AND c.player_id = salary.player_id AND c.site = salary.site
+                  AND UPPER(c.roster_position) = 'CPT'
+                  AND c.as_of <= (SELECT MIN(data_cutoff_at) FROM target.player_projection
+                      WHERE projection_run_id = :projection_run_id)
+                ORDER BY c.as_of DESC, c.snapshot_salary_id DESC LIMIT 1)""" if contest_format == "showdown" else "NULL::INTEGER"
             has_injuries = inspector.has_table("snapshot_injury_status", schema="target")
             injury_join = ""
             injury_filter = ""
@@ -324,11 +411,16 @@ class SimulationService:
                     WITH latest_salary AS (
                         SELECT DISTINCT ON (player_id)
                             player_id, salary, roster_position, team_id,
-                            opponent_team_id, game_id
-                        FROM target.snapshot_salary
+                            opponent_team_id, game_id,
+                            {captain_salary_expression} AS captain_salary
+                        FROM target.snapshot_salary salary
                         WHERE season = :season AND week = :week
                           AND UPPER(COALESCE(slate, slate_id)) = UPPER(:slate)
-                        ORDER BY player_id, as_of DESC
+                          AND LOWER(site) = 'draftkings'
+                          {salary_slot_filter}
+                          AND as_of <= (SELECT MIN(data_cutoff_at)
+                              FROM target.player_projection WHERE projection_run_id = :projection_run_id)
+                        ORDER BY player_id, as_of DESC, snapshot_salary_id DESC
                     ),
                     latest_projection AS (
                         SELECT DISTINCT ON (player_id) *
@@ -341,8 +433,8 @@ class SimulationService:
                     SELECT
                         p.player_id,
                         {name_expression} AS player_display_name,
-                        s.roster_position AS position,
-                        s.salary,
+                        {position_expression} AS position,
+                        s.salary, s.captain_salary,
                         s.team_id,
                         s.opponent_team_id,
                         s.game_id,
@@ -374,6 +466,7 @@ class SimulationService:
                 week=week,
                 slate=slate,
                 ownership_run_id=ownership_run_id,
+                contest_format=contest_format,
             )
 
         if pool.empty:
@@ -390,9 +483,11 @@ class SimulationService:
             "projection_p90",
         ):
             pool[column] = pd.to_numeric(pool[column], errors="coerce")
+        positions = VALID_CLASSIC_POSITIONS | ({"K"} if contest_format == "showdown" else set())
+        minimum_salary = 1 if contest_format == "showdown" else MIN_CLASSIC_SALARY
         pool = pool[
-            pool["position"].isin(VALID_CLASSIC_POSITIONS)
-            & pool["salary"].ge(MIN_CLASSIC_SALARY)
+            pool["position"].isin(positions)
+            & pool["salary"].ge(minimum_salary)
             & pool["projection_mean"].gt(0)
         ].drop_duplicates("player_id").copy()
         if not ownership.empty:
@@ -403,7 +498,7 @@ class SimulationService:
             pool["field_ownership"] = np.nan
         cutoff_values = pd.to_datetime(pool["data_cutoff_at"], errors="coerce", utc=True).dropna()
         data_cutoff_at = cutoff_values.max().to_pydatetime() if not cutoff_values.empty else None
-        return pool.reset_index(drop=True), selected_projection_run_id, selected_ownership_run_id, data_cutoff_at
+        return pool.sort_values("player_id").reset_index(drop=True), selected_projection_run_id, selected_ownership_run_id, data_cutoff_at
 
     def _load_ownership(
         self,
@@ -413,10 +508,13 @@ class SimulationService:
         week: int,
         slate: str,
         ownership_run_id: str | None,
+        contest_format: str = "classic",
     ) -> tuple[str | None, pd.DataFrame]:
         inspector = inspect(connection)
         if inspector.has_table("ownership_projection", schema="target"):
-            conditions = ["season = :season", "week = :week", "UPPER(slate_id) = UPPER(:slate)"]
+            slot_condition = ("UPPER(roster_position) IN ('CPT', 'FLEX')" if contest_format == "showdown"
+                              else "UPPER(roster_position) NOT IN ('CPT', 'FLEX')")
+            conditions = ["season = :season", "week = :week", "UPPER(slate_id) = UPPER(:slate)", slot_condition]
             params: dict[str, Any] = {"season": season, "week": week, "slate": slate}
             if ownership_run_id:
                 conditions.append("ownership_run_id = :ownership_run_id")
@@ -439,11 +537,11 @@ class SimulationService:
                 frame = pd.read_sql(
                     text(
                         """
-                        SELECT DISTINCT ON (player_id)
-                            player_id, projected_ownership AS field_ownership
+                        SELECT player_id, SUM(projected_ownership) AS field_ownership
                         FROM target.ownership_projection
                         WHERE ownership_run_id = :ownership_run_id
-                        ORDER BY player_id, created_at DESC
+                        GROUP BY player_id
+                        ORDER BY player_id
                         """
                     ),
                     connection,
@@ -452,7 +550,8 @@ class SimulationService:
                 return selected, frame
         if ownership_run_id:
             raise ValueError(f"Ownership run not found for this slate: {ownership_run_id}")
-        if inspector.has_table("dk_ownership"):
+        # Legacy ownership lacks reliable Captain/FLEX semantics.
+        if contest_format == "classic" and inspector.has_table("dk_ownership"):
             frame = pd.read_sql(
                 text(
                     """
@@ -490,7 +589,7 @@ class SimulationService:
                         (:simulation_run_id, :simulation_model_id, :projection_run_id,
                          :ownership_run_id, :season, :week, :slate_id, :contest_format,
                          :num_simulations, :successful_simulations, :seed, :salary_cap,
-                         9, CAST(:params_json AS JSONB), :data_cutoff_at, :created_at,
+                         :roster_size, CAST(:params_json AS JSONB), :data_cutoff_at, :created_at,
                          :status, :message)
                     """
                 ),
@@ -507,11 +606,14 @@ class SimulationService:
                     "successful_simulations": result.successful_simulations,
                     "seed": result.seed,
                     "salary_cap": salary_cap,
+                    "roster_size": 6 if result.contest_format == "showdown" else 9,
                     "params_json": json.dumps(
                         {
                             "marginal_sampling": "piecewise_linear_calibrated_quantiles",
                             "correlation": "independent_dt_502",
-                            "roster_contract": "draftkings_classic_v1",
+                            "roster_contract": f"draftkings_{result.contest_format}_v1",
+                            "probability_semantics": "optimal_roster_frequency_not_paid_finish_probability",
+                            "contest_outcome_model": "unavailable",
                         },
                         sort_keys=True,
                     ),
@@ -543,6 +645,10 @@ class SimulationService:
                                 "opponent_team_id": row["opponent_team_id"],
                                 "game_id": row["game_id"],
                                 "sampling_index": row["sampling_index"],
+                                **{key: row[key] for key in (
+                                    "captain_salary", "captain_optimal_count", "captain_optimal_probability",
+                                    "flex_optimal_count", "flex_optimal_probability",
+                                ) if key in row},
                             },
                             sort_keys=True,
                         ),
@@ -581,8 +687,8 @@ class SimulationService:
         ownership_run_id: str | None = None,
         simulation_run_id: str | None = None,
     ) -> SimulationResult:
-        if contest_format != "classic":
-            raise ValueError("DT-502 supports classic slates; showdown simulation is tracked by DT-603.")
+        if contest_format not in {"classic", "showdown"}:
+            raise ValueError("Slate simulation supports classic and showdown formats.")
         if not 1 <= int(num_simulations) <= 20_000:
             raise ValueError("num_simulations must be between 1 and 20000.")
         if not slate.strip():
@@ -590,6 +696,12 @@ class SimulationService:
         if simulation_run_id is not None:
             existing = self.fetch_by_id(simulation_run_id)
             if existing is not None:
+                expected = (season, week, slate.upper(), contest_format, int(num_simulations), int(seed), int(salary_cap))
+                actual = (existing.season, existing.week, existing.slate.upper(), existing.contest_format,
+                          existing.num_simulations, existing.seed, existing.salary_cap)
+                if (expected != actual or (projection_run_id and projection_run_id != existing.projection_run_id)
+                        or (ownership_run_id and ownership_run_id != existing.ownership_run_id)):
+                    raise ValueError("Simulation run ID already belongs to a different scope or request.")
                 return existing
         pool, selected_projection_run_id, selected_ownership_run_id, cutoff = self._load_pool(
             season=season,
@@ -597,20 +709,21 @@ class SimulationService:
             slate=slate,
             projection_run_id=projection_run_id,
             ownership_run_id=ownership_run_id,
+            contest_format=contest_format,
         )
-        counts, successful = simulate_optimal_lineups(
-            pool,
-            num_simulations=int(num_simulations),
-            seed=int(seed),
-            salary_cap=int(salary_cap),
-        )
+        captain_counts = None
+        simulation_params = dict(num_simulations=int(num_simulations), seed=int(seed), salary_cap=int(salary_cap))
+        if contest_format == "showdown":
+            counts, captain_counts, successful = simulate_showdown_lineups(pool, **simulation_params)
+        else:
+            counts, successful = simulate_optimal_lineups(pool, **simulation_params)
         if successful == 0:
             raise RuntimeError("Slate simulation did not produce a legal lineup in any iteration.")
-        rows = build_simulation_rows(pool, counts, successful_simulations=successful)
+        rows = build_simulation_rows(pool, counts, successful_simulations=successful, captain_counts=captain_counts)
         created_at = datetime.now(timezone.utc)
         result = SimulationResult(
             simulation_run_id=simulation_run_id or str(uuid.uuid4()),
-            simulation_model_id=SIMULATION_MODEL_ID,
+            simulation_model_id=SHOWDOWN_SIMULATION_MODEL_ID if contest_format == "showdown" else SIMULATION_MODEL_ID,
             season=season,
             week=week,
             slate=slate,
@@ -623,14 +736,26 @@ class SimulationService:
             salary_cap=int(salary_cap),
             status="completed",
             message=(
-                f"Completed {successful} deterministic classic slate simulations "
-                f"for {len(rows)} players"
+                f"Completed {successful} deterministic {contest_format} slate simulations "
+                f"for {len(rows)} players. Optimal-roster frequencies are not GPP paid-finish or return estimates."
             ),
             data_cutoff_at=cutoff,
             created_at=created_at,
             rows=rows,
         )
         self._persist(result, salary_cap=int(salary_cap))
+        return result
+
+    @staticmethod
+    def _public_player_result(row) -> dict[str, Any]:
+        result = dict(row)
+        details = result.pop("result_json", None) or {}
+        if isinstance(details, str):
+            details = json.loads(details)
+        for key in ("captain_salary", "captain_optimal_count", "captain_optimal_probability",
+                    "flex_optimal_count", "flex_optimal_probability"):
+            if key in details:
+                result[key] = details[key]
         return result
 
     def fetch_by_id(self, simulation_run_id: str) -> SimulationResult | None:
@@ -658,7 +783,7 @@ class SimulationService:
                     """
                     SELECT player_id, player_display_name, position, salary,
                            projection_mean, optimal_lineup_count,
-                           optimal_lineup_probability, field_ownership, leverage_score
+                           optimal_lineup_probability, field_ownership, leverage_score, result_json
                     FROM target.player_simulation
                     WHERE simulation_run_id = :simulation_run_id
                     ORDER BY optimal_lineup_probability DESC, projection_mean DESC,
@@ -688,7 +813,7 @@ class SimulationService:
             message=str(run.get("message") or ""),
             data_cutoff_at=run.get("data_cutoff_at"),
             created_at=run["created_at"],
-            rows=[dict(row) for row in rows],
+            rows=[self._public_player_result(row) for row in rows],
         )
 
     def fetch_latest(
@@ -741,7 +866,7 @@ class SimulationService:
                     """
                     SELECT player_id, player_display_name, position, salary,
                            projection_mean, optimal_lineup_count,
-                           optimal_lineup_probability, field_ownership, leverage_score
+                           optimal_lineup_probability, field_ownership, leverage_score, result_json
                     FROM target.player_simulation
                     WHERE simulation_run_id = :simulation_run_id
                     ORDER BY optimal_lineup_probability DESC, projection_mean DESC,
@@ -767,7 +892,7 @@ class SimulationService:
             message=str(run.get("message") or ""),
             data_cutoff_at=run.get("data_cutoff_at"),
             created_at=run["created_at"],
-            rows=[dict(row) for row in rows],
+            rows=[self._public_player_result(row) for row in rows],
         )
 
     def fetch_player_result(
@@ -778,12 +903,14 @@ class SimulationService:
         slate: str,
         player_id: str,
         projection_run_id: str | None = None,
+        contest_format: str = "classic",
     ) -> tuple[dict[str, Any] | None, str | None]:
         result = self.fetch_latest(
             season=season,
             week=week,
             slate=slate,
             projection_run_id=projection_run_id,
+            contest_format=contest_format,
         )
         if result is None:
             return None, None
@@ -799,6 +926,7 @@ class SimulationService:
         player_id: str,
         projection_multiplier: float,
         projection_run_id: str | None = None,
+        contest_format: str = "classic",
     ) -> dict[str, Any] | None:
         """Replay the latest run's exact draws with one player's distribution changed."""
         result = self.fetch_latest(
@@ -806,6 +934,7 @@ class SimulationService:
             week=week,
             slate=slate,
             projection_run_id=projection_run_id,
+            contest_format=contest_format,
         )
         if result is None:
             return None
@@ -831,12 +960,11 @@ class SimulationService:
                 pd.to_numeric(pool.loc[target, column], errors="coerce")
                 * float(projection_multiplier)
             ).clip(lower=0.0)
-        counts, successful = simulate_optimal_lineups(
-            pool,
-            num_simulations=result.num_simulations,
-            seed=result.seed,
-            salary_cap=result.salary_cap,
-        )
+        replay_params = dict(num_simulations=result.num_simulations, seed=result.seed, salary_cap=result.salary_cap)
+        if result.contest_format == "showdown":
+            counts, _, successful = simulate_showdown_lineups(pool, **replay_params)
+        else:
+            counts, successful = simulate_optimal_lineups(pool, **replay_params)
         if successful == 0:
             return None
         target_index = int(np.flatnonzero(target.to_numpy())[0])
@@ -896,6 +1024,7 @@ class SimulationService:
                     "opponent_team_id": str(details.get("opponent_team_id") or ""),
                     "game_id": str(details.get("game_id") or ""),
                     "sampling_index": int(details.get("sampling_index", -1)),
+                    **({"captain_salary": int(details["captain_salary"])} if "captain_salary" in details else {}),
                 }
             )
         if not pool_rows:

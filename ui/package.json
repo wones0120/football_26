@@ -7,6 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "test:e2e:overlap": "npm run build && node tests/classicLiveOverlap.e2e.mjs",
+    "test:e2e:preparation": "npm run build && node tests/slatePreparation.e2e.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

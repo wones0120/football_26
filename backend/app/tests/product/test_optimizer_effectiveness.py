@@ -4,6 +4,8 @@ from copy import deepcopy
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+import pytest
+
 from backend.app.product_services.optimizer_effectiveness import (
     actual_points_by_player,
     build_optimizer_effectiveness,
@@ -22,6 +24,18 @@ from backend.app.product_services.optimizer_effectiveness import (
 def _classic_candidate(ids: list[str], rank: int, mean: float) -> dict:
     return {"player_ids": ids, "rank": rank, "mean": mean, "p90": mean + 20,
             "objective_score": 10 - rank, "ownership_sum": 100 - rank}
+
+
+@pytest.mark.parametrize("points", [79, 80, 90, 99.994, 99.995, 100, 100.005, 100.006, 120, 121])
+def test_field_rank_preserves_ties_and_half_cent_tolerance(points):
+    scores = [120.0, 100.005, 100.0, 100.0, 99.995, 90.0, 80.0]
+    above = sum(score > points + 0.005 for score in scores)
+    tied_or_above = sum(score >= points - 0.005 for score in scores)
+    assert field_rank(points, scores) == {
+        "best_rank": above + 1,
+        "worst_rank": max(above + 1, tied_or_above),
+        "top_percent_conservative": 100 * tied_or_above / len(scores),
+    }
 
 
 def test_classic_candidate_scoring_selection_regret_and_ties():

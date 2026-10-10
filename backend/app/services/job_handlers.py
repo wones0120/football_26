@@ -7,6 +7,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
+from fastapi.encoders import jsonable_encoder
+
 from Database.config import get_connection_string
 
 from ..db import SessionLocal
@@ -25,6 +27,7 @@ from ..product_services.agent import NewsMatchupAgent
 from ..product_services.data_quality import DataQualityService
 from ..product_services.canonical_projection_inputs import StaleTrainingOutcomeError
 from ..product_services.predictions import PredictionsService
+from ..product_services.showdown_data_readiness import refresh_projection_player_context
 from ..product_services.simulations import SimulationService as SlateSimulationService
 from ..product_services.starters import StartingQBService
 from ..schemas import (
@@ -308,13 +311,23 @@ def _projection_handler(
             4,
             "Resolving and persisting starting-QB evidence for this slate.",
         )
-        starter_result = StartingQBService(connection_string).derive_starters(
-            season=request.season,
-            week=request.week,
-            slate=request.slate,
-        )
-        if starter_result.rows_written <= 0:
-            raise PermanentJobError(starter_result.message)
+        try:
+            player_refresh = refresh_projection_player_context(
+                prediction_service, season=request.season, week=request.week,
+                slate=request.slate, progress=context.progress,
+            )
+        except ValueError as exc:
+            raise PermanentJobError(str(exc)) from exc
+        if player_refresh is None:
+            starter_result = StartingQBService(connection_string).derive_starters(
+                season=request.season, week=request.week, slate=request.slate,
+            )
+            if starter_result.rows_written <= 0:
+                raise PermanentJobError(starter_result.message)
+            refresh_message = starter_result.message
+        else:
+            checkpoint["automatic_player_context_refresh"] = jsonable_encoder(player_refresh)
+            refresh_message = "Refreshed Showdown roster, injury, starter and canonical player evidence."
         # Jobs freeze a cutoff when queued. Evidence recorded by this worker
         # would otherwise be invisible to the time-safe projection loader.
         checkpoint["data_cutoff_at"] = datetime.now(UTC).isoformat()
@@ -322,7 +335,7 @@ def _projection_handler(
             "starting_qb_resolution",
             1,
             4,
-            starter_result.message,
+            refresh_message,
             checkpoint=checkpoint,
         )
 
@@ -555,13 +568,22 @@ def _weekly_run_handler(
 
 def _optimizer_handler(context: ExecutionContext, payload: dict[str, Any]) -> dict[str, Any]:
     from ..product_services.optimizer import OptimizerService
+    from ..product_services.slate_preparation import validate_prepared_optimizer
 
     if not context.run_id:
         raise PermanentJobError("Optimizer queue item has no run ID.")
+    context.progress("input_validation", 0, 1, "Verifying prepared source evidence before lineup generation.")
+    with SessionLocal() as session:
+        try:
+            preparation = validate_prepared_optimizer(session, payload)
+        except ValueError as exc:
+            raise PermanentJobError(str(exc)) from exc
+    if preparation:
+        payload = {**payload, "params": {**payload.get("params", {}), "prepared_input_evidence": preparation}}
     request = OptimizerRunRequest.model_validate({**payload, "optimizer_run_id": context.run_id})
-    context.progress("optimizer", 0, 1, "Solving the saved optimizer request.")
+    context.progress("optimizer", 0, 1, "Preparing the optimizer request; live evidence must pass before generation.")
     try:
-        job = OptimizerService().run_job(**request.model_dump())
+        job = OptimizerService().run_job(**request.model_dump(), progress=context.progress)
     except ValueError as exc:
         raise PermanentJobError(str(exc)) from exc
     if job.status != "completed" or not job.lineage_persisted:
@@ -569,6 +591,11 @@ def _optimizer_handler(context: ExecutionContext, payload: dict[str, Any]) -> di
     context.progress("optimizer", 1, 1, "Optimizer results saved; ready to reopen.")
     # Keep queue polling lightweight; the full report lives in optimizer lineage.
     return {"optimizer_run_id": job.job_id, "status": job.status}
+
+
+def _preparation_handler(context: ExecutionContext, payload: dict[str, Any]) -> dict[str, Any]:
+    from ..product_services.slate_preparation import execute_preparation
+    return execute_preparation(context, payload)
 
 
 HANDLERS = {
@@ -581,6 +608,7 @@ HANDLERS = {
     SYMBOLIC_JOB: _symbolic_handler,
     ULTIMATE_LINEUP_JOB: _ultimate_lineup_handler,
     WEEKLY_RUN_JOB: _weekly_run_handler,
+    "slate_preparation": _preparation_handler,
 }
 
 

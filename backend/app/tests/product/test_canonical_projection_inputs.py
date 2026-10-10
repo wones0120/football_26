@@ -195,6 +195,17 @@ def prepare(matrix, salaries, **kwargs):
     return prepare_inputs(matrix, salaries, season=2026, week=1, slate="night", cutoff=CUTOFF, **kwargs)
 
 
+def test_unresolved_canonical_availability_names_player_and_recovery_action():
+    from backend.app.product_services.showdown_player_context import CONTEXT_CONTRACT, PlayerContextUnresolved
+    matrix, salaries = inputs()
+    context = pd.DataFrame([{
+        "player_master_id": "canonical-1", "position": "WR",
+        "evidence_json": {"canonical_context_contract": CONTEXT_CONTRACT, "availability_state": "UNKNOWN"},
+    }])
+    with pytest.raises(PlayerContextUnresolved, match="Same Name.*Refresh current roster and injury evidence"):
+        prepare(matrix, salaries, pregame_context=context)
+
+
 def test_cutoff_identity_deduplication_and_label_allowlist():
     matrix, salaries = inputs()
     train, target, metadata = prepare(matrix, salaries)
@@ -572,9 +583,11 @@ def test_pregame_context_zeros_backup_qb_and_redistributes_team_opportunity():
     assert by_id.loc["qb-start", "pregame_start_probability"] == 1.0
     assert by_id.loc["qb-backup", "pregame_start_probability"] == 0.0
     assert by_id.loc["rb-veteran", "carry_share_mean_3"] == 0.0
-    assert by_id.loc["rb-rookie", "carry_share_mean_3"] == 1.0
-    assert by_id.loc["rb-rookie", "carries_mean_3"] == 24.0
-    assert by_id.loc["rb-rookie", "target_share_mean_3"] == 1.0
+    # No observed opportunity or sourced promotion: salary cannot manufacture
+    # a full workload for the rookie after the veteran is removed.
+    assert by_id.loc["rb-rookie", "carry_share_mean_3"] == 0.0
+    assert by_id.loc["rb-rookie", "carries_mean_3"] == 0.0
+    assert by_id.loc["rb-rookie", "target_share_mean_3"] == 0.0
     assert by_id.loc["rb-veteran", "pregame_expected_snaps"] == 12.0
     assert by_id.loc["rb-veteran", "pregame_expected_carries"] == 4.0
     assert by_id.loc["rb-veteran", "pregame_red_zone_share"] == 0.20
@@ -773,8 +786,10 @@ def test_questionable_snapshot_selection_uses_cutoff_and_effective_status(cleare
          "as_of": CUTOFF, "source": "official"},
     ])
     def prepare_loaded(*args, **kwargs):
-        metadata = {"availability_scenario": {"overrides": kwargs["availability_overrides"] or []}}
-        return pd.DataFrame(), pd.DataFrame(), metadata
+        matrix, scoring_salaries = inputs()
+        return prepare(matrix, scoring_salaries, pregame_context=args[5],
+            injury_statuses=kwargs["injury_statuses"], assume_questionable_out=True,
+            availability_overrides=kwargs["availability_overrides"])
     with (
         patch("backend.app.product_services.canonical_projection_inputs.inspect", return_value=inspector),
         patch("backend.app.product_services.canonical_projection_inputs.pd.read_sql",
@@ -789,9 +804,59 @@ def test_questionable_snapshot_selection_uses_cutoff_and_effective_status(cleare
     snapshot_call = read_sql.call_args_list[2]
     assert "as_of <= :cutoff" in str(snapshot_call.args[0])
     assert snapshot_call.kwargs["params"]["cutoff"] == CUTOFF.replace(tzinfo=None)
-    assert bool(prepare_mock.call_args.kwargs["availability_overrides"]) is not cleared
+    pd.testing.assert_frame_equal(prepare_mock.call_args.kwargs["injury_statuses"], snapshots)
+    assert bool(metadata["availability_scenario"]["overrides"]) is not cleared
     rows = metadata["availability_scenario"]["injury_snapshot_rows"]
     assert [row["snapshot_injury_id"] for row in rows] == ([] if cleared else [42])
+
+
+@pytest.mark.parametrize("exclusion", ["salary_status", "roster", "position"])
+def test_automatic_questionable_snapshot_only_applies_to_scoring_players(exclusion):
+    matrix, salaries = inputs()
+    excluded_matrix = matrix.assign(player_master_id="excluded", player_name="Excluded Receiver",
+                                    player_game_feature_matrix_id=matrix["player_game_feature_matrix_id"] + 10)
+    excluded_salaries = salaries.assign(player_master_id="excluded", player_name="Excluded Receiver",
+                                       curated_salary_id=salaries["curated_salary_id"] + 10,
+                                       player_status="OUT" if exclusion == "salary_status" else "Q")
+    if exclusion == "position":
+        excluded_salaries["position"] = "TE"
+        excluded_matrix["position"] = "TE"
+    participation = pd.DataFrame([
+        {"season": season, "week": week, "player_master_id": pid, "team": "A",
+         "roster_status": "DEV" if exclusion == "roster" and season == 2026 and pid == "excluded" else "ACT",
+         "participation_status": "played_confirmed", "offense_snap_share": 0.75,
+         "created_at": "2026-09-06T11:00:00Z", "curated_player_game_participation_id": i}
+        for i, (season, week, pid) in enumerate([(2025, 18, "canonical-1"), (2025, 18, "excluded"),
+                                               (2026, 1, "canonical-1"), (2026, 1, "excluded")], 1)
+    ])
+    snapshots = pd.DataFrame([
+        {"player_id": pid, "injury_status": "Q"} for pid in ["canonical-1", "excluded", "another-slate"]
+    ])
+    originals = [frame.copy(deep=True) for frame in (matrix, salaries, participation, snapshots)]
+    train, target, metadata = prepare(pd.concat([matrix, excluded_matrix]),
+        pd.concat([salaries, excluded_salaries]), participation=participation,
+        injury_statuses=snapshots, assume_questionable_out=True, positions=["WR"])
+    assert target["player_id"].tolist() == ["canonical-1"]
+    assert target["availability_override"].tolist() == ["assume_out"]
+    assert target["pregame_availability_probability"].tolist() == [0.0]
+    assert [r["player_id"] for r in metadata["availability_scenario"]["overrides"]] == ["canonical-1"]
+    if exclusion == "roster":
+        assert metadata["roster_eligibility_policy"]["excluded_players"][0]["roster_status"] == "DEV"
+    elif exclusion == "salary_status":
+        assert metadata["salary_status_policy"]["excluded_players"][0]["status"] == "OUT"
+    else:
+        assert metadata["excluded_positions"] == ["TE"]
+    assert train["season"].eq(2025).all()
+    for original, frame in zip(originals, (matrix, salaries, participation, snapshots), strict=True):
+        pd.testing.assert_frame_equal(original, frame)
+
+
+@pytest.mark.parametrize("reference", [{"player_id": "another-slate"}, {"player_name": "Missing Player"}])
+def test_explicit_out_of_pool_availability_assumptions_still_fail(reference):
+    matrix, salaries = inputs()
+    with pytest.raises(ValueError, match="was not found in the selected slate"):
+        prepare(matrix, salaries, assume_questionable_out=True,
+                availability_overrides=[{**reference, "availability": "assume_out"}])
 
 
 def test_multiple_active_qbs_require_starting_evidence():
@@ -929,9 +994,11 @@ def test_late_inputs_rejected_and_exclusions_recorded():
     unknown = {**salaries.iloc[0].to_dict(), "curated_salary_id": 4,
                "player_master_id": None, "source_player_key": "unresolved"}
     unsupported = {**salaries.iloc[0].to_dict(), "curated_salary_id": 5, "position": "P"}
-    _, target, metadata = prepare(matrix, pd.concat([salaries, pd.DataFrame([late, unknown, unsupported])]))
+    with pytest.raises(ValueError, match="Resolve 1 salary identities before projections"):
+        prepare(matrix, pd.concat([salaries, pd.DataFrame([late, unknown, unsupported])]))
+    _, target, metadata = prepare(matrix, pd.concat([salaries, pd.DataFrame([late, unsupported])]))
     assert target["salary"].tolist() == [5000]
-    assert metadata["unresolved_salary_source_keys"] == ["unresolved"]
+    assert metadata["unresolved_salary_source_keys"] == []
     assert metadata["excluded_positions"] == ["P"]
     matrix.loc[matrix["season"] == 2026, "created_at"] = "2026-09-06T14:00:00Z"
     with pytest.raises(ValueError, match="Missing canonical features"):
@@ -1048,6 +1115,60 @@ def test_current_roster_ineligible_players_are_not_scored():
     assert roster_policy["excluded_player_count"] == 1
     assert roster_policy["excluded_row_count"] == 2
     assert roster_policy["excluded_players"][0]["roster_status"] == "DEV"
+
+
+@pytest.mark.parametrize("covered_team", ["CAR", "LA"])
+def test_other_slate_roster_coverage_does_not_exclude_target_players(covered_team):
+    matrix, salaries = inputs()
+    salaries["team"] = "DET"
+    participation = pd.DataFrame([
+        {
+            "season": 2026, "week": 1, "player_master_id": "other-slate-player",
+            "team": covered_team, "roster_status": "ACT",
+            "participation_status": "unknown",
+            "created_at": "2026-09-06T11:00:00Z",
+        },
+        {
+            "season": 2025, "week": 18, "player_master_id": "canonical-1",
+            "team": "A", "roster_status": "ACT",
+            "participation_status": "played_confirmed",
+            "created_at": "2026-09-06T11:00:00Z",
+        },
+    ])
+
+    _, target, metadata = prepare(matrix, salaries, participation=participation)
+
+    assert target["player_id"].tolist() == ["canonical-1"]
+    policy = metadata["roster_eligibility_policy"]
+    assert policy["excluded_player_count"] == 0
+    assert policy["missing_teams"] == ["DET"]
+    assert policy["covered_teams"] == (["LAR"] if covered_team == "LA" else ["CAR"])
+
+
+def test_missing_canonical_player_on_a_covered_team_remains_ineligible():
+    matrix, salaries = inputs()
+    salaries["team"] = "LAR"
+    participation = pd.DataFrame([{
+        "season": 2026, "week": 1, "player_master_id": "different-canonical-id",
+        "team": "LA", "roster_status": "ACT",
+        "participation_status": "unknown",
+        "created_at": "2026-09-06T11:00:00Z",
+    }])
+    with pytest.raises(ValueError, match="No roster-eligible canonical salaries"):
+        prepare(matrix, salaries, participation=participation)
+
+
+def test_roster_coverage_loaded_after_cutoff_does_not_exclude_players():
+    matrix, salaries = inputs()
+    participation = pd.DataFrame([{
+        "season": 2026, "week": 1, "player_master_id": "different-canonical-id",
+        "team": "A", "roster_status": "ACT",
+        "participation_status": "unknown",
+        "created_at": "2026-09-06T14:00:00Z",
+    }])
+    _, target, metadata = prepare(matrix, salaries, participation=participation)
+    assert target["player_id"].tolist() == ["canonical-1"]
+    assert metadata["roster_eligibility_policy"]["available"] is False
 
 
 def test_canonical_prediction_runs_without_any_legacy_tables(tmp_path):

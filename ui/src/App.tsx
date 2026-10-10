@@ -1,3 +1,21 @@
+import { ShadowComparisons } from "./ShadowComparisons";
+import { EntryHistory } from "./EntryHistory";
+import { optimizerHasPreparedInputs, optimizerWaitingStatus } from "./preparedOptimizer";
+import { OptimizerLineupControls } from "./OptimizerLineupControls";
+import { LINEUP_CONTROLS_STORAGE_KEY, lineupControlParams, restoreLineupControls } from "./lineupControls";
+import { LARGE_GPP_CONTROLS_STORAGE_KEY } from "./classicLargeGppControls";
+import { defaultTournamentStrategyId, DEFAULT_OPTIMIZER_OBJECTIVE, ACTIVE_OPTIMIZER_STRATEGIES } from "./optimizerStrategy";
+import { singleLineupReportHtml } from "./singleLineupReport";
+import { GppRecommendation } from "./GppRecommendation";
+import { ScenarioPortfolioAccounting } from "./ScenarioPortfolioAccountingReport";
+import { lineupConditionedTotal, teamLimitDescription, exposureWarning, qbLineupLimit, qbCaptainAllowed, captainPositionsDescription, showdownPreflightLabel } from "./showdownReporting";
+import { SlatePreparation, type PreparationCheckState } from "./SlatePreparation";
+import { LearningCandidateDetails } from "./LearningCandidateDetails";
+import { fetchPreparation, type PreparationStatus } from "./api";
+import { preparationBuildIssue } from "./showdownPreparation";
+import { classicLivePreflightLabel, classicLiveReadinessSummary, classicLiveSourceActions } from "./classicLiveReadiness";
+import { ClassicConstructionReport } from "./ClassicConstructionReport";
+import { SINGLE_TE_STORAGE_KEY, parseSingleTePreference } from "./classicConstruction";
 import { OptimizerControlComparison } from "./OptimizerControlComparison";
 import { optimizerAvailabilityOverrides } from "./optimizerProjectionScenario";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -6,9 +24,10 @@ import { AppShell, type ViewMode } from "./AppShell";
 import { DailyNewsBrief } from "./DailyNewsBrief";
 import { ContestWorkflow } from "./ContestWorkflow";
 import { ContestLibrary } from "./ContestLibrary";
+import { canOpenSavedOptimizerReport } from "./optimizerHistory";
 import { RecentOptimizerRuns } from "./RecentOptimizerRuns";
 import { ClassicGameConcentrationReport } from "./ClassicGameConcentrationReport";
-import { classicGameCapParams, parseSavedPrimaryGameCap, PRIMARY_GAME_CAP_STORAGE_KEY } from "./classicGameConcentration";
+import { ClassicLargeGppReadinessReport } from "./ClassicLargeGppReadinessReport";
 import { DesignPreview } from "./DesignPreview";
 import { DigitalTwin } from "./DigitalTwin";
 import { ModelWorkbench } from "./ModelWorkbench";
@@ -19,7 +38,8 @@ import {
   RUN_SELECTIONS_STORAGE_KEY,
   parsePersistedRunSelections,
   DEFAULT_SLATE,
-  SLATE_OPTIONS,
+  availableSlateOptions,
+  isValidSlateId,
   normalizeSlateId,
   parsePersistedActiveSlateContext,
   serializeActiveSlateContext,
@@ -28,25 +48,12 @@ import {
   type PersistedRunSelection,
   type PersistedRunSelections,
 } from "./workspaceContext";
-import {
-  CLASSIC_CONTEST_STRATEGIES,
-  CLASSIC_LARGE_GPP_STRATEGY_ID,
-  CLASSIC_SMALL_FIELD_GPP_STRATEGY_ID,
-  SHOWDOWN_GPP_CAPTAIN_INFORMED_STRATEGY_ID,
-  SHOWDOWN_SINGLE_ENTRY_GPP_STRATEGY_ID,
-  SHOWDOWN_SINGLE_ENTRY_PORTFOLIO_STRATEGY_ID,
-  SHOWDOWN_THREE_MAX_GPP_STRATEGY_ID,
-  SHOWDOWN_SMALL_MAX_GPP_STRATEGY_ID,
-  classicSmallFieldCandidateParams,
-  optimizerStrategyId,
-  type ClassicContestStrategyId,
-} from "./optimizerStrategy";
+import { CLASSIC_CONTEST_STRATEGIES } from "./optimizerStrategy";
 import {
   contextReadinessLabel,
   individualCeilingSummary,
 } from "./optimizerPresentation";
 import { downloadOptimizerReport } from "./optimizerReport";
-import { classicContestUrls } from "./classicContestUrl";
 import { resolveCsvIngestPath } from "./ingestPath";
 import { RbDstDiagnosticsPanel } from "./RbDstDiagnosticsPanel";
 import { ModelDisagreementPanel } from "./ModelDisagreementPanel";
@@ -84,6 +91,7 @@ import {
   fetchOptimizerRuns,
   previewOptimizerContests,
   fetchSlateReadiness,
+  fetchSavedContestScopes,
   fetchSymbolicBacktest,
   fetchSymbolicRules,
   fetchUnmatchedSalaries,
@@ -97,7 +105,8 @@ import {
   loadSlateResource,
   loadStartingQBs,
   processUnmatchedToPlayerMaster,
-  reconcileSlateSalaryIdentities,
+  queuePreparation,
+  waitForOperationalJob,
   runAgent,
   runOptimizer,
   runOwnershipModel,
@@ -322,6 +331,16 @@ function App() {
   const [season, setSeason] = useState(startupContext?.season ?? FALLBACK_SEASON);
   const [week, setWeek] = useState(startupContext?.week ?? FALLBACK_WEEK);
   const [slate, setSlate] = useState(startupContext?.slate ?? DEFAULT_SLATE);
+  const [discoveredSlateNames, setDiscoveredSlateNames] = useState<string[]>([]);
+  const slateOptions = useMemo(() => availableSlateOptions(slate, discoveredSlateNames), [slate, discoveredSlateNames]);
+  useEffect(() => {
+    let cancelled = false;
+    setDiscoveredSlateNames([]);
+    fetchSavedContestScopes().then(({ scopes }) => {
+      if (!cancelled) setDiscoveredSlateNames(scopes.filter(row => row.season === season && row.week === week).map(row => row.slate));
+    }).catch(() => { /* Standard and active slate options remain available. */ });
+    return () => { cancelled = true; };
+  }, [season, week]);
   const [activeContextReady, setActiveContextReady] = useState(Boolean(startupContext));
   const [runSelections, setRunSelections] = useState<PersistedRunSelections>(() => {
     try { return parsePersistedRunSelections(window.localStorage.getItem(RUN_SELECTIONS_STORAGE_KEY)); }
@@ -367,6 +386,8 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [preparationCheck, setPreparationCheck] = useState<PreparationCheckState | null>(null);
+  const [preparationStatus, setPreparationStatus] = useState<PreparationStatus | null>(null);
   const [loadSummaries, setLoadSummaries] = useState<LoadSummary[]>([]);
   const [lastLoadType, setLastLoadType] = useState<string | null>(null);
   const [slateStatus, setSlateStatus] = useState<SlateLoadResponse | null>(null);
@@ -378,75 +399,54 @@ function App() {
   }, [optimizerOpenRequest]);
   const setOptimizerStatus = useCallback((status: OptimizerResponse | null) => {
     setOptimizerStatuses((current) => {
-      if (status) return { ...current, [activeContextKey]: status };
+      const key = activeContextKey;
+      if (status) return { ...current, [key]: status };
       const next = { ...current };
-      delete next[activeContextKey];
+      delete next[key];
       return next;
     });
   }, [activeContextKey]);
   const [slateReadiness, setSlateReadiness] = useState<SlateReadinessResponse | null>(null);
+  useEffect(() => {
+    if (viewMode !== "workspace") return;
+    let cancelled = false;
+    fetchSlateReadiness({ season, week, slate }).then(report => {
+      if (!cancelled) setSlateReadiness(report);
+    }).catch(() => { if (!cancelled) setSlateReadiness(null); });
+    return () => { cancelled = true; };
+  }, [viewMode, season, week, slate]);
   const [lineupExportPending, setLineupExportPending] = useState(false);
   const [lineupExportError, setLineupExportError] = useState<string | null>(null);
   const [dataQualityHistory, setDataQualityHistory] = useState<DataQualityHistoryResponse | null>(null);
   const [dataQualityLoading, setDataQualityLoading] = useState(false);
   const [dataQualityError, setDataQualityError] = useState<string | null>(null);
-  const [numLineups, setNumLineups] = useState(20);
-  const [maxExposure, setMaxExposure] = useState(60);
-  const [classicMaxLineupOverlap, setClassicMaxLineupOverlap] = useState("");
-  const [classicSkillMaxAppearances, setClassicSkillMaxAppearances] = useState("");
-  const [classicExpandedDiscovery, setClassicExpandedDiscovery] = useState(false);
-  const [classicDistinctQbPaths, setClassicDistinctQbPaths] = useState(false);
-  const [classicMaxObjectiveLoss, setClassicMaxObjectiveLoss] = useState("");
-  const [captainMaxExposure, setCaptainMaxExposure] = useState(60);
-  const captainMaxExposureInputRef = useRef<HTMLInputElement>(null);
-  const [coreMaxExposure, setCoreMaxExposure] = useState(80);
-  const [startingQbMaxExposure, setStartingQbMaxExposure] = useState(100);
-  const [cheapPuntMaxExposure, setCheapPuntMaxExposure] = useState(40);
-  const [showdownDecisiveMargin, setShowdownDecisiveMargin] = useState(14);
-  const [requireScenarioDiversity, setRequireScenarioDiversity] = useState(false);
+  const [noQbCaptain, setNoQbCaptain] = useState(false);
+  const [noTwoQbs, setNoTwoQbs] = useState(false);
+  const [noQbs, setNoQbs] = useState(false);
+  const [captainPositions, setCaptainPositions] = useState("");
   const [contestFormat, setContestFormat] = useState<"classic" | "showdown">("classic");
-  const [optimizerObjective, setOptimizerObjective] = useState<"cash" | "gpp">("gpp");
-  const [refreshOwnershipBeforeOptimize, setRefreshOwnershipBeforeOptimize] = useState<boolean>(
-    () => window.localStorage.getItem("dfs-refresh-ownership-before-optimize") !== "false",
-  );
-  const [showdownGppStrategy, setShowdownGppStrategy] = useState(SHOWDOWN_GPP_CAPTAIN_INFORMED_STRATEGY_ID);
-  const [singleEntryContestUrls, setSingleEntryContestUrls] = useState("");
-  const [classicSmallFieldContestUrl, setClassicSmallFieldContestUrl] = useState("");
-  const [classicQbFamilyDiagnostics, setClassicQbFamilyDiagnostics] = useState(false);
-  const [smallMaxContestUrl, setSmallMaxContestUrl] = useState("");
-  const [smallMaxManual, setSmallMaxManual] = useState("");
-  const [smallMaxMaximumEntries, setSmallMaxMaximumEntries] = useState(5);
-  const [smallMaxEntriesToUse, setSmallMaxEntriesToUse] = useState("auto");
-  const [smallMaxCaptainMaxExposure, setSmallMaxCaptainMaxExposure] = useState(100);
-  const [smallMaxPlayerMaxExposure, setSmallMaxPlayerMaxExposure] = useState(100);
-  const [smallMaxStartingQbMaxExposure, setSmallMaxStartingQbMaxExposure] = useState(100);
-  const [smallMaxCheapPuntMaxExposure, setSmallMaxCheapPuntMaxExposure] = useState(100);
-  const [singleEntryContestMode, setSingleEntryContestMode] = useState<"auto" | "enter_all">("auto");
-  const [singleEntryBudget, setSingleEntryBudget] = useState("");
-  const [singleEntryMaximum, setSingleEntryMaximum] = useState("");
-  const [singleEntryManual, setSingleEntryManual] = useState("");
-  const [contestPreview, setContestPreview] = useState<ContestPreview | null>(null);
-  const [contestPreviewError, setContestPreviewError] = useState<string | null>(null);
-  const [contestPreviewPending, setContestPreviewPending] = useState(false);
+  const [lineupControlsByFormat, setLineupControlsByFormat] = useState(() => {
+    try { return restoreLineupControls(window.localStorage.getItem(LINEUP_CONTROLS_STORAGE_KEY), window.localStorage.getItem(LARGE_GPP_CONTROLS_STORAGE_KEY)); }
+    catch { return restoreLineupControls(null, null); }
+  });
+  const lineupControls = lineupControlsByFormat[contestFormat];
+  const showdownMaxPlayersPerTeam = lineupControlsByFormat.showdown.maxPlayersPerTeam;
+  const setShowdownMaxPlayersPerTeam = (value: number) => setLineupControlsByFormat(current => ({ ...current, showdown: { ...current.showdown, maxPlayersPerTeam: value } }));
+  useEffect(() => {
+    try { window.localStorage.setItem(LINEUP_CONTROLS_STORAGE_KEY, JSON.stringify(lineupControlsByFormat)); } catch { /* Preserve session choices. */ }
+  }, [lineupControlsByFormat]);
+  const [singleLineupContestUrl, setSingleLineupContestUrl] = useState("");
   const [optimizerProjectionMessage, setOptimizerProjectionMessage] = useState<string | null>(null);
   const [optimizerProjectionPending, setOptimizerProjectionPending] = useState(false);
   const [optimizerProjectionRunsByContext, setOptimizerProjectionRunsByContext] = useState<Record<string, OptimizerProjectionRun[]>>({});
-  const [optimizerProjectionOverrides, setOptimizerProjectionOverrides] = useState<Record<string, string>>({});
   const optimizerProjectionRuns = optimizerProjectionRunsByContext[activeContextKey] ?? [];
-  const optimizerProjectionOverride = optimizerProjectionOverrides[activeContextKey];
-  useEffect(() => {
-    window.localStorage.setItem(
-      "dfs-refresh-ownership-before-optimize",
-      String(refreshOwnershipBeforeOptimize),
-    );
-  }, [refreshOwnershipBeforeOptimize]);
   const refreshOptimizerProjectionRuns = async () => {
     setOptimizerProjectionPending(true);
     setOptimizerProjectionMessage(null);
     try {
       const response = await fetchOptimizerProjectionRuns({ season, week, slate });
       setOptimizerProjectionRunsByContext((current) => ({ ...current, [activeContextKey]: response.runs }));
-      if (!response.runs.length) setOptimizerProjectionMessage("No completed projection is available for this slate.");
+      setOptimizerProjectionMessage(response.runs.length ? "Reloaded projection list; no source fetch or rebuild occurred." : "Reloaded projection list; no completed projection is available for this slate.");
       return response.runs;
     } catch (err) {
       setOptimizerProjectionMessage(err instanceof Error ? err.message : String(err));
@@ -455,105 +455,26 @@ function App() {
       setOptimizerProjectionPending(false);
     }
   };
-  const singleEntryContestParams = () => {
-    const urls = singleEntryContestUrls.split(/\r?\n/).map((url) => url.trim()).filter(Boolean);
-    if (!urls.length) throw new Error("Paste at least one DraftKings single-entry contest URL.");
-    let manual: Array<Record<string, unknown>> = [];
-    if (singleEntryManual.trim()) {
-      const parsed = JSON.parse(singleEntryManual);
-      if (!Array.isArray(parsed)) throw new Error("Manual contest metadata must be a JSON array.");
-      manual = parsed;
-    }
-    const budget = singleEntryBudget.trim() ? Number(singleEntryBudget) : undefined;
-    const maximum = singleEntryMaximum.trim() ? Number(singleEntryMaximum) : undefined;
-    if (budget !== undefined && (!Number.isFinite(budget) || budget <= 0)) throw new Error("Maximum budget must be positive.");
-    if (maximum !== undefined && (!Number.isInteger(maximum) || maximum < 1)) throw new Error("Maximum contests must be a positive integer.");
-    return {
-      contest_urls: urls, contest_selection: singleEntryContestMode,
-      manual_contest_metadata: manual,
-      ...(budget !== undefined ? { maximum_total_entry_budget: budget } : {}),
-      ...(maximum !== undefined ? { maximum_contests_to_enter: maximum } : {}),
-    };
-  };
-  const classicPortfolioParams = () => {
-    const constraints: Record<string, number | boolean> = {};
-    if (classicMaxLineupOverlap.trim()) {
-      const value = Number(classicMaxLineupOverlap);
-      if (!Number.isInteger(value) || value < 0 || value > 8) throw new Error("Maximum lineup overlap must be 0–8 players.");
-      constraints.max_lineup_overlap = value;
-    }
-    for (const [key, input] of [["skill_max_appearances", classicSkillMaxAppearances]]) {
-      if (input.trim()) {
-        const value = Number(input);
-        if (!Number.isInteger(value) || value < 1 || value > numLineups) throw new Error(`${key} must be 1 through the requested lineup count.`);
-        constraints[key] = value;
-      }
-    }
-    if (classicDistinctQbPaths) constraints.distinct_qb_paths = true;
-    if (classicMaxObjectiveLoss.trim()) {
-      const value = Number(classicMaxObjectiveLoss);
-      if (!Number.isFinite(value) || value < 0) throw new Error("Maximum selector loss must be non-negative.");
-      constraints.max_objective_loss = value;
-    }
-    return { ...(Object.keys(constraints).length ? { portfolio_constraints: constraints } : {}),
-      ...(classicExpandedDiscovery ? { classic_expanded_discovery: true } : {}) };
-  };
-  const smallMaxContestParams = () => {
-    const url = smallMaxContestUrl.trim();
-    if (!url && selectedOptimizerStrategy === SHOWDOWN_THREE_MAX_GPP_STRATEGY_ID) {
-      throw new Error("Paste one DraftKings 3-max contest URL.");
-    }
-    let manual: Array<Record<string, unknown>> = [];
-    if (url && smallMaxManual.trim()) {
-      const parsed = JSON.parse(smallMaxManual);
-      if (!Array.isArray(parsed)) throw new Error("Manual small-max contest metadata must be a JSON array.");
-      manual = parsed;
-    }
-    return {
-      contest_urls: url ? [url] : [], entries_to_use: smallMaxEntriesToUse,
-      manual_contest_metadata: manual,
-      small_max_maximum_entries: smallMaxMaximumEntries,
-      captain_max_exposure: smallMaxCaptainMaxExposure / 100,
-      core_player_max_exposure: smallMaxPlayerMaxExposure / 100,
-      starting_qb_max_exposure: smallMaxStartingQbMaxExposure / 100,
-      cheap_punt_max_exposure: smallMaxCheapPuntMaxExposure / 100,
-    };
-  };
-  const [classicContestStrategy, setClassicContestStrategy] =
-    useState<ClassicContestStrategyId>(CLASSIC_LARGE_GPP_STRATEGY_ID);
-  const [minimumUniqueness, setMinimumUniqueness] = useState(2);
-  const [maxPlayersPerTeam, setMaxPlayersPerTeam] = useState(4);
-  const [maxPlayersPerGame, setMaxPlayersPerGame] = useState(5);
-  const [maxLineupsPerPrimaryGame, setMaxLineupsPerPrimaryGame] = useState<number | null>(() => {
-    try { return parseSavedPrimaryGameCap(window.localStorage.getItem(PRIMARY_GAME_CAP_STORAGE_KEY)); }
-    catch { return null; }
+  const [enforceSingleTE, setEnforceSingleTE] = useState(() => {
+    try { return parseSingleTePreference(window.localStorage.getItem(SINGLE_TE_STORAGE_KEY)); }
+    catch { return true; }
   });
   useEffect(() => {
-    try { window.localStorage.setItem(PRIMARY_GAME_CAP_STORAGE_KEY, JSON.stringify(maxLineupsPerPrimaryGame)); } catch { /* Keep the current session choice. */ }
-  }, [maxLineupsPerPrimaryGame]);
-  const [enforceSingleTE, setEnforceSingleTE] = useState(true);
+    try { window.localStorage.setItem(SINGLE_TE_STORAGE_KEY, String(enforceSingleTE)); } catch { /* Keep session preference. */ }
+  }, [enforceSingleTE]);
   const [avoidDstOpponents, setAvoidDstOpponents] = useState(true);
-  const [longShotMode, setLongShotMode] = useState(false);
-  const selectedClassicStrategy = CLASSIC_CONTEST_STRATEGIES.find(
-    (strategy) => strategy.id === classicContestStrategy
-  ) ?? CLASSIC_CONTEST_STRATEGIES[1];
-  const effectiveOptimizerObjective =
-    contestFormat === "classic"
-      ? selectedClassicStrategy.objective
-      : optimizerObjective;
+  const effectiveOptimizerObjective = DEFAULT_OPTIMIZER_OBJECTIVE;
   const storedOptimizerStatus = optimizerStatuses[activeContextKey] ?? null;
-  const optimizerStatus = storedOptimizerStatus?.contest_format === contestFormat
-    && storedOptimizerStatus.objective === effectiveOptimizerObjective ? storedOptimizerStatus : null;
-  const selectedOptimizerStrategy = contestFormat === "showdown" && optimizerObjective === "gpp"
-    ? showdownGppStrategy
-    : optimizerStrategyId(contestFormat, effectiveOptimizerObjective, classicContestStrategy);
+  const optimizerStatus = storedOptimizerStatus?.contest_format === contestFormat ? storedOptimizerStatus : null;
+  const selectedOptimizerStrategy = defaultTournamentStrategyId(contestFormat);
   const [predictionStatuses, setPredictionStatuses] = useState<Record<string, PredictionOperationStatus>>({});
   const predictionStatus = predictionStatuses[activeContextKey] ?? null;
   const setPredictionStatus = useCallback((status: PredictionOperationStatus | null) => {
     setPredictionStatuses((current) => {
-      if (status) return { ...current, [activeContextKey]: status };
+      const key = activeContextKey;
+      if (status) return { ...current, [key]: status };
       const next = { ...current };
-      delete next[activeContextKey];
+      delete next[key];
       return next;
     });
   }, [activeContextKey]);
@@ -577,15 +498,16 @@ function App() {
     setPredictionRowsByContext((current) => ({ ...current, [activeContextKey]: rows }));
   }, [activeContextKey]);
   const [simulationStatuses, setSimulationStatuses] = useState<Record<string, SimulationResponse>>({});
-  const simulationStatus = simulationStatuses[activeContextKey] ?? null;
+  const simulationStatus = simulationStatuses[`${activeContextKey}:${contestFormat}`] ?? null;
   const setSimulationStatus = useCallback((status: SimulationResponse | null) => {
     setSimulationStatuses((current) => {
-      if (status) return { ...current, [activeContextKey]: status };
+      const key = `${activeContextKey}:${contestFormat}`;
+      if (status) return { ...current, [key]: status };
       const next = { ...current };
-      delete next[activeContextKey];
+      delete next[key];
       return next;
     });
-  }, [activeContextKey]);
+  }, [activeContextKey, contestFormat]);
   const [operationalJobs, setOperationalJobs] = useState<OperationalJob[]>([]);
   const [weeklyRuns, setWeeklyRuns] = useState<WeeklyRun[]>([]);
   const [weeklyDirectory, setWeeklyDirectory] = useState("");
@@ -625,7 +547,7 @@ function App() {
     const choice = weeklyContestSelections[file.path];
     return Boolean(file.source_file_id && choice && Number.isInteger(choice.season)
       && choice.season >= 2000 && Number.isInteger(choice.week)
-      && choice.week >= 1 && choice.week <= 25 && SLATE_OPTIONS.includes(choice.slate));
+      && choice.week >= 1 && choice.week <= 25 && isValidSlateId(choice.slate));
   });
   const [ownershipEvidence, setOwnershipEvidence] = useState<OwnershipEvidenceDraft>({
     contestId: "",
@@ -716,7 +638,13 @@ function App() {
     }));
   };
   const [excludePlayers, setExcludePlayers] = useState<string>("");
-  const [excludeQuestionable, setExcludeQuestionable] = useState(false);
+  const [questionableExclusionByFormat, setQuestionableExclusionByFormat] = useState({
+    classic: false, showdown: true,
+  });
+  const excludeQuestionable = questionableExclusionByFormat[contestFormat];
+  const setExcludeQuestionable = (enabled: boolean) => setQuestionableExclusionByFormat(
+    (current) => ({ ...current, [contestFormat]: enabled }),
+  );
   const [excludeOpponentTeams, setExcludeOpponentTeams] = useState<string>("DEN");
   const [excludePlayerIds, setExcludePlayerIds] = useState<string>("");
   const [lockedPlayers, setLockedPlayers] = useState<string>("");
@@ -726,11 +654,15 @@ function App() {
     { playerName: "", availability: "default", excludeFromLineups: false },
   ]);
   const configuredAvailabilityOverrides = () => optimizerAvailabilityOverrides(
-    playerDecisionControls, excludePlayers, excludePlayerIds,
+    playerDecisionControls, "", "", "showdown",
   );
   const preferenceExcludedPlayers = playerDecisionControls
     .filter((row) => row.playerName.trim() && row.excludeFromLineups)
     .map((row) => row.playerName.trim());
+  const availabilityPreview = (() => {
+    try { return { overrides: configuredAvailabilityOverrides(), error: null }; }
+    catch (failure) { return { overrides: null, error: failure instanceof Error ? failure.message : String(failure) }; }
+  })();
   const [topLineups, setTopLineups] = useState<
     {
       rank: number;
@@ -756,7 +688,7 @@ function App() {
   const runLoadRawSalaries = async () => {
     if (!salaryFileToLoad) return;
     setError(null);
-    setPendingAction("Loading raw salaries...");
+    setPendingAction("Loading salary CSV...");
     try {
       const resp = await loadRawSalaries({ season, week, slate, path: salaryFileToLoad });
       let summaries = (resp as any).summaries;
@@ -774,6 +706,7 @@ function App() {
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
+      try { setPreparationStatus(await fetchPreparation({ season, week, slate })); } catch { setPreparationStatus(null); }
       setPendingAction(null);
     }
   };
@@ -781,7 +714,7 @@ function App() {
   const runLoadRawInjuries = async () => {
     if (!injuryFileToLoad) return;
     setError(null);
-    setPendingAction("Loading raw injuries...");
+    setPendingAction("Loading injury CSV...");
     try {
       const resp = await loadRawInjuries({ season, week, slate, path: injuryFileToLoad });
       let summaries = (resp as any).summaries;
@@ -799,6 +732,7 @@ function App() {
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
+      try { setPreparationStatus(await fetchPreparation({ season, week, slate })); } catch { setPreparationStatus(null); }
       setPendingAction(null);
     }
   };
@@ -819,9 +753,10 @@ function App() {
   const agentStatus = agentStatuses[activeContextKey] ?? null;
   const setAgentStatus = useCallback((status: AgentRunResponse | null) => {
     setAgentStatuses((current) => {
-      if (status) return { ...current, [activeContextKey]: status };
+      const key = activeContextKey;
+      if (status) return { ...current, [key]: status };
       const next = { ...current };
-      delete next[activeContextKey];
+      delete next[key];
       return next;
     });
   }, [activeContextKey]);
@@ -909,13 +844,13 @@ function App() {
     const selectedOptimizerRunId = activeRunSelection.optimizerRunId;
     if (!selectedOptimizerRunId || optimizerStatus?.job_id === selectedOptimizerRunId || pendingAction) return;
     let cancelled = false;
-    fetchOptimizerRuns({ season, week, slate, contest_format: contestFormat, objective: effectiveOptimizerObjective })
+    fetchOptimizerRuns({ season, week, slate, contest_format: contestFormat })
       .then((history) => {
         const selected = history.runs.find((run) => run.optimizer_run_id === selectedOptimizerRunId);
-        return selected && selected.status !== "completed" ? null : fetchOptimizerResults(selectedOptimizerRunId);
+        return selected && !canOpenSavedOptimizerReport(selected) ? null : fetchOptimizerResults(selectedOptimizerRunId);
       })
       .then((response) => {
-        if (response && !cancelled && response.contest_format === contestFormat && response.objective === effectiveOptimizerObjective) setOptimizerStatus(response);
+        if (response && !cancelled && response.contest_format === contestFormat) setOptimizerStatus(response);
       })
       .catch(() => {
         // Delivery performs the authoritative compatibility check when creating a portfolio.
@@ -925,13 +860,16 @@ function App() {
     };
   }, [activeRunSelection.optimizerRunId, optimizerStatus?.job_id, setOptimizerStatus, contestFormat, effectiveOptimizerObjective, pendingAction, season, week, slate]);
 
-  const openRecentOptimizer = useCallback(async (run: OptimizerRunSummary) => {
+  const openRecentOptimizer = useCallback(async (run: OptimizerRunSummary, scrollToResults = true) => {
     updateActiveRunSelection({ optimizerRunId: run.optimizer_run_id,
       ...(run.projection_run_id ? { projectionRunId: run.projection_run_id } : {}) });
-    if (run.status === "completed") {
+    setContestFormat(run.contest_format as "classic" | "showdown");
+    if (canOpenSavedOptimizerReport(run)) {
       const response = await fetchOptimizerResults(run.optimizer_run_id);
       setOptimizerStatus(response);
-      setOptimizerOpenRequest((current) => current + 1);
+      if (scrollToResults) setOptimizerOpenRequest((current) => current + 1);
+    } else {
+      setOptimizerStatus(null);
     }
   }, [updateActiveRunSelection, setOptimizerStatus]);
 
@@ -979,92 +917,44 @@ function App() {
     };
   }, [viewMode, season, week, slate]);
 
+  const optimizerParams = () => ({
+    ...lineupControlParams(lineupControls, contestFormat), refresh_ownership: false,
+    ...(singleLineupContestUrl.trim() ? { contest_urls: [singleLineupContestUrl.trim()] } : {}),
+    enforce_single_te: contestFormat === "classic" && enforceSingleTE,
+    avoid_dst_opponents: avoidDstOpponents,
+    availability_overrides: configuredAvailabilityOverrides(), exclusions_assumed_out: false,
+    exclude_players: Array.from(new Set([...excludePlayers.split(",").map(v => v.trim()).filter(Boolean), ...preferenceExcludedPlayers])),
+    exclude_opponent_teams: excludeOpponentTeams.split(",").map(v => v.trim().toUpperCase()).filter(Boolean),
+    exclude_questionable: excludeQuestionable,
+    exclude_player_ids: excludePlayerIds.split(",").map(v => v.trim()).filter(Boolean),
+    locked_player_ids: lockedPlayerIds.split(",").map(v => v.trim()).filter(Boolean),
+    locked_players: lockedPlayers.split(",").map(v => v.trim()).filter(Boolean),
+    ...(contestFormat === "showdown" ? {
+      no_qb_captain: noQbCaptain, no_two_qbs: noTwoQbs, no_qbs: noQbs,
+      captain_positions: captainPositions ? captainPositions.split(",") : [],
+      max_players_per_team: showdownMaxPlayersPerTeam,
+      flex_only_players: flexOnlyPlayers.split(",").map(v => v.trim()).filter(Boolean),
+    } : {}),
+  });
+
   const launchWeeklyRun = async () => {
-    const requestedCaptainMaxExposure = Number.isFinite(captainMaxExposureInputRef.current?.valueAsNumber)
-      ? Number(captainMaxExposureInputRef.current?.valueAsNumber)
-      : captainMaxExposure;
     setPendingAction("Queueing weekly run...");
     setWeeklyRunError(null);
     try {
-      if (contestFormat === "classic" && ["classic_large_gpp_v1", "classic_small_field_gpp"].includes(selectedOptimizerStrategy)) classicGameCapParams(maxLineupsPerPrimaryGame);
       const availabilityOverrides = configuredAvailabilityOverrides();
-      const classicReportingUrls = selectedOptimizerStrategy === CLASSIC_SMALL_FIELD_GPP_STRATEGY_ID
-        ? classicContestUrls(classicSmallFieldContestUrl) : [];
       const response = await createWeeklyRun({
         season,
         week,
         slate,
         draftkings_directory: weeklyDirectory.trim() || undefined,
         availability_overrides: availabilityOverrides,
-        assume_questionable_out: excludeQuestionable,
+        assume_questionable_out: false,
         refresh_projections: true,
         contest_format: contestFormat,
         objective: effectiveOptimizerObjective,
         strategy: selectedOptimizerStrategy,
         num_simulations: 1000,
-        optimizer_params: {
-          num_lineups: longShotMode && effectiveOptimizerObjective === "gpp" ? 1 : selectedOptimizerStrategy === SHOWDOWN_SINGLE_ENTRY_GPP_STRATEGY_ID ? 1 : selectedOptimizerStrategy === SHOWDOWN_SMALL_MAX_GPP_STRATEGY_ID ? 5 : selectedOptimizerStrategy === SHOWDOWN_THREE_MAX_GPP_STRATEGY_ID ? 3 : selectedOptimizerStrategy === SHOWDOWN_SINGLE_ENTRY_PORTFOLIO_STRATEGY_ID ? singleEntryContestUrls.split(/\r?\n/).filter((url) => url.trim()).length : numLineups,
-          long_shot_mode: longShotMode && effectiveOptimizerObjective === "gpp",
-          ...(selectedOptimizerStrategy === SHOWDOWN_SINGLE_ENTRY_PORTFOLIO_STRATEGY_ID ? singleEntryContestParams() : {}),
-          ...(classicReportingUrls.length ? { contest_urls: classicReportingUrls } : {}),
-          ...(selectedOptimizerStrategy === CLASSIC_SMALL_FIELD_GPP_STRATEGY_ID ? {
-            classic_qb_family_diagnostics: classicQbFamilyDiagnostics,
-            classic_solver_backend: "auto",
-            classic_candidate_workers: 4,
-            ...classicSmallFieldCandidateParams(longShotMode, slate, numLineups),
-            ...classicPortfolioParams(),
-          } : {}),
-          ...((selectedOptimizerStrategy === SHOWDOWN_THREE_MAX_GPP_STRATEGY_ID || selectedOptimizerStrategy === SHOWDOWN_SMALL_MAX_GPP_STRATEGY_ID) ? smallMaxContestParams() : {}),
-          max_exposure: selectedOptimizerStrategy === SHOWDOWN_SINGLE_ENTRY_GPP_STRATEGY_ID || selectedOptimizerStrategy === SHOWDOWN_SINGLE_ENTRY_PORTFOLIO_STRATEGY_ID ? 1 : maxExposure / 100,
-          ...(contestFormat === "showdown" && effectiveOptimizerObjective === "gpp" && (showdownGppStrategy === SHOWDOWN_GPP_CAPTAIN_INFORMED_STRATEGY_ID) ? {
-            captain_max_exposure: requestedCaptainMaxExposure / 100,
-            core_player_max_exposure: coreMaxExposure / 100,
-            starting_qb_max_exposure: startingQbMaxExposure / 100,
-            cheap_punt_max_exposure: cheapPuntMaxExposure / 100,
-            showdown_decisive_margin: showdownDecisiveMargin,
-            require_scenario_diversity: requireScenarioDiversity,
-          } : {}),
-          enforce_single_te: contestFormat === "showdown" ? false : enforceSingleTE,
-          avoid_dst_opponents: avoidDstOpponents,
-          ...(contestFormat === "classic" && (classicContestStrategy === CLASSIC_LARGE_GPP_STRATEGY_ID || classicContestStrategy === CLASSIC_SMALL_FIELD_GPP_STRATEGY_ID)
-            ? {
-                minimum_uniqueness: minimumUniqueness,
-                max_players_per_team: maxPlayersPerTeam,
-                max_players_per_game: maxPlayersPerGame,
-                ...classicGameCapParams(maxLineupsPerPrimaryGame),
-              }
-            : {}),
-          availability_overrides: availabilityOverrides,
-          exclusions_assumed_out: true,
-          exclude_players: Array.from(new Set([
-            ...excludePlayers.split(",").map((value) => value.trim()).filter(Boolean),
-            ...preferenceExcludedPlayers,
-          ])),
-          exclude_opponent_teams: excludeOpponentTeams.split(",").map((value) => value.trim().toUpperCase()).filter(Boolean),
-          exclude_questionable: excludeQuestionable,
-          exclude_player_ids: excludePlayerIds
-            .split(",")
-            .map((value) => value.trim())
-            .filter(Boolean),
-          locked_player_ids: lockedPlayerIds
-            .split(",")
-            .map((value) => value.trim())
-            .filter(Boolean),
-          locked_players: lockedPlayers
-            .split(",")
-            .map((value) => value.trim())
-            .filter(Boolean),
-          ...(contestFormat === "showdown"
-            ? {
-                flex_only_players: flexOnlyPlayers
-                  .split(",")
-                  .map((value) => value.trim())
-                  .filter(Boolean),
-              }
-            : {}),
-        },
-        template_id: weeklyTemplateId.trim() || undefined,
-        portfolio_name: `${season} W${week} ${slate}`,
+        optimizer_params: optimizerParams(),
       });
       setWeeklyRuns((current) => [
         response.run,
@@ -1274,224 +1164,76 @@ function App() {
     }
   };
 
-  const runOptimizerJob = async () => {
-    const requestedCaptainMaxExposure = Number.isFinite(captainMaxExposureInputRef.current?.valueAsNumber)
-      ? Number(captainMaxExposureInputRef.current?.valueAsNumber)
-      : captainMaxExposure;
+  const preparedBuild = preparationStatus?.latest_build;
+  const preparationRunning = Boolean(preparationStatus?.jobs.some(j => j.status === "queued" || j.status === "running"));
+  const optimizerPrepared = optimizerHasPreparedInputs(preparationStatus, { season, week, slate },
+    contestFormat, availabilityPreview.overrides);
+  const currentCheckError = preparationCheck?.scope.season === season && preparationCheck.scope.week === week
+    && preparationCheck.scope.slate.toUpperCase() === slate.toUpperCase() ? preparationCheck.error : null;
+  const optimizerWait = optimizerWaitingStatus(preparationStatus, { season, week, slate },
+    optimizerPrepared, pendingAction, currentCheckError, availabilityPreview.error);
+
+
+  const prepareOptimizerSlate = async () => {
     setError(null);
-    setPendingAction("Reconciling slate player identities...");
+    setPendingAction("Preparing slate sources, projections and ownership...");
     try {
-      if (contestFormat === "classic" && ["classic_large_gpp_v1", "classic_small_field_gpp"].includes(selectedOptimizerStrategy)) classicGameCapParams(maxLineupsPerPrimaryGame);
-      const availabilityOverrides = configuredAvailabilityOverrides();
-      if (optimizerProjectionOverride) {
-        throw new Error("Run Optimizer rebuilds current projections. Select Latest completed (automatic) before running.");
-      }
-      const classicReportingUrls = selectedOptimizerStrategy === CLASSIC_SMALL_FIELD_GPP_STRATEGY_ID
-        ? classicContestUrls(classicSmallFieldContestUrl) : [];
-      await reconcileSlateSalaryIdentities({ season, week, slate });
-      setPendingAction("Refreshing slate features before projections...");
-      await buildFeatureMatrix({ season, weeks: [week], slate });
-      setPendingAction("Checking slate readiness...");
-      const readiness = await fetchSlateReadiness({ season, week, slate, record: true });
-      setSlateReadiness(readiness);
-      const gateKey = optimizerReadinessGateKey(contestFormat, effectiveOptimizerObjective);
-      if (readiness.gates.prediction.status === "fail") {
-        throw new Error(`Projection rebuild blocked by slate readiness: ${readinessFailureMessage(readiness, "prediction")}`);
-      }
-      setPendingAction("Resolving starting QBs before projections...");
-      const starterResponse = await loadStartingQBs({ season, week, slate });
-      setStartingQBStatus(starterResponse);
-      if (starterResponse.rows_written <= 0) {
-        stageStartingQBCandidates(starterResponse.candidates);
-        throw new Error(starterResponse.message || "No starting-QB evidence could be resolved for this slate.");
-      }
-      setPendingAction("Rebuilding projections using configured assumed-out players...");
-      const scenarioProjection = await runPredictions({
-        season,
-        week,
-        slate,
-        availability_overrides: availabilityOverrides,
-        assume_questionable_out: excludeQuestionable,
-      });
-      const projectionRunId = scenarioProjection.projection_run_id ?? undefined;
-      if (!projectionRunId || scenarioProjection.rows_written <= 0 || !scenarioProjection.target_persisted) {
-        throw new Error("Projection rebuild did not produce a persisted projection run. Optimization was not started.");
-      }
-      setPredictionStatus({ message: scenarioProjection.message, rows_written: scenarioProjection.rows_written });
-      updateActiveRunSelection({ projectionRunId });
-      await refreshOptimizerProjectionRuns();
-      let ownershipRunId: string | undefined;
-      if (effectiveOptimizerObjective === "gpp" && refreshOwnershipBeforeOptimize) {
-        setPendingAction("Refreshing ownership before optimization...");
-        const ownership = await runOwnershipModel({
-          season,
-          week,
-          slate,
-          projection_run_id: projectionRunId,
-        });
-        setOwnershipStatus(ownership);
-        if (ownership.rows_written <= 0 || !ownership.ownership_run_id) {
-          throw new Error(
-            ownership.message || "Ownership refresh did not produce current-slate projections.",
-          );
-        }
-        ownershipRunId = ownership.ownership_run_id;
-      }
-      const finalReadiness = await fetchSlateReadiness({ season, week, slate, record: true });
-      setSlateReadiness(finalReadiness);
-      if (finalReadiness.gates[gateKey].status === "fail") {
-        throw new Error(`Optimizer blocked by slate readiness: ${readinessFailureMessage(finalReadiness, gateKey)}`);
-      }
-      const optimizerRunId = globalThis.crypto?.randomUUID?.()
-        ?? `optimizer-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-      setPendingAction("Running optimizer...");
-      updateActiveRunSelection({ optimizerRunId, projectionRunId });
-      const response = await runOptimizer({
-        season,
-        week,
-        slate,
-        strategy: selectedOptimizerStrategy,
-        optimizer_run_id: optimizerRunId,
-        contest_format: contestFormat,
-        objective: effectiveOptimizerObjective,
-        projection_run_id: projectionRunId,
-        params: {
-          num_lineups: longShotMode && effectiveOptimizerObjective === "gpp" ? 1 : selectedOptimizerStrategy === SHOWDOWN_SINGLE_ENTRY_GPP_STRATEGY_ID ? 1 : selectedOptimizerStrategy === SHOWDOWN_SMALL_MAX_GPP_STRATEGY_ID ? 5 : selectedOptimizerStrategy === SHOWDOWN_THREE_MAX_GPP_STRATEGY_ID ? 3 : selectedOptimizerStrategy === SHOWDOWN_SINGLE_ENTRY_PORTFOLIO_STRATEGY_ID ? singleEntryContestUrls.split(/\r?\n/).filter((url) => url.trim()).length : numLineups,
-          long_shot_mode: longShotMode && effectiveOptimizerObjective === "gpp",
-          ...(ownershipRunId ? { ownership_run_id: ownershipRunId } : {}),
-          ...(selectedOptimizerStrategy === SHOWDOWN_SINGLE_ENTRY_PORTFOLIO_STRATEGY_ID ? singleEntryContestParams() : {}),
-          ...(classicReportingUrls.length ? { contest_urls: classicReportingUrls } : {}),
-          ...(selectedOptimizerStrategy === CLASSIC_SMALL_FIELD_GPP_STRATEGY_ID ? {
-            classic_qb_family_diagnostics: classicQbFamilyDiagnostics,
-            classic_solver_backend: "auto",
-            classic_candidate_workers: 4,
-            ...classicSmallFieldCandidateParams(longShotMode, slate, numLineups),
-            ...classicPortfolioParams(),
-          } : {}),
-          ...((selectedOptimizerStrategy === SHOWDOWN_THREE_MAX_GPP_STRATEGY_ID || selectedOptimizerStrategy === SHOWDOWN_SMALL_MAX_GPP_STRATEGY_ID) ? smallMaxContestParams() : {}),
-          max_exposure: selectedOptimizerStrategy === SHOWDOWN_SINGLE_ENTRY_GPP_STRATEGY_ID || selectedOptimizerStrategy === SHOWDOWN_SINGLE_ENTRY_PORTFOLIO_STRATEGY_ID ? 1 : maxExposure / 100,
-          ...(contestFormat === "showdown" && effectiveOptimizerObjective === "gpp" && (showdownGppStrategy === SHOWDOWN_GPP_CAPTAIN_INFORMED_STRATEGY_ID) ? {
-            captain_max_exposure: requestedCaptainMaxExposure / 100,
-            core_player_max_exposure: coreMaxExposure / 100,
-            starting_qb_max_exposure: startingQbMaxExposure / 100,
-            cheap_punt_max_exposure: cheapPuntMaxExposure / 100,
-            showdown_decisive_margin: showdownDecisiveMargin,
-            require_scenario_diversity: requireScenarioDiversity,
-          } : {}),
-          enforce_single_te: contestFormat === "showdown" ? false : enforceSingleTE,
-          avoid_dst_opponents: avoidDstOpponents,
-          ...(contestFormat === "classic" && (classicContestStrategy === CLASSIC_LARGE_GPP_STRATEGY_ID || classicContestStrategy === CLASSIC_SMALL_FIELD_GPP_STRATEGY_ID)
-            ? {
-                minimum_uniqueness: minimumUniqueness,
-                max_players_per_team: maxPlayersPerTeam,
-                max_players_per_game: maxPlayersPerGame,
-                ...classicGameCapParams(maxLineupsPerPrimaryGame),
-              }
-            : {}),
-          availability_overrides: availabilityOverrides,
-          exclusions_assumed_out: true,
-          exclude_players: Array.from(new Set([
-            ...excludePlayers.split(",").map((s) => s.trim()).filter((s) => s.length > 0),
-            ...preferenceExcludedPlayers,
-          ])),
-          exclude_opponent_teams: excludeOpponentTeams.split(",").map((value) => value.trim().toUpperCase()).filter(Boolean),
-          exclude_questionable: excludeQuestionable,
-          exclude_player_ids: excludePlayerIds
-            .split(",")
-            .map((value) => value.trim())
-            .filter(Boolean),
-          locked_player_ids: lockedPlayerIds
-            .split(",")
-            .map((value) => value.trim())
-            .filter(Boolean),
-          locked_players: lockedPlayers
-            .split(",")
-            .map((value) => value.trim())
-            .filter(Boolean),
-          ...(contestFormat === "showdown"
-            ? {
-                flex_only_players: flexOnlyPlayers
-                  .split(",")
-                  .map((value) => value.trim())
-                  .filter(Boolean),
-              }
-            : {}),
-        },
-      }, () => setPendingAction("Optimizer queued on the durable worker. You can reopen it in Recent optimizer runs."));
-      setOptimizerStatus(response);
-      updateActiveRunSelection({
-        optimizerRunId: response.job_id,
-        projectionRunId: response.projection_run_id ?? activeRunSelection.projectionRunId,
-      });
+      const response = await queuePreparation({ season, week, slate, action: "prepare", contest_format: contestFormat, ownership_required: true,
+        availability_overrides: configuredAvailabilityOverrides(), assume_questionable_out: false });
+      setPreparationStatus(await fetchPreparation({ season, week, slate }));
+      setPendingAction(`Preparing slate on the durable worker (${response.job.job_id}). Source checks appear in Preparation and data tools.`);
+      await waitForOperationalJob(response.job.job_id);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
+      try { setPreparationStatus(await fetchPreparation({ season, week, slate })); } catch { setPreparationStatus(null); }
+      try { setSlateReadiness(await fetchSlateReadiness({ season, week, slate })); } catch { setSlateReadiness(null); }
+      await refreshOptimizerProjectionRuns().catch(() => undefined);
       setPendingAction(null);
+    }
+  };
+
+  const runOptimizerJob = async () => {
+    let submittedRunId: string | undefined;
+    setError(null);
+    setPendingAction("Checking optimizer request...");
+    try {
+      const params = optimizerParams();
+      if (!optimizerPrepared || !preparedBuild) throw new Error("Prepare slate for optimization first.");
+      submittedRunId = globalThis.crypto.randomUUID();
+      updateActiveRunSelection({ optimizerRunId: submittedRunId });
+      setPendingAction("Submitting optimizer request...");
+      const response = await runOptimizer({ season, week, slate, strategy: selectedOptimizerStrategy,
+        optimizer_run_id: submittedRunId, contest_format: contestFormat,
+        objective: effectiveOptimizerObjective, projection_run_id: preparedBuild.projection_run_id,
+        params: { ...params, prepared_input_job_id: preparedBuild.prepared_input_job_id } },
+        () => setPendingAction("Optimizer queued on the durable worker. Reopen it in Recent optimizer runs."));
+      setOptimizerStatus(response);
+      updateActiveRunSelection({ optimizerRunId: response.job_id,
+        projectionRunId: response.projection_run_id ?? activeRunSelection.projectionRunId });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      if (submittedRunId) {
+        setPendingAction("Checking for saved optimizer results after the request error...");
+        try { setOptimizerStatus(await fetchOptimizerResults(submittedRunId)); } catch { /* Keep original failure. */ }
+      }
+    } finally {
+      setPendingAction(null);
+      try { setSlateReadiness(await fetchSlateReadiness({ season, week, slate })); } catch { setSlateReadiness(null); }
+      try { setPreparationStatus(await fetchPreparation({ season, week, slate })); } catch { /* Keep last preparation audit. */ }
+      await refreshOptimizerProjectionRuns().catch(() => undefined);
     }
   };
 
   const refreshOptimizer = async () => {
-    if (!optimizerStatus?.job_id) return;
     setError(null);
-    setPendingAction("Refreshing optimizer...");
+    setSlateReadiness(null);
+    setPendingAction("Refreshing readiness and optimizer status...");
     try {
-      const response = await fetchOptimizerResults(optimizerStatus.job_id);
-      setOptimizerStatus(response);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setPendingAction(null);
-    }
-  };
-
-  const runPredictionJob = async () => {
-    setError(null);
-    setPendingAction("Reconciling slate player identities...");
-    try {
-      const availabilityOverrides = configuredAvailabilityOverrides();
-      await reconcileSlateSalaryIdentities({ season, week, slate });
-      setPendingAction("Refreshing slate features...");
-      await buildFeatureMatrix({ season, weeks: [week], slate });
-      setPendingAction("Checking slate readiness...");
-      const readiness = await fetchSlateReadiness({ season, week, slate, record: true });
-      setSlateReadiness(readiness);
-      if (readiness.gates.prediction.status === "fail") {
-        throw new Error(`Prediction blocked by slate readiness: ${readinessFailureMessage(readiness, "prediction")}`);
-      }
-      setPendingAction("Resolving starting QBs...");
-      const starterResponse = await loadStartingQBs({ season, week, slate });
-      setStartingQBStatus(starterResponse);
-      if (starterResponse.rows_written <= 0) {
-        stageStartingQBCandidates(starterResponse.candidates);
-        throw new Error(starterResponse.message || "No starting-QB evidence could be resolved for this slate.");
-      }
-      setStartingQBCandidates([]);
-      setPendingAction("Running projections...");
-      const response = await runPredictions({
-        season,
-        week,
-        slate,
-        availability_overrides: availabilityOverrides,
-        assume_questionable_out: excludeQuestionable,
-      });
-      setPredictionStatus({
-        message: response.message,
-        rows_written: response.rows_written,
-      });
-      // Pull latest projections after run
-      const projections = await fetchLatestPredictions({
-        season,
-        week,
-        limit: 1000,
-        slate,
-        projectionRunId: response.projection_run_id ?? activeRunSelection.projectionRunId,
-      });
-      setPredictionRows(projections.rows);
-      updateActiveRunSelection({
-        projectionRunId: projections.projection_run_id ?? response.projection_run_id ?? undefined,
-      });
+      setSlateReadiness(await fetchSlateReadiness({ season, week, slate }));
+      setPreparationStatus(await fetchPreparation({ season, week, slate }));
       await refreshOptimizerProjectionRuns();
-      setSlateReadiness(await fetchSlateReadiness({ season, week, slate, record: true }));
+      if (optimizerStatus?.job_id) setOptimizerStatus(await fetchOptimizerResults(optimizerStatus.job_id));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -1915,7 +1657,7 @@ function App() {
           .filter((file) => file.file_type === "contest_standings")
           .map((file) => [file.path, {
             selected: false, season: file.season, week: file.week,
-            slate: SLATE_OPTIONS.includes(file.slate) ? file.slate : "",
+            slate: isValidSlateId(file.slate) ? file.slate : "",
           }])));
       } else {
         setWeeklyContestSelections({});
@@ -2041,7 +1783,7 @@ function App() {
 
   if (viewMode === "digital-twin") {
     return (
-      <AppShell activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onSlateChange={setActiveSlate} onNavigate={setViewMode}>
+      <AppShell slateOptions={slateOptions} activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onSlateChange={setActiveSlate} onNavigate={setViewMode}>
         <DigitalTwin
           season={season}
           week={week}
@@ -2059,7 +1801,7 @@ function App() {
 
   if (viewMode === "preview") {
     return (
-      <AppShell activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onSlateChange={setActiveSlate} onNavigate={setViewMode}>
+      <AppShell slateOptions={slateOptions} activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onSlateChange={setActiveSlate} onNavigate={setViewMode}>
         <DesignPreview onBack={() => setViewMode("war-room")} />
       </AppShell>
     );
@@ -2067,7 +1809,7 @@ function App() {
 
   if (viewMode === "news-brief") {
     return (
-      <AppShell activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onSlateChange={setActiveSlate} onNavigate={setViewMode}>
+      <AppShell slateOptions={slateOptions} activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onSlateChange={setActiveSlate} onNavigate={setViewMode}>
         <DailyNewsBrief onBack={() => setViewMode("war-room")} />
       </AppShell>
     );
@@ -2075,12 +1817,12 @@ function App() {
 
   if (viewMode === "contest-workflow") {
     return (
-      <AppShell activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onSlateChange={setActiveSlate} onNavigate={setViewMode}>
+      <AppShell slateOptions={slateOptions} activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onSlateChange={setActiveSlate} onNavigate={setViewMode}>
         <ContestWorkflow
           season={season}
           week={week}
           slate={slate}
-          slateOptions={SLATE_OPTIONS}
+          slateOptions={slateOptions}
           optimizerRunId={activeRunSelection.optimizerRunId}
           onOptimizerRunIdChange={setActiveOptimizerRunId}
           onSeasonChange={setSeason}
@@ -2095,12 +1837,12 @@ function App() {
 
   if (viewMode === "model-workbench") {
     return (
-      <AppShell activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onSlateChange={setActiveSlate} onNavigate={setViewMode}>
+      <AppShell slateOptions={slateOptions} activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onSlateChange={setActiveSlate} onNavigate={setViewMode}>
         <ModelWorkbench
           season={season}
           week={week}
           slate={slate}
-          slateOptions={SLATE_OPTIONS}
+          slateOptions={slateOptions}
           projectionRunId={activeRunSelection.projectionRunId}
           onProjectionRunChange={setActiveProjectionRunId}
           onSeasonChange={setSeason}
@@ -2116,12 +1858,12 @@ function App() {
 
   if (viewMode === "war-room") {
     return (
-      <AppShell activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onSlateChange={setActiveSlate} onNavigate={setViewMode}>
+      <AppShell slateOptions={slateOptions} activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onSlateChange={setActiveSlate} onNavigate={setViewMode}>
         <WarRoom
           season={season}
           week={week}
           slate={slate}
-          slateOptions={SLATE_OPTIONS}
+          slateOptions={slateOptions}
           pendingAction={pendingAction}
           optimizerStatus={optimizerStatus}
           projectionRunId={activeRunSelection.projectionRunId}
@@ -2140,12 +1882,12 @@ function App() {
 
   if (viewMode === "research") {
     return (
-      <AppShell activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onSlateChange={setActiveSlate} onNavigate={setViewMode}>
+      <AppShell slateOptions={slateOptions} activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onSlateChange={setActiveSlate} onNavigate={setViewMode}>
         <ResearchWorkspace
           season={season}
           week={week}
           slate={slate}
-          slateOptions={SLATE_OPTIONS}
+          slateOptions={slateOptions}
           selectedSimulationRunId={activeRunSelection.researchSimulationRunId ?? ""}
           selectedBaselineRunId={activeRunSelection.researchBaselineRunId ?? ""}
           onSeasonChange={setSeason}
@@ -2160,7 +1902,7 @@ function App() {
 
   if (viewMode === "learning") {
     return (
-      <AppShell activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onSlateChange={setActiveSlate} onNavigate={setViewMode}>
+      <AppShell slateOptions={slateOptions} activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onSlateChange={setActiveSlate} onNavigate={setViewMode}>
         <div className="operations-workspace learning-workspace">
           <section className="operations-command" aria-labelledby="learning-command-title">
             <div className="operations-command-copy">
@@ -2179,6 +1921,8 @@ function App() {
               </label>
             </div>
           </section>
+          <EntryHistory key={season} year={season} directory={weeklyContestDirectory} />
+          <ShadowComparisons key={`${season}-${week}`} season={season} week={week} />
           <section className="panel operations-panel operations-data-panel" aria-labelledby="learning-import-title">
             <div className="operations-panel-heading">
               <span>01 · Import</span>
@@ -2259,7 +2003,7 @@ function App() {
                               [file.path]: { ...current[file.path], slate: event.target.value },
                             }))}>
                             <option value="">Choose slate</option>
-                            {SLATE_OPTIONS.map((option) => <option key={option} value={option}>{option.replaceAll("_", " ")}</option>)}
+                            {slateOptions.map((option) => <option key={option} value={option}>{option.replaceAll("_", " ")}</option>)}
                           </select> : file.slate.replaceAll("_", " ")}</td>
                           <td>{file.status === "would_stage" || file.status === "staged"
                             ? weeklyContestSelections[file.path]?.slate ? "Ready to load" : "Needs slate"
@@ -2354,6 +2098,7 @@ function App() {
                       {report.learning_outcomes.beliefs.contradicted} contradicted ·{" "}
                       {report.learning_outcomes.beliefs.theses_scored} scored
                     </p>
+                    <LearningCandidateDetails key={report.report_id} report={report} />
                     <ul>
                       {report.entries.map((entry, index) => {
                         const rank = typeof entry.rank === "number" ? entry.rank : null;
@@ -2370,6 +2115,9 @@ function App() {
                             {actualPoints != null ? ` · actual ${actualPoints.toFixed(2)} pts` : ""}
                             {projectedPoints != null ? ` · projected ${projectedPoints.toFixed(2)} pts${actualPoints != null ? ` · difference ${(actualPoints - projectedPoints).toFixed(2)} pts` : ""}` : " · projection unavailable"}
                             {entry.lineup_match_basis ? ` · ${String(entry.lineup_match_basis).replaceAll("_", " ")}` : ""}
+                            {entry.entry_evidence != null && typeof entry.entry_evidence === "object" && "url" in entry.entry_evidence && (
+                              <> · <a href={String(entry.entry_evidence.url)} target="_blank" rel="noreferrer">Open saved decision and control evidence</a></>
+                            )}
                             {players.length > 0 && (
                               <details>
                                 <summary>Player predictions and results</summary>
@@ -2410,14 +2158,14 @@ function App() {
   }
 
   return (
-    <AppShell activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onSlateChange={setActiveSlate} onNavigate={setViewMode}>
+    <AppShell slateOptions={slateOptions} activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onSlateChange={setActiveSlate} onNavigate={setViewMode}>
       <div className="operations-workspace">
       <section className="operations-command" aria-labelledby="operations-command-title">
         <div className="operations-command-copy">
           <span className="operations-eyebrow"><i aria-hidden="true" /> Live pipeline</span>
-          <h2 id="operations-command-title">Prepare. Project. Generate.</h2>
+          <h2 id="operations-command-title">Choose your lineup.</h2>
           <p>
-            Move the active slate from raw inputs to validated, upload-ready lineups.
+            Choose Captain or Classic, load slate files, prepare verified inputs, then run with your lineup and player settings.
           </p>
         </div>
         <div className="operations-context" aria-label="Active slate controls">
@@ -2446,6 +2194,379 @@ function App() {
         </div>
       </section>
 
+      <section className="panel operations-panel operations-basic-inputs" aria-labelledby="basic-inputs-title">
+        <div className="operations-panel-heading">
+          <span>01 · Load files</span>
+          <h2 id="basic-inputs-title">Slate files</h2>
+          <p>Download the slate’s DraftKings salary CSV and FanDuel injury CSV, enter their local paths, then load each file. Files already loaded for this slate do not need to be loaded again.</p>
+        </div>
+        <div className="basic-file-grid">
+          <div className="form-row column">
+            <label>
+              Salary file
+              <input
+                className="full-width"
+                type="text"
+                value={salaryPath}
+                onChange={(event) => setSalaryPath(event.target.value)}
+                placeholder="~/NFL/DKSalaries_2026_3_SUNDAY_MAIN.csv"
+              />
+            </label>
+            <small>{salaryFileToLoad ? `Will load: ${salaryFileToLoad}` : "Enter a CSV filename."}</small>
+            <button disabled={!salaryFileToLoad || Boolean(pendingAction)} onClick={runLoadRawSalaries}>Load salary CSV</button>
+          </div>
+          <div className="form-row column">
+            <label>
+              Injury file
+              <input
+                className="full-width"
+                type="text"
+                value={injuryPath}
+                onChange={(event) => setInjuryPath(event.target.value)}
+                placeholder="~/NFL/FanDuel_injuries_2026_3_SUNDAY_MAIN.csv"
+              />
+            </label>
+            <small>{injuryFileToLoad ? `Will load: ${injuryFileToLoad}` : "Enter a CSV filename."}</small>
+            <button disabled={!injuryFileToLoad || Boolean(pendingAction)} onClick={runLoadRawInjuries}>Load injury CSV</button>
+          </div>
+        </div>
+        {preparationStatus?.scope.season === season && preparationStatus.scope.week === week && preparationStatus.scope.slate.toUpperCase() === slate.toUpperCase() ? <div className="basic-loaded-inputs" role="status">
+          <strong>Loaded for {slate.replaceAll("_", " ")}</strong>
+          <span>Salary rows: {preparationStatus.inputs.salaries?.length ?? 0} · Injury rows: {preparationStatus.inputs.injuries?.length ?? 0}</span>
+          {(preparationStatus.inputs.salaries ?? []).some(row => !row.player_master_id) && <p className="error inline-error">
+            Unresolved salary identities: {(preparationStatus.inputs.salaries ?? []).filter(row => !row.player_master_id).map(row => `${row.player_name} (${row.team} · ${row.position})`).join(", ")}. Preparation must resolve or report these before optimization.
+          </p>}
+          <small>Files are imported, but optimizer readiness has not been certified. Complete Prepare slate below; contest compatibility and final game-day clearance are separate checks.</small>
+        </div> : <p className="placeholder">Checking loaded slate files…</p>}
+        {loadSummaries.length > 0 && <div role="status">
+          <p>{lastLoadType} imported. {loadSummaries.find(summary => summary.dataset.startsWith("curated_"))?.rows_written ?? 0} rows stored. Preparation is still required.</p>
+          {loadSummaries.filter(summary => summary.dataset.startsWith("unmatched_") && summary.rows_written > 0).map(summary =>
+            <p className="error inline-error" key={summary.dataset}>{summary.rows_written} unresolved {summary.dataset.includes("salaries") ? "salary" : "injury"} identities. These records are not ready for use. Prepare slate applies saved matching rules and reports any identities that still need review.</p>)}
+        </div>}
+      </section>
+
+      <section className="panel operations-panel" aria-labelledby="prepare-slate-title">
+        <div className="operations-panel-heading">
+          <span>02 · Prepare</span>
+          <h2 id="prepare-slate-title">Prepare slate</h2>
+          <p>After loading files, prepare the selected {contestFormat === "classic" ? "Classic" : "Showdown"} slate. This checks identities, availability, projections, and ownership together. Running projections alone does not certify readiness.</p>
+        </div>
+        <div className="button-row">
+              <button onClick={prepareOptimizerSlate} disabled={Boolean(pendingAction) || preparationRunning}>Prepare slate for optimization</button>
+              <small>{preparationStatus?.build_issue}</small>
+              <strong role="status">{preparationRunning ? "Preparing slate…" : optimizerPrepared ? "Prepared — ready to optimize" : currentCheckError ? "Readiness check unavailable — see status beside Run Optimizer" : !preparationStatus ? "Checking saved slate readiness…" : "Preparation required before optimization"}</strong>
+        </div>
+            {slateReadiness && slateReadiness.season === season && slateReadiness.week === week
+              && slateReadiness.slate.toUpperCase() === slate.toUpperCase() && (() => {
+              const gateKey = optimizerReadinessGateKey(contestFormat, effectiveOptimizerObjective);
+              const gate = slateReadiness.gates[gateKey];
+              const preparationIssue = preparationBuildIssue(preparationStatus, { season, week, slate });
+              const requestFailure = availabilityPreview.error ?? (preparationIssue?.status === "failed" ? preparationIssue.message : null);
+              const preparingInputs = preparationIssue?.status === "preparing";
+              const attention = new Set(gate.attention_checks);
+              const blocking = new Set(gate.blocking_checks);
+              const visibleWarnings = gate.attention_checks.length;
+              const checks = slateReadiness.checks
+                .filter((check) => attention.has(check.check_id))
+                .sort((left, right) => Number(blocking.has(right.check_id)) - Number(blocking.has(left.check_id)))
+                .slice(0, 3);
+              const unresolvedPlayers = attention.has("player_identity_coverage")
+                && preparationStatus?.scope.season === season && preparationStatus.scope.week === week
+                && preparationStatus.scope.slate.toUpperCase() === slate.toUpperCase()
+                ? Array.from(new Set((preparationStatus.inputs.salaries ?? [])
+                  .filter(row => !row.player_master_id)
+                  .map(row => `${row.player_name} (${row.team} · ${row.position})`))) : [];
+              return (
+                <div className={`readiness-preflight ${requestFailure ? "fail" : preparingInputs ? "warn" : contestFormat === "classic" && slateReadiness.classic_data_readiness?.status !== "READY" ? "fail" : gate.status}`} role="status">
+                  <div>
+                    <span>Slate preflight · {contestFormat} {effectiveOptimizerObjective}</span>
+                    <strong>{requestFailure ? "Blocked" : preparingInputs ? "Preparing inputs" : contestFormat === "showdown" ? showdownPreflightLabel(gate.status, slateReadiness.showdown_data_readiness) : contestFormat === "classic" ? classicLivePreflightLabel(slateReadiness.classic_data_readiness) : gate.status === "fail" ? "Blocked" : visibleWarnings > 0 ? "Ready with warnings" : "Ready"}</strong>
+                    {requestFailure ? <small>{requestFailure} This saved preparation attempt failed. After changing inputs, prepare again to get a current assessment.</small> : preparingInputs ? <small>{preparationIssue.message}</small> : contestFormat === "classic" ? <small>{classicLiveReadinessSummary(slateReadiness.classic_data_readiness)}</small> : <small>{gate.score}/100 · {gate.status === "fail" ? gate.message : `${visibleWarnings} warning${visibleWarnings === 1 ? "" : "s"}.`}</small>}
+                    {contestFormat === "showdown" && <small>
+                      {slateReadiness.showdown_data_readiness?.evaluated_at ? `Saved inputs assessed ${new Date(String(slateReadiness.showdown_data_readiness.evaluated_at)).toLocaleString()}. ` : "Coverage score does not certify generation readiness. "}
+                      Prepare slate resolves source checks before generation. Refresh Status rechecks saved inputs.
+                    </small>}
+                    {contestFormat === "classic" && <small>
+                      Saved evidence status: {String(slateReadiness.classic_data_readiness?.status ?? "UNVERIFIED")}. Prepare slate verifies required sources. Run Optimizer consumes the prepared inputs. The coverage score does not certify readiness or final game-day clearance.
+                    </small>}
+                    {contestFormat === "classic" && Array.isArray(slateReadiness.classic_data_readiness?.reason_codes) && <details><summary>Technical source blockers</summary><small>
+                      {(slateReadiness.classic_data_readiness.reason_codes as string[]).join(", ") || "None"}.
+                    </small></details>}
+                  </div>
+                  {contestFormat === "classic" && <ul>
+                    {classicLiveSourceActions(slateReadiness.classic_data_readiness).map(action => <li key={action}>{action}</li>)}
+                  </ul>}
+                  {checks.length > 0 && (
+                    <ul>
+                      {checks.map((check) => <li key={check.check_id}>{check.message}</li>)}
+                    </ul>
+                  )}
+                  {unresolvedPlayers.length > 0 && <p className="identity-preflight-help">
+                    Unresolved salary identities: {unresolvedPlayers.join(", ")}. Prepare slate applies existing matching rules; unresolved identities remain visible for upstream review.
+                  </p>}
+                </div>
+              );
+            })()}
+      </section>
+
+      <section className="panel wide operations-panel operations-model-panel">
+        <div className="optimizer-grid">
+          <div className="subpanel operations-optimizer-panel">
+            <div className="operations-panel-heading">
+              <span>03 · Optimize</span>
+              <h2>Captain and Classic optimizer</h2>
+              <p>Choose Captain or Classic, configure your lineups and players, and prepare verified slate data. Lineups are optimized for GPP tournaments.</p>
+            </div>
+            <div className="operations-projection-status">
+              <p>Prepare slate for optimization first. Once ready, run as many lineup variations as you need from the verified inputs. Source issues are resolved in preparation.
+                {predictionStatus && <small>Latest rebuild: {predictionStatus.rows_written} players · {predictionStatus.message}</small>}
+              </p>
+
+            </div>
+            <div className="form-row">
+              <label>Strategy
+                <select aria-label="Strategy" value={contestFormat} disabled={Boolean(pendingAction)}
+                  onChange={event => { setContestFormat(event.target.value as "classic" | "showdown"); setSingleLineupContestUrl(""); }}>
+                  <option value="showdown">Captain / Showdown GPP</option>
+                  <option value="classic">Classic GPP</option>
+                </select>
+              </label>
+              <p>{lineupControls.numLineups} requested lineup(s) · GPP tournament strategy · ranked for tournament play.</p>
+            </div>
+            <div className="operations-disclosure optimizer-options" data-testid="optimizer-options">
+              <h3>Optimizer options</h3>
+              <p>Configure lineup count, exposure, construction, player preferences, availability assumptions, and optional contest evidence.</p>
+              <OptimizerLineupControls key={contestFormat} value={lineupControls} format={contestFormat} disabled={Boolean(pendingAction)}
+                onChange={value => setLineupControlsByFormat(current => ({ ...current, [contestFormat]: value }))} />
+              {contestFormat === "showdown" && <div className="optimizer-injury-preference" aria-label="Showdown lineup preferences">
+                <label className="showdown-team-limit">Captain position
+                  <select aria-label="Captain position" value={captainPositions} disabled={Boolean(pendingAction)}
+                    onChange={(event) => setCaptainPositions(event.target.value)}>
+                    <option value="">Any position</option>
+                    <option value="WR,RB,TE">WR/RB/TE only</option>
+                    <option value="WR">WR only</option>
+                    <option value="RB">RB only</option>
+                    <option value="TE">TE only</option>
+                  </select>
+                  <small>Applies to Captain in every lineup. Other positions remain eligible at FLEX; projections remain unchanged.</small>
+                </label>
+                <label className="showdown-team-limit">Max players per team
+                  <select value={showdownMaxPlayersPerTeam} disabled={Boolean(pendingAction)}
+                    onChange={(event) => setShowdownMaxPlayersPerTeam(Number(event.target.value))}>
+                    <option value={5}>5 — allows 5–1 (current default)</option>
+                    <option value={4}>4 — allows 4–2 and 3–3</option>
+                    <option value={3}>3 — requires 3–3</option>
+                  </select>
+                  <small>Counts Captain and FLEX together. Applies to either team in every lineup; projections remain unchanged.</small>
+                </label>
+                <label className="checkbox-label">
+                  <input type="checkbox" checked={noQbs} disabled={Boolean(pendingAction)}
+                    onChange={(event) => setNoQbs(event.target.checked)} />
+                  <span>No QBs in the lineup</span>
+                </label>
+                <label className="checkbox-label">
+                  <input type="checkbox" checked={noQbCaptain} disabled={Boolean(pendingAction) || noQbs}
+                    onChange={(event) => setNoQbCaptain(event.target.checked)} />
+                  <span>No QB Captain</span>
+                </label>
+                <label className="checkbox-label">
+                  <input type="checkbox" checked={noTwoQbs} disabled={Boolean(pendingAction) || noQbs}
+                    onChange={(event) => setNoTwoQbs(event.target.checked)} />
+                  <span>No 2 QBs in the lineup</span>
+                </label>
+                <small>{noQbs
+                  ? "Excludes QBs from Captain and FLEX, overriding QB-required constructions. Other quality, exposure and team limits still apply. Projections remain unchanged."
+                  : "Lineup preferences only. No QB Captain keeps QBs eligible at FLEX; No 2 QBs allows at most one QB per lineup. Projections remain unchanged."}</small>
+              </div>}
+            <div className="optimizer-injury-preference">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={excludeQuestionable}
+                  onChange={(event) => setExcludeQuestionable(event.target.checked)}
+                />
+                <span>Exclude questionable (Q) players</span>
+              </label>
+                  <small>Lineup preference only; projections and football opportunity remain unchanged. Use an explicit player Assume Out decision for an availability scenario.</small>
+            </div>
+            <label>DraftKings contest URL (optional)
+              <input type="url" value={singleLineupContestUrl} onChange={event => setSingleLineupContestUrl(event.target.value)}
+                placeholder="https://www.draftkings.com/draft/contest/..." />
+              <small>Native payout facts are recorded when verifiable. Without a supported contest-field model, selection uses the generic proxy and reports its limitations.</small>
+            </label>
+            <div className="form-row checkbox-row">
+              {contestFormat === "classic" && <><label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  disabled={Boolean(pendingAction)}
+                  checked={enforceSingleTE}
+                  onChange={(event) => setEnforceSingleTE(event.target.checked)}
+                />
+                Enforce single TE (exclude TE from FLEX)
+              </label>
+              <p>On excludes TE from FLEX. Off permits, but does not require, a second TE. Other requested constraints still apply.</p></>}
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={avoidDstOpponents}
+                  onChange={(event) => setAvoidDstOpponents(event.target.checked)}
+                />
+                No offense vs DST
+              </label>
+            </div>
+            <section className="player-decision-controls" aria-label="Player availability and lineup preferences">
+              <div className="player-decision-header">
+                <div>
+                  <strong>Player decisions</strong>
+                  <small>{contestFormat === "showdown" ? "Exclusions are lineup preferences. Availability assumptions independently change the football scenario; Run Optimizer rebuilds projections with your selected assumptions." : "Exclusions affect lineup selection only. Explicit availability assumptions change the football scenario."}</small>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPlayerDecisionControls((current) => [
+                    ...current,
+                    { playerName: "", availability: "default", excludeFromLineups: false },
+                  ])}
+                >Add player</button>
+              </div>
+              {playerDecisionControls.map((control, index) => (
+                <div className="player-decision-row" key={`player-decision-${index}`}>
+                  <label>
+                    Player
+                    <input
+                      type="text"
+                      value={control.playerName}
+                      onChange={(event) => setPlayerDecisionControls((current) => current.map((row, rowIndex) => (
+                        rowIndex === index ? { ...row, playerName: event.target.value } : row
+                      )))}
+                      placeholder="e.g. Puka Nacua"
+                    />
+                  </label>
+                  <label>
+                    Availability
+                    <select
+                      value={control.availability}
+                      onChange={(event) => setPlayerDecisionControls((current) => current.map((row, rowIndex) => (
+                        rowIndex === index ? {
+                          ...row,
+                          availability: event.target.value as PlayerDecisionControl["availability"],
+                        } : row
+                      )))}
+                    >
+                      <option value="default">Default</option>
+                      <option value="assume_active">Assume Active</option>
+                      <option value="assume_out">Assume Out</option>
+                    </select>
+                  </label>
+                  <label className="checkbox-label player-preference-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={control.excludeFromLineups}
+                      onChange={(event) => setPlayerDecisionControls((current) => current.map((row, rowIndex) => (
+                        rowIndex === index ? { ...row, excludeFromLineups: event.target.checked } : row
+                      )))}
+                    />
+                    Exclude from lineup
+                  </label>
+                  <button
+                    type="button"
+                    disabled={playerDecisionControls.length === 1}
+                    onClick={() => setPlayerDecisionControls((current) => current.filter((_, rowIndex) => rowIndex !== index))}
+                  >Remove</button>
+                </div>
+              ))}
+            </section>
+            <div className="form-row optimizer-player-controls">
+              <label className="text-label">
+                Hard exclude players facing teams (comma-separated codes)
+                <input
+                  type="text"
+                  value={excludeOpponentTeams}
+                  onChange={(event) => setExcludeOpponentTeams(event.target.value)}
+                  placeholder="e.g. DEN"
+                />
+              </label>
+              <label className="text-label">
+                Exclude players from lineup (comma-separated names)
+                <input
+                  type="text"
+                  value={excludePlayers}
+                  onChange={(event) => setExcludePlayers(event.target.value)}
+                  placeholder="e.g. George Kittle, Skyy Moore"
+                />
+              </label>
+              <label className="text-label">
+                Exclude canonical player IDs from lineup
+                <input
+                  type="text"
+                  value={excludePlayerIds}
+                  onChange={(event) => setExcludePlayerIds(event.target.value)}
+                  placeholder="Comma-separated player_master_id values"
+                />
+              </label>
+              <label className="text-label">
+                Lock players in lineup (comma-separated names)
+                <input
+                  type="text"
+                  value={lockedPlayers}
+                  onChange={(event) => setLockedPlayers(event.target.value)}
+                  placeholder="e.g. Derrick Henry, Trey McBride"
+                />
+              </label>
+              <label className="text-label">
+                Lock canonical player IDs (advanced)
+                <input
+                  type="text"
+                  value={lockedPlayerIds}
+                  onChange={(event) => setLockedPlayerIds(event.target.value)}
+                  placeholder="Required in lineup"
+                />
+              </label>
+              {contestFormat === "showdown" && (
+                <label className="text-label">
+                  Exclude from Captain (FLEX still allowed; comma-separated names)
+                  <input
+                    type="text"
+                    value={flexOnlyPlayers}
+                    onChange={(event) => setFlexOnlyPlayers(event.target.value)}
+                    placeholder="e.g. Malik Nabers, Wan'Dale Robinson"
+                  />
+                  <small>Applies to every generated lineup in this run. The players remain eligible at FLEX.</small>
+                </label>
+              )}
+            </div>
+            <div className="button-row">
+              <div className="text-label">
+                <strong>Verified prepared inputs</strong>
+                <small>Prepare slate refreshes sources and verifies projections and ownership before optimization.</small>
+                <button type="button" onClick={() => { refreshOptimizerProjectionRuns().catch(() => undefined); }} disabled={optimizerProjectionPending}>
+                  {optimizerProjectionPending ? "Checking projections…" : "Reload projection list"}
+                </button>
+                <small>{optimizerProjectionRuns[0] ? `Last completed: ${optimizerProjectionRuns[0].projection_run_id}` : "No previous projection for this slate; verified preparation is required."}</small>
+                {optimizerProjectionMessage && <small role="status">{optimizerProjectionMessage}</small>}
+              </div>
+              <small>Run Optimizer uses the prepared build. Exclusions affect selection only; changing availability assumptions requires preparation again.</small>
+
+            </div>
+            </div>
+            <p className="optimizer-settings-summary">{contestFormat === "classic" ? "Classic" : "Captain / Showdown"} · {lineupControls.numLineups} requested GPP tournament lineup(s) · Questionable players: {excludeQuestionable ? "excluded" : "allowed"}</p>
+            {error && <div role="alert" className="error inline-error">{error}</div>}
+            <div id="optimizer-readiness-status" className="optimizer-readiness-status" role="status" aria-live="polite">
+              {optimizerWait.busy && <progress aria-label="Optimizer readiness in progress" />}
+              <span>{optimizerWait.message}</span>
+            </div>
+            <div className="button-row">
+              <button aria-describedby="optimizer-readiness-status" className="operations-primary-action" onClick={runOptimizerJob} disabled={Boolean(pendingAction) || !optimizerPrepared}>Run Optimizer</button>
+              <button onClick={refreshOptimizer} disabled={Boolean(pendingAction)}>
+                Refresh Status
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <details className="operations-disclosure" data-testid="weekly-pipeline-options">
+        <summary>Weekly pipeline</summary>
       <section className="panel operations-panel weekly-run-panel" aria-labelledby="weekly-run-title">
         <div className="operations-panel-heading">
           <span>Weekly control</span>
@@ -2533,6 +2654,17 @@ function App() {
         })()}
       </section>
 
+      </details>
+
+      <details className="operations-disclosure" data-testid="preparation-tools">
+        <summary>Preparation and data tools</summary>
+        <p>Review source evidence, refresh markets, resolve identities and starting QBs, or run individual preparation steps.</p>
+        <div className="button-row">
+          <button type="button" onClick={() => setViewMode("model-workbench")}>Open Model</button>
+          <button type="button" onClick={runSimulationJob} disabled={Boolean(pendingAction)}>Run Simulation</button>
+          <small>Simulation measures optimal-roster frequency; GPP paid-finish probability and expected return require contest-field evaluation.</small>
+          {simulationStatus && <small className="status-text">{simulationStatus.message} · {simulationStatus.simulation_run_id}</small>}
+        </div>
       <div className="operations-grid">
         <section className="panel operations-panel operations-data-panel">
           <div className="operations-panel-heading">
@@ -2557,34 +2689,10 @@ function App() {
               Build Features (Future Week)
             </button>
           </div>
-          <div className="form-row column">
-            <label>
-              Salary file
-              <input
-                className="full-width"
-                type="text"
-                value={salaryPath}
-                onChange={(event) => setSalaryPath(event.target.value)}
-                placeholder="~/NFL/DKSalaries_2026_3_SUNDAY_MAIN.csv"
-              />
-            </label>
-            <small>{salaryFileToLoad ? `Will load: ${salaryFileToLoad}` : "Enter a CSV filename."}</small>
-            <button disabled={!salaryFileToLoad} onClick={runLoadRawSalaries}>Load Raw Salaries (CSV)</button>
-          </div>
-          <div className="form-row column">
-            <label>
-              Injury file
-              <input
-                className="full-width"
-                type="text"
-                value={injuryPath}
-                onChange={(event) => setInjuryPath(event.target.value)}
-                placeholder="~/NFL/FanDuel_injuries_2026_3_SUNDAY_MAIN.csv"
-              />
-            </label>
-            <small>{injuryFileToLoad ? `Will load: ${injuryFileToLoad}` : "Enter a CSV filename."}</small>
-            <button disabled={!injuryFileToLoad} onClick={runLoadRawInjuries}>Load Raw Injuries (CSV)</button>
-          </div>
+          <SlatePreparation contestFormat={contestFormat} onStatus={setPreparationStatus} onCheckState={setPreparationCheck} scope={{ season, week, slate }} salaryPath={salaryFileToLoad ?? ""}
+            injuryPath={injuryFileToLoad ?? ""} busy={Boolean(pendingAction)}
+            getAvailabilityOverrides={configuredAvailabilityOverrides} assumeQuestionableOut={contestFormat === "classic" && excludeQuestionable}
+            onStartingQbs={runStartingQBs} />
           <details className="contest-evidence-editor">
             <summary>
               <span>
@@ -2697,7 +2805,7 @@ function App() {
                       )}
                     >
                       <option value="">Auto-detect from roster</option>
-                      <option value="classic">Classic</option>
+                      <option value="classic">Classic GPP</option>
                       <option value="showdown">Showdown</option>
                     </select>
                   </label>
@@ -3206,7 +3314,7 @@ function App() {
                 value={slate}
                 onChange={(event) => setActiveSlate(event.target.value)}
               >
-                {SLATE_OPTIONS.map((option) => (
+                {slateOptions.map((option) => (
                   <option key={option} value={option}>
                     {option.replace(/_/g, " ")}
                   </option>
@@ -3307,535 +3415,7 @@ function App() {
         </div>
       </div>
 
-      <section className="panel wide operations-panel operations-model-panel">
-        <div className="optimizer-grid">
-          <div className="subpanel operations-projection-panel">
-            <div className="operations-panel-heading">
-              <span>03 · Model</span>
-              <h2>Player projections</h2>
-            </div>
-            <p className="helper-text">
-              Uses all loaded weeks in the season to predict the selected week (future weeks OK).
-            </p>
-            <div className="button-row">
-              <button className="operations-primary-action" onClick={runPredictionJob}>Run Projections</button>
-              <button onClick={runSimulationJob} disabled={contestFormat !== "classic"}>Run Simulation</button>
-            </div>
-            {predictionStatus && (
-              <div className="status-text">
-                {predictionStatus.message} ({predictionStatus.rows_written} rows)
-              </div>
-            )}
-            {simulationStatus && (
-              <div className="status-text">
-                {simulationStatus.message} · {simulationStatus.simulation_run_id}
-              </div>
-            )}
-          </div>
-
-          <div className="subpanel operations-optimizer-panel">
-            <div className="operations-panel-heading">
-              <span>04 · Generate</span>
-              <h2>Portfolio optimizer</h2>
-              <p>Shape lineup volume, exposure, format, and objective before the build.</p>
-            </div>
-            <div className="optimizer-injury-preference">
-              <label>
-                <input
-                  type="checkbox"
-                  checked={excludeQuestionable}
-                  onChange={(event) => setExcludeQuestionable(event.target.checked)}
-                />
-                <span>Exclude questionable (Q) players</span>
-              </label>
-              <small>Assumes questionable players are out. Run Optimizer rebuilds projections and redistributes their workload before selecting lineups.</small>
-            </div>
-            <div className="form-row">
-              {!(contestFormat === "showdown" && optimizerObjective === "gpp" && showdownGppStrategy !== SHOWDOWN_GPP_CAPTAIN_INFORMED_STRATEGY_ID) ? <label>
-                Lineups
-                <input
-                  type="number"
-                  min={1}
-                  max={50}
-                  value={numLineups}
-                  onChange={(event) => setNumLineups(Number(event.target.value))}
-                />
-              </label> : <p>{showdownGppStrategy === SHOWDOWN_SINGLE_ENTRY_GPP_STRATEGY_ID ? "1 single-entry contest" : showdownGppStrategy === SHOWDOWN_SMALL_MAX_GPP_STRATEGY_ID ? "One small-max contest; entry count selected below" : showdownGppStrategy === SHOWDOWN_THREE_MAX_GPP_STRATEGY_ID ? "One 3-max contest; entries selected below" : "Contest count selected from pasted single-entry contests"}</p>}
-              {contestFormat === "classic" && <label>
-                Max Exposure (%)
-                <input
-                  type="number"
-                  min={1}
-                  max={100}
-                  value={maxExposure}
-                  onChange={(event) => setMaxExposure(Number(event.target.value))}
-                />
-              </label>}
-              <label>
-                Format
-                <select
-                  value={contestFormat}
-                  onChange={(event) => {
-                    const next = event.target.value as "classic" | "showdown";
-                    setContestFormat(next);
-                    if (next === "showdown") setNumLineups(5);
-                  }}
-                >
-                  <option value="classic">Classic</option>
-                  <option value="showdown">Showdown</option>
-                </select>
-              </label>
-              {contestFormat === "showdown" && (
-                <label>
-                  Objective
-                  <select
-                    value={optimizerObjective}
-                    onChange={(event) => setOptimizerObjective(event.target.value as "cash" | "gpp")}
-                  >
-                    <option value="gpp">GPP</option>
-                    <option value="cash">Cash</option>
-                  </select>
-                </label>
-              )}
-            </div>
-            {selectedOptimizerStrategy === CLASSIC_SMALL_FIELD_GPP_STRATEGY_ID && <div className="form-row classic-portfolio-controls">
-              <label>
-                Max shared players (optional)
-                <input type="number" min={0} max={8} value={classicMaxLineupOverlap}
-                  onChange={(event) => setClassicMaxLineupOverlap(event.target.value)}
-                  placeholder="Default: 6 shared players" />
-              </label>
-              <label>
-                Max selector loss (optional)
-                <input type="number" min={0} step="0.01" value={classicMaxObjectiveLoss}
-                  onChange={(event) => setClassicMaxObjectiveLoss(event.target.value)}
-                  placeholder="No quality floor" />
-              </label>
-
-              <label>Max appearances per skill player (optional)
-                <input type="number" min={1} max={numLineups} value={classicSkillMaxAppearances}
-                  onChange={(event) => setClassicSkillMaxAppearances(event.target.value)} placeholder="Existing caps" />
-              </label>
-              <label className="checkbox-label">
-                <input type="checkbox" checked={classicExpandedDiscovery}
-                  onChange={(event) => setClassicExpandedDiscovery(event.target.checked)} />
-                Expanded candidate discovery (slower)
-              </label>
-              <label className="checkbox-label">
-                <input type="checkbox" checked={classicDistinctQbPaths}
-                  onChange={(event) => setClassicDistinctQbPaths(event.target.checked)} />
-                Different QB in each lineup
-              </label>
-            </div>}
-            <ContestLibrary
-              season={season} week={week} slate={slate} contestFormat={contestFormat}
-              onActivateScope={(scope) => {
-                if (scope.season !== season || scope.week !== week || scope.slate !== slate || scope.contest_format !== contestFormat) {
-                  setSingleEntryContestUrls("");
-                  setSmallMaxContestUrl("");
-                  setContestPreview(null);
-                }
-                setSeason(scope.season);
-                setWeek(scope.week);
-                setActiveSlate(scope.slate);
-                setContestFormat(scope.contest_format);
-                if (scope.contest_format === "showdown") setOptimizerObjective(scope.contest_type === "gpp" ? "gpp" : "cash");
-              }}
-              optimizerUrls={contestFormat === "showdown" && optimizerObjective === "gpp" && showdownGppStrategy === SHOWDOWN_SINGLE_ENTRY_PORTFOLIO_STRATEGY_ID ? singleEntryContestUrls : showdownGppStrategy === SHOWDOWN_SMALL_MAX_GPP_STRATEGY_ID ? smallMaxContestUrl : showdownGppStrategy === SHOWDOWN_THREE_MAX_GPP_STRATEGY_ID ? smallMaxContestUrl : undefined}
-              allowUseAll={showdownGppStrategy === SHOWDOWN_SINGLE_ENTRY_PORTFOLIO_STRATEGY_ID}
-              onUseUrls={contestFormat === "showdown" && optimizerObjective === "gpp" && showdownGppStrategy === SHOWDOWN_SINGLE_ENTRY_PORTFOLIO_STRATEGY_ID ? (urls) => {
-                const current = singleEntryContestUrls.split(/\r?\n/).map((url) => url.trim()).filter(Boolean);
-                setSingleEntryContestUrls([...new Set([...current, ...urls])].join("\n"));
-                setContestPreview(null);
-              } : contestFormat === "showdown" && optimizerObjective === "gpp" && (showdownGppStrategy === SHOWDOWN_SMALL_MAX_GPP_STRATEGY_ID || showdownGppStrategy === SHOWDOWN_THREE_MAX_GPP_STRATEGY_ID) ? (urls) => {
-                if (urls.length !== 1) { setContestPreviewError("Small-max uses one contest; choose a single saved URL."); return; }
-                setSmallMaxContestUrl(urls[0]);
-                setSmallMaxEntriesToUse("auto");
-                setContestPreview(null);
-                setContestPreviewError(null);
-              } : contestFormat === "showdown" && optimizerObjective === "gpp" && (showdownGppStrategy === SHOWDOWN_GPP_CAPTAIN_INFORMED_STRATEGY_ID) ? (urls, contests) => {
-                const maximumEntries = contests[0]?.latest_contest?.maximum_entries ?? contests[0]?.latest_successful_contest?.maximum_entries;
-                if (maximumEntries != null && (Number(maximumEntries) < 2 || Number(maximumEntries) > 5)) { setContestPreviewError("Choose a saved 2–5 max contest for this mode."); return; }
-                if (urls.length !== 1) { setContestPreviewError("Small-max uses one contest; choose a single saved URL."); return; }
-                setSmallMaxContestUrl(urls[0]);
-                setSmallMaxEntriesToUse("auto");
-                setShowdownGppStrategy(SHOWDOWN_SMALL_MAX_GPP_STRATEGY_ID);
-                setContestPreview(null);
-                setContestPreviewError(null);
-              } : undefined}
-            />
-            {contestFormat === "showdown" && optimizerObjective === "gpp" && (
-              <div className="form-row">
-                <label>Showdown GPP strategy
-                  <select value={showdownGppStrategy} onChange={(event) => { setShowdownGppStrategy(event.target.value); setContestPreview(null); setContestPreviewError(null); }}>
-                    <option value={SHOWDOWN_GPP_CAPTAIN_INFORMED_STRATEGY_ID}>Multi-entry GPP portfolio</option>
-                    <option value={SHOWDOWN_SINGLE_ENTRY_GPP_STRATEGY_ID}>Single-entry GPP</option>
-                    <option value={SHOWDOWN_SINGLE_ENTRY_PORTFOLIO_STRATEGY_ID}>Single-entry contest portfolio</option>
-                    <option value={SHOWDOWN_SMALL_MAX_GPP_STRATEGY_ID}>Small-max GPP</option>
-                  </select>
-                </label>
-              </div>
-            )}
-            {contestFormat === "showdown" && optimizerObjective === "gpp" && showdownGppStrategy === SHOWDOWN_GPP_CAPTAIN_INFORMED_STRATEGY_ID && contestPreviewError && <p role="alert">{contestPreviewError}</p>}
-            {contestFormat === "showdown" && optimizerObjective === "gpp" && showdownGppStrategy === SHOWDOWN_SMALL_MAX_GPP_STRATEGY_ID && <div className="status-card nested-card">
-              <h3>Small-max GPP</h3>
-              <label>DraftKings contest URL (optional)<input className="full-width" value={smallMaxContestUrl} onChange={(event) => { setSmallMaxContestUrl(event.target.value); setSmallMaxEntriesToUse("auto"); setContestPreview(null); }} placeholder="https://www.draftkings.com/draft/contest/195677836" /></label>
-              {!smallMaxContestUrl.trim() && <label>Entry limit for generic lineup building<select value={smallMaxMaximumEntries} onChange={(event) => { setSmallMaxMaximumEntries(Number(event.target.value)); setSmallMaxEntriesToUse("auto"); }}>{[2, 3, 4, 5].map((count) => <option key={count} value={count}>{count}</option>)}</select></label>}
-              <div className="form-row"><label>Entries to use<select value={smallMaxEntriesToUse} onChange={(event) => setSmallMaxEntriesToUse(event.target.value)}><option value="auto">{smallMaxContestUrl.trim() ? "Auto · compare 1 through contest maximum" : "Auto · strongest single lineup"}</option>{Array.from({ length: Math.min(5, Number(smallMaxContestUrl.trim() ? contestPreview?.contests[0]?.maximum_entries ?? 5 : smallMaxMaximumEntries)) }, (_, index) => index + 1).map((count) => <option key={count} value={count}>{count}</option>)}</select></label></div>
-              <button disabled={!smallMaxContestUrl.trim() || contestPreviewPending} onClick={async () => { setContestPreviewPending(true); setContestPreviewError(null); try { const params = smallMaxContestParams(); setContestPreview(await previewOptimizerContests({ urls: params.contest_urls, manual_contest_metadata: params.manual_contest_metadata })); } catch (error) { setContestPreviewError(error instanceof Error ? error.message : String(error)); } finally { setContestPreviewPending(false); } }}>{contestPreviewPending ? "Refreshing contest…" : "Preview / refresh contest details"}</button>
-              {contestPreviewError && <p role="alert">{contestPreviewError}</p>}
-              {contestPreview && <p>{String(contestPreview.contests[0]?.name ?? "Contest details unavailable")} · maximum entries: {String(contestPreview.contests[0]?.maximum_entries ?? "unavailable")} · entry fee: {String(contestPreview.contests[0]?.entry_fee ?? "unavailable")} · payout tiers: {(contestPreview.contests[0]?.payout_ladder as unknown[] | undefined)?.length ?? 0} · missing: {(contestPreview.contests[0]?.unavailable_fields as string[] | undefined)?.join(", ") || "none"}</p>}
-              {smallMaxContestUrl.trim() && <details><summary>Manual metadata for unavailable contest fields</summary><p>JSON array keyed by contest_id. Missing fields are listed by preview; the optimizer verifies a 2–5 entry limit and the full payout ladder.</p><textarea className="full-width" rows={4} value={smallMaxManual} onChange={(event) => setSmallMaxManual(event.target.value)} placeholder='[{"contest_id":"123","maximum_entries":3}]' /></details>}
-              <div className="form-row">
-                <label>CPT max (%)<input type="number" min={1} max={100} value={smallMaxCaptainMaxExposure} onChange={(event) => setSmallMaxCaptainMaxExposure(Number(event.target.value))} /></label>
-                <label>Player max (%)<input type="number" min={1} max={100} value={smallMaxPlayerMaxExposure} onChange={(event) => setSmallMaxPlayerMaxExposure(Number(event.target.value))} /></label>
-                <label>Starting QB max (%)<input type="number" min={1} max={100} value={smallMaxStartingQbMaxExposure} onChange={(event) => setSmallMaxStartingQbMaxExposure(Number(event.target.value))} /></label>
-                <label>Cheap punt max (%)<input type="number" min={1} max={100} value={smallMaxCheapPuntMaxExposure} onChange={(event) => setSmallMaxCheapPuntMaxExposure(Number(event.target.value))} /></label>
-              </div>
-              <p>{smallMaxContestUrl.trim() ? "Contest must allow 2–5 entries per user. Auto compares every entry count through the verified limit." : "Without a contest, Auto returns the strongest single lineup. Choose an explicit count to build more entries; payout, fees, field size, and ROI are unavailable."} Exposures default to 100%.</p>
-            </div>}
-            {contestFormat === "showdown" && optimizerObjective === "gpp" && showdownGppStrategy === SHOWDOWN_SINGLE_ENTRY_PORTFOLIO_STRATEGY_ID && (
-              <div className="status-card nested-card">
-                <h3>Available single-entry contests</h3>
-                <label>DraftKings contest URLs, one per line
-                  <textarea className="full-width" rows={4} value={singleEntryContestUrls} onChange={(event) => { setSingleEntryContestUrls(event.target.value); setContestPreview(null); }} placeholder="https://www.draftkings.com/draft/contest/195677817" />
-                </label>
-                <div className="form-row">
-                  <label>Contest selection
-                    <select value={singleEntryContestMode} onChange={(event) => setSingleEntryContestMode(event.target.value as "auto" | "enter_all")}>
-                      <option value="auto">Auto</option><option value="enter_all">Enter all</option>
-                    </select>
-                  </label>
-                  <label>Maximum total entry budget ($, optional)<input type="number" min={0.01} step={0.01} value={singleEntryBudget} onChange={(event) => setSingleEntryBudget(event.target.value)} /></label>
-                  <label>Maximum contests to enter (optional)<input type="number" min={1} step={1} value={singleEntryMaximum} onChange={(event) => setSingleEntryMaximum(event.target.value)} /></label>
-                </div>
-                <button disabled={contestPreviewPending} onClick={async () => {
-                  setContestPreviewPending(true); setContestPreviewError(null);
-                  try {
-                    const params = singleEntryContestParams();
-                    setContestPreview(await previewOptimizerContests({ urls: params.contest_urls, manual_contest_metadata: params.manual_contest_metadata }));
-                  } catch (error) { setContestPreviewError(error instanceof Error ? error.message : String(error)); }
-                  finally { setContestPreviewPending(false); }
-                }}>{contestPreviewPending ? "Refreshing contests…" : "Preview / refresh contest details"}</button>
-                {contestPreviewError && <p role="alert">{contestPreviewError}</p>}
-                {contestPreview && <div className="table-wrap"><p>Refreshed {new Date(contestPreview.refreshed_at).toLocaleString()}. Counts and potential overlay can change before lock.</p><table><thead><tr><th>Contest</th><th>Slate</th><th>Single entry</th><th>Entry</th><th>Filled / capacity</th><th>Pool</th><th>Paid</th><th>Lock</th><th>Payout tiers</th><th>Missing fields / error</th></tr></thead><tbody>{contestPreview.contests.map((row) => <tr key={String(row.contest_id)}><td>{String(row.name ?? row.contest_id)}</td><td>{String(row.slate ?? "—")}</td><td>{row.single_entry === true ? "Yes" : row.single_entry === false ? "No" : "—"}</td><td>{row.entry_fee == null ? "—" : `$${row.entry_fee}`}</td><td>{String(row.current_entries ?? "—")} / {String(row.capacity ?? "—")}</td><td>{row.prize_pool == null ? "—" : `$${row.prize_pool}`}</td><td>{String(row.paid_places ?? "—")}</td><td>{String(row.lock_time ?? "—")}</td><td>{(row.payout_ladder as unknown[] | undefined)?.length ?? "—"}</td><td>{[...(row.unavailable_fields as string[] ?? []), ...(row.error ? [String(row.error)] : [])].join(", ") || "None"}</td></tr>)}</tbody></table>{contestPreview.contests.map((row) => <details key={`${row.contest_id}-payouts`}><summary>{String(row.name ?? row.contest_id)} payout ladder</summary><table><thead><tr><th>Ranks</th><th>Cash prize</th></tr></thead><tbody>{((row.payout_ladder as Array<Record<string, unknown>> | undefined) ?? []).map((tier, index) => <tr key={index}><td>{String(tier.from)}–{String(tier.to)}</td><td>{tier.cash == null ? "Unavailable" : `$${tier.cash}`}</td></tr>)}</tbody></table></details>)}</div>}
-                <details><summary>Manual metadata for unavailable fields</summary><p>JSON array keyed by contest_id. The preview lists exactly which fields need correction. Refresh reruns the source lookup.</p><textarea className="full-width" rows={4} value={singleEntryManual} onChange={(event) => setSingleEntryManual(event.target.value)} placeholder='[{"contest_id":"195677817","entry_fee":5}]' /></details>
-              </div>
-            )}
-            {contestFormat === "showdown" && optimizerObjective === "gpp" && (showdownGppStrategy === SHOWDOWN_GPP_CAPTAIN_INFORMED_STRATEGY_ID) && (
-              <div className="form-row">
-                <label>CPT max (%)<input ref={captainMaxExposureInputRef} type="number" min={1} max={100} value={captainMaxExposure} onChange={(event) => setCaptainMaxExposure(Number(event.target.value))} /></label>
-                <label>Core max (%)<input type="number" min={1} max={100} value={coreMaxExposure} onChange={(event) => setCoreMaxExposure(Number(event.target.value))} /></label>
-                <label>Starting QB max (%)<input type="number" min={1} max={100} value={startingQbMaxExposure} onChange={(event) => setStartingQbMaxExposure(Number(event.target.value))} /></label>
-                <label>Cheap punt max (%)<input type="number" min={1} max={100} value={cheapPuntMaxExposure} onChange={(event) => setCheapPuntMaxExposure(Number(event.target.value))} /></label>
-              </div>
-            )}
-            {contestFormat === "showdown" && optimizerObjective === "gpp" && showdownGppStrategy === SHOWDOWN_GPP_CAPTAIN_INFORMED_STRATEGY_ID && <div className="form-row">
-              <label>Decisive-win margin (points)<input type="number" min={7} max={35} step={1} value={showdownDecisiveMargin} onChange={(event) => setShowdownDecisiveMargin(Number(event.target.value))} /></label>
-              <label><input type="checkbox" checked={requireScenarioDiversity} onChange={(event) => setRequireScenarioDiversity(event.target.checked)} /> Require scenario diversity</label>
-              <small>Off by default. When on, qualifying scenario families are represented where possible under the existing quality and exposure limits.</small>
-            </div>}
-            {contestFormat === "classic" && (
-              <div className="form-row">
-                <label>
-                  Contest Strategy
-                  <select
-                    value={classicContestStrategy}
-                    onChange={(event) => {
-                      const next = event.target.value as ClassicContestStrategyId;
-                      setClassicContestStrategy(next);
-                      if (next === CLASSIC_LARGE_GPP_STRATEGY_ID) {
-                        setNumLineups(20);
-                        setMaxExposure(60);
-                      } else if (next === CLASSIC_SMALL_FIELD_GPP_STRATEGY_ID) {
-                        setNumLineups(5);
-                        setMaxExposure(100);
-                      } else {
-                        setNumLineups(6);
-                        setMaxExposure(100);
-                      }
-                    }}
-                  >
-                    {CLASSIC_CONTEST_STRATEGIES.map((strategy) => (
-                      <option key={strategy.id} value={strategy.id}>
-                        {strategy.label}
-                      </option>
-                    ))}
-                  </select>
-                  <small>
-                    {selectedClassicStrategy.detail}
-                  </small>
-                </label>
-              </div>
-            )}
-            {contestFormat === "classic" && classicContestStrategy === CLASSIC_SMALL_FIELD_GPP_STRATEGY_ID && (
-              <div className="status-card nested-card">
-                <h3>Classic contest context</h3>
-                <label>DraftKings contest URL (optional, one URL, reporting only)
-                  <input className="full-width" value={classicSmallFieldContestUrl} onChange={(event) => { setClassicSmallFieldContestUrl(event.target.value); setContestPreview(null); setContestPreviewError(null); }} placeholder="https://www.draftkings.com/draft/contest/123456789" />
-                </label>
-                <label><input type="checkbox" checked={classicQbFamilyDiagnostics} onChange={(event) => setClassicQbFamilyDiagnostics(event.target.checked)} /> Compute exact top-10 QB stack families (up to 40 additional solver calls)</label>
-                <button disabled={!classicSmallFieldContestUrl.trim() || contestPreviewPending} onClick={async () => {
-                  setContestPreviewPending(true); setContestPreviewError(null);
-                  try { setContestPreview(await previewOptimizerContests({ urls: classicContestUrls(classicSmallFieldContestUrl) })); }
-                  catch (error) { setContestPreviewError(error instanceof Error ? error.message : String(error)); }
-                  finally { setContestPreviewPending(false); }
-                }}>{contestPreviewPending ? "Refreshing contest…" : "Preview / refresh contest details"}</button>
-                {contestPreviewError && <p role="alert">{contestPreviewError}</p>}
-                {contestPreview && <p>{String(contestPreview.contests[0]?.name ?? "Contest details unavailable")} · entry fee {String(contestPreview.contests[0]?.entry_fee ?? "unavailable")} · field {String(contestPreview.contests[0]?.capacity ?? "unavailable")} · missing: {(contestPreview.contests[0]?.unavailable_fields as string[] | undefined)?.join(", ") || "none"}</p>}
-              </div>
-            )}
-            {contestFormat === "classic" && (classicContestStrategy === CLASSIC_LARGE_GPP_STRATEGY_ID || classicContestStrategy === CLASSIC_SMALL_FIELD_GPP_STRATEGY_ID) && (
-              <div className="form-row">
-                <label>Max lineups per primary game
-                  <select value={maxLineupsPerPrimaryGame === null ? "none" : [4, 3, 2].includes(maxLineupsPerPrimaryGame) ? String(maxLineupsPerPrimaryGame) : "custom"}
-                    onChange={(event) => setMaxLineupsPerPrimaryGame(event.target.value === "none" ? null : event.target.value === "custom" ? 1 : Number(event.target.value))}>
-                    <option value="none">No limit</option><option value="4">4</option><option value="3">3</option><option value="2">2</option><option value="custom">Custom</option>
-                  </select>
-                  <small>Portfolio concentration by the QB's canonical game. JAX-CIN and CIN-JAX count together.</small>
-                </label>
-                {maxLineupsPerPrimaryGame !== null && ![4, 3, 2].includes(maxLineupsPerPrimaryGame) && <label>Custom primary-game limit
-                  <input type="number" min={1} step={1} value={maxLineupsPerPrimaryGame} onChange={(event) => setMaxLineupsPerPrimaryGame(Number(event.target.value))} />
-                </label>}
-                <label>
-                  Minimum uniqueness
-                  <input type="number" min={1} max={9} value={minimumUniqueness}
-                    onChange={(event) => setMinimumUniqueness(Number(event.target.value))} />
-                </label>
-                <label>
-                  Max players / team
-                  <input type="number" min={1} max={4} value={maxPlayersPerTeam}
-                    onChange={(event) => setMaxPlayersPerTeam(Number(event.target.value))} />
-                </label>
-                <label>
-                  Max players / game
-                  <input type="number" min={1} max={9} value={maxPlayersPerGame}
-                    onChange={(event) => setMaxPlayersPerGame(Number(event.target.value))} />
-                </label>
-              </div>
-            )}
-            {slateReadiness && (() => {
-              const gateKey = optimizerReadinessGateKey(contestFormat, effectiveOptimizerObjective);
-              const gate = slateReadiness.gates[gateKey];
-              const attention = new Set(gate.attention_checks);
-              const blocking = new Set(gate.blocking_checks);
-              const ownershipRefreshPending = effectiveOptimizerObjective === "gpp"
-                && refreshOwnershipBeforeOptimize && attention.has("ownership_projection");
-              const visibleWarnings = gate.attention_checks.length - Number(ownershipRefreshPending);
-              const checks = slateReadiness.checks
-                .filter((check) => attention.has(check.check_id)
-                  && !(ownershipRefreshPending && check.check_id === "ownership_projection"))
-                .sort((left, right) => Number(blocking.has(right.check_id)) - Number(blocking.has(left.check_id)))
-                .slice(0, 3);
-              return (
-                <div className={`readiness-preflight ${gate.status}`} role="status">
-                  <div>
-                    <span>Slate preflight · {contestFormat} {effectiveOptimizerObjective}</span>
-                    <strong>{gate.status === "fail" ? "Blocked" : visibleWarnings > 0 ? "Ready with warnings" : ownershipRefreshPending ? "Ready pending ownership refresh" : "Ready"}</strong>
-                    <small>{gate.score}/100{ownershipRefreshPending ? " before ownership refresh" : ""} · {gate.status === "fail" ? gate.message : `${visibleWarnings} warning${visibleWarnings === 1 ? "" : "s"}${ownershipRefreshPending ? "; ownership refresh scheduled" : ""}.`}</small>
-                  </div>
-                  {checks.length > 0 && (
-                    <ul>
-                      {checks.map((check) => <li key={check.check_id}>{check.message}</li>)}
-                    </ul>
-                  )}
-                </div>
-              );
-            })()}
-            <div className="form-row checkbox-row">
-              {effectiveOptimizerObjective === "gpp" && (
-                <label className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={longShotMode}
-                    onChange={(event) => setLongShotMode(event.target.checked)}
-                  />
-                  Create one standalone long-shot lineup
-                  <small>Strongly favors low ownership when complete ownership data is available. Otherwise the report marks contrarian confidence unavailable.</small>
-                </label>
-              )}
-              {contestFormat === "classic" && <label className="checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={enforceSingleTE}
-                  onChange={(event) => setEnforceSingleTE(event.target.checked)}
-                />
-                Enforce single TE (no double-TE lineups)
-              </label>}
-              <label className="checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={avoidDstOpponents}
-                  onChange={(event) => setAvoidDstOpponents(event.target.checked)}
-                />
-                No offense vs DST
-              </label>
-            </div>
-            <section className="player-decision-controls" aria-label="Player availability and lineup preferences">
-              <div className="player-decision-header">
-                <div>
-                  <strong>Player decisions</strong>
-                  <small>Excluded players are assumed out when projections rebuild. Exposure, overlap, and Captain controls apply when selecting lineups.</small>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setPlayerDecisionControls((current) => [
-                    ...current,
-                    { playerName: "", availability: "default", excludeFromLineups: false },
-                  ])}
-                >Add player</button>
-              </div>
-              {playerDecisionControls.map((control, index) => (
-                <div className="player-decision-row" key={`player-decision-${index}`}>
-                  <label>
-                    Player
-                    <input
-                      type="text"
-                      value={control.playerName}
-                      onChange={(event) => setPlayerDecisionControls((current) => current.map((row, rowIndex) => (
-                        rowIndex === index ? { ...row, playerName: event.target.value } : row
-                      )))}
-                      placeholder="e.g. Puka Nacua"
-                    />
-                  </label>
-                  <label>
-                    Availability
-                    <select
-                      value={control.availability}
-                      onChange={(event) => setPlayerDecisionControls((current) => current.map((row, rowIndex) => (
-                        rowIndex === index ? {
-                          ...row,
-                          availability: event.target.value as PlayerDecisionControl["availability"],
-                        } : row
-                      )))}
-                    >
-                      <option value="default">Default</option>
-                      <option value="assume_active">Assume Active</option>
-                      <option value="assume_out">Assume Out</option>
-                    </select>
-                  </label>
-                  <label className="checkbox-label player-preference-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={control.excludeFromLineups}
-                      onChange={(event) => setPlayerDecisionControls((current) => current.map((row, rowIndex) => (
-                        rowIndex === index ? { ...row, excludeFromLineups: event.target.checked } : row
-                      )))}
-                    />
-                    Exclude and assume out
-                  </label>
-                  <button
-                    type="button"
-                    disabled={playerDecisionControls.length === 1}
-                    onClick={() => setPlayerDecisionControls((current) => current.filter((_, rowIndex) => rowIndex !== index))}
-                  >Remove</button>
-                </div>
-              ))}
-            </section>
-            <div className="form-row optimizer-player-controls">
-              <label className="text-label">
-                Hard exclude players facing teams (comma-separated codes)
-                <input
-                  type="text"
-                  value={excludeOpponentTeams}
-                  onChange={(event) => setExcludeOpponentTeams(event.target.value)}
-                  placeholder="e.g. DEN"
-                />
-              </label>
-              <label className="text-label">
-                Exclude and assume out players (comma-separated names)
-                <input
-                  type="text"
-                  value={excludePlayers}
-                  onChange={(event) => setExcludePlayers(event.target.value)}
-                  placeholder="e.g. George Kittle, Skyy Moore"
-                />
-              </label>
-              <label className="text-label">
-                Exclude and assume out canonical player IDs
-                <input
-                  type="text"
-                  value={excludePlayerIds}
-                  onChange={(event) => setExcludePlayerIds(event.target.value)}
-                  placeholder="Comma-separated player_master_id values"
-                />
-              </label>
-              <label className="text-label">
-                Lock players in every lineup (comma-separated names)
-                <input
-                  type="text"
-                  value={lockedPlayers}
-                  onChange={(event) => setLockedPlayers(event.target.value)}
-                  placeholder="e.g. Derrick Henry, Trey McBride"
-                />
-              </label>
-              <label className="text-label">
-                Lock canonical player IDs (advanced)
-                <input
-                  type="text"
-                  value={lockedPlayerIds}
-                  onChange={(event) => setLockedPlayerIds(event.target.value)}
-                  placeholder="Required in every lineup"
-                />
-              </label>
-              {contestFormat === "showdown" && (
-                <label className="text-label">
-                  Exclude from Captain (FLEX still allowed; comma-separated names)
-                  <input
-                    type="text"
-                    value={flexOnlyPlayers}
-                    onChange={(event) => setFlexOnlyPlayers(event.target.value)}
-                    placeholder="e.g. Malik Nabers, Wan'Dale Robinson"
-                  />
-                  <small>Applies to every generated lineup in this run. The players remain eligible at FLEX.</small>
-                </label>
-              )}
-            </div>
-            <div className="button-row">
-              <div className="text-label">
-                <label>Optimizer projection
-                  <select value={optimizerProjectionOverride ?? ""} onChange={(event) => {
-                    const selected = event.target.value;
-                    setOptimizerProjectionOverrides((current) => {
-                      const next = { ...current };
-                      if (selected) next[activeContextKey] = selected;
-                      else delete next[activeContextKey];
-                      return next;
-                    });
-                  }}>
-                    <option value="">{optimizerProjectionRuns[0] ? `Latest completed (automatic) · ${new Date(optimizerProjectionRuns[0].created_at).toLocaleString()} · ${optimizerProjectionRuns[0].projection_run_id.slice(0, 8)} · model artifact ${optimizerProjectionRuns[0].model_artifact_status ?? "unknown"}` : "Latest completed (automatic)"}</option>
-                    {optimizerProjectionRuns.slice(1).map((run) => <option key={run.projection_run_id} value={run.projection_run_id}>{new Date(run.created_at).toLocaleString()} · {run.projection_run_id.slice(0, 8)} · {run.row_count} players · model artifact {run.model_artifact_status ?? "unknown"}</option>)}
-                    {optimizerProjectionOverride && !optimizerProjectionRuns.some((run) => run.projection_run_id === optimizerProjectionOverride) && <option value={optimizerProjectionOverride} disabled>Selected projection unavailable</option>}
-                  </select>
-                </label>
-                <button type="button" onClick={() => { refreshOptimizerProjectionRuns().catch(() => undefined); }} disabled={optimizerProjectionPending}>
-                  {optimizerProjectionPending ? "Checking projections…" : "Refresh projections"}
-                </button>
-                <small>{optimizerProjectionOverride ? `Using older projection ${optimizerProjectionOverride}` : optimizerProjectionRuns[0] ? `Automatic latest: ${optimizerProjectionRuns[0].projection_run_id}` : "The optimizer needs a completed projection for this slate."}</small>
-                {optimizerProjectionRuns.find((run) => run.projection_run_id === (optimizerProjectionOverride || optimizerProjectionRuns[0]?.projection_run_id))?.model_artifact_status === "missing" && <small role="status">This projection run has no reloadable fitted model artifact. Player market rescoring is unavailable.</small>}
-                {optimizerProjectionMessage && <small role="status">{optimizerProjectionMessage}</small>}
-              </div>
-              {effectiveOptimizerObjective === "gpp" && (
-                <label className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={refreshOwnershipBeforeOptimize}
-                    onChange={(event) => setRefreshOwnershipBeforeOptimize(event.target.checked)}
-                  />
-                  Refresh ownership before optimizing
-                </label>
-              )}
-              <small>Run Optimizer rebuilds projections using your player availability and exclusions before generating lineups. Use Latest completed (automatic).</small>
-              <button className="operations-primary-action" onClick={runOptimizerJob} disabled={Boolean(pendingAction)}>Run Optimizer</button>
-              {pendingAction && <small role="status">{pendingAction}</small>}
-              <button onClick={refreshOptimizer} disabled={!optimizerStatus}>
-                Refresh Status
-              </button>
-            </div>
-          </div>
-
-        </div>
-      </section>
+      </details>
 
       <div className="activity-wrapper">
         <section className="panel summary-panel unified activity-panel operations-panel operations-activity-panel">
@@ -3846,11 +3426,18 @@ function App() {
             </div>
             {lastLoadType && <span className="summary-subtitle">{lastLoadType}</span>}
           </div>
-          {error && <div className="error inline-error">{error}</div>}
           <RecentOptimizerRuns season={season} week={week} slate={slate}
             contestFormat={contestFormat} objective={effectiveOptimizerObjective}
             selectedRunId={activeRunSelection.optimizerRunId} loadedRunId={optimizerStatus?.job_id}
             onOpen={openRecentOptimizer} />
+          {optimizerStatus?.contest_format === "showdown" && <div className="status-card">
+            <h3>Showdown data readiness</h3>
+            <p>Generation readiness: {String(optimizerStatus.data_readiness?.status ?? "Unverified archived run")}</p>
+            {optimizerStatus.data_readiness && <details><summary>Frozen generation checks</summary><pre>{JSON.stringify(optimizerStatus.data_readiness, null, 2)}</pre></details>}
+            <p>Entry ready: {optimizerStatus.entry_readiness?.entry_ready === true ? "Yes" : "No"} · {String(optimizerStatus.entry_readiness?.status ?? "Not evaluated for this saved run")}</p>
+            <p>Current player clearance remains unevaluated by this frozen-input report. Review Operations preparation before the next user-invoked run.</p>
+            {optimizerStatus.entry_readiness && <details><summary>Checks and consumed provenance</summary><pre>{JSON.stringify(optimizerStatus.entry_readiness, null, 2)}</pre></details>}
+          </div>}
           {operationalJobs.length > 0 && (
             <div className="status-card">
               <h3>Durable worker queue</h3>
@@ -3895,7 +3482,7 @@ function App() {
                   Some datasets returned 0 rows. This usually means the provider has no data for that season/week yet.
                 </div>
               )}
-              <table className="compact-table">
+              <div style={{ overflowX: "auto" }}><table className="compact-table">
                 <thead>
                   <tr>
                     <th>Dataset</th>
@@ -3914,7 +3501,7 @@ function App() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             </div>
           )}
           {slateStatus && loadSummaries.length === 0 && (
@@ -3930,18 +3517,61 @@ function App() {
           {optimizerStatus && (
             <div className="status-card optimizer-results" ref={optimizerResultsRef}>
               <h3>
-                Optimizer · {CLASSIC_CONTEST_STRATEGIES.find(
+                Optimizer · {ACTIVE_OPTIMIZER_STRATEGIES.find(strategy => strategy.id === optimizerStatus.strategy)?.label ?? CLASSIC_CONTEST_STRATEGIES.find(
                   (strategy) => strategy.id === optimizerStatus.strategy
                 )?.label ?? optimizerStatus.strategy}
               </h3>
+              {singleLineupReportHtml(optimizerStatus) && <div dangerouslySetInnerHTML={{ __html: singleLineupReportHtml(optimizerStatus) }} />}
+              {optimizerStatus.status === "completed" && optimizerStatus.objective === "gpp" && !optimizerStatus.gpp_recommendation &&
+                <p>This saved run predates GPP recommendations. Run the optimizer to save a candidate comparison and one recommendation.</p>}
+              {optimizerStatus.status === "completed" && optimizerStatus.objective === "gpp" && optimizerStatus.gpp_recommendation &&
+                <GppRecommendation report={optimizerStatus.gpp_recommendation} pending={lineupExportPending}
+                  onDownload={async () => {
+                    setLineupExportPending(true); setLineupExportError(null);
+                    try { await downloadOptimizerLineups(optimizerStatus.job_id, true); }
+                    catch (error) { setLineupExportError(error instanceof Error ? error.message : String(error)); }
+                    finally { setLineupExportPending(false); }
+                  }} />}
               <p>Job ID: {optimizerStatus.job_id}</p>
               <p>Status: {optimizerStatus.status}</p>
               <p>Strategy: {optimizerStatus.strategy}</p>
               <ClassicGameConcentrationReport optimizer={optimizerStatus} />
+              <ClassicLargeGppReadinessReport key={optimizerStatus.job_id} optimizer={optimizerStatus}
+                onAssessment={value => setOptimizerStatus({ ...optimizerStatus, readiness_assessment: value })} />
+              <ClassicConstructionReport key={`${optimizerStatus.job_id}:${enforceSingleTE}`} optimizer={optimizerStatus} enforceSingleTE={enforceSingleTE} />
               {typeof optimizerStatus.strategy_config.description === "string" && (
                 <p>{optimizerStatus.strategy_config.description}</p>
               )}
               <p>{optimizerStatus.message}</p>
+              {optimizerStatus.contest_format === "showdown" && Array.isArray(optimizerStatus.results) && (() => {
+                const first = (optimizerStatus.results[0] as any[])?.[0];
+                const policy = first?.showdown_qb_preferences;
+                return <div className="status-card nested-card">
+                  <h4>QB CONSTRUCTION POLICY</h4>
+                  <p>QB Captain allowed: {policy ? qbCaptainAllowed(policy) ? "Yes" : "No" : "Unavailable"} · Maximum starting QBs: {policy ? qbLineupLimit(policy) : "Unavailable"}</p>
+                  <p>Requested lineup count: {policy?.requested_portfolio_size ?? "Unavailable"} · Effective QB-Captain lineup limit: {policy ? qbCaptainAllowed(policy) ? 1 : 0 : "Unavailable"} · Effective starting-QB lineup limit: {policy ? qbLineupLimit(policy) : "Unavailable"}</p>
+                  <p>{captainPositionsDescription(first?.showdown_captain_preferences ?? {})}.</p>
+                  <p>{teamLimitDescription(first?.showdown_team_constraints ?? {})}. Captain and FLEX count together.</p>
+                  <p>User lineup constraints preserve model assessments.</p>
+                </div>;
+              })()}
+              {Array.isArray(optimizerStatus.results) && (() => {
+                const report = (optimizerStatus.results[0] as any[])?.[0]?.portfolio_exposure_report;
+                const warnings = report?.rows?.filter((row: any) => exposureWarning(row));
+                if (!warnings?.length) return null;
+                return <div className="status-card nested-card">
+                  <h4>Underfilled portfolio exposure</h4>
+                  <p>REQUESTED-PORTFOLIO CAP COMPLIANCE uses {report.requested_lineups} requested entries. FINAL-PORTFOLIO REALIZED EXPOSURE uses {report.generated_lineups} generated entries.</p>
+                  {warnings.map((row: any) => <p key={`${row.scope}:${row.player_id}`}>
+                    <strong>{row.player_name} ({row.scope})</strong>: {row.actual_appearances}/{row.generated_lineups} = {(row.final_generated_portfolio_exposure * 100).toFixed(1)}% realized; {(row.configured_cap * 100).toFixed(0)}% configured. {exposureWarning(row)}
+                  </p>)}
+                </div>;
+              })()}
+              {Array.isArray(optimizerStatus.results) && (() => {
+                const preferences = (optimizerStatus.results[0] as any[])?.[0]?.showdown_qb_preferences;
+                if (!preferences?.exclusions?.length) return null;
+                return <p>User lineup preferences: {preferences.exclusions.map((item: any) => item.reason).join(" · ")}. Model assessments preserved.</p>;
+              })()}
               {Array.isArray(optimizerStatus.results) && (() => {
                 const report = (optimizerStatus.results[0] as any[])?.[0]?.long_shot_report;
                 if (!report) return null;
@@ -4126,7 +3756,7 @@ function App() {
                         setLineupExportPending(false);
                       }
                     }}>
-                      {lineupExportPending ? "Preparing download…" : `Download all ${optimizerStatus.results.length} lineups for DraftKings`}
+                      {lineupExportPending ? "Preparing download…" : optimizerStatus.results.length === 1 ? "Download lineup for DraftKings" : `Download all ${optimizerStatus.results.length} lineups for DraftKings`}
                     </button>
                     <button onClick={() => downloadOptimizerReport(optimizerStatus, { season, week, slate })}>
                       Download readable lineup report
@@ -4208,7 +3838,9 @@ function App() {
                                 {player.included
                                   ? [
                                       "Included",
-                                      player.flex_only ? "Captain excluded · FLEX allowed" : null,
+                                      player.captain_user_preference_exclusions?.length
+                                        ? player.captain_user_preference_exclusions.map((item) => item.reason).join(", ")
+                                        : player.flex_only ? "Captain excluded · FLEX allowed" : null,
                                       player.warnings?.length
                                         ? player.warnings.map((warning) => warning.reason_code).join(", ")
                                         : null,
@@ -4230,7 +3862,7 @@ function App() {
                     const families = report?.scenario_family_coverage as any[] | undefined;
                     if (!families?.length) return null;
                     const definitions = report.scenario_definitions as any[] | undefined;
-                    return <><h3>Showdown game-script scenarios</h3><p>{report.scenario_generation_status} · Scenario diversity {report.require_scenario_diversity ? "on" : "off"}</p><div className="scroll-table"><table className="compact-table"><thead><tr><th>Scenario</th><th>Condition</th><th>Candidates</th><th>Best rank</th><th>Best mean</th><th>Best P90</th><th>Best selector</th><th>Captain</th><th>Team split</th><th>Salary</th><th>Selected</th><th>Reason</th></tr></thead><tbody>{["baseline", "team_a_decisive_win", "team_b_decisive_win"].map((id) => { const family = families.find((item: any) => item.scenario_id === id); const definition = definitions?.find((item: any) => item.scenario_id === id); return <tr key={id}><td>{definition?.label ?? id.replaceAll("_", " ").toUpperCase()}</td><td>{definition?.conditioned_winner ? `${definition.conditioned_winner} by ${definition.decisive_margin_threshold}+` : id === "baseline" ? "Market" : "Unavailable"}</td><td>{family?.candidate_count ?? 0}</td><td>{family ? `#${family.best_rank}` : "—"}</td><td>{family ? Number(family.best_mean).toFixed(1) : "—"}</td><td>{family ? Number(family.best_p90).toFixed(1) : "—"}</td><td>{family ? Number(family.best_selector).toFixed(1) : "—"}</td><td>{family?.best_captain ?? "—"}</td><td>{family?.best_team_split ?? "—"}</td><td>{family ? `$${Number(family.best_salary).toLocaleString()}` : "—"}</td><td>{family?.selected ? "Yes" : "No"}</td><td>{family?.reason ?? report.scenario_generation_status}</td></tr>; })}</tbody></table></div></>;
+                    return <><h3>Showdown game-script scenarios</h3><p>{report.scenario_generation_status} · Legacy required coverage {report.require_scenario_diversity ? "on" : "off"}. Conditions discover rosters; baseline quality stays primary; soft coverage is {report.soft_scenario_diversity ? "on" : "off"}. Mean and P90 maxima may come from different rosters. Captain, team split and salary describe the maximum-selector roster.</p><div className="scroll-table"><table className="compact-table"><thead><tr><th>Scenario</th><th>Condition</th><th>Candidates</th><th>Best rank</th><th>Independent maximum baseline mean</th><th>Independent maximum summed marginal P90</th><th>Maximum baseline selector</th><th>Captain at maximum selector</th><th>Team split</th><th>Salary</th><th>Selected</th><th>Reason</th></tr></thead><tbody>{["baseline", "team_a_decisive_win", "team_b_decisive_win"].map((id) => { const family = families.find((item: any) => item.scenario_id === id); const definition = definitions?.find((item: any) => item.scenario_id === id); return <tr key={id}><td>{definition?.label ?? id.replaceAll("_", " ").toUpperCase()}</td><td>{definition?.conditioned_winner ? `${definition.conditioned_winner} by ${definition.decisive_margin_threshold}+` : id === "baseline" ? "Market" : "Unavailable"}</td><td>{family?.candidate_count ?? 0}</td><td>{family ? `#${family.best_rank}` : "—"}</td><td>{family ? Number(family.best_mean).toFixed(1) : "—"}</td><td>{family ? Number(family.best_p90).toFixed(1) : "—"}</td><td>{family ? Number(family.best_selector).toFixed(1) : "—"}</td><td>{family?.best_captain ?? "—"}</td><td>{family?.best_team_split ?? "—"}</td><td>{family ? `$${Number(family.best_salary).toLocaleString()}` : "—"}</td><td>{family?.selected ? "Yes" : "No"}</td><td>{family?.reason ?? report.scenario_generation_status}</td></tr>; })}</tbody></table></div><ScenarioPortfolioAccounting report={report} /></>;
                   })()}
                 </div>
               )}
@@ -4246,6 +3878,7 @@ function App() {
                       (sum, player: any) => sum + (Number(player?.projection ?? player?.predicted_mean) || 0),
                       0
                     );
+                    const cashDiagnostic = lineup.find((row: any) => row.cash_lineup_selection)?.cash_lineup_selection?.diagnostics;
                     const ceilingSummary = individualCeilingSummary(lineup);
                     const totalFloor = lineup.reduce(
                       (sum, player: any) => sum + (Number(player?.h2h_floor ?? player?.predicted_p10 ?? player?.projection) || 0),
@@ -4349,13 +3982,15 @@ function App() {
 
                     const sortedLineup = assignSlots(lineup);
                     return (
-                      <div className="lineup-card" key={`lineup-${idx}`}>
+                      <div className="lineup-card" id={`optimizer-lineup-${idx + 1}`} key={`lineup-${idx}`}>
                         <div className="lineup-header">
-                          <strong>{lineup[0]?.lineup_variant === "long_shot" ? "Long-shot lineup" : `Lineup ${idx + 1}`}</strong>
+                          {optimizerStatus.gpp_recommendation?.recommended?.lineup_number === idx + 1 && <strong>Recommended GPP candidate · provisional</strong>}
+                          <strong>{lineup.some((row: any) => row.cash_lineup_selection) ? idx === 0 ? "Primary recommendation" : `Additional requested lineup ${idx + 1}` : lineup[0]?.lineup_variant === "long_shot" ? "Long-shot lineup" : `Lineup ${idx + 1}`}</strong>
                           <span>Salary: {totalSalary.toLocaleString()}</span>
                           <span>Mean: {totalProj.toFixed(2)}</span>
+                          {cashDiagnostic && <span>Downside: {Number(cashDiagnostic.downside_diagnostic).toFixed(2)} · Upside: {Number(cashDiagnostic.upside_diagnostic).toFixed(2)} · Proxy score: {Number(cashDiagnostic.selection_score).toFixed(2)}</span>}
                           <span>{ceilingSummary.label}: {ceilingSummary.value.toFixed(2)}</span>
-                          {lineup[0]?.showdown_scenario && <span>Scenario: {lineup[0].showdown_scenario.label} · winner {lineup[0].showdown_scenario.conditioned_winner ?? "market"} · {lineup[0].showdown_scenario.decisive_margin_threshold}+ points · baseline mean {lineup.reduce((sum: number, row: any) => sum + Number(row.baseline_projection ?? row.projection ?? 0), 0).toFixed(2)} → scenario {totalProj.toFixed(2)} · baseline P90 {lineup.reduce((sum: number, row: any) => sum + Number(row.baseline_p90 ?? row.p90 ?? 0), 0).toFixed(2)} → scenario {lineup.reduce((sum: number, row: any) => sum + Number(row.p90 ?? 0), 0).toFixed(2)}</span>}
+                          {lineup[0]?.showdown_scenario && <span>Scenario: {lineup[0].showdown_scenario.label} · winner {lineup[0].showdown_scenario.conditioned_winner ?? "market"} · {lineup[0].showdown_scenario.decisive_margin_threshold}+ points · baseline mean {lineup.reduce((sum: number, row: any) => sum + Number(row.baseline_projection ?? row.projection ?? 0), 0).toFixed(2)} → discovery-conditioned {lineupConditionedTotal(lineup, "mean")} · baseline P90 {lineup.reduce((sum: number, row: any) => sum + Number(row.baseline_p90 ?? row.p90 ?? 0), 0).toFixed(2)} → discovery-conditioned {lineupConditionedTotal(lineup, "p90")}</span>}
                           {hasContextScoring && (
                             <span>
                               Context: {totalContextAdjustment >= 0 ? "+" : ""}
@@ -4392,7 +4027,7 @@ function App() {
                             <span>Construction: {constructionLabel}</span>
                           )}
                         </div>
-                        <OptimizerControlComparison comparison={lineup[0]?.lineup_control_comparison} />
+                        {!ACTIVE_OPTIMIZER_STRATEGIES.some(strategy => strategy.id === optimizerStatus.strategy) && <OptimizerControlComparison comparison={lineup[0]?.lineup_control_comparison} />}
                         {correlationRules.length > 0 && (
                           <details>
                             <summary>

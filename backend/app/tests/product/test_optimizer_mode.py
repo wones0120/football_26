@@ -62,6 +62,12 @@ from backend.app.product_services.optimizer import (
 
 
 class OptimizerModeTests(unittest.TestCase):
+    def setUp(self):
+        # Strategy fixtures have synthetic inputs and no live source lineage.
+        live = patch("backend.app.product_services.showdown_data_readiness.is_live_slate", return_value=False)
+        live.start()
+        self.addCleanup(live.stop)
+
     def test_name_exclusion_resolves_to_canonical_id_when_name_norm_is_missing(self):
         pool = pd.DataFrame([
             {"player_id": "harvey-id", "name": "RJ Harvey", "name_norm": None},
@@ -826,13 +832,8 @@ class OptimizerModeTests(unittest.TestCase):
             ]
         )
 
-        filtered, evidence = restrict_showdown_pool_to_starting_qbs(pool)
-
-        qbs = filtered[filtered["position"] == "QB"]
-        self.assertEqual(set(qbs["player_id"]), {"aaa-qb1", "bbb-qb1"})
-        self.assertTrue(qbs["showdown_qb_eligible"].all())
-        self.assertEqual(evidence["excluded_qb_count"], 3)
-        self.assertEqual(evidence["evidence_status"], "salary_inferred")
+        with self.assertRaisesRegex(ValueError, "salary cannot establish"):
+            restrict_showdown_pool_to_starting_qbs(pool)
 
     def test_showdown_pool_preserves_explicit_specialty_qb_package(self):
         pool = pd.DataFrame(
@@ -845,6 +846,7 @@ class OptimizerModeTests(unittest.TestCase):
             ]
         )
 
+        pool["depth_chart_position"] = pool["player_id"].map({"aaa-qb1": "QB1", "bbb-qb1": "QB1"})
         filtered, evidence = restrict_showdown_pool_to_starting_qbs(pool)
 
         self.assertEqual(
@@ -892,12 +894,8 @@ class OptimizerModeTests(unittest.TestCase):
             ]
         )
 
-        filtered, _ = restrict_showdown_pool_to_starting_qbs(pool)
-
-        self.assertEqual(
-            set(filtered.loc[filtered["position"] == "QB", "player_id"]),
-            {"aaa-current", "bbb-current"},
-        )
+        with self.assertRaisesRegex(ValueError, "salary cannot establish"):
+            restrict_showdown_pool_to_starting_qbs(pool)
 
     def test_validated_captain_model_adds_position_probabilities_and_weights(self):
         positions = ["QB", "QB", "RB", "RB", "WR", "WR", "TE", "K", "DST"]
@@ -1381,6 +1379,7 @@ class OptimizerModeTests(unittest.TestCase):
                 params={"flex_only_players": ["Missing Player"], "enforce_single_te": False},
                 contest_format="showdown",
                 objective="gpp",
+                allow_incomplete_evidence=True,
             )
 
     def test_showdown_solver_preserves_mean_and_p90_slot_values(self):
@@ -1399,6 +1398,7 @@ class OptimizerModeTests(unittest.TestCase):
                     "projection": 10.0 + index,
                     "p90": 20.0 + index,
                     "showdown_qb_eligible": index in {0, 3},
+                    "is_starting_qb": index in {0, 3},
                 }
                 for index in range(7)
             ]
@@ -1585,6 +1585,7 @@ class OptimizerModeTests(unittest.TestCase):
                     "player_id": f"player-{index}",
                     "name": f"Player {index}",
                     "position": "QB" if index in {0, 4} else "RB",
+                    "is_starting_qb": index in {0, 4},
                     "player_team": "AAA" if index < 2 else "BBB",
                     "salary": 5000,
                     "projection": 10.0,
@@ -1614,6 +1615,7 @@ class OptimizerModeTests(unittest.TestCase):
             params={"num_lineups": 1, "enforce_single_te": False},
             contest_format="showdown",
             objective="cash",
+            allow_incomplete_evidence=True,
         )
 
         validation = job.params["strategy_runtime"]["validation"]
@@ -1645,6 +1647,7 @@ class OptimizerModeTests(unittest.TestCase):
                     "projection": 10.0 + index,
                     "p90": 20.0 + index,
                     "showdown_qb_eligible": index in {0, 3},
+                    "is_starting_qb": index in {0, 3},
                 }
                 for index in range(6)
             ]
@@ -1805,8 +1808,12 @@ class OptimizerModeTests(unittest.TestCase):
                 "projection": 10.0 + index,
                 "p90": 20.0 + index,
                 "showdown_qb_eligible": index in {0, 3},
+                    "is_starting_qb": index in {0, 3},
                 "captain_ownership": 5.0 + index,
                 "flex_ownership": 12.0 + index,
+                "ownership_run_id": "synthetic-ownership",
+                "ownership_source": "synthetic-approved-model",
+                "ownership_observed_at": datetime.now().isoformat(),
                 "team_implied_total": 24.0 if index < 3 else 20.0,
             }
             for index in range(6)
@@ -1838,6 +1845,7 @@ class OptimizerModeTests(unittest.TestCase):
             },
             contest_format="showdown",
             objective="gpp",
+            allow_incomplete_evidence=True,
         )
 
         self.assertEqual(job.status, "completed")

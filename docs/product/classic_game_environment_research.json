@@ -1,0 +1,65 @@
+{
+  "contract_id": "classic_game_environment_research_notes_v1",
+  "title": "Classic game totals and historical finishing ranks",
+  "label": "RESEARCH_ONLY / OBSERVATIONAL / NOT PRODUCTION VALIDATED",
+  "verification": "Independently reproduced from hash-verified archived inputs",
+  "sample_period": "2026 Weeks 1\u20133, Sunday Main",
+  "sample": {
+    "contests": 8,
+    "independent_slates": 3,
+    "top_10_entries": 93218,
+    "field_entries": 929532
+  },
+  "success_definition": "Top 10% means recorded rank <= ceil(full stored field size \u00d7 0.10), including all cutoff ties. Offensive selections count eight slots per classified legal roster; FLEX uses its actual position, DST is separate. Field includes top finishers.",
+  "rows": [
+    {
+      "tier": "Highest quarter",
+      "top_10": 0.45897787980862065,
+      "field": 0.40014840801607693
+    },
+    {
+      "tier": "Middle half",
+      "top_10": 0.3806105044090197,
+      "field": 0.4098219587921664
+    },
+    {
+      "tier": "Lowest quarter",
+      "top_10": 0.16041161578235963,
+      "field": 0.19002963319175672
+    }
+  ],
+  "findings": [
+    "Top-10% lineups averaged 3.67 offensive players from high-total games; field 3.20.",
+    "High-total RB selections: 51.7% versus 41.4% field.",
+    "Low-total DST selections: 52.9% versus 48.8% field.",
+    "Average selected offensive game total: 46.53 versus 46.15; difference 0.38.",
+    "50+ total games had mixed outcomes: offensive selection share was lower than field in Weeks 1 and 3, higher in Week 2.",
+    "Mean offensive team implied points: 23.72 versus 23.79 field.",
+    "DST opponent implied points: 20.19 versus 20.44 field."
+  ],
+  "controlled_comparisons": [
+    "Exploratory lineup-level comparisons use contest intercepts, salary, prelock mean/P90 sums, position mix, QB/pass-catcher stacks, bring-backs and distinct games. No entry-level significance claims or production parameter fitting.",
+    "Average offensive game O/U: adjusted association +1.43 percentage points per one total point pooled, +1.70 with equal slate weights; individual-slate range -0.06 to +4.04. Descriptive only.",
+    "Average offensive team implied points: adjusted association -0.97 percentage points per one implied point pooled, +0.53 with equal slate weights; individual-slate range -2.13 to +3.17. Descriptive only.",
+    "DST opponent implied points: adjusted association -0.40 percentage points per one implied point pooled, +0.15 with equal slate weights; individual-slate range -0.49 to +0.71. Descriptive only.",
+    "High-total RB count: adjusted association +2.57 percentage points per one additional RB pooled, +0.98 with equal slate weights; individual-slate range -4.09 to +4.43. Descriptive only.",
+    "The high-total RB association shrinks after projection/salary controls and changes sign across slates; independent predictive value is unestablished.",
+    "Projected ownership was excluded: Week 1 has no recoverable prelock runs; Weeks 2\u20133 runs lack verified input provenance. Realized ownership is not a substitute.",
+    "Rank archives support 46,661 top-5% entries and 9,380 top-1% entries, including ties. No archived payout records support an actual-cash comparison."
+  ],
+  "cash_outcomes": "Unavailable",
+  "limitations": [
+    "Only three independent slates; overlapping contests and shared player outcomes remain dependent.",
+    "Means/P90 recovered from archived before-lock run/row clocks; recovered means exactly match hashed original export. These are archived model references, not calibrated player-quality controls.",
+    "No verified ownership control; cannot establish an independent effect beyond ownership.",
+    "Market captures were prelock but sometimes days/weeks old, not certified closing lines.",
+    "Complete-case projection controls exclude some entries; convenience sample and unknown contest structures limit generalization.",
+    "Roster deduplication occurs within contests; equal-slate and leave-one-slate-out diagnostics handle shared slates descriptively. No independent-entry confidence interval or cash claim.",
+    "Top-decile finishes are not paid positions. Historical percentages are not requirements or selection bonuses."
+  ],
+  "source": {
+    "path": "artifacts/classic_game_environment_review/historical_results.json",
+    "sha256": "362a5ee73fb83ee592232e38863f65bc7f3f4abdd8f498fef91c6ae0379f8e99",
+    "reproduced_at": "2026-10-09"
+  }
+}

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import json
 import os
 import signal
 import socket
@@ -230,6 +231,8 @@ def main() -> None:
     signal.signal(signal.SIGINT, stop)
     signal.signal(signal.SIGTERM, stop)
     LOGGER.info("Starting operational worker %s", args.worker_id)
+    from .product_services.runtime_code import LOADED
+    LOGGER.info("Loaded worker runtime: %s", json.dumps(LOADED, sort_keys=True))
     run_worker(
         worker_id=args.worker_id,
         poll_seconds=args.poll_seconds,
