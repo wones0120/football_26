@@ -3,19 +3,38 @@ import { DEFAULT_LARGE_GPP_CONTROLS, largeGppControlParams, type LargeGppControl
 export type LineupControls = LargeGppControls & {
   numLineups: number; maxExposure: number; primaryGameCap: number | null;
   maxPlayersPerTeam: number; maxPlayersPerGame: number;
-  captainMaxExposure: number; coreMaxExposure: number; startingQbMaxExposure: number; cheapPuntMaxExposure: number;
+  seasonRankQb: number | null; seasonRankRb: number | null; seasonRankWr: number | null; seasonRankTe: number | null;
+  minimumQbSalary: number | null; minimumRbSalary: number | null; minimumPlayerSalary: number | null; captainMaxExposure: number; coreMaxExposure: number; startingQbMaxExposure: number; cheapPuntMaxExposure: number;
 };
 export const LINEUP_CONTROLS_STORAGE_KEY = "football-26-lineup-controls";
 export const MAX_LINEUPS = 500;
 export function defaultLineupControls(format: "classic" | "showdown"): LineupControls {
   return { ...DEFAULT_LARGE_GPP_CONTROLS, numLineups: 5, maxExposure: 100, primaryGameCap: null,
-    maxPlayersPerTeam: format === "classic" ? 4 : 5, maxPlayersPerGame: format === "classic" ? 5 : 6,
-    captainMaxExposure: 100, coreMaxExposure: 100, startingQbMaxExposure: 100, cheapPuntMaxExposure: 100 };
+    maxPlayersPerTeam: 4, maxPlayersPerGame: format === "classic" ? 5 : 6,
+    seasonRankQb: format === "classic" ? 50 : null, seasonRankRb: format === "classic" ? 25 : null, seasonRankWr: format === "classic" ? 50 : null, seasonRankTe: format === "classic" ? 25 : null,
+    minimumQbSalary: format === "classic" ? 4500 : null, minimumRbSalary: format === "classic" ? 4500 : null, minimumPlayerSalary: null, captainMaxExposure: 100, coreMaxExposure: 100, startingQbMaxExposure: 100, cheapPuntMaxExposure: 100 };
 }
 
 export function lineupControlParams(value: LineupControls, format: "classic" | "showdown"): Record<string, number> {
   const size = format === "classic" ? 9 : 6;
   const params: Record<string, number> = {};
+  if (value.minimumPlayerSalary !== null) {
+    if (!Number.isInteger(value.minimumPlayerSalary) || value.minimumPlayerSalary < 0 || value.minimumPlayerSalary > 50000) throw new Error("Minimum player salary must be a whole dollar amount from 0 to 50000.");
+    params.minimum_player_salary = value.minimumPlayerSalary;
+  }
+  if (format === "classic") {
+    for (const [pos, input] of [["qb", value.seasonRankQb], ["rb", value.seasonRankRb], ["wr", value.seasonRankWr], ["te", value.seasonRankTe]] as const) {
+      if (input === null) continue;
+      if (![25, 50, 75, 100].includes(input)) throw new Error(`Season-average ${pos.toUpperCase()} rank must be 25, 50, 75, 100 or No restriction.`);
+      params[`season_ppg_top_pct_${pos}`] = input;
+    }
+
+    for (const [key, input] of [["minimum_qb_salary", value.minimumQbSalary], ["minimum_rb_salary", value.minimumRbSalary]] as const) {
+      if (input === null) continue;
+      if (!Number.isInteger(input) || input < 0 || input > 50000) throw new Error(`${key} must be a whole dollar amount from 0 to 50000.`);
+      params[key] = input;
+    }
+  }
   for (const [key, input, low, high] of [
     ["num_lineups", value.numLineups, 1, MAX_LINEUPS],
     ["max_players_per_team", value.maxPlayersPerTeam, format === "classic" ? 1 : 3, format === "classic" ? 4 : 5],
@@ -64,5 +83,12 @@ export function restoreLineupControls(raw: string | null, legacyClassic: string 
   let saved: Record<string, unknown> = {};
   try { saved = JSON.parse(raw ?? "{}") ?? {}; } catch { /* Use defaults and legacy choices. */ }
   const classicRaw = saved.classic ? JSON.stringify(saved.classic) : legacyClassic;
-  return { classic: parseLineupControls(classicRaw, "classic"), showdown: parseLineupControls(JSON.stringify(saved.showdown ?? null), "showdown") };
+  const showdown = parseLineupControls(JSON.stringify(saved.showdown ?? null), "showdown");
+  // Apply the new Captain default once to old saved five-player caps.
+  if (saved.captainDefaultsVersion !== 1 && showdown.maxPlayersPerTeam === 5) showdown.maxPlayersPerTeam = 4;
+  return { classic: parseLineupControls(classicRaw, "classic"), showdown };
+}
+
+export function serializeLineupControls(controls: { classic: LineupControls; showdown: LineupControls }): string {
+  return JSON.stringify({ ...controls, captainDefaultsVersion: 1 });
 }

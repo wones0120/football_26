@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ..injury_scope import injury_slate_sql
+
 import uuid
 import math
 import json
@@ -362,9 +364,9 @@ def showdown_optimizer_rules(strategy: str) -> list[dict]:
     if strategy in {CAPTAIN_SINGLE_LINEUP_STRATEGY_ID, SHOWDOWN_GPP_CAPTAIN_INFORMED_STRATEGY_ID, SHOWDOWN_THREE_MAX_GPP_STRATEGY_ID, SHOWDOWN_SMALL_MAX_GPP_STRATEGY_ID} or strategy in SHOWDOWN_SINGLE_ENTRY_STRATEGY_IDS:
         rules.extend(
             [
-                {"rule_id": "showdown_require_starting_qb_v1", "rule_type": "hard_constraint", "trigger": {"portfolio_size_max": 5}, "requirement": {"minimum_starting_qbs": 1}, "source": "user_required"},
+                {"rule_id": "showdown_require_starting_qb_v2", "rule_type": "hard_constraint", "trigger": {"portfolio_size_max": 5, "captain_position_not": "RB"}, "requirement": {"minimum_starting_qbs": 1}, "source": "user_required"},
                 {"rule_id": "showdown_pass_catcher_captain_qb_v1", "rule_type": "hard_constraint", "trigger": {"captain_positions": ["WR", "TE"]}, "requirement": {"same_team_starting_qb": True}, "source": "user_required"},
-                {"rule_id": "showdown_multi_pass_catcher_qb_v1", "rule_type": "hard_constraint", "trigger": {"same_team_wr_te_minimum": 2}, "requirement": {"same_team_starting_qb": True}, "source": "user_required"},
+                {"rule_id": "showdown_multi_pass_catcher_qb_v2", "rule_type": "hard_constraint", "trigger": {"same_team_wr_te_minimum": 2, "captain_position_not": "RB"}, "requirement": {"same_team_starting_qb": True}, "source": "user_required"},
                 {"rule_id": "showdown_qb_captain_role_stack_v1", "rule_type": "hard_constraint", "trigger": {"captain_position": "QB"}, "requirement": {"pocket_qb_wr_te": 2, "high_rushing_qb_wr_te": 1}, "source": "user_required"},
                 {"rule_id": "showdown_low_opportunity_skill_gate_v2", "rule_type": "hard_exclusion", "trigger": {"positions": ["RB", "WR", "TE"], "legacy_salary_max": 1000, "legacy_projection_below": 3, "legacy_p90_below": 10, "fallback_salary_max": 2000, "fallback_projection_below": 2, "fallback_p90_below": 8, "opportunity_path": False}, "source": "user_required"},
             ]
@@ -3377,7 +3379,7 @@ class OptimizerService:
                     FROM target.snapshot_injury_status injury
                     WHERE injury.season = :season AND injury.week = :week
                       AND injury.player_id = s.player_id
-                      AND (injury.slate IS NULL OR UPPER(injury.slate) = UPPER(:slate))
+                      AND (injury.slate IS NULL OR {injury_slate_sql('injury.slate')})
                       AND {cutoff_predicate}
                     ORDER BY injury.as_of DESC
                     LIMIT 1
@@ -4600,6 +4602,10 @@ class OptimizerService:
         locked_player_ids: set[str] | None = None,
         excluded_player_ids: set[str] | None = None,
         excluded_opponent_teams: set[str] | None = None,
+        minimum_player_salary: int | None = None,
+        season_ppg_eligible_ids: dict[str, set[str]] | None = None,
+        minimum_qb_salary: int | None = None,
+        minimum_rb_salary: int | None = None,
     ) -> tuple[bool, str]:
         """Validate finalized classic lineups independently of either solver."""
         exposure_counts: dict[str, int] = {}
@@ -4657,6 +4663,18 @@ class OptimizerService:
             if enforce_single_te and positions.count("TE") > 1:
                 return False, f"Lineup {lineup_number} violates the single-TE control"
 
+            for row in lineup:
+                position = str(row.get("position", "")).upper()
+                if season_ppg_eligible_ids is not None and position in season_ppg_eligible_ids and str(row.get("player_id")) not in season_ppg_eligible_ids[position]:
+                    return False, f"Lineup {lineup_number} violates user season-average {position} rank limit"
+            for position, minimum in (("QB", minimum_qb_salary), ("RB", minimum_rb_salary)):
+                if minimum is not None and any(str(row.get("position", "")).upper() == position and _safe_float(row.get("salary")) < minimum for row in lineup):
+                    return False, f"Lineup {lineup_number} violates user minimum {position} salary ${minimum}"
+            if minimum_player_salary is not None and any(
+                str(row.get("position") or "").upper() not in {"DST", "D", "DEF"}
+                and _safe_float(row.get("salary")) < minimum_player_salary for row in lineup
+            ):
+                return False, f"Lineup {lineup_number} violates user minimum offensive salary ${minimum_player_salary}"
             salary = sum(_safe_float(row.get("salary")) for row in lineup)
             if salary > SALARY_CAP:
                 return False, (
@@ -4750,6 +4768,8 @@ class OptimizerService:
         no_two_qbs: bool = False,
         no_qbs: bool = False,
         captain_positions: list[str] | None = None,
+        minimum_player_salary: int | None = None,
+        required_team_leader_ids: set[str] | None = None,
         max_players_per_team: int = 5,
     ) -> tuple[bool, str]:
         """Validate the persisted one-CPT/five-FLEX contract independently."""
@@ -4800,6 +4820,8 @@ class OptimizerService:
                 return False, f"Lineup {lineup_number} must contain exactly five FLEX slots"
             if any(position not in {"CPT", "FLEX"} for position in roster_positions):
                 return False, f"Lineup {lineup_number} contains an invalid showdown slot"
+            if required_team_leader_ids and not required_team_leader_ids.intersection(player_ids):
+                return False, f"Lineup {lineup_number} violates required season-average team leader preference"
             captain_index = roster_positions.index("CPT")
             if player_ids[captain_index] in (flex_only_player_ids or set()):
                 return False, (
@@ -4877,7 +4899,7 @@ class OptimizerService:
                     row for row, position in zip(lineup, natural_positions)
                     if position == "QB" and bool(row.get("showdown_qb_eligible"))
                 ]
-                if not starter_qbs:
+                if not starter_qbs and natural_positions[captain_index] != "RB":
                     return False, f"Lineup {lineup_number} has no starting quarterback"
                 for team in {
                     str(row.get("player_team") or row.get("team") or "").upper()
@@ -4892,7 +4914,7 @@ class OptimizerService:
                         if str(row.get("player_team") or row.get("team") or "").upper() == team
                         and str(row.get("position") or "").upper() in {"WR", "TE"}
                     ]
-                    if len(team_catchers) >= 2 and not team_qbs:
+                    if natural_positions[captain_index] != "RB" and len(team_catchers) >= 2 and not team_qbs:
                         return False, f"Lineup {lineup_number} has two {team} pass catchers without their QB"
                 captain = lineup[captain_index]
                 captain_team = str(captain.get("player_team") or captain.get("team") or "").upper()
@@ -4913,6 +4935,13 @@ class OptimizerService:
                     if len(own_catchers) < minimum:
                         return False, f"Lineup {lineup_number} QB CPT requires {minimum} same-team WR/TE"
 
+            if minimum_player_salary is not None:
+                for row in lineup:
+                    base = row.get("base_salary")
+                    if base is None:
+                        base = _safe_float(row.get("salary")) / (1.5 if row.get("roster_position") == "CPT" else 1)
+                    if _safe_float(base) < minimum_player_salary:
+                        return False, f"Lineup {lineup_number} violates user minimum base salary ${minimum_player_salary}"
             salary = sum(_safe_float(row.get("salary")) for row in lineup)
             if salary > SALARY_CAP:
                 return False, (
@@ -5527,6 +5556,9 @@ class OptimizerService:
             normalized_teams = pool[team_field].astype(str).str.strip().str.upper()
             normalized_positions = pool["position"].astype(str).str.strip().str.upper()
             selected = {i: cap_vars[i] + flex_vars[i] for i in index_range}
+            if params.get("required_team_leader_ids"):
+                required = set(params["required_team_leader_ids"])
+                model += pulp.lpSum(selected[i] for i in index_range if str(pool.loc[i, "player_id"]) in required) >= 1, "user_season_average_team_leader"
 
             captain_positions = allowed_captain_positions(params)
             if captain_positions:
@@ -5544,15 +5576,14 @@ class OptimizerService:
             if params.get("no_two_qbs", False):
                 model += pulp.lpSum(selected[i] for i in qb_indexes) <= 1, "user_no_two_qbs"
 
+            rb_captain_selected = pulp.lpSum(cap_vars[i] for i in index_range if normalized_positions.iloc[i] == "RB")
             if bool(params.get("require_starting_qb", False)) and not params.get("no_qbs", False):
                 starter_qbs = [
                     i for i in index_range
                     if normalized_positions.iloc[i] == "QB"
                     and bool(pool.loc[i].get("showdown_qb_eligible"))
                 ]
-                if not starter_qbs:
-                    return None
-                model += pulp.lpSum(selected[i] for i in starter_qbs) >= 1
+                model += pulp.lpSum(selected[i] for i in starter_qbs) >= 1 - rb_captain_selected
 
             if bool(params.get("hard_qb_correlations", False)) and not params.get("no_qbs", False):
                 for team in sorted(set(normalized_teams)):
@@ -5569,9 +5600,9 @@ class OptimizerService:
                     ]
                     qb_selected = pulp.lpSum(selected[i] for i in qbs)
                     if pass_catchers:
-                        # Two same-team pass catchers require their starting QB.
+                        # Except with RB Captain, two same-team pass catchers require their QB.
                         model += pulp.lpSum(selected[i] for i in pass_catchers) <= (
-                            1 + max(1, len(pass_catchers) - 1) * qb_selected
+                            1 + max(1, len(pass_catchers) - 1) * (qb_selected + rb_captain_selected)
                         )
                     for receiver_index in pass_catchers:
                         if qbs:
@@ -6518,6 +6549,20 @@ class OptimizerService:
             if progress:
                 progress("evidence_frozen", 1, 1, frozen_job.message)
         initial_pool = pool.copy()
+        from .showdown_team_leader_preferences import leader_preference
+        team_leader_preference = leader_preference(initial_pool, params, engine=self.engine, season=season, week=week) if contest_format == "showdown" else {"enabled": False, "required_player_ids": []}
+        params.setdefault("strategy_runtime", {})["team_leader_preference"] = team_leader_preference
+        from .classic_season_rank_preferences import preference as season_rank_preference
+        season_rank_report = season_rank_preference(self.engine, params, season=season, week=week) if contest_format == "classic" else {"enabled": False, "eligible_ids": {}}
+        params.setdefault("strategy_runtime", {})["season_ppg_rank_preference"] = season_rank_report
+        season_ppg_eligible_ids = {pos: set(ids) for pos, ids in season_rank_report["eligible_ids"].items()}
+        if season_rank_report["enabled"] or team_leader_preference["enabled"]:
+            rank_job = OptimizerJob(job_id=job_id, status="running", created_at=now, updated_at=now,
+                season=season, week=week, slate=slate, strategy=strategy, contest_format=contest_format,
+                objective=objective, params=params, projection_run_id=projection_run_id, rule_run_id=rule_run_id,
+                data_cutoff_at=data_cutoff_at, message="Season-average preference evidence frozen before selection")
+            if not self._persist_optimizer_run(rank_job):
+                raise ValueError("Season-average preference evidence could not be persisted; candidate generation blocked")
         eligible_pool_ids: set[str] = set()
         exclusion_reasons: dict[str, list[str]] = {}
         exclusion_details: dict[str, list[dict]] = {}
@@ -6925,6 +6970,40 @@ class OptimizerService:
                 ExclusionCategory.USER,
             )
 
+        if params.get("minimum_player_salary") is not None and not pool.empty:
+            before_user_salary = pool.copy()
+            base_salary = pd.to_numeric(pool["base_salary"], errors="coerce") if "base_salary" in pool else pd.to_numeric(pool["salary"], errors="coerce")
+            if "base_salary" in pool:
+                base_salary = base_salary.fillna(pd.to_numeric(pool["salary"], errors="coerce"))
+            salary_eligible = base_salary >= params["minimum_player_salary"]
+            if contest_format == "classic":
+                salary_eligible = (pd.to_numeric(pool["salary"], errors="coerce") >= params["minimum_player_salary"]) | pool["position"].astype(str).str.upper().isin({"DST", "D", "DEF"})
+            pool = pool.loc[salary_eligible].copy().reset_index(drop=True)
+            record_pool_exclusions(before_user_salary, pool, "user_minimum_player_salary", ExclusionCategory.USER)
+            if requested_captain_id and requested_captain_id not in set(pool["player_id"].astype(str)):
+                raise ValueError("Locked Captain conflicts with minimum player salary or other eligibility constraints")
+
+        if contest_format == "classic":
+            for position, key in (("QB", "minimum_qb_salary"), ("RB", "minimum_rb_salary")):
+                minimum = params.get(key)
+                if minimum is None or pool.empty:
+                    continue
+                before_position_salary = pool.copy()
+                eligible = (pool["position"].astype(str).str.upper() != position) | (pd.to_numeric(pool["salary"], errors="coerce") >= minimum)
+                pool = pool.loc[eligible].copy().reset_index(drop=True)
+                record_pool_exclusions(before_position_salary, pool, f"user_{key}", ExclusionCategory.USER)
+
+        for position, eligible_ids in season_ppg_eligible_ids.items():
+            if pool.empty:
+                break
+            before_season_rank = pool.copy()
+            eligible = (pool["position"].astype(str).str.upper() != position) | pool["player_id"].astype(str).isin(eligible_ids)
+            pool = pool.loc[eligible].copy().reset_index(drop=True)
+            record_pool_exclusions(before_season_rank, pool, f"user_season_ppg_rank_{position.lower()}", ExclusionCategory.USER)
+
+        if team_leader_preference["enabled"] and not set(team_leader_preference["required_player_ids"]).intersection(set(pool["player_id"].astype(str)) if "player_id" in pool else set()):
+            raise ValueError("Required season-average team leader is unavailable under the current exclusions or salary minimum; change those preferences")
+
         candidate_ids_before_strategy = (
             set(pool["player_id"].astype(str))
             if not pool.empty and "player_id" in pool
@@ -7079,6 +7158,7 @@ class OptimizerService:
             stack_cfg = dict(stack_policy)
             if contest_format == "showdown":
                 stack_cfg.update({
+                    "required_team_leader_ids": team_leader_preference["required_player_ids"],
                     "captain_positions": captain_positions,
                     "no_qb_captain": params.get("no_qb_captain", False),
                     "no_two_qbs": params.get("no_two_qbs", False),
@@ -8653,6 +8733,10 @@ class OptimizerService:
                                 locked_player_ids=locked_ids,
                                 excluded_player_ids=exclude_ids,
                                 excluded_opponent_teams=excluded_opponent_teams,
+                                minimum_player_salary=params.get("minimum_player_salary"),
+                                season_ppg_eligible_ids=season_ppg_eligible_ids,
+                                minimum_qb_salary=params.get("minimum_qb_salary"),
+                                minimum_rb_salary=params.get("minimum_rb_salary"),
                             )
                             if not legal:
                                 raise ValueError(f"Candidate failed Classic legality: {reason}")
@@ -9105,6 +9189,10 @@ class OptimizerService:
                     locked_player_ids=locked_ids,
                     excluded_player_ids=exclude_ids,
                     excluded_opponent_teams=excluded_opponent_teams,
+                    minimum_player_salary=params.get("minimum_player_salary"),
+                    season_ppg_eligible_ids=season_ppg_eligible_ids,
+                    minimum_qb_salary=params.get("minimum_qb_salary"),
+                    minimum_rb_salary=params.get("minimum_rb_salary"),
                 )
                 if not ok:
                     status = "failed"
@@ -9199,6 +9287,8 @@ class OptimizerService:
                     no_two_qbs=params.get("no_two_qbs", False),
                     no_qbs=params.get("no_qbs", False),
                     captain_positions=captain_positions,
+                    required_team_leader_ids=set(team_leader_preference["required_player_ids"]),
+                    minimum_player_salary=params.get("minimum_player_salary"),
                     max_players_per_team=params["max_players_per_team"],
                 )
                 if not ok:

@@ -17,6 +17,8 @@ from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select, text
+from sqlalchemy.orm import load_only
+from ..injury_scope import injury_slate_sql, injury_subset_membership_sql
 
 from ..config import get_settings
 from ..models import CuratedSalary, OperationalJob, RawNflSchedule, SourceSnapshot
@@ -116,11 +118,12 @@ def source_manifest(session, request, cutoff=None):
         WHERE s.season=:season AND s.week=:week AND LOWER(s.slate)=LOWER(:slate)
           AND s.source_system='draftkings' ORDER BY s.curated_salary_id
     """)
-    injuries = rows("""
+    injuries = rows(f"""
         SELECT i.*, r.source_checksum, r.source_path, r.started_at AS imported_at,
                r.status AS ingest_status, r.rows_unresolved
         FROM public.curated_injury i JOIN public.ingest_run r USING (ingest_run_id)
-        WHERE i.season=:season AND i.week=:week AND LOWER(i.slate)=LOWER(:slate)
+        WHERE i.season=:season AND i.week=:week AND {injury_slate_sql('i.slate')}
+          AND {injury_subset_membership_sql('i.player_master_id', 'i.team')}
         ORDER BY i.curated_injury_id
     """)
     starters = rows("""
@@ -288,15 +291,42 @@ def verify_artifacts(manifest, session=None):
     return storage_replicas
 
 
+def preparation_jobs(session, request):
+    # History/status checks need metadata, not every saved multi-megabyte audit.
+    return list(session.scalars(select(OperationalJob).where(
+        OperationalJob.job_type == PREPARATION_JOB,
+        OperationalJob.request_json['season'].as_integer() == request.season,
+        OperationalJob.request_json['week'].as_integer() == request.week,
+        func.lower(OperationalJob.request_json['slate'].as_string()) == request.slate.lower(),
+    ).options(load_only(OperationalJob.job_id, OperationalJob.request_json, OperationalJob.status,
+        OperationalJob.stage, OperationalJob.progress_message, OperationalJob.error_message,
+        OperationalJob.created_at, OperationalJob.completed_at)).order_by(OperationalJob.created_at.desc())))
+
+
+def preparation_summary(result):
+    if not result:
+        return result
+    summary = {k: v for k, v in result.items() if k not in {
+        'source_manifest', 'source_refresh', 'data_readiness', 'calibration_metrics'}}
+    if 'data_readiness' in result:
+        summary['data_readiness'] = {k: v for k, v in result['data_readiness'].items()
+            if k in {'status', 'reason_codes'}}
+    if 'source_refresh' in result:
+        summary['source_refresh'] = {k: {field: v[field] for field in ('status', 'reason') if field in v}
+            for k, v in result['source_refresh'].items() if isinstance(v, dict)}
+    return summary
+
+
 def preparation_status(session, request):
     now = datetime.now(UTC)
-    jobs = [j for j in session.scalars(select(OperationalJob).where(
-        OperationalJob.job_type == PREPARATION_JOB).order_by(OperationalJob.created_at.desc()))
-        if same_scope(j.request_json, request)]
+    jobs = preparation_jobs(session, request)
     job_views = [
         {"job_id": j.job_id, "action": j.request_json["action"], "status": j.status,
          "stage": j.stage, "message": j.progress_message, "error": j.error_message,
-         "result": j.result_json, "checkpoint": j.checkpoint_json,
+         "result": {"audit_url": f"/api/jobs/{j.job_id}"} if j.status == 'completed' else None,
+         "checkpoint": ({"preparation_result": preparation_summary(
+             (j.checkpoint_json or {}).get('preparation_result'))} if j.status == 'failed' else None),
+         "audit_url": f"/api/jobs/{j.job_id}",
          "completed_at": str(j.completed_at) if j.completed_at else None} for j in jobs[:10]]
     try:
         manifest = source_manifest(session, request, now)
@@ -351,7 +381,8 @@ def preparation_status(session, request):
             "lock_at": min(aware(r["kickoff_at"]) for r in manifest["games"]).isoformat(),
             "prelock": all(now < aware(r["kickoff_at"]) for r in manifest["games"]),
             "weather": weather, "load_freshness": freshness.model_dump(mode="json"), "jobs": job_views,
-            "latest_build": {**latest_build.result_json, "prepared_input_job_id": latest_build.job_id}
+            "latest_build": {**preparation_summary(latest_build.result_json),
+                "prepared_input_job_id": latest_build.job_id, "audit_url": f"/api/jobs/{latest_build.job_id}"}
                 if latest_build and latest_build.status == "completed" and latest_build.result_json else None,
             "build_current": current_build, "build_issue": build_issue,
             "entry_ready": False, "limitations": [
@@ -398,7 +429,7 @@ def validate_prepared_optimizer(session, payload, *, verify_current=True):
     if digest(expected_scenario) != digest({"availability_overrides": [r.model_dump(mode="json") for r in scenario.availability_overrides],
                                           "assume_questionable_out": params.get("assume_questionable_out", False) if request.action == "prepare" or payload.get("contest_format") == "showdown" or payload.get("strategy") == "classic_single_lineup_v1" else params.get("exclude_questionable", False)}):
         raise ValueError("Availability scenario changed; rebuild projections using the current controls.")
-    others = session.scalars(select(OperationalJob).where(OperationalJob.job_type == PREPARATION_JOB))
+    others = preparation_jobs(session, request)
     if any(j.job_id != job_id and same_scope(j.request_json, request) and
            (j.status in {"queued", "running"} or j.created_at > job.created_at) for j in others):
         raise ValueError("A newer preparation action exists. Review its status and rebuild before optimizing.")

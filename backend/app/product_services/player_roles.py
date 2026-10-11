@@ -7,7 +7,7 @@ VERSION = "current_slate_role_availability_v1"
 LINEAGE_COLUMNS = ["role_availability", "expected_depth_role", "role_starter_evidence",
                    "role_change", "role_optimizer_eligible", "role_confidence",
                    "role_resolution_warning", "role_rostered", "role_active"]
-UNAVAILABLE = {"IR", "PUP", "NFI", "O", "OUT", "INACTIVE", "SUSP", "SUSPENDED", "RES", "RESERVE"}
+UNAVAILABLE = {"IR", "PUP", "NFI", "O", "OUT", "INACTIVE", "SUSP", "SUSPENDED", "RES", "RESERVE", "EXE"}
 PRACTICE = {"PS", "PRA", "DEV", "PRACTICE_SQUAD"}
 
 

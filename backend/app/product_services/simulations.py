@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ..injury_scope import injury_slate_sql
+
 import json
 import uuid
 from dataclasses import dataclass
@@ -395,7 +397,7 @@ class SimulationService:
                         FROM target.snapshot_injury_status injury
                         WHERE injury.season = :season AND injury.week = :week
                           AND injury.player_id = p.player_id
-                          AND (injury.slate IS NULL OR UPPER(injury.slate) = UPPER(:slate))
+                          AND (injury.slate IS NULL OR {injury_slate_sql('injury.slate')})
                           AND {cutoff_predicate}
                         ORDER BY injury.as_of DESC
                         LIMIT 1

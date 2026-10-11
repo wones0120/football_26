@@ -11,6 +11,7 @@ import pandas as pd
 
 from Database.config import get_connection_string
 from Database.operations import delete_from_postgres, insert_into_postgres, ensure_table_columns
+from ..injury_scope import injury_source_slates
 from .player_master import PlayerMasterResolver
 from .player_master import PlayerMasterResolver
 
@@ -340,7 +341,7 @@ class SlateDataService:
         roots = [Path.cwd(), Path.home() / "Downloads"]
         target_tokens = [str(season), str(week), "injur"]
         if slate:
-            target_tokens.append(self._normalize_token(slate))
+            target_tokens.append(self._normalize_token(injury_source_slates(slate)[-1]))
         for root in roots:
             if not root.exists():
                 continue

@@ -7,9 +7,11 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import UTC, datetime
+import json
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+from ..injury_scope import injury_slate_sql, injury_subset_membership_sql, SUNDAY_SUBSETS
 
 from Database.dst import normalize_team
 from Database.player_identity import normalize_position
@@ -301,6 +303,68 @@ def match_source_player(row, key, source_lookup, salary_lookup):
     return matches[0] if len(matches) == 1 else None
 
 
+def transferred_roster_facts(rows, source_lookup, salary_lookup, *, cutoff):
+    """An exclusive current native-ID roster assignment invalidates the old team.
+
+    Never turn a name match or roster absence into an exclusion. Conflicting
+    latest assignments and ambiguous native aliases remain unresolved.
+    """
+    by_key = {}
+    for row in rows:
+        if (row.get('observed_at') and row.get('received_at') and row.get('snapshot_id')
+                and aware(row['observed_at']) <= cutoff and aware(row['received_at']) <= cutoff):
+            by_key.setdefault(str(row['gsis_id']), []).append(row)
+    facts = []
+    for key, history in by_key.items():
+        ids = source_lookup.get(key, set())
+        if len(ids) != 1:
+            continue
+        pid = next(iter(ids))
+        salary = salary_lookup.get(pid)
+        if not salary:
+            continue
+        newest = max(aware(r['observed_at']) for r in history)
+        latest = [r for r in history if aware(r['observed_at']) == newest]
+        assignments = {(normalize_team(str(r['team'])), normalize_position(str(r['position'])),
+                        normalize_salary_status(r['roster_status'])) for r in latest}
+        if len(assignments) != 1:
+            continue
+        team, position, status = next(iter(assignments))
+        if (not team or team == normalize_team(salary['team'])
+                or position != normalize_position(salary['position']) or status not in {'ACT', 'ACTIVE'}):
+            continue
+        row = max(latest, key=lambda r: aware(r['received_at']))
+        facts.append(dict(player_id=pid, team=salary['team'], position=salary['position'],
+            source_position=position, kind='roster_status', status='CUT',
+            source='nflreadpy_weekly_roster_team_transfer', current_team=team,
+            observed_at=newest.isoformat(), received_at=aware(row['received_at']).isoformat(),
+            source_ids=[str(row['snapshot_id']), str(row['raw_nfl_weekly_roster_id']), key],
+            source_uri=row['source_uri'], observation_basis='exclusive_native_id_roster_assignment_to_other_team'))
+    return facts
+
+
+def shared_sunday_source_facts(connection, *, season, week, slate, cutoff, salaries):
+    """Reuse Main's original football evidence, never its derived assessments."""
+    from .pregame_context import load_current_pregame_context
+
+    if slate.upper() not in SUNDAY_SUBSETS:
+        return []
+    members = {(str(s['player_id']), normalize_team(s['team']), s['position'].upper()) for s in salaries}
+    contexts = load_current_pregame_context(connection, season=season, week=week,
+        slate='SUNDAY_MAIN', cutoff=cutoff, include_source_history=True)
+    facts = {}
+    for context in contexts:
+        evidence = context.get('evidence_json') or {}
+        if evidence.get('canonical_context_contract') != CONTEXT_CONTRACT:
+            continue
+        for fact in evidence.get('source_facts', []):
+            member = (str(fact.get('player_id')), normalize_team(str(fact.get('team') or '')),
+                      str(fact.get('position') or '').upper())
+            if member in members and _visible(fact, cutoff):
+                facts[json.dumps(fact, sort_keys=True, default=str)] = fact
+    return list(facts.values())
+
+
 def refresh_canonical_context(engine, *, season, week, slate, cutoff=None):
     """Normalize existing canonical/snapshot sources; persist through context API."""
     from ..services.source_capture import SourceCaptureService, fetch_nflreadpy_dataset, DEFAULT_NFLREADPY_LICENSE
@@ -336,6 +400,7 @@ def refresh_canonical_context(engine, *, season, week, slate, cutoff=None):
         # than the latest derived context's role clock. Merge original facts;
         # selecting only one context would hide that valid status supplement.
         contexts = load_current_pregame_context(connection, **params, include_source_history=True)
+        shared_facts = shared_sunday_source_facts(connection, **params, salaries=salaries)
         roster_rows = [dict(r) for r in connection.execute(text("""
             SELECT roster.gsis_id, roster.team, roster.position, roster.roster_status,
                    roster.raw_nfl_weekly_roster_id, snapshot.snapshot_id, snapshot.observed_at, snapshot.captured_at AS received_at,
@@ -346,7 +411,7 @@ def refresh_canonical_context(engine, *, season, week, slate, cutoff=None):
             WHERE roster.season=:season AND roster.week=:week AND roster.created_at AT TIME ZONE 'UTC' <= :cutoff
               AND snapshot.observed_at <= :cutoff AND snapshot.captured_at <= :cutoff
         """), params).mappings()]
-        injuries = [dict(r) for r in connection.execute(text("""
+        injuries = [dict(r) for r in connection.execute(text(f"""
             SELECT i.player_master_id AS player_id,i.team,i.position,i.injury_status,i.curated_injury_id,
                    i.created_at AT TIME ZONE 'UTC' AS received_at,
                    COALESCE(snapshot.observed_at,i.created_at AT TIME ZONE 'UTC') AS observed_at,
@@ -354,7 +419,8 @@ def refresh_canonical_context(engine, *, season, week, slate, cutoff=None):
             FROM public.curated_injury i JOIN public.ingest_run run USING(ingest_run_id)
             LEFT JOIN public.source_snapshot_ingest_run link USING(ingest_run_id)
             LEFT JOIN public.source_snapshot snapshot USING(snapshot_id)
-            WHERE i.season=:season AND i.week=:week AND LOWER(i.slate)=LOWER(:slate) AND run.status='completed'
+            WHERE i.season=:season AND i.week=:week AND {injury_slate_sql('i.slate')} AND run.status='completed'
+              AND {injury_subset_membership_sql('i.player_master_id', 'i.team')}
         """), params).mappings()]
         raw_injury_snapshots = [dict(r) for r in connection.execute(text("""
             SELECT * FROM public.source_snapshot WHERE season=:season AND week=:week AND dataset='injuries'
@@ -369,7 +435,8 @@ def refresh_canonical_context(engine, *, season, week, slate, cutoff=None):
     source_lookup = {}
     for alias in aliases:
         source_lookup.setdefault(alias["source_key"], set()).add(alias["player_master_id"])
-    facts = []
+    facts = transferred_roster_facts(roster_rows, source_lookup, salary_lookup, cutoff=cutoff)
+    facts.extend(shared_facts)
     def add(row, *, pid, kind, source, status=None, role=None, observed=None, received=None, ids=(), uri=None, **extra):
         if pid not in salary_lookup: return
         facts.append({"player_id": pid, "team": normalize_team(str(row.get("team") or "")),

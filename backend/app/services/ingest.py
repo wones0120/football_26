@@ -15,6 +15,7 @@ from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
 from Database.dst import canonical_team_sql
+from ..injury_scope import injury_source_slates, SUNDAY_SUBSETS
 from ..models import (
     CuratedGameVenue,
     CuratedGameWeather,
@@ -2229,15 +2230,22 @@ class IngestService:
             ),
             (
                 "injuries",
-                source_system,
+                "draftkings/fanduel" if source_system == "draftkings" else source_system,
                 slate,
                 CuratedInjury.curated_injury_id,
                 CuratedInjury.created_at,
                 (
-                    CuratedInjury.source_system == source_system,
+                    CuratedInjury.source_system.in_(["draftkings", "fanduel"] if source_system == "draftkings" else [source_system]),
                     CuratedInjury.season == season,
                     CuratedInjury.week == week,
-                    func.lower(CuratedInjury.slate) == slate.strip().lower(),
+                    func.upper(CuratedInjury.slate).in_(injury_source_slates(slate)),
+                    (select(CuratedSalary.curated_salary_id).where(
+                        CuratedSalary.season == season, CuratedSalary.week == week,
+                        func.upper(CuratedSalary.slate) == slate.strip().upper(),
+                        CuratedSalary.source_system == "draftkings",
+                        (CuratedInjury.player_master_id.is_(None) | (CuratedSalary.player_master_id == CuratedInjury.player_master_id)),
+                        func.upper(CuratedSalary.team) == func.upper(CuratedInjury.team),
+                    ).exists() if slate.strip().upper() in SUNDAY_SUBSETS else True),
                 ),
             ),
             (

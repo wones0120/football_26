@@ -202,7 +202,7 @@ def test_unresolved_canonical_availability_names_player_and_recovery_action():
         "player_master_id": "canonical-1", "position": "WR",
         "evidence_json": {"canonical_context_contract": CONTEXT_CONTRACT, "availability_state": "UNKNOWN"},
     }])
-    with pytest.raises(PlayerContextUnresolved, match="Same Name.*Refresh current roster and injury evidence"):
+    with pytest.raises(PlayerContextUnresolved, match="Same Name.*refresh roster, injury and depth-chart evidence"):
         prepare(matrix, salaries, pregame_context=context)
 
 

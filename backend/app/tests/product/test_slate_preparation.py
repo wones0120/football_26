@@ -45,7 +45,9 @@ def test_real_queue_worker_persistence_and_consumption(fixture):
     status = fixture.client.get("/api/slate/preparation?season=2000&week=1&slate=SUNDAY_MAIN").json()
     build = status["latest_build"]
     assert status["build_current"] is True
-    assert build["source_sha256"] == digest(build["source_manifest"])
+    assert build["source_sha256"] == digest(result["result"]["source_manifest"])
+    assert 'source_manifest' not in build
+    assert build['audit_url'] == f'/api/jobs/{job_id}'
     assert build["consumption"]["market_snapshot_ids"] == ["synthetic-market-2"]
     assert build["consumption"]["weather_consumed"] is False
     assert status["inputs"]["markets"][0]["quote_freshness"].startswith("unknown")
@@ -201,8 +203,7 @@ def prepared_refresh(build):
 
 
 def test_prepare_job_publishes_ready_build_and_revalidates_without_collectors(fixture):
-    enqueue(fixture); fixture.work()
-    build = fixture.client.get("/api/slate/preparation?season=2000&week=1&slate=SUNDAY_MAIN").json()["latest_build"]
+    enqueue(fixture); build = fixture.work()['result']
     with patch("backend.app.product_services.classic_data_readiness.refresh_live_sources", return_value=prepared_refresh(build)) as refresh, \
          patch("backend.app.product_services.slate_preparation.assess_prepared_inputs", return_value={"status": "READY", "reason_codes": []}):
         enqueue(fixture, "prepare", "prepare-ready")
@@ -260,8 +261,7 @@ def test_weekly_readiness_runs_durable_preparation_before_predict_and_reuses_it(
     from backend.app.product_services.slate_preparation import run_weekly_preparation
     from backend.app.services.weekly_orchestrator import DefaultWeeklyStageExecutor
     from backend.app.weekly_schemas import WeeklyRunRequest
-    enqueue(fixture); fixture.work()
-    build = fixture.client.get("/api/slate/preparation?season=2000&week=1&slate=SUNDAY_MAIN").json()["latest_build"]
+    enqueue(fixture); build = fixture.work()['result']
     request = WeeklyRunRequest(season=2000, week=1, slate="SUNDAY_MAIN", refresh_projections=True)
     executor = DefaultWeeklyStageExecutor(fixture.factory)
     with patch("backend.app.product_services.showdown_data_readiness.is_live_slate", return_value=True), \
@@ -302,3 +302,23 @@ def test_live_training_audit_follows_current_features_and_precedes_projection(fi
         result = fixture.work()
     assert result["status"] == "completed", result
     assert fixture.calls == ["features", "training_labels", "projections"]
+
+
+def test_status_history_scopes_in_sql_and_defers_heavy_audits(fixture):
+    from sqlalchemy import inspect
+    from backend.app.product_services.slate_preparation import preparation_jobs, preparation_summary
+    job_id = enqueue(fixture)
+    fixture.client.post('/api/slate/preparation/jobs', headers={'Idempotency-Key':'another-week'},
+        json={'season':2000,'week':2,'slate':'SUNDAY_MAIN','action':'rebuild'})
+    with fixture.factory() as db:
+        jobs = preparation_jobs(db, SlatePreparationRequest(season=2000,week=1,slate='sunday_main',action='rebuild'))
+        assert [j.job_id for j in jobs] == [job_id]
+        assert {'result_json','checkpoint_json'} <= inspect(jobs[0]).unloaded
+    raw = {'source_sha256':'hash','source_manifest':{'large':'immutable'},
+           'data_readiness':{'status':'READY','reason_codes':[],'players':['large']},
+           'source_refresh':{'projection':{'status':'blocked','reason':'missing source','result':{'large':'audit'}}}}
+    summary = preparation_summary(raw)
+    assert 'source_manifest' not in summary
+    assert summary['data_readiness'] == {'status':'READY','reason_codes':[]}
+    assert summary['source_refresh']['projection'] == {'status':'blocked','reason':'missing source'}
+    assert raw['source_manifest'] == {'large':'immutable'}

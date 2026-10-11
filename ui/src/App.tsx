@@ -2,7 +2,7 @@ import { ShadowComparisons } from "./ShadowComparisons";
 import { EntryHistory } from "./EntryHistory";
 import { optimizerHasPreparedInputs, optimizerWaitingStatus } from "./preparedOptimizer";
 import { OptimizerLineupControls } from "./OptimizerLineupControls";
-import { LINEUP_CONTROLS_STORAGE_KEY, lineupControlParams, restoreLineupControls } from "./lineupControls";
+import { LINEUP_CONTROLS_STORAGE_KEY, lineupControlParams, restoreLineupControls, serializeLineupControls } from "./lineupControls";
 import { LARGE_GPP_CONTROLS_STORAGE_KEY } from "./classicLargeGppControls";
 import { defaultTournamentStrategyId, DEFAULT_OPTIMIZER_OBJECTIVE, ACTIVE_OPTIMIZER_STRATEGIES } from "./optimizerStrategy";
 import { singleLineupReportHtml } from "./singleLineupReport";
@@ -54,7 +54,7 @@ import {
   individualCeilingSummary,
 } from "./optimizerPresentation";
 import { downloadOptimizerReport } from "./optimizerReport";
-import { resolveCsvIngestPath } from "./ingestPath";
+import { resolveCsvIngestPath, injurySourceSlate } from "./ingestPath";
 import { RbDstDiagnosticsPanel } from "./RbDstDiagnosticsPanel";
 import { ModelDisagreementPanel } from "./ModelDisagreementPanel";
 import { SkillExposureApprovalPanel } from "./SkillExposureApprovalPanel";
@@ -423,7 +423,9 @@ function App() {
   const [noQbCaptain, setNoQbCaptain] = useState(false);
   const [noTwoQbs, setNoTwoQbs] = useState(false);
   const [noQbs, setNoQbs] = useState(false);
-  const [captainPositions, setCaptainPositions] = useState("");
+  const [requireTeamLeader, setRequireTeamLeader] = useState(true);
+  const [requireHomeTeamLeader, setRequireHomeTeamLeader] = useState(false);
+  const [captainPositions, setCaptainPositions] = useState("WR,RB");
   const [contestFormat, setContestFormat] = useState<"classic" | "showdown">("classic");
   const [lineupControlsByFormat, setLineupControlsByFormat] = useState(() => {
     try { return restoreLineupControls(window.localStorage.getItem(LINEUP_CONTROLS_STORAGE_KEY), window.localStorage.getItem(LARGE_GPP_CONTROLS_STORAGE_KEY)); }
@@ -433,7 +435,7 @@ function App() {
   const showdownMaxPlayersPerTeam = lineupControlsByFormat.showdown.maxPlayersPerTeam;
   const setShowdownMaxPlayersPerTeam = (value: number) => setLineupControlsByFormat(current => ({ ...current, showdown: { ...current.showdown, maxPlayersPerTeam: value } }));
   useEffect(() => {
-    try { window.localStorage.setItem(LINEUP_CONTROLS_STORAGE_KEY, JSON.stringify(lineupControlsByFormat)); } catch { /* Preserve session choices. */ }
+    try { window.localStorage.setItem(LINEUP_CONTROLS_STORAGE_KEY, serializeLineupControls(lineupControlsByFormat)); } catch { /* Preserve session choices. */ }
   }, [lineupControlsByFormat]);
   const [singleLineupContestUrl, setSingleLineupContestUrl] = useState("");
   const [optimizerProjectionMessage, setOptimizerProjectionMessage] = useState<string | null>(null);
@@ -526,7 +528,7 @@ function App() {
   const [salaryPath, setSalaryPath] = useState<string>("~/NFL/");
   const [ownershipPath, setOwnershipPath] = useState<string>("~/NFL/");
   const salaryFileToLoad = resolveCsvIngestPath(salaryPath, `DKSalaries_${season}_${week}_${activeContext.slate}.csv`);
-  const injuryFileToLoad = resolveCsvIngestPath(injuryPath, `FanDuel_injuries_${season}_${week}_${activeContext.slate}.csv`);
+  const injuryFileToLoad = resolveCsvIngestPath(injuryPath, `FanDuel_injuries_${season}_${week}_${injurySourceSlate(activeContext.slate)}.csv`);
   const [weeklyContestDirectory, setWeeklyContestDirectory] = useState("~/NFL");
   const [weeklyContestImport, setWeeklyContestImport] = useState<{
     discovered: number;
@@ -716,7 +718,7 @@ function App() {
     setError(null);
     setPendingAction("Loading injury CSV...");
     try {
-      const resp = await loadRawInjuries({ season, week, slate, path: injuryFileToLoad });
+      const resp = await loadRawInjuries({ season, week, slate: injurySourceSlate(slate), path: injuryFileToLoad });
       let summaries = (resp as any).summaries;
       if (!Array.isArray(summaries)) {
         const rows = (resp as any).rows_written ?? 0;
@@ -931,6 +933,7 @@ function App() {
     locked_players: lockedPlayers.split(",").map(v => v.trim()).filter(Boolean),
     ...(contestFormat === "showdown" ? {
       no_qb_captain: noQbCaptain, no_two_qbs: noTwoQbs, no_qbs: noQbs,
+      require_team_leader: requireTeamLeader, require_home_team_leader: requireTeamLeader && requireHomeTeamLeader,
       captain_positions: captainPositions ? captainPositions.split(",") : [],
       max_players_per_team: showdownMaxPlayersPerTeam,
       flex_only_players: flexOnlyPlayers.split(",").map(v => v.trim()).filter(Boolean),
@@ -2198,7 +2201,7 @@ function App() {
         <div className="operations-panel-heading">
           <span>01 · Load files</span>
           <h2 id="basic-inputs-title">Slate files</h2>
-          <p>Download the slate’s DraftKings salary CSV and FanDuel injury CSV, enter their local paths, then load each file. Files already loaded for this slate do not need to be loaded again.</p>
+          <p>Download the slate’s DraftKings salary CSV and FanDuel injury CSV, enter their local paths, then load each file. Sunday Early and Sunday Late share the Sunday Main injury file; no separate injury file is needed. Files already loaded do not need to be loaded again.</p>
         </div>
         <div className="basic-file-grid">
           <div className="form-row column">
@@ -2339,22 +2342,26 @@ function App() {
               <OptimizerLineupControls key={contestFormat} value={lineupControls} format={contestFormat} disabled={Boolean(pendingAction)}
                 onChange={value => setLineupControlsByFormat(current => ({ ...current, [contestFormat]: value }))} />
               {contestFormat === "showdown" && <div className="optimizer-injury-preference" aria-label="Showdown lineup preferences">
+                <label className="checkbox-label"><input type="checkbox" checked={requireTeamLeader} disabled={Boolean(pendingAction)} onChange={event => { setRequireTeamLeader(event.target.checked); if (!event.target.checked) setRequireHomeTeamLeader(false); }} /><span>Require at least one season-average non-QB team leader</span></label>
+                <label className="checkbox-label"><input type="checkbox" checked={requireHomeTeamLeader} disabled={Boolean(pendingAction) || !requireTeamLeader} onChange={event => setRequireHomeTeamLeader(event.target.checked)} /><span>Require the home team’s season-average leader</span></label>
+                <small>Highest season DraftKings points per participating game through the prior week on each team among RB, WR, TE and K. Captain or FLEX qualifies; either team is allowed unless home-team-only is selected. Players without usable history cannot be leaders. Week 1 requires turning this option off. Exclusions do not redefine leaders.</small>
                 <label className="showdown-team-limit">Captain position
                   <select aria-label="Captain position" value={captainPositions} disabled={Boolean(pendingAction)}
                     onChange={(event) => setCaptainPositions(event.target.value)}>
                     <option value="">Any position</option>
+                    <option value="WR,RB">WR/RB only (default)</option>
                     <option value="WR,RB,TE">WR/RB/TE only</option>
                     <option value="WR">WR only</option>
                     <option value="RB">RB only</option>
                     <option value="TE">TE only</option>
                   </select>
-                  <small>Applies to Captain in every lineup. Other positions remain eligible at FLEX; projections remain unchanged.</small>
+                  <small>Applies to Captain in every lineup. WR Captain requires his team’s QB; RB Captain does not require a QB. Other positions remain eligible at FLEX; projections remain unchanged.</small>
                 </label>
                 <label className="showdown-team-limit">Max players per team
                   <select value={showdownMaxPlayersPerTeam} disabled={Boolean(pendingAction)}
                     onChange={(event) => setShowdownMaxPlayersPerTeam(Number(event.target.value))}>
-                    <option value={5}>5 — allows 5–1 (current default)</option>
-                    <option value={4}>4 — allows 4–2 and 3–3</option>
+                    <option value={5}>5 — allows 5–1</option>
+                    <option value={4}>4 — allows 4–2 and 3–3 (default)</option>
                     <option value={3}>3 — requires 3–3</option>
                   </select>
                   <small>Counts Captain and FLEX together. Applies to either team in every lineup; projections remain unchanged.</small>

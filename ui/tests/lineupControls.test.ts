@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { defaultLineupControls, lineupControlParams, parseLineupControls, restoreLineupControls } from "../src/lineupControls.ts";
+import { defaultLineupControls, lineupControlParams, parseLineupControls, restoreLineupControls, serializeLineupControls } from "../src/lineupControls.ts";
 
 test("both strategies default to five and preserve explicit volume and construction settings", () => {
   for (const format of ["classic", "showdown"] as const) {
@@ -50,4 +50,53 @@ test("hundreds of lineups submit and survive reload with matching primary-game l
       assert.deepEqual(parseLineupControls(JSON.stringify(controls), format), controls);
     }
   }
+});
+
+test("Captain minimum salary serializes, persists, clears and applies separately to Classic", () => {
+  const controls = { ...defaultLineupControls("showdown"), minimumPlayerSalary: 1700 };
+  assert.equal(lineupControlParams(controls, "showdown").minimum_player_salary, 1700);
+  assert.equal(parseLineupControls(JSON.stringify(controls), "showdown").minimumPlayerSalary, 1700);
+  assert.equal(lineupControlParams({...defaultLineupControls("classic"), minimumPlayerSalary: 3500}, "classic").minimum_player_salary, 3500);
+  assert.equal(lineupControlParams({...controls, minimumPlayerSalary: null}, "showdown").minimum_player_salary, undefined);
+  for (const invalid of [-1, 1.5, 50001, NaN]) assert.throws(() => lineupControlParams({...controls, minimumPlayerSalary: invalid}, "showdown"));
+});
+
+
+test("Captain defaults allow 4–2 and 3–3, migrate old five-player caps once, and preserve new overrides", () => {
+  const controls = restoreLineupControls(null, null);
+  assert.equal(lineupControlParams(controls.showdown, "showdown").max_players_per_team, 4);
+  controls.showdown.maxPlayersPerTeam = 5;
+  assert.equal(restoreLineupControls(JSON.stringify(controls), null).showdown.maxPlayersPerTeam, 4);
+  assert.equal(restoreLineupControls(serializeLineupControls(controls), null).showdown.maxPlayersPerTeam, 5);
+  controls.showdown.maxPlayersPerTeam = 3;
+  assert.equal(restoreLineupControls(JSON.stringify(controls), null).showdown.maxPlayersPerTeam, 3);
+  assert.equal(controls.classic.maxPlayersPerTeam, 4);
+});
+
+
+test("Classic position salary defaults, clearing, persistence and Captain isolation", () => {
+  const controls = restoreLineupControls(null, null);
+  assert.equal(lineupControlParams(controls.classic, "classic").minimum_qb_salary, 4500);
+  assert.equal(lineupControlParams(controls.classic, "classic").minimum_rb_salary, 4500);
+  controls.classic.minimumQbSalary = null;
+  controls.classic.minimumRbSalary = 5000;
+  const restored = restoreLineupControls(serializeLineupControls(controls), null);
+  assert.equal(restored.classic.minimumQbSalary, null);
+  assert.equal(lineupControlParams(restored.classic, "classic").minimum_rb_salary, 5000);
+  assert.equal(lineupControlParams(restored.showdown, "showdown").minimum_qb_salary, undefined);
+  assert.throws(() => lineupControlParams({...controls.classic, minimumRbSalary: -1}, "classic"));
+});
+
+
+test("Classic season-rank defaults serialize, migrate missing fields, persist overrides and omit Captain", () => {
+  const restored = restoreLineupControls(JSON.stringify({classic:{minimumQbSalary:null}}),null);
+  const p = lineupControlParams(restored.classic,"classic");
+  assert.deepEqual([p.season_ppg_top_pct_qb,p.season_ppg_top_pct_rb,p.season_ppg_top_pct_wr,p.season_ppg_top_pct_te],[50,25,50,25]);
+  restored.classic.seasonRankRb=null; restored.classic.seasonRankQb=75;
+  const next=restoreLineupControls(serializeLineupControls(restored),null);
+  assert.equal(next.classic.seasonRankRb,null);
+  assert.equal(lineupControlParams(next.classic,"classic").season_ppg_top_pct_qb,75);
+  assert.equal(lineupControlParams(next.classic,"classic").season_ppg_top_pct_rb,undefined);
+  assert.equal(lineupControlParams({...next.showdown,seasonRankQb:50},"showdown").season_ppg_top_pct_qb,undefined);
+  assert.throws(()=>lineupControlParams({...next.classic,seasonRankTe:30},"classic"));
 });

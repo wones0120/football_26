@@ -12,12 +12,36 @@ export function OptimizerLineupControls({ value, onChange, format, disabled }: {
     <div className="form-row">
       <label>Number of lineups<input data-portfolio-field="num_lineups" type="number" min={1} max={MAX_LINEUPS} step={1} value={value.numLineups} onChange={event => set("numLineups", Number(event.target.value))} /></label>
       {percent("Max player exposure (%)", "maxExposure")}
+      {format === "showdown" && <>
+        {percent("Max Captain exposure (%)", "captainMaxExposure")}
+        <label>Minimum player salary ($)<input aria-label="Minimum player salary ($)" type="number" min={0} max={50000} step={1} placeholder="No minimum" value={value.minimumPlayerSalary ?? ""} onChange={event => set("minimumPlayerSalary", event.target.value === "" ? null : Number(event.target.value))} />
+          <small>Uses base FLEX salary for both slots. Enter 1,700 to exclude players priced at $1,600 or less. Blank means no additional minimum.</small>
+        </label>
+      </>}
       {format === "classic" && <>
+        {([['Minimum QB salary ($)', 'minimumQbSalary'], ['Minimum RB salary ($)', 'minimumRbSalary']] as const).map(([label, key]) => <label key={key}>{label}<input aria-label={label} type="number" min={0} max={50000} step={1} placeholder="No position minimum" value={value[key] ?? ""} onChange={event => set(key, event.target.value === "" ? null : Number(event.target.value))} />
+          <small>Defaults to $4,500. {key === "minimumRbSalary" ? "Includes RBs in FLEX. " : ""}Blank removes this position minimum. The higher of this and the offensive minimum applies.</small>
+        </label>)}
+        <label>Minimum offensive player salary ($)<input aria-label="Minimum offensive player salary ($)" type="number" min={0} max={50000} step={1} placeholder="No minimum" value={value.minimumPlayerSalary ?? ""} onChange={event => set("minimumPlayerSalary", event.target.value === "" ? null : Number(event.target.value))} />
+          <small>Applies to QB, RB, WR, TE and FLEX. DST is exempt. Blank means no additional minimum.</small>
+        </label>
         <label>Max players / team<input type="number" min={1} max={4} step={1} value={value.maxPlayersPerTeam} onChange={event => set("maxPlayersPerTeam", Number(event.target.value))} /></label>
         <label>Max players / game<input type="number" min={1} max={9} step={1} value={value.maxPlayersPerGame} onChange={event => set("maxPlayersPerGame", Number(event.target.value))} /></label>
       </>}
     </div>
+    {format === "classic" && <>
+      <div className="form-row">
+        {([["QB", "seasonRankQb"], ["RB", "seasonRankRb"], ["WR", "seasonRankWr"], ["TE", "seasonRankTe"]] as const).map(([pos, key]) => <label key={key}>Season-average {pos} rank
+          <select aria-label={`Season-average ${pos} rank`} value={value[key] ?? ""} onChange={event => set(key, event.target.value === "" ? null : Number(event.target.value))}>
+            <option value="">No restriction</option>
+            {[25, 50, 75, 100].map(pct => <option key={pct} value={pct}>Top {pct}%{pct === 100 ? " with history" : ""}</option>)}
+          </select>
+        </label>)}
+      </div>
+      <small>Season DraftKings points per participating game through the prior week, ranked across the NFL. Defaults: QB/WR top 50%, RB/TE top 25%. Includes FLEX by natural position; ties qualify. Players without usable history are excluded when a limit is enabled. Week 1 requires No restriction. Incomplete history blocks the run. Projections stay unchanged.</small>
+    </>}
     <p>Request 1–{MAX_LINEUPS} tournament lineups; five is the default. Team and game limits are maximums, not required counts.</p>
+    {format === "showdown" && <p>Max Captain exposure limits how often any one player can be Captain; it does not limit that player’s FLEX appearances. At {value.captainMaxExposure}% across {value.numLineups} requested lineups, each player can captain at most {Math.ceil(value.numLineups * value.captainMaxExposure / 100 - 1e-9)} lineup(s). Fractional appearances round up. Use 40% for at most 2 of 5, or 60% for at most 3 of 5.</p>}
     <details><summary>Exposure, overlap and risk limits</summary>
       <div className="form-row">
         <OptionalNumber label="Max shared players between lineups" field="max_lineup_overlap" value={value.maxLineupOverlap} onChange={next => set("maxLineupOverlap", next)} choices={format === "classic" ? [7, 6, 5, 4] : [5, 4, 3, 2]} maximum={size} defaultLabel="No additional limit" helper="Counts shared players regardless of Captain/FLEX slot. Each lineup must still be distinct." />
@@ -26,7 +50,7 @@ export function OptimizerLineupControls({ value, onChange, format, disabled }: {
         <OptionalNumber label="Max elevated-risk players per lineup" field="max_elevated_players_per_lineup" value={value.maxElevatedPerLineup} onChange={next => set("maxElevatedPerLineup", next)} choices={[0, 1, 2]} maximum={size} defaultLabel="No additional limit" />
       </div>
       {format === "showdown" && <div className="form-row">
-        {percent("CPT max (%)", "captainMaxExposure")}{percent("Core max (%)", "coreMaxExposure")}
+        {percent("Core max (%)", "coreMaxExposure")}
         {percent("Starting QB max (%)", "startingQbMaxExposure")}{percent("Cheap punt max (%)", "cheapPuntMaxExposure")}
       </div>}
       <p>Ordinary exposure caps round up to whole appearances; elevated-risk caps round down. Caps use the requested lineup count. Locks require a player in every lineup and override ordinary player caps. Conflicting hard limits may prevent the full count; limits are never relaxed.</p>

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ..injury_scope import injury_slate_sql
+
 from bisect import bisect_left
 from datetime import datetime, timezone
 import re
@@ -1457,9 +1459,9 @@ def prepare_inputs(
         if missing_status:
             names = {str(r.player_master_id): str(r.player_name) for r in salaries.itertuples(index=False)}
             raise PlayerContextUnresolved(
-                "Current player availability needs verification for "
+                "Current player availability or depth-chart role needs verification for "
                 + ", ".join(names.get(pid, pid) for pid in missing_status)
-                + ". Refresh current roster and injury evidence, then rerun projections."
+                + ". Prepare the slate again to refresh roster, injury and depth-chart evidence."
             )
         specialist_ids = {pid for pid,r in canonical_context.items() if assessed[pid] == "AVAILABLE"
             and is_excluded_specialist(r["evidence_json"], cutoff=cutoff, evaluated_at=cutoff,
@@ -1977,12 +1979,12 @@ def load_inputs(
             "snapshot_injury_status", schema="target"
         ):
             injury_statuses = pd.read_sql(
-                text("""
+                text(f"""
                     SELECT DISTINCT ON (player_id) snapshot_injury_id, player_id,
                            injury_status, as_of, source
                     FROM target.snapshot_injury_status
                     WHERE season = :season AND week = :week
-                      AND (slate IS NULL OR UPPER(slate) = UPPER(:slate))
+                      AND (slate IS NULL OR {injury_slate_sql('slate')})
                       AND as_of IS NOT NULL AND as_of <= :cutoff
                     ORDER BY player_id, as_of DESC, snapshot_injury_id DESC
                 """), connection,

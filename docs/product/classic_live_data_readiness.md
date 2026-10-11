@@ -322,3 +322,49 @@ The disabled Run Optimizer button now has an adjacent live status describing the
 
 
 Optimizer queue submission checks the saved prepared build, scope and availability scenario before returning its durable receipt. Current source hashing, artifact verification, projection lineage and readiness checks run on the worker before generation, with an input-validation progress stage. Enqueue does not issue trusted evidence. A lost receipt retries the identical run ID once; the queue returns the existing job. Regression coverage ensures expensive audits never run before the receipt and modified dependencies still fail the worker without invoking the solver.
+
+## Native status refresh and roster transfers
+
+Classic preparation captures the public DraftKings lobby and current draftables
+response. It selects Classic groups by kickoff and game count, then requires the
+full away/home/kickoff set and every imported native draftable ID to match exactly.
+Only explicit unavailable statuses supplement player context. Blank, unknown,
+questionable or active labels do not certify availability or clear an older OUT.
+HTTP observation/cache age and receipt clocks, both source snapshots and the native
+ID remain attached to each fact. Source failure falls back to existing evidence;
+unresolved players still block preparation. This does not replace salary imports.
+
+Current nflverse EXE and the official Commissioner Exempt roster section map to
+unavailable. A unique native-ID assignment to another team's active roster records
+an exclusion for the old salary-file team. Conflicting assignments, positional
+mismatches, future evidence or ambiguous aliases cannot establish a transfer.
+A changed native DraftKings team/position is reported rather than silently updating
+the salary row; a corrected salary import is needed to select that player for the
+new team. No player names or specific slate IDs are hardcoded.
+
+When combining status and practice evidence, the derived context observation covers
+the latest retained fact. Each fact keeps its original freshness clock; evidence
+after the preparation cutoff still fails validation.
+
+Preparation status filters job history by slate in SQL and loads only job metadata
+unless the current build or a failed checkpoint is needed. The UI receives a compact
+build/consumption summary and links to full saved job audits. Validation still reads
+the full persisted manifest and readiness evidence; saved audit records are unchanged.
+
+## Shared Sunday injury evidence
+
+Sunday Early and Sunday Late consume their own injury evidence plus the same
+season/week's Sunday Main injury import. The app defaults their injury filename
+to `FanDuel_injuries_<season>_<week>_SUNDAY_MAIN.csv` and loads it under Main.
+No separate Early/Late injury file or duplicate import is required. Salary files
+and model/optimizer runs remain scoped to the selected slate.
+
+Canonical IDs and salary-team membership restrict inherited rows; unresolved
+identities remain visible only for teams in the selected subset. Projection,
+optimizer and simulation injury lookups retain their decision-cutoff checks.
+Shared rows retain their original source slate, ingest IDs and observation clocks;
+reading them for another slate never makes stale evidence fresh. The load-age
+indicator recognizes both DraftKings and FanDuel injury imports. Captain slates
+do not inherit Sunday Main injury evidence.
+
+Sunday subsets also reuse Main’s original canonical player source facts (including depth-chart roles), filtered by canonical player ID, team and position. Derived Main projections and workload assessments are not copied. Original observation and receipt timestamps remain unchanged, so stale or future facts cannot satisfy current readiness.

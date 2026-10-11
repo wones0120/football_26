@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ..injury_scope import injury_slate_sql, injury_subset_membership_sql
+
 import hashlib
 import json
 import logging
@@ -847,11 +849,12 @@ class SlateReadinessService:
             if inspector.has_table("snapshot_injury_status", schema="target"):
                 injury = connection.execute(
                     text(
-                        """
+                        f"""
                         SELECT COUNT(*) AS rows, COUNT(*) FILTER (WHERE player_id IS NOT NULL) AS identified
                         FROM target.snapshot_injury_status
                         WHERE season = :season AND week = :week
-                          AND (slate IS NULL OR UPPER(slate) = UPPER(:slate))
+                          AND (slate IS NULL OR {injury_slate_sql('slate')})
+                          AND {injury_subset_membership_sql('player_id', 'team_id')}
                         """
                     ),
                     {"season": season, "week": week, "slate": slate},

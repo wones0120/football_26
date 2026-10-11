@@ -11,3 +11,9 @@ export function resolveCsvIngestPath(input: string, expectedFilename: string): s
   if (!basename.includes(".")) return `${path}.csv`;
   return null;
 }
+
+/** Sunday Classic subsets share the Main injury source, while salaries stay slate-specific. */
+export function injurySourceSlate(slate: string): string {
+  const selected = slate.trim().toUpperCase();
+  return ["SUNDAY_EARLY", "SUNDAY_LATE"].includes(selected) ? "SUNDAY_MAIN" : selected;
+}

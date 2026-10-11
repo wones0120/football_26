@@ -120,9 +120,11 @@ export function SlatePreparation(props: Props) {
       </tbody></table></div>
       <details><summary>Existing load-age freshness policy (import age, separate from publication freshness)</summary><pre>{JSON.stringify(status.load_freshness ?? {}, null, 2)}</pre></details>
       <p>{status.latest_build ? `${status.build_current ? "Verified current" : "Older or superseded"} prepared projection: ${status.latest_build.projection_run_id} · feature: ${status.latest_build.feature_run_id}` : "No current verified dependent build. Rebuild slate features and projections."}</p>
-      <details><summary>Exact persisted source → feature → projection consumption</summary><pre>{JSON.stringify(status.latest_build, null, 2)}</pre></details>
+      <details><summary>Prepared build and consumption summary</summary><pre>{JSON.stringify(status.latest_build, null, 2)}</pre>
+        {status.latest_build?.audit_url && <a href={status.latest_build.audit_url} target="_blank" rel="noreferrer">Open full saved preparation audit</a>}</details>
       <ul>{status.limitations.map(v => <li key={v}>{v}</li>)}</ul>
-      {status.jobs.map(j => <details key={j.job_id} open={j.status === "failed"}><summary>{j.action}: {j.status} · {j.stage} · {j.job_id.slice(0, 12)}</summary><p>{j.message}</p>{j.error && <p role="alert">{j.error}</p>}<pre>{show(j.result ?? j.checkpoint)}</pre></details>)}
+      {status.jobs.map(j => <details key={j.job_id} open={j.status === "failed"}><summary>{j.action}: {j.status} · {j.stage} · {j.job_id.slice(0, 12)}</summary><p>{j.message}</p>{j.error && <p role="alert">{j.error}</p>}<pre>{show(j.result ?? j.checkpoint)}</pre>
+        {j.audit_url && <a href={j.audit_url} target="_blank" rel="noreferrer">Open saved job audit</a>}</details>)}
     </>}
   </div>;
 }

@@ -46,17 +46,15 @@ try {
   });
   await page.addInitScript(()=>localStorage.setItem("football-26-active-slate-context",JSON.stringify({season:2000,week:1,slate:"SUNDAY_MAIN"})));
   await page.goto(base);await page.getByRole("button",{name:"Operations",exact:true}).click();
-  const format=page.locator(".operations-optimizer-panel").getByRole("combobox",{name:"Format",exact:true});
+  const format=page.locator(".operations-optimizer-panel").getByRole("combobox",{name:"Strategy",exact:true});
   assert.equal(await page.getByLabel("Captain position",{exact:true}).count(),0);
   await format.selectOption("showdown");
   const control=page.getByLabel("Captain position",{exact:true});
-  assert.equal(await control.inputValue(),"");
-  assert.deepEqual(await control.locator("option").allTextContents(),["Any position","WR/RB/TE only","WR only","RB only","TE only"]);
+  assert.equal(await control.inputValue(),"WR,RB");
+  assert.deepEqual(await control.locator("option").allTextContents(),["Any position","WR/RB only (default)","WR/RB/TE only","WR only","RB only","TE only"]);
   await page.getByLabel("Refresh ownership before optimizing").uncheck();
-  const objective=page.locator(".operations-optimizer-panel").getByRole("combobox",{name:"Objective",exact:true});
-  for(const mode of ["cash","gpp"]) {
-    await objective.selectOption(mode);
-    for(const [value,positions] of [["",[]],["WR,RB,TE",["WR","RB","TE"]],["WR",["WR"]],["RB",["RB"]],["TE",["TE"]]]) {
+  for(const mode of ["gpp"]) {
+    for(const [value,positions] of [["WR,RB",["WR","RB"]],["",[]],["WR,RB,TE",["WR","RB","TE"]],["WR",["WR"]],["RB",["RB"]],["TE",["TE"]]]) {
       await control.selectOption(value);
       const ready=new Promise(r=>requestReady=r);
       await page.getByRole("button",{name:"Run Optimizer",exact:true}).click();
@@ -82,7 +80,7 @@ try {
   await preferences.screenshot({path:artifacts+"/captain-mobile.png"});
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),"Controls must fit mobile width");
   assert.deepEqual(errors,[]);
-  assert.equal(writes.filter(r=>r.path==="/optimizer/jobs").length,10);
+  assert.equal(writes.filter(r=>r.path==="/optimizer/jobs").length,6);
   writeFileSync(artifacts+"/requests.json",JSON.stringify(writes,null,2));
-  console.log("PASS: all Captain choices submit in Cash/GPP; weekly parameter retained; Classic hidden; choice survives format switches; pending state disabled; desktop/mobile fit; no browser errors. Synthetic API only.");
+  console.log("PASS: all Captain choices submit in GPP; weekly parameter retained; Classic hidden; choice survives format switches; pending state disabled; desktop/mobile fit; no browser errors. Synthetic API only.");
 } finally {await browser?.close();await new Promise(r=>server.close(r));}

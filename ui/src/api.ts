@@ -1287,6 +1287,7 @@ function newIdempotencyKey(jobType: string): string {
 
 export type PreparationScope = { season: number; week: number; slate: string };
 export type PreparedBuild = PreparationScope & {
+  audit_url?: string;
   action?: string; contest_format?: "classic" | "showdown"; data_readiness?: { status: string };
   availability_overrides?: unknown[]; assume_questionable_out?: boolean;
   prepared_input_job_id: string; projection_run_id: string; feature_run_id: string;
@@ -1296,7 +1297,7 @@ export type PreparedBuild = PreparationScope & {
 export type PreparationStatus = {
   scope: PreparationScope; server_time: string; inputs: Record<string, Array<Record<string, unknown>>>;
   weather?: { games?: Array<Record<string, unknown>> }; load_freshness?: unknown;
-  jobs: Array<{ job_id: string; action: string; status: string; stage: string; message?: string; error?: string; result?: unknown; checkpoint?: unknown }>;
+  jobs: Array<{ job_id: string; action: string; status: string; stage: string; message?: string; error?: string; result?: unknown; checkpoint?: unknown; audit_url?: string }>;
   latest_build: PreparedBuild | null; build_current?: boolean; build_issue?: string | null; limitations: string[]; entry_ready: false;
   lock_at?: string; prelock?: boolean;
 };

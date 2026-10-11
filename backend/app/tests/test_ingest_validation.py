@@ -694,3 +694,24 @@ def test_data_freshness_scopes_rows_and_classifies_age() -> None:
     assert uppercase_rows["salaries"].status == "fresh"
     assert uppercase_rows["injuries"].rows == 1
     assert uppercase_rows["injuries"].status == "stale"
+
+
+def test_subset_injury_freshness_uses_main_fanduel_file_without_redating_or_deleting_it():
+    session = _session()
+    now = utcnow_naive()
+    session.add(IngestRun(ingest_run_id='shared-injury',source_system='test',source_table='injury',status='completed',started_at=now))
+    session.flush()
+    session.add(CuratedSalary(ingest_run_id='shared-injury',source_system='draftkings',season=2026,week=5,
+        slate='SUNDAY_EARLY',source_player_key='salary',player_name='Early Player',normalized_name='early player',team='BUF',position='WR',salary=6000))
+    for team in ('BUF','SEA'):
+        session.add(CuratedInjury(ingest_run_id='shared-injury',source_system='fanduel',season=2026,week=5,
+            slate='SUNDAY_MAIN',source_player_key=team,player_name=team,normalized_name=team.lower(),team=team,
+            position='WR',injury_status='OUT',created_at=now-timedelta(hours=13)))
+    session.commit()
+    service=IngestService(session)
+    result=service.get_data_freshness(source_system='draftkings',season=2026,week=5,slate='sunday_early',checked_at=now)
+    injury=next(r for r in result.rows if r.dataset=='injuries')
+    assert injury.rows == 1 and injury.age_hours == 13 and injury.status == 'stale'
+    service._clear_existing_slice('fanduel','injury',2026,5,'SUNDAY_EARLY')
+    assert session.query(CuratedInjury).count() == 2
+    session.close()

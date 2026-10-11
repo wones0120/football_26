@@ -25,6 +25,7 @@ try {
   const initialCheck = new Promise(resolve => { releaseInitialCheck = resolve; });
   const scope = { season: 2026, week: 5, slate: "SUNDAY_MAIN" };
   const build = { ...scope, action: "prepare", contest_format: "classic", prepared_input_job_id: "prepared-id",
+    audit_url: "/api/jobs/prepared-id",
     projection_run_id: "verified-projection", feature_run_id: "verified-features", source_sha256: "sha",
     data_readiness: { status: "READY" }, availability_overrides: [], assume_questionable_out: false, limitations: [], consumption: {} };
   await page.route("**/api/**", async route => {
@@ -93,6 +94,8 @@ try {
     elements: [...document.querySelectorAll("body *")].filter(el => el.getBoundingClientRect().right > innerWidth + 1).slice(0, 12).map(el => ({ tag: el.tagName, cls: el.className, right: el.getBoundingClientRect().right })) }));
   assert.equal(overflow.scroll <= overflow.width + 1, true, JSON.stringify(overflow));
   await page.getByTestId("preparation-tools").locator(":scope > summary").click();
+  await page.getByText('Prepared build and consumption summary', { exact: true }).click();
+  assert.equal(await page.getByRole('link', { name: 'Open full saved preparation audit' }).getAttribute('href'), '/api/jobs/prepared-id');
   await page.getByRole("button", { name: "Open Model", exact: true }).click();
   await page.getByText("5 unresolved salary records were excluded.", { exact: false }).waitFor();
   assert.equal(await page.locator(".pipeline-result-card.status-warning").count() > 0, true);

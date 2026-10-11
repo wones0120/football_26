@@ -17,7 +17,8 @@ from Database.player_identity import normalize_player_name, normalize_position
 from .official_injuries import _Document, observation_clock, resolve_official_player, _record_identity
 from .pregame_context import PregameContextService, load_current_pregame_context
 from .showdown_player_context import compose_player_contexts, CONTEXT_CONTRACT, retained_workload_context
-from .slate_preparation import SlatePreparationRequest, slate_games, require_prelock
+from .slate_preparation import SlatePreparationRequest, slate_games, require_prelock, aware
+from .draftkings_player_status import refresh_native_statuses
 from ..config import get_settings
 from ..services.source_capture import SourceCaptureService
 
@@ -49,7 +50,8 @@ def parse_club_tables(html, *, team, uri, kind):
                 if kind == 'roster' and 'Player' in header and 'Pos' in header:
                     status = ('PS' if 'practice squad' in section else 'IR' if 'injured' in section else
                         'PUP' if 'physically' in section else 'NFI' if 'non-football' in section else
-                        'SUSP' if 'suspend' in section else 'ACT' if section == 'active' else None)
+                        'SUSP' if 'suspend' in section else 'EXE' if section == 'commissioner exempt' else
+                        'ACT' if section == 'active' else None)
                     if not status:
                         continue
                     cell = cells[header.index('Player')]
@@ -152,7 +154,7 @@ def parse_club_transactions(html, *, team, uri, salaries, observed_at):
     return result
 
 
-def _retain_risk_evidence(context, evidence):
+def _retain_risk_evidence(context, evidence, *, cutoff=None):
     """Roster/depth supplementation must not erase independently sourced risk facts.
 
     Preserve the original fact clocks. The consumer still validates freshness
@@ -165,6 +167,14 @@ def _retain_risk_evidence(context, evidence):
                 'expected_qb_package', 'role_change'):
         if key in evidence:
             context['evidence_json'][key] = deepcopy(evidence[key])
+    if cutoff is not None and context.get('observed_at'):
+        practice = evidence.get('practice_report') or {}
+        for value in (evidence.get('practice_observed_at') or practice.get('observed_at'),
+                      evidence.get('expected_workload_observed_at')):
+            if value and aware(value) <= cutoff:
+                # A derived envelope contains all retained observations. Never
+                # rewrite the independent availability, role or practice clocks.
+                context['observed_at'] = max(aware(context['observed_at']), aware(value))
 
 
 def supplement_unresolved_context(engine, *, season, week, slate):
@@ -174,7 +184,7 @@ def supplement_unresolved_context(engine, *, season, week, slate):
         lock = require_prelock(games)
         contexts = load_current_pregame_context(session, **params, cutoff=datetime.now(UTC))
         salaries = [dict(r) for r in session.execute(text('''
-            SELECT s.player_master_id AS player_id,s.player_name,s.team,s.position,m.full_name,
+            SELECT s.player_master_id AS player_id,s.player_name,s.team,s.position,m.full_name,s.source_player_key,
                    s.curated_salary_id AS salary_source_row_id
             FROM public.curated_salary s JOIN public.player_master m USING(player_master_id)
             WHERE s.season=:season AND s.week=:week AND UPPER(s.slate)=UPPER(:slate) AND s.source_system='draftkings'
@@ -187,7 +197,18 @@ def supplement_unresolved_context(engine, *, season, week, slate):
              or not (by_id.get(str(s['player_id']), {}).get('evidence_json') or {}).get('canonical_role'))]
     facts = defaultdict(list)
     captures, errors, identity_failures = [], [], []
-    for team in sorted({s['team'] for s in wanted}):
+    try:
+        native_facts, native_captures, discrepancies = refresh_native_statuses(engine,
+            salaries=salaries, games=games, lock=lock, **params)
+        captures.extend(native_captures)
+        errors.extend(discrepancies)
+        for fact in native_facts:
+            facts[fact['player_id']].append(fact)
+        wanted_ids = {str(s['player_id']) for s in wanted} | set(facts)
+        wanted = [s for s in salaries if str(s['player_id']) in wanted_ids]
+    except (httpx.HTTPError, ValueError, KeyError, TypeError, OSError) as exc:
+        errors.append(dict(kind='native_slate_status', reason=str(exc)[:500]))
+    for team in sorted({s['team'] for s in wanted if not facts[str(s['player_id'])]}):
         for kind, suffix in [('roster', 'players-roster/'), ('depth', 'depth-chart'), ('transactions', f'transactions/{datetime.now(UTC).year}')]:
             uri = f'https://www.{CLUBS[team]}.com/team/{suffix}'
             try:
@@ -255,9 +276,10 @@ def supplement_unresolved_context(engine, *, season, week, slate):
         evidence = old.get('evidence_json') or {}
         original_facts = evidence.get('source_facts', [])
         combined = list({json.dumps(f, sort_keys=True, default=str): f for f in original_facts + facts[pid]}.values())
-        context = compose_player_contexts([salary], combined, cutoff=datetime.now(UTC),
+        cutoff = datetime.now(UTC)
+        context = compose_player_contexts([salary], combined, cutoff=cutoff,
             max_age_hours=get_settings().classic_player_status_max_age_hours)[0]
-        _retain_risk_evidence(context, evidence)
+        _retain_risk_evidence(context, evidence, cutoff=cutoff)
         run = service.create_run(dict(**params, source=CONTEXT_CONTRACT, source_uri=context['source_uri'],
             observed_at=context['observed_at'], players=[dict(player_id=pid, injury_status=context['injury_status'],
                 availability_probability=context['availability_probability'],

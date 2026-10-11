@@ -2069,11 +2069,11 @@ class OptimizerModeTests(unittest.TestCase):
             job.strategy, SHOWDOWN_GPP_CAPTAIN_INFORMED_STRATEGY_ID
         )
         self.assertIn(
-            "showdown_require_starting_qb_v1",
+            "showdown_require_starting_qb_v2",
             {rule["rule_id"] for rule in job.params["optimizer_rules"]},
         )
         self.assertIn(
-            "showdown_require_starting_qb_v1",
+            "showdown_require_starting_qb_v2",
             {rule["rule_id"] for rule in job.results[0][0]["lineup_optimizer_rules"]},
         )
         self.assertTrue(job.lineage_persisted)

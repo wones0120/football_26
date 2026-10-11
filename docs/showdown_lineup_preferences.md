@@ -19,7 +19,8 @@ GPP strategy. All default off and can be used together:
 
 **Captain position** applies to Cash and every Showdown GPP strategy:
 
-- **Any position** is the default and adds no position restriction.
+- **WR/RB only (default)** permits WR or RB at Captain.
+- **Any position** adds no position restriction.
 - **WR/RB/TE only** permits any of those three positions at Captain.
 - **WR only**, **RB only** or **TE only** requires that position at Captain in
   every generated lineup.
@@ -41,9 +42,9 @@ eligibility. Projections, ownership and football context remain unchanged.
 
 **Max players per team** is a separate dropdown for Cash and every GPP strategy:
 
-- **4 — allows 4–2 and 3–3** prevents five players from either team.
+- **4 — allows 4–2 and 3–3 (default)** prevents five players from either team.
 - **3 — requires 3–3** forces an even split.
-- **5 — allows 5–1 (current default)** preserves the existing default.
+- **5 — allows 5–1** is available as an override.
 
 Captain counts as one player together with the five FLEX players. Direct and weekly
 runs submit `max_players_per_team`; the API accepts integers 3, 4 or 5. Omitted
@@ -83,3 +84,14 @@ assessment and the Captain-only user exclusion reason while remaining FLEX eligi
 The result view displays active preferences and their Captain exclusions.
 With **No QBs in the lineup**, QB audit rows are marked excluded by user preference
 with reason `user_no_qbs`, retaining their projections and model assessment.
+
+## Captain app defaults
+
+New sessions require at least one season-average non-QB team leader at Captain or FLEX.
+Home-team-only remains off. Leaders use each team's highest season DK points per participating game through the prior week
+among RB/WR/TE/K before user exclusions. No current-week outcomes enter this average.
+The team cap defaults to four, allowing 4–2 and 3–3. Old saved five-player caps migrate
+to four once; later explicit overrides persist, and existing three-player caps remain.
+Omitted API parameters and saved historical runs retain their existing semantics.
+
+Captain team-leader preferences now use prior-week season averages instead of projections. Require at least one defaults on; home-team-only defaults off. The leader may be Captain or FLEX. Missing/ambiguous history remains unranked; missing team history or Week 1 fails explicitly without falling back to projections. Frozen run metadata records prior-game scores, averages, source lineage and tied leader IDs. Existing historical runs are unchanged.

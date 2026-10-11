@@ -510,3 +510,168 @@ def test_exposure_rounding_does_not_add_an_appearance_for_float_artifacts():
     assert appearance_limit(50, .56) == 28
     assert appearance_limit(50, .58) == 29
     assert appearance_limit(3, .5) == 2
+
+
+def test_classic_salary_floor_exempts_dst_but_checks_flex():
+    rows=roster()
+    rows[-1]['salary']=2000
+    kwargs=dict(requested_lineups=1,max_exposure=1,enforce_single_te=False,avoid_dst_opponents=False,minimum_player_salary=5000)
+    assert OptimizerService._validate_classic_lineups([rows],**kwargs)[0]
+    rows[7].update(roster_position='FLEX',salary=4900)
+    valid,reason=OptimizerService._validate_classic_lineups([rows],**kwargs)
+    assert not valid and 'minimum offensive salary' in reason
+
+
+def test_classic_minimum_salary_filters_candidates_preserves_dst_and_model():
+    from backend.app.tests.product.test_classic_data_readiness import fixture, service_fixture, refresh_result, NOW
+    from backend.app.product_services import classic_data_readiness as gate
+    rows,evidence=fixture()
+    cheap=next(r for r in rows if r['position']=='WR')
+    cheap['salary']=3500
+    defense=next(r for r in rows if r['position']=='DST')
+    defense['salary']=3000
+    for salary in evidence['source_manifest']['salaries']:
+        if salary['player_master_id']==cheap['player_id']: salary['salary']=3500
+        if salary['player_master_id']==defense['player_id']: salary['salary']=3000
+    service=service_fixture(rows)
+    service._attach_symbolic_explanations=MagicMock()
+    def discover(pool,solve,**kwargs):
+        assert cheap['player_id'] not in set(pool.player_id)
+        assert any((pool.position=='DST') & (pool.salary<4000))
+        saved=service._persist_optimizer_run.call_args.args[0]
+        assert cheap['player_id'] in {p['player_id'] for p in saved.params['classic_evidence_snapshot']['player_pool']}
+        lineup=OptimizerService._solve_lineup(service,pool,**{**kwargs['base_kwargs'],'include_control_comparison':False})
+        return [lineup] if lineup else []
+    with prepared_optimizer(service,return_value=refresh_result()),patch.object(gate,'read_evidence',return_value=evidence),patch('backend.app.product_services.optimizer.generate_single_lineup_candidates',side_effect=discover):
+        job=service.run_job(season=NOW.year,week=1,slate='SUNDAY_MAIN',strategy=CLASSIC,
+            params={'num_lineups':1,'minimum_player_salary':4000,'exclude_questionable':False})
+    assert job.status=='completed',job.message
+    assert all(p['position']=='DST' or p['salary']>=4000 for r in job.results for p in r)
+    audit=next(r for r in job.params['strategy_runtime']['player_pool']['rows'] if r['player_id']==cheap['player_id'])
+    assert 'user_minimum_player_salary' in audit['exclusion_reasons']
+    assert audit['user_preference_exclusions']
+
+
+@pytest.mark.parametrize("position,index,key", [("QB",0,"minimum_qb_salary"),("RB",7,"minimum_rb_salary")])
+def test_classic_position_salary_floor_checks_natural_position_including_flex(position,index,key):
+    rows=roster()
+    rows[index].update(position=position,salary=4500)
+    kwargs=dict(requested_lineups=1,max_exposure=1,enforce_single_te=False,avoid_dst_opponents=False,**{key:4500})
+    assert OptimizerService._validate_classic_lineups([rows],**kwargs)[0]
+    rows[index]['salary']=4400
+    assert not OptimizerService._validate_classic_lineups([rows],**kwargs)[0]
+
+@pytest.mark.parametrize("key", ["minimum_qb_salary", "minimum_rb_salary"])
+@pytest.mark.parametrize("value", [-1, 1.5, True, 50001])
+def test_classic_position_salary_request_rejects_invalid(key,value):
+    with pytest.raises(ValueError,match=key):
+        OptimizerRunRequest(season=2026,week=1,slate='SUNDAY_MAIN',strategy='classic_cash_v1',params={key:value})
+
+
+def test_classic_qb_salary_filters_candidates_preserves_model():
+    from backend.app.tests.product.test_classic_data_readiness import fixture, service_fixture, refresh_result, NOW
+    from backend.app.product_services import classic_data_readiness as gate
+    rows,evidence=fixture()
+    cheap=next(r for r in rows if r['position']=='QB')
+    cheap['salary']=3500
+    defense=next(r for r in rows if r['position']=='DST')
+    defense['salary']=3000
+    for salary in evidence['source_manifest']['salaries']:
+        if salary['player_master_id']==cheap['player_id']: salary['salary']=3500
+        if salary['player_master_id']==defense['player_id']: salary['salary']=3000
+    for row in rows:
+        if row['player_id'] != cheap['player_id'] and row['position'] in {'QB','RB'}:
+            row['salary']=4500
+    for salary in evidence['source_manifest']['salaries']:
+        match=next((r for r in rows if r['player_id']==salary['player_master_id']),None)
+        if match: salary['salary']=match['salary']
+    service=service_fixture(rows)
+    service._attach_symbolic_explanations=MagicMock()
+    def discover(pool,solve,**kwargs):
+        assert cheap['player_id'] not in set(pool.player_id)
+        assert any((pool.position=='DST') & (pool.salary<4000))
+        saved=service._persist_optimizer_run.call_args.args[0]
+        assert cheap['player_id'] in {p['player_id'] for p in saved.params['classic_evidence_snapshot']['player_pool']}
+        lineup=OptimizerService._solve_lineup(service,pool,**{**kwargs['base_kwargs'],'include_control_comparison':False})
+        return [lineup] if lineup else []
+    with prepared_optimizer(service,return_value=refresh_result()),patch.object(gate,'read_evidence',return_value=evidence),patch('backend.app.product_services.optimizer.generate_single_lineup_candidates',side_effect=discover):
+        job=service.run_job(season=NOW.year,week=1,slate='SUNDAY_MAIN',strategy=CLASSIC,
+            params={'num_lineups':1,'minimum_qb_salary':4500,'exclude_questionable':False})
+    assert job.status=='completed',job.message
+    assert all(p['position']!='QB' or p['salary']>=4500 for r in job.results for p in r)
+    audit=next(r for r in job.params['strategy_runtime']['player_pool']['rows'] if r['player_id']==cheap['player_id'])
+    assert 'user_minimum_qb_salary' in audit['exclusion_reasons']
+    assert audit['user_preference_exclusions']
+
+
+def test_classic_rb_salary_filters_candidates_preserves_model():
+    from backend.app.tests.product.test_classic_data_readiness import fixture, service_fixture, refresh_result, NOW
+    from backend.app.product_services import classic_data_readiness as gate
+    rows,evidence=fixture()
+    cheap=next(r for r in rows if r['position']=='RB')
+    cheap['salary']=3500
+    defense=next(r for r in rows if r['position']=='DST')
+    defense['salary']=3000
+    for salary in evidence['source_manifest']['salaries']:
+        if salary['player_master_id']==cheap['player_id']: salary['salary']=3500
+        if salary['player_master_id']==defense['player_id']: salary['salary']=3000
+    for row in rows:
+        if row['player_id'] != cheap['player_id'] and row['position'] in {'QB','RB'}:
+            row['salary']=4500
+    for salary in evidence['source_manifest']['salaries']:
+        match=next((r for r in rows if r['player_id']==salary['player_master_id']),None)
+        if match: salary['salary']=match['salary']
+    service=service_fixture(rows)
+    service._attach_symbolic_explanations=MagicMock()
+    def discover(pool,solve,**kwargs):
+        assert cheap['player_id'] not in set(pool.player_id)
+        assert any((pool.position=='DST') & (pool.salary<4000))
+        saved=service._persist_optimizer_run.call_args.args[0]
+        assert cheap['player_id'] in {p['player_id'] for p in saved.params['classic_evidence_snapshot']['player_pool']}
+        lineup=OptimizerService._solve_lineup(service,pool,**{**kwargs['base_kwargs'],'include_control_comparison':False})
+        return [lineup] if lineup else []
+    with prepared_optimizer(service,return_value=refresh_result()),patch.object(gate,'read_evidence',return_value=evidence),patch('backend.app.product_services.optimizer.generate_single_lineup_candidates',side_effect=discover):
+        job=service.run_job(season=NOW.year,week=1,slate='SUNDAY_MAIN',strategy=CLASSIC,
+            params={'num_lineups':1,'minimum_rb_salary':4500,'exclude_questionable':False})
+    assert job.status=='completed',job.message
+    assert all(p['position']!='RB' or p['salary']>=4500 for r in job.results for p in r)
+    audit=next(r for r in job.params['strategy_runtime']['player_pool']['rows'] if r['player_id']==cheap['player_id'])
+    assert 'user_minimum_rb_salary' in audit['exclusion_reasons']
+    assert audit['user_preference_exclusions']
+
+
+def test_classic_season_rank_filters_candidates_preserves_model():
+    from backend.app.tests.product.test_classic_data_readiness import fixture, service_fixture, refresh_result, NOW
+    from backend.app.product_services import classic_data_readiness as gate
+    rows,evidence=fixture()
+    cheap=next(r for r in rows if r['position']=='RB')
+    cheap['salary']=3500
+    defense=next(r for r in rows if r['position']=='DST')
+    defense['salary']=3000
+    for salary in evidence['source_manifest']['salaries']:
+        if salary['player_master_id']==cheap['player_id']: salary['salary']=3500
+        if salary['player_master_id']==defense['player_id']: salary['salary']=3000
+    for row in rows:
+        if row['player_id'] != cheap['player_id'] and row['position'] in {'QB','RB'}:
+            row['salary']=4500
+    for salary in evidence['source_manifest']['salaries']:
+        match=next((r for r in rows if r['player_id']==salary['player_master_id']),None)
+        if match: salary['salary']=match['salary']
+    service=service_fixture(rows)
+    service._attach_symbolic_explanations=MagicMock()
+    def discover(pool,solve,**kwargs):
+        assert cheap['player_id'] not in set(pool.player_id)
+        assert any((pool.position=='DST') & (pool.salary<4000))
+        saved=service._persist_optimizer_run.call_args.args[0]
+        assert cheap['player_id'] in {p['player_id'] for p in saved.params['classic_evidence_snapshot']['player_pool']}
+        lineup=OptimizerService._solve_lineup(service,pool,**{**kwargs['base_kwargs'],'include_control_comparison':False})
+        return [lineup] if lineup else []
+    report={'enabled':True,'eligible_ids':{'RB':[r['player_id'] for r in rows if r['position']=='RB' and r['player_id']!=cheap['player_id']]},'through_week':0}
+    with patch('backend.app.product_services.classic_season_rank_preferences.preference',return_value=report), prepared_optimizer(service,return_value=refresh_result()),patch.object(gate,'read_evidence',return_value=evidence),patch('backend.app.product_services.optimizer.generate_single_lineup_candidates',side_effect=discover):
+        job=service.run_job(season=NOW.year,week=1,slate='SUNDAY_MAIN',strategy=CLASSIC,
+            params={'num_lineups':1,'season_ppg_top_pct_rb':25,'exclude_questionable':False})
+    assert job.status=='completed',job.message
+    assert all(p['player_id']!=cheap['player_id'] for r in job.results for p in r)
+    audit=next(r for r in job.params['strategy_runtime']['player_pool']['rows'] if r['player_id']==cheap['player_id'])
+    assert 'user_season_ppg_rank_rb' in audit['exclusion_reasons']
+    assert audit['user_preference_exclusions']

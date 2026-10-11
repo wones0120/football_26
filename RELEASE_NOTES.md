@@ -1,5 +1,49 @@
 # Release Notes
 
+Read-only [Classic/Captain generation-versus-selection audit](docs/product/generation_selection_audit_2026_w1_w4.md): Sunday Main shortlisting/ranking remains the first priority; Captain requires evaluating quality-screen losses under current WR/RB preferences. No live selector changes.
+
+Sunday Early and Sunday Late reuse the **Sunday Main injury file**. Load it once for the season/week; each Classic subset selects matching canonical players and teams, preserving original source timestamps. Salary files, projections and lineups remain slate-specific. Early/Late also reuse Main’s original player-role evidence, with its original timestamps and normal freshness checks.
+
+Classic preparation now refreshes explicit unavailable statuses from the current DraftKings slate, verifying native player IDs and the full game schedule. Commissioner-exempt players and verified transfers off a salary-file team are recognized automatically. Blank statuses do not establish availability; source evidence and freshness checks remain enforced. Preparation status loads summaries with links to full saved audits, avoiding repeated downloads of historical reports.
+
+Classic **Season-average QB/RB/WR/TE rank** controls now default to top 50% for QB/WR and top 25% for RB/TE. Choose 25%, 50%, 75%, 100% with history, or No restriction; choices persist. Rankings use league-wide DraftKings points per participating game through the prior week, including ties, zero/negative games and natural-position FLEX. Enabled limits exclude players without usable history; Week 1 or incomplete historical coverage requires refreshing inputs or disabling the limits. Model projections remain unchanged.
+
+
+Classic lineup options now include **Minimum QB salary ($)** and **Minimum RB salary ($)**, each defaulting to $4,500. RB applies at RB or FLEX. Clear either to remove its position floor; saved overrides persist. If the overall offensive minimum is also set, the higher floor applies. These user preferences filter selection and preserve model projections.
+
+
+Captain options now support **Require at least one season-average non-QB team leader**, plus **Require the home team’s season-average leader**. The first defaults on; home-team-only defaults off. Captain team splits default to 4–2 or 3–3 (maximum four players per team). Older saved five-player caps migrate to four once; subsequent user overrides persist. Leaders use season DK points per participating game through the prior week before user filters among RB/WR/TE/K; any tied leader qualifies at Captain or FLEX. Conflicting exclusions block the run.
+
+Classic now offers **Minimum offensive player salary ($)**. It applies to QB, RB, WR, TE and FLEX while exempting DST. Blank adds no minimum, and settings are saved separately from Captain mode. Selection and final validation enforce the preference without changing projections.
+
+Captain mode now offers **Minimum player salary ($)** beside lineup count. It uses base FLEX salary in both slots; $1,700 excludes players at $1,600 or less. Blank means no additional minimum. The saved preference affects eligibility only and retains model assessments.
+
+**Max Captain exposure (%)** is now visible beside the lineup count for Captain runs. It caps each player’s Captain appearances; 40% permits at most 2 of 5 lineups. Existing settings persist, and the default remains 100%. Fractional appearances round up.
+
+RB Captain lineups now allow zero QBs, including with multiple same-team pass catchers. WR Captain still requires its team’s starting QB. Explicit QB limits, projections and player assessments remain unchanged.
+
+Captain optimizer now defaults to **WR/RB only** in the app’s Captain position dropdown. Choose another setting to override it; FLEX eligibility and projections are unchanged. Existing saved runs retain their original settings.
+
+WR/RB historical shortlist replay: unchanged 5/7 verified paid finishes; Week 4 Sunday Night scores lower under the restriction. This is a saved-shortlist test, not fresh generation. [Details](docs/product/no_qb_captain_shadow.md).
+
+WR/RB Captain shadow: `--wr-rb-captain` tests WR Captain with same-team QB FLEX or RB Captain without a QB requirement. Live selections remain unchanged; [details](docs/product/no_qb_captain_shadow.md).
+
+2026-10-10: Added full-field Captain-position paid-rate auditing with tie uncertainty and a research-only no-QB-Captain shortlist challenger. QB FLEX eligibility and production selection remain unchanged. See [research results](docs/product/no_qb_captain_shadow.md).
+
+## 2026-10-10 — QB Captain paid-finish follow-up
+
+- Audit top-decile Captain entries against verified paid places and native-ID-matched rushing-TD actuals. Record ties, duplicate entries, unknown payout status and recovered Week 3 salary identity separately. No live policy changes.
+
+## 2026-10-10 — Single GPP shortlist shadows
+
+- Add isolated Classic candidate-coverage and Captain full-pool shortlisting experiments with exact control parity, original constraints, frozen forecasts and native salary validation.
+- Sunday Main retains its recommendation; Sunday Night's research choice moves Captain from London to Penix. Register both for paid-finish-first outcome comparison; no live selection or policy changes. See `docs/product/single_gpp_shortlist_shadow_results.md`.
+
+## 2026-10-10 — Weeks 1–4 Classic and Captain validation
+
+- Add a read-only cross-format audit of saved projections, canonical actuals, GPP replay choices, candidate coverage and verified paid cutoffs. Record missing evidence, historical exclusions and explicit legacy game-ID mappings.
+- Audit 251 completed GPP runs; 175 pass replay screening. Identify Classic Week 3 small-field and Captain Week 4 Sunday-night shortlisting misses. Keep live policies unchanged; 29 targeted tests pass. See `docs/product/weekly_validation_2026_w1_w4.md`.
+
 ## 2026-10-10 — Classic production review
 
 - Confirm current Classic policies remain the supported production choice; reject promotion of the losing upside ranker and retain unvalidated workload/shortlist experiments in shadow.
@@ -2048,3 +2092,5 @@
 
 - Added separate receiving and rushing centrality diagnostics, transparent max/dual/fitted formulations, next-game walk-forward validation, current Sunday Main and DET-BUF reports, and opportunity-only regression tests.
 - Centrality remains a shadow diagnostic and does not change fantasy projections or optimizer behavior.
+
+Captain team-leader preferences now use prior-week season averages instead of projections. Require at least one defaults on; home-team-only defaults off. The leader may be Captain or FLEX. Missing/ambiguous history remains unranked; missing team history or Week 1 fails explicitly without falling back to projections. Frozen run metadata records prior-game scores, averages, source lineage and tied leader IDs. Existing historical runs are unchanged.

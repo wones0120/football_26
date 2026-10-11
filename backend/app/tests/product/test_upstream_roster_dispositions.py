@@ -59,3 +59,67 @@ def test_current_cut_fact_is_unavailable_and_later_roster_fact_can_supersede_it(
     facts.append(fact("ACT", NOW))
     assert compose_player_contexts([SALARY], facts, cutoff=NOW, max_age_hours=24)[0]["evidence_json"]["availability_state"] == "AVAILABLE"
     assert compose_player_contexts([SALARY], facts[:1], cutoff=NOW + timedelta(days=2), max_age_hours=24)[0]["evidence_json"]["availability_state"] == "UNKNOWN"
+
+
+def test_commissioner_exempt_roster_is_unavailable_without_a_role():
+    from backend.app.product_services.classic_official_context import parse_club_tables
+    html = ('<h3>Commissioner Exempt</h3><table><tr><th>Player</th><th>Pos</th></tr>'
+            '<tr><td><a href="/team/players-roster/example/">Example Receiver</a></td><td>WR</td></tr></table>')
+    row = parse_club_tables(html, team='WAS', uri='https://example.test', kind='roster')[0]
+    assert row['status'] == 'EXE'
+    fact = dict(row, player_id='canonical', source='official_club_roster', source_ids=['snapshot'],
+                observed_at=NOW.isoformat(), received_at=NOW.isoformat())
+    context = compose_player_contexts([SALARY], [fact], cutoff=NOW, max_age_hours=24)[0]
+    assert context['evidence_json']['availability_state'] == 'UNAVAILABLE'
+    assert context['availability_probability'] == 0
+    assert 'player_role_missing' not in context['evidence_json']['canonical_context_reason_codes']
+
+
+def transfer_rows(team='MIA', at=NOW, status='ACT', position='WR'):
+    return [dict(gsis_id='native-id', team=team, position=position, roster_status=status,
+                 observed_at=at, received_at=at, snapshot_id='snapshot',
+                 raw_nfl_weekly_roster_id='row', source_uri='fixture://rosters')]
+
+
+def transfer_facts(rows, aliases=None):
+    from backend.app.product_services.showdown_player_context import transferred_roster_facts
+    return transferred_roster_facts(rows, aliases or {'native-id': {'canonical'}},
+                                   {'canonical': SALARY}, cutoff=NOW)
+
+
+def test_native_roster_transfer_excludes_old_team_and_preserves_evidence():
+    facts = transfer_facts(transfer_rows())
+    assert facts[0]['team'] == 'WAS' and facts[0]['current_team'] == 'MIA'
+    assert facts[0]['source_ids'] == ['snapshot', 'row', 'native-id']
+    assert compose_player_contexts([SALARY], facts, cutoff=NOW, max_age_hours=24)[0]['availability_probability'] == 0
+    # Re-reading old evidence must not refresh its clock.
+    assert compose_player_contexts([SALARY], facts, cutoff=NOW+timedelta(days=2), max_age_hours=24)[0]['evidence_json']['availability_state'] == 'UNKNOWN'
+
+
+@pytest.mark.parametrize('rows', [transfer_rows('WAS'), transfer_rows(position='RB'),
+    transfer_rows(status='UNKNOWN'), transfer_rows(at=NOW+timedelta(hours=1)),
+    transfer_rows()+transfer_rows('WAS'),
+    transfer_rows(at=NOW-timedelta(hours=1))+transfer_rows('WAS')])
+def test_transfer_requires_unambiguous_latest_team_position_and_visible_evidence(rows):
+    assert not transfer_facts(rows)
+
+
+def test_ambiguous_native_alias_cannot_establish_transfer():
+    assert not transfer_facts(transfer_rows(), {'native-id': {'canonical', 'another'}})
+
+
+def test_supplement_envelope_includes_newer_practice_without_freshening_sources():
+    from backend.app.product_services.classic_official_context import _retain_risk_evidence
+    from backend.app.product_services.pregame_context import risk_evidence_fields
+    old_status = NOW - timedelta(hours=2)
+    practice_at = NOW - timedelta(hours=1)
+    context = dict(observed_at=old_status, evidence_json={'availability_observed_at': old_status.isoformat()})
+    evidence = dict(practice_report={'practice_status':'LIMITED', 'observed_at':practice_at.isoformat()})
+    _retain_risk_evidence(context, evidence, cutoff=NOW)
+    assert context['observed_at'] == practice_at
+    assert context['evidence_json']['availability_observed_at'] == old_status.isoformat()
+    assert risk_evidence_fields(context['evidence_json'],context['observed_at'])['practice_observed_at'] == practice_at.isoformat()
+    evidence['practice_report']['observed_at'] = (NOW+timedelta(seconds=1)).isoformat()
+    _retain_risk_evidence(context, evidence, cutoff=NOW)
+    with pytest.raises(ValueError, match='later than its context observation'):
+        risk_evidence_fields(context['evidence_json'],context['observed_at'])
