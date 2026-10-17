@@ -1,5 +1,28 @@
+import { JointOpportunitySummary } from "./JointOpportunitySummary";
+import { WeeklyLearningLibrary } from "./WeeklyLearningLibrary";
+import { PersonalThoughtSummary, type PersonalContext } from "./PersonalThoughtSummary";
+import { AnalystIntentComparison } from "./AnalystIntentComparison";
+import { intentHandoff, intentLabel, type OptimizationIntent } from "./analystIntent";
+import { AnalystPreparationSummary } from "./AnalystPreparationSummary";
+import { checkedAnalystSelection, analystHandoffIssue, scopedAnalystHandoff, type AnalystHandoffMode } from "./analystPreparation";
+import { AnalystFocusSummary } from "./AnalystFocusSummary";
+import { TeammateOpportunityReview } from "./TeammateOpportunityReview";
+import { cheaperPairChoice, type TeammateChoice, type TeammatePair } from "./teammateOpportunity";
+import { fetchAnalystPacket } from "./api";
+import { PreliminaryClassicControls } from "./PreliminaryClassicControls";
+import { CLASSIC_OBJECTIVE_STORAGE_KEY, classicSelectionParams, savedHighestProjectionReport, type ClassicSelectionObjective } from "./classicSelectionObjective";
+import { preliminaryRunParams, preliminaryScopeIssue, analystFocusedRunIssue, type PreliminarySnapshot } from "./preliminaryResearch";
+import { runPreliminaryOptimizer, freezePreliminarySnapshot } from "./api";
+import { nextPreparationStatus } from "./preparationStatus";
+import { AnalystReports } from "./AnalystReports";
+import { SingleStat } from "./SingleStat";
+import { Tiers } from "./Tiers";
+import { AnalystPacketControls } from "./AnalystPacketControls";
+import { analystOptimizerParams, analystPacketScopeIssue, type AnalystPacketMetadata } from "./analystPacket";
 import { ShadowComparisons } from "./ShadowComparisons";
 import { EntryHistory } from "./EntryHistory";
+import { WeeklyResults } from "./WeeklyResults";
+import { ALL_LEARNING_SLATES, LEARNING_CONTEXT_STORAGE_KEY, initialLearningContext, parseLearningContext } from "./learningContext";
 import { optimizerHasPreparedInputs, optimizerWaitingStatus } from "./preparedOptimizer";
 import { OptimizerLineupControls } from "./OptimizerLineupControls";
 import { LINEUP_CONTROLS_STORAGE_KEY, lineupControlParams, restoreLineupControls, serializeLineupControls } from "./lineupControls";
@@ -8,9 +31,10 @@ import { defaultTournamentStrategyId, DEFAULT_OPTIMIZER_OBJECTIVE, ACTIVE_OPTIMI
 import { singleLineupReportHtml } from "./singleLineupReport";
 import { GppRecommendation } from "./GppRecommendation";
 import { ScenarioPortfolioAccounting } from "./ScenarioPortfolioAccountingReport";
-import { lineupConditionedTotal, teamLimitDescription, exposureWarning, qbLineupLimit, qbCaptainAllowed, captainPositionsDescription, showdownPreflightLabel } from "./showdownReporting";
+import { lineupConditionedTotal, teamLimitDescription, exposureWarning, qbLineupLimit, qbCaptainDescription, qbCaptainLimitDescription, captainPositionsDescription, showdownPreflightLabel } from "./showdownReporting";
 import { SlatePreparation, type PreparationCheckState } from "./SlatePreparation";
 import { LearningCandidateDetails } from "./LearningCandidateDetails";
+import { LearningEntryEvidence } from "./LearningEntryEvidence";
 import { fetchPreparation, type PreparationStatus } from "./api";
 import { preparationBuildIssue } from "./showdownPreparation";
 import { classicLivePreflightLabel, classicLiveReadinessSummary, classicLiveSourceActions } from "./classicLiveReadiness";
@@ -39,6 +63,7 @@ import {
   parsePersistedRunSelections,
   DEFAULT_SLATE,
   availableSlateOptions,
+  defaultContestFormatForSlate,
   isValidSlateId,
   normalizeSlateId,
   parsePersistedActiveSlateContext,
@@ -92,6 +117,7 @@ import {
   previewOptimizerContests,
   fetchSlateReadiness,
   fetchSavedContestScopes,
+  fetchImportedSlateScopes,
   fetchSymbolicBacktest,
   fetchSymbolicRules,
   fetchUnmatchedSalaries,
@@ -332,13 +358,24 @@ function App() {
   const [week, setWeek] = useState(startupContext?.week ?? FALLBACK_WEEK);
   const [slate, setSlate] = useState(startupContext?.slate ?? DEFAULT_SLATE);
   const [discoveredSlateNames, setDiscoveredSlateNames] = useState<string[]>([]);
-  const slateOptions = useMemo(() => availableSlateOptions(slate, discoveredSlateNames), [slate, discoveredSlateNames]);
+  const [customSlateName, setCustomSlateName] = useState("");
+  const [customSlateNames, setCustomSlateNames] = useState<string[]>([]);
+  const customSlateStorageKey = `football-26-custom-slates:${season}:${week}`;
+  useEffect(() => {
+    try {
+      const saved: unknown = JSON.parse(window.localStorage.getItem(customSlateStorageKey) ?? "[]");
+      setCustomSlateNames(Array.isArray(saved) ? saved.filter((name): name is string => typeof name === "string" && isValidSlateId(name)) : []);
+    } catch { setCustomSlateNames([]); }
+    setCustomSlateName("");
+  }, [customSlateStorageKey]);
+  const slateOptions = useMemo(() => availableSlateOptions(slate, [...discoveredSlateNames, ...customSlateNames]), [slate, discoveredSlateNames, customSlateNames]);
   useEffect(() => {
     let cancelled = false;
     setDiscoveredSlateNames([]);
-    fetchSavedContestScopes().then(({ scopes }) => {
+    Promise.allSettled([fetchSavedContestScopes(), fetchImportedSlateScopes(season, week)]).then(results => {
+      const scopes = results.flatMap(result => result.status === "fulfilled" ? result.value.scopes : []);
       if (!cancelled) setDiscoveredSlateNames(scopes.filter(row => row.season === season && row.week === week).map(row => row.slate));
-    }).catch(() => { /* Standard and active slate options remain available. */ });
+    });
     return () => { cancelled = true; };
   }, [season, week]);
   const [activeContextReady, setActiveContextReady] = useState(Boolean(startupContext));
@@ -350,9 +387,38 @@ function App() {
     () => ({ season, week, slate: normalizeSlateId(slate) }),
     [season, slate, week],
   );
+  const [learningContext, setLearningContext] = useState(() => {
+    try { return parseLearningContext(window.localStorage.getItem(LEARNING_CONTEXT_STORAGE_KEY)); }
+    catch { return null; }
+  });
+  const reviewContext = learningContext ?? initialLearningContext(activeContext);
+  const { season: learningSeason, week: learningWeek, slate: learningSlate } = reviewContext;
+  const updateLearningContext = (patch: Partial<typeof reviewContext>) => {
+    setLearningContext(current => ({ ...(current ?? initialLearningContext(activeContext)), ...patch }));
+  };
+  useEffect(() => {
+    if (viewMode === "learning" && activeContextReady && !learningContext) setLearningContext(initialLearningContext(activeContext));
+  }, [viewMode, learningContext, activeContext, activeContextReady]);
+  useEffect(() => {
+    if (!learningContext) return;
+    try { window.localStorage.setItem(LEARNING_CONTEXT_STORAGE_KEY, serializeActiveSlateContext(learningContext)); }
+    catch { /* Review still works without browser storage. */ }
+  }, [learningContext]);
+  const [learningDiscoveredSlates, setLearningDiscoveredSlates] = useState<string[]>([]);
+  useEffect(() => {
+    if (viewMode !== "learning") return;
+    let active = true;
+    setLearningDiscoveredSlates([]);
+    void fetchImportedSlateScopes(learningSeason, learningWeek).then(result => {
+      if (active) setLearningDiscoveredSlates(result.scopes
+        .filter(row => row.season === learningSeason && row.week === learningWeek).map(row => row.slate));
+    }).catch(() => { /* Standard and currently selected slates remain available. */ });
+    return () => { active = false; };
+  }, [viewMode, learningSeason, learningWeek]);
+  const learningSlateOptions = availableSlateOptions(learningSlate, learningDiscoveredSlates)
+    .filter(option => option !== ALL_LEARNING_SLATES);
   const activeContextKey = slateContextKey(activeContext);
   const activeRunSelection = runSelections[activeContextKey] ?? {};
-  const setActiveSlate = useCallback((value: string) => setSlate(normalizeSlateId(value)), []);
   const updateActiveRunSelection = useCallback(
     (patch: Partial<PersistedRunSelection>) => {
       setRunSelections((current) => {
@@ -387,7 +453,12 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [preparationCheck, setPreparationCheck] = useState<PreparationCheckState | null>(null);
-  const [preparationStatus, setPreparationStatus] = useState<PreparationStatus | null>(null);
+  const [preparationStatus, storePreparationStatus] = useState<PreparationStatus | null>(null);
+  const preparationScopeRef = useRef({season, week, slate});
+  preparationScopeRef.current = {season, week, slate};
+  const setPreparationStatus = useCallback((next: PreparationStatus | null) => {
+    storePreparationStatus(current => nextPreparationStatus(current, next, preparationScopeRef.current));
+  }, []);
   const [loadSummaries, setLoadSummaries] = useState<LoadSummary[]>([]);
   const [lastLoadType, setLastLoadType] = useState<string | null>(null);
   const [slateStatus, setSlateStatus] = useState<SlateLoadResponse | null>(null);
@@ -426,7 +497,13 @@ function App() {
   const [requireTeamLeader, setRequireTeamLeader] = useState(true);
   const [requireHomeTeamLeader, setRequireHomeTeamLeader] = useState(false);
   const [captainPositions, setCaptainPositions] = useState("WR,RB");
-  const [contestFormat, setContestFormat] = useState<"classic" | "showdown">("classic");
+  const [namedResearchPreferences, setNamedResearchPreferences] = useState<Record<string, {captain: string[]; questionable: string[]}>>(() => {
+    try { return JSON.parse(window.localStorage.getItem("dfs-named-research-preferences-v1") ?? "{}"); } catch { return {}; }
+  });
+  const namedResearch = namedResearchPreferences[activeContextKey] ?? {captain: [], questionable: []};
+  useEffect(() => { try { window.localStorage.setItem("dfs-named-research-preferences-v1", JSON.stringify(namedResearchPreferences)); } catch { /* Preserve session preferences. */ } }, [namedResearchPreferences]);
+  const [constructionComparison, setConstructionComparison] = useState(false);
+  const [contestFormat, setContestFormat] = useState<"classic" | "showdown">(() => defaultContestFormatForSlate(slate));
   const [lineupControlsByFormat, setLineupControlsByFormat] = useState(() => {
     try { return restoreLineupControls(window.localStorage.getItem(LINEUP_CONTROLS_STORAGE_KEY), window.localStorage.getItem(LARGE_GPP_CONTROLS_STORAGE_KEY)); }
     catch { return restoreLineupControls(null, null); }
@@ -438,6 +515,54 @@ function App() {
     try { window.localStorage.setItem(LINEUP_CONTROLS_STORAGE_KEY, serializeLineupControls(lineupControlsByFormat)); } catch { /* Preserve session choices. */ }
   }, [lineupControlsByFormat]);
   const [singleLineupContestUrl, setSingleLineupContestUrl] = useState("");
+  const setActiveSlate = useCallback((value: string) => {
+    const nextSlate = normalizeSlateId(value);
+    if (nextSlate === slate) return;
+    setSlate(nextSlate);
+    setContestFormat(defaultContestFormatForSlate(nextSlate));
+    setSingleLineupContestUrl("");
+  }, [slate]);
+  const [analystPacketsByContext, setAnalystPacketsByContext] = useState<Record<string, AnalystPacketMetadata | null>>(() => {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem("dfs-analyst-packets-v1") ?? "{}");
+      return saved && typeof saved === "object" && !Array.isArray(saved) ? saved : {};
+    } catch { return {}; }
+  });
+  useEffect(() => {
+    try { window.localStorage.setItem("dfs-analyst-packets-v1", JSON.stringify(analystPacketsByContext)); } catch { /* Session choices remain available. */ }
+  }, [analystPacketsByContext]);
+  const [analystModes, setAnalystModes] = useState<Record<string, AnalystHandoffMode>>(() => {
+    try { return JSON.parse(window.localStorage.getItem("dfs-analyst-handoff-modes-v1") ?? "{}") || {}; } catch { return {}; }
+  });
+  useEffect(() => { try { window.localStorage.setItem("dfs-analyst-handoff-modes-v1", JSON.stringify(analystModes)); } catch { /* Keep session preferences. */ } }, [analystModes]);
+  const analystHandoffMode = analystModes[activeContextKey] ?? (Object.prototype.hasOwnProperty.call(analystPacketsByContext, activeContextKey) ? analystPacketsByContext[activeContextKey] ? "MANUAL" : "BASELINE" : "AUTO");
+  const [preliminaryAnalystInputs, setPreliminaryAnalystInputs] = useState<Record<string, PreliminarySnapshot | null>>({});
+  const [optimizationIntents, setOptimizationIntents] = useState<Record<string, OptimizationIntent>>(() => {
+    try { return JSON.parse(window.localStorage.getItem("dfs-optimization-intents-v1") ?? "{}") || {}; } catch { return {}; }
+  });
+  useEffect(() => { try { window.localStorage.setItem("dfs-optimization-intents-v1", JSON.stringify(optimizationIntents)); } catch { /* Keep session selection. */ } }, [optimizationIntents]);
+  const [classicSelectionObjectives, setClassicSelectionObjectives] = useState<Record<string, ClassicSelectionObjective>>(() => {
+    try { return JSON.parse(window.localStorage.getItem(CLASSIC_OBJECTIVE_STORAGE_KEY) ?? "{}") || {}; } catch { return {}; }
+  });
+  useEffect(() => { try { window.localStorage.setItem(CLASSIC_OBJECTIVE_STORAGE_KEY, JSON.stringify(classicSelectionObjectives)); } catch { /* Keep session selection. */ } }, [classicSelectionObjectives]);
+  const optimizationIntent = optimizationIntents[activeContextKey] ?? (contestFormat === "showdown" ? "EXPECTED_GAME" : "MIXED");
+  const normalHandoff = intentHandoff(preparationStatus?.latest_build, optimizationIntent);
+  const candidateHandoff = preparationStatus?.build_current && preparationStatus.latest_build?.data_readiness?.status?.toUpperCase() === "READY" ? normalHandoff : intentHandoff(preliminaryAnalystInputs[activeContextKey], optimizationIntent) ?? normalHandoff;
+  const preparedAnalystHandoff = scopedAnalystHandoff(candidateHandoff, {season,week,slate,format:contestFormat});
+  const [checkedAnalystPackets, setCheckedAnalystPackets] = useState<Record<string, AnalystPacketMetadata>>({});
+  const checkedAnalystHash = preparedAnalystHandoff?.checked_packet_sha256;
+  useEffect(() => {
+    let active = true;
+    if (checkedAnalystHash) void fetchAnalystPacket(checkedAnalystHash).then(packet => { if (active) setCheckedAnalystPackets(current => ({...current,[checkedAnalystHash]:packet})); }).catch(() => { /* Request guard reports unavailable checked metadata. */ });
+    return () => { active = false; };
+  }, [checkedAnalystHash]);
+  const selectedAnalystPacket = checkedAnalystSelection(analystHandoffMode, preparedAnalystHandoff, checkedAnalystHash ? checkedAnalystPackets[checkedAnalystHash] ?? null : null, analystPacketsByContext[activeContextKey] ?? null);
+  const selectAnalystOverride = (packet: AnalystPacketMetadata | null) => {
+    setAnalystModes(current => ({...current,[activeContextKey]:packet ? "MANUAL" : "BASELINE"}));
+    setAnalystPacketsByContext(current => ({...current,[activeContextKey]:packet}));
+  };
+  const [teammateChoices, setTeammateChoices] = useState<Record<string, {choice:TeammateChoice;packetHash:string;label:string} | null>>({});
+  const stagedTeammateChoice = teammateChoices[activeContextKey] ?? null;
   const [optimizerProjectionMessage, setOptimizerProjectionMessage] = useState<string | null>(null);
   const [optimizerProjectionPending, setOptimizerProjectionPending] = useState(false);
   const [optimizerProjectionRunsByContext, setOptimizerProjectionRunsByContext] = useState<Record<string, OptimizerProjectionRun[]>>({});
@@ -468,7 +593,9 @@ function App() {
   const effectiveOptimizerObjective = DEFAULT_OPTIMIZER_OBJECTIVE;
   const storedOptimizerStatus = optimizerStatuses[activeContextKey] ?? null;
   const optimizerStatus = storedOptimizerStatus?.contest_format === contestFormat ? storedOptimizerStatus : null;
+  const highestProjectionReport = savedHighestProjectionReport(optimizerStatus);
   const selectedOptimizerStrategy = defaultTournamentStrategyId(contestFormat);
+  const highestProjection = contestFormat === "classic" && classicSelectionObjectives[activeContextKey] === "baseline_mean";
   const [predictionStatuses, setPredictionStatuses] = useState<Record<string, PredictionOperationStatus>>({});
   const predictionStatus = predictionStatuses[activeContextKey] ?? null;
   const setPredictionStatus = useCallback((status: PredictionOperationStatus | null) => {
@@ -573,15 +700,16 @@ function App() {
     () => window.localStorage.getItem("dfs-learning-entry-user") ?? "",
   );
   const [learningReport, setLearningReport] = useState<WeeklyLearningReport | null>(null);
+  const [learningTab, setLearningTab] = useState<"review" | "results">("review");
   const [learningError, setLearningError] = useState<string | null>(null);
-  const learningScopeRef = useRef(`${season}:${week}`);
-  learningScopeRef.current = `${season}:${week}`;
+  const learningScopeRef = useRef(`${learningSeason}:${learningWeek}`);
+  learningScopeRef.current = `${learningSeason}:${learningWeek}`;
   useEffect(() => {
     setWeeklyContestImport(null);
     setWeeklyContestSelections({});
-    setLearningReport(null);
+    setLearningReport(current => current?.season === learningSeason && current.week === learningWeek ? current : null);
     setLearningError(null);
-  }, [season, week]);
+  }, [learningSeason, learningWeek]);
   const ownershipHasCompletePayoutTiers = ownershipEvidence.payoutTiers.length > 0
     && ownershipEvidence.payoutTiers.every((tier) => (
       tier.minRank.trim()
@@ -641,13 +769,18 @@ function App() {
   };
   const [excludePlayers, setExcludePlayers] = useState<string>("");
   const [questionableExclusionByFormat, setQuestionableExclusionByFormat] = useState({
-    classic: false, showdown: true,
+    classic: true, showdown: true,
   });
   const excludeQuestionable = questionableExclusionByFormat[contestFormat];
   const setExcludeQuestionable = (enabled: boolean) => setQuestionableExclusionByFormat(
     (current) => ({ ...current, [contestFormat]: enabled }),
   );
-  const [excludeOpponentTeams, setExcludeOpponentTeams] = useState<string>("DEN");
+  const [opponentExclusionsByContext, setOpponentExclusionsByContext] = useState<Record<string, string>>(() => {
+    try { return JSON.parse(window.localStorage.getItem("dfs-opponent-exclusions-by-context-v1") ?? "{}") || {}; } catch { return {}; }
+  });
+  const excludeOpponentTeams = opponentExclusionsByContext[activeContextKey] ?? "DEN";
+  const setExcludeOpponentTeams = (value: string) => setOpponentExclusionsByContext(current => ({...current, [activeContextKey]: value}));
+  useEffect(() => { try { window.localStorage.setItem("dfs-opponent-exclusions-by-context-v1", JSON.stringify(opponentExclusionsByContext)); } catch { /* Preserve current choices. */ } }, [opponentExclusionsByContext]);
   const [excludePlayerIds, setExcludePlayerIds] = useState<string>("");
   const [lockedPlayers, setLockedPlayers] = useState<string>("");
   const [lockedPlayerIds, setLockedPlayerIds] = useState<string>("");
@@ -935,6 +1068,8 @@ function App() {
       no_qb_captain: noQbCaptain, no_two_qbs: noTwoQbs, no_qbs: noQbs,
       require_team_leader: requireTeamLeader, require_home_team_leader: requireTeamLeader && requireHomeTeamLeader,
       captain_positions: captainPositions ? captainPositions.split(",") : [],
+      captain_position_exception_ids: namedResearch.captain,
+      questionable_eligible_player_ids: namedResearch.questionable,
       max_players_per_team: showdownMaxPlayersPerTeam,
       flex_only_players: flexOnlyPlayers.split(",").map(v => v.trim()).filter(Boolean),
     } : {}),
@@ -1168,7 +1303,7 @@ function App() {
   };
 
   const preparedBuild = preparationStatus?.latest_build;
-  const preparationRunning = Boolean(preparationStatus?.jobs.some(j => j.status === "queued" || j.status === "running"));
+  const preparationRunning = Boolean(preparationStatus?.scope.season === season && preparationStatus.scope.week === week && preparationStatus.scope.slate.toUpperCase() === slate.toUpperCase() && preparationStatus.jobs.some(j => j.status === "queued" || j.status === "running"));
   const optimizerPrepared = optimizerHasPreparedInputs(preparationStatus, { season, week, slate },
     contestFormat, availabilityPreview.overrides);
   const currentCheckError = preparationCheck?.scope.season === season && preparationCheck.scope.week === week
@@ -1177,20 +1312,24 @@ function App() {
     optimizerPrepared, pendingAction, currentCheckError, availabilityPreview.error);
 
 
-  const prepareOptimizerSlate = async () => {
+  const prepareOptimizerSlate = async (preliminary = false): Promise<PreliminarySnapshot | undefined> => {
     setError(null);
     setPendingAction("Preparing slate sources, projections and ownership...");
     try {
-      const response = await queuePreparation({ season, week, slate, action: "prepare", contest_format: contestFormat, ownership_required: true,
-        availability_overrides: configuredAvailabilityOverrides(), assume_questionable_out: false });
+      if (preliminary) preliminaryRunParams({exclude_questionable: true, availability_overrides: configuredAvailabilityOverrides()}, false);
+      const response = await queuePreparation({ season, week, slate, action: "prepare", contest_format: contestFormat, ownership_required: true, preliminary_research: preliminary,
+        availability_overrides: preliminary ? [] : configuredAvailabilityOverrides(), assume_questionable_out: false,
+        analyst_mode: analystHandoffMode, ...(analystHandoffMode === "MANUAL" && selectedAnalystPacket ? { analyst_packet_sha256:selectedAnalystPacket.analyst_packet_sha256, analyst_strategy:selectedAnalystPacket.selected_strategy ?? "MERGED_SCENARIOS" } : {}) });
       setPreparationStatus(await fetchPreparation({ season, week, slate }));
       setPendingAction(`Preparing slate on the durable worker (${response.job.job_id}). Source checks appear in Preparation and data tools.`);
       await waitForOperationalJob(response.job.job_id);
+      if (preliminary) return await freezePreliminarySnapshot(response.job.job_id, {analyst_mode: analystHandoffMode, ...(analystHandoffMode === "MANUAL" && selectedAnalystPacket ? {analyst_packet_sha256: selectedAnalystPacket.analyst_packet_sha256, analyst_strategy: selectedAnalystPacket.selected_strategy} : {})});
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
+      if (preliminary) throw err;
     } finally {
       try { setPreparationStatus(await fetchPreparation({ season, week, slate })); } catch { setPreparationStatus(null); }
-      try { setSlateReadiness(await fetchSlateReadiness({ season, week, slate })); } catch { setSlateReadiness(null); }
+      if (!preliminary) try { setSlateReadiness(await fetchSlateReadiness({ season, week, slate })); } catch { setSlateReadiness(null); }
       await refreshOptimizerProjectionRuns().catch(() => undefined);
       setPendingAction(null);
     }
@@ -1201,7 +1340,16 @@ function App() {
     setError(null);
     setPendingAction("Checking optimizer request...");
     try {
-      const params = optimizerParams();
+      const normalCheckedHandoff = highestProjection ? null : scopedAnalystHandoff(normalHandoff, {season,week,slate,format:contestFormat});
+      const normalCheckedMetadata = normalCheckedHandoff?.checked_packet_sha256 ? await fetchAnalystPacket(normalCheckedHandoff.checked_packet_sha256) : null;
+      const normalPacket = highestProjection ? null : checkedAnalystSelection(analystHandoffMode,normalCheckedHandoff,normalCheckedMetadata,analystPacketsByContext[activeContextKey] ?? selectedAnalystPacket);
+      const handoffIssue = highestProjection ? null : analystHandoffIssue(analystHandoffMode, normalCheckedHandoff, normalPacket); if (handoffIssue) throw new Error(handoffIssue);
+      if (normalPacket) {
+        const issue = analystPacketScopeIssue(normalPacket, season, week, contestFormat);
+        if (issue) throw new Error(issue);
+      }
+      const focusIssue = analystFocusedRunIssue(normalPacket); if (focusIssue) throw new Error(focusIssue);
+      const params = classicSelectionParams({ ...optimizerParams(), ...analystOptimizerParams(normalPacket, contestFormat), analyst_optimization_intent: optimizationIntent, ...(contestFormat === "showdown" && optimizationIntent === "EXPECTED_GAME" && constructionComparison ? {analyst_strategy: "CONSTRUCTION"} : {}) }, highestProjection);
       if (!optimizerPrepared || !preparedBuild) throw new Error("Prepare slate for optimization first.");
       submittedRunId = globalThis.crypto.randomUUID();
       updateActiveRunSelection({ optimizerRunId: submittedRunId });
@@ -1209,7 +1357,7 @@ function App() {
       const response = await runOptimizer({ season, week, slate, strategy: selectedOptimizerStrategy,
         optimizer_run_id: submittedRunId, contest_format: contestFormat,
         objective: effectiveOptimizerObjective, projection_run_id: preparedBuild.projection_run_id,
-        params: { ...params, prepared_input_job_id: preparedBuild.prepared_input_job_id } },
+        params: { ...params, prepared_input_job_id: preparedBuild.prepared_input_job_id, analyst_handoff_mode:highestProjection ? "BASELINE" : analystHandoffMode, ...(normalCheckedHandoff ? {analyst_handoff_compatibility_sha256:normalCheckedHandoff.compatibility_sha256} : {}) } },
         () => setPendingAction("Optimizer queued on the durable worker. Reopen it in Recent optimizer runs."));
       setOptimizerStatus(response);
       updateActiveRunSelection({ optimizerRunId: response.job_id,
@@ -1226,6 +1374,62 @@ function App() {
       try { setPreparationStatus(await fetchPreparation({ season, week, slate })); } catch { /* Keep last preparation audit. */ }
       await refreshOptimizerProjectionRuns().catch(() => undefined);
     }
+  };
+
+  const stageTeammateAlternative = async (pair: TeammatePair) => {
+    if (selectedAnalystPacket?.selected_strategy === "MERGED_SCENARIOS" && selectedAnalystPacket.focus_mode === "SELECTED_ONLY") { setError("Selected-only scenario focus excludes cheaper-teammate application. Choose Mixed scenarios explicitly before staging this branch."); return; }
+    if (!optimizerStatus?.football_analyst?.packet_sha256) { setError("The saved pair is missing its original Analyst packet."); return; }
+    setPendingAction("Selecting the original Analyst inputs for this cheaper branch..."); setError(null);
+    try {
+      const packet = await fetchAnalystPacket(optimizerStatus.football_analyst.packet_sha256);
+      const issue = analystPacketScopeIssue(packet, season, week, "classic"); if (issue) throw new Error(issue);
+      const choice = cheaperPairChoice(optimizerStatus.job_id, pair);
+      selectAnalystOverride({...packet,selected_strategy:"MERGED_SCENARIOS",teammate_enabled:true,challenger_enabled:selectedAnalystPacket?.challenger_enabled ?? Boolean(optimizerStatus?.football_analyst?.challenger)});
+      setTeammateChoices(current => ({...current,[activeContextKey]:{choice,packetHash:packet.analyst_packet_sha256,label:`${pair.primary_name} → ${pair.backup_name}`}}));
+      document.getElementById("preliminary-generation-controls")?.scrollIntoView({behavior:"smooth",block:"start"});
+    } catch(err) { setError(err instanceof Error ? err.message : String(err)); }
+    finally { setPendingAction(null); }
+  };
+
+  const generatePreliminaryResearch = async (snapshot: PreliminarySnapshot, noSeasonRankRestriction: boolean) => {
+    let submittedRunId: string | undefined;
+    setError(null);
+    setPendingAction("Checking preliminary research assumptions...");
+    try {
+      const issue = preliminaryScopeIssue(snapshot, { season, week, slate });
+      if (issue) throw new Error(issue);
+      if (contestFormat !== "classic" || effectiveOptimizerObjective !== "gpp" || selectedOptimizerStrategy !== "classic_large_gpp_v1") throw new Error("Preliminary research requires Classic Large GPP.");
+      const snapshotHandoff = highestProjection ? null : intentHandoff(snapshot, optimizationIntent);
+      const checkedPacket = snapshotHandoff?.checked_packet_sha256 ? await fetchAnalystPacket(snapshotHandoff.checked_packet_sha256) : null;
+      const preliminaryPacket = highestProjection ? null : checkedAnalystSelection(analystHandoffMode, snapshotHandoff, checkedPacket, analystPacketsByContext[activeContextKey] ?? selectedAnalystPacket);
+      if (!highestProjection && (analystHandoffMode === "AUTO" || snapshotHandoff)) { const handoffIssue = analystHandoffIssue(analystHandoffMode,snapshotHandoff,preliminaryPacket); if (handoffIssue) throw new Error(handoffIssue); }
+      if (preliminaryPacket) {
+        const packetIssue = analystPacketScopeIssue(preliminaryPacket, season, week, contestFormat);
+        if (packetIssue) throw new Error(packetIssue);
+      }
+      const focusIssue = analystFocusedRunIssue(preliminaryPacket); if (focusIssue) throw new Error(focusIssue);
+      let params = preliminaryRunParams({ ...optimizerParams(), ...analystOptimizerParams(preliminaryPacket, contestFormat), analyst_optimization_intent: optimizationIntent }, noSeasonRankRestriction);
+      params = classicSelectionParams(params, highestProjection);
+      if (stagedTeammateChoice && !highestProjection) {
+        if (preliminaryPacket?.selected_strategy === "MERGED_SCENARIOS" && preliminaryPacket.focus_mode === "SELECTED_ONLY") throw new Error("Clear the staged cheaper branch before generating selected-only scenarios; no mixed-story fallback is allowed.");
+        if (preliminaryPacket?.analyst_packet_sha256 !== stagedTeammateChoice.packetHash || preliminaryPacket.selected_strategy !== "MERGED_SCENARIOS") throw new Error("The staged cheaper branch requires its original Analyst packet and merged strategy; clear it to use another strategy.");
+        params.analyst_teammate_enabled = true;
+        params.analyst_teammate_choice = stagedTeammateChoice.choice;
+      }
+      params.analyst_handoff_mode = highestProjection ? "BASELINE" : analystHandoffMode;
+      if (snapshotHandoff) params.analyst_handoff_compatibility_sha256 = snapshotHandoff.compatibility_sha256;
+      if (noSeasonRankRestriction) params.preliminary_rank_preference = "explicit_no_restriction_for_this_research_run";
+      submittedRunId = globalThis.crypto.randomUUID();
+      updateActiveRunSelection({ optimizerRunId: submittedRunId });
+      const response = await runPreliminaryOptimizer(snapshot, { season, week, slate, strategy: selectedOptimizerStrategy,
+        optimizer_run_id: submittedRunId, contest_format: "classic", objective: "gpp", projection_run_id: snapshot.projection_run_id, params },
+        () => setPendingAction("Preliminary optimizer queued. Reopen it in Recent optimizer runs; results remain not entry cleared."));
+      setOptimizerStatus(response);
+      updateActiveRunSelection({ optimizerRunId: response.job_id, projectionRunId: response.projection_run_id ?? activeRunSelection.projectionRunId });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      if (submittedRunId) try { setOptimizerStatus(await fetchOptimizerResults(submittedRunId)); } catch { /* Preserve original error and saved run ID. */ }
+    } finally { setPendingAction(null); }
   };
 
   const refreshOptimizer = async () => {
@@ -1635,7 +1839,7 @@ function App() {
   };
 
   const runWeeklyContestFolderImport = async (dryRun: boolean) => {
-    const requestScope = `${season}:${week}`;
+    const requestScope = `${learningSeason}:${learningWeek}`;
     setLearningError(null);
     if (dryRun) {
       setWeeklyContestImport(null);
@@ -1644,7 +1848,7 @@ function App() {
     setPendingAction(dryRun ? "Checking weekly contest folder..." : "Loading weekly contest results...");
     try {
       const result = await importWeeklyContestFolder({
-        directory: weeklyContestDirectory.trim(), season, week, dry_run: dryRun,
+        directory: weeklyContestDirectory.trim(), season: learningSeason, week: learningWeek, dry_run: dryRun,
         ...(!dryRun ? { selected_files: selectedWeeklyContestFiles.map((file) => ({
           path: file.path,
           source_file_id: file.source_file_id ?? "",
@@ -1668,13 +1872,13 @@ function App() {
       const selectedWeekLoaded = result.files.some((file) =>
         file.file_type === "contest_standings" &&
         ["imported", "deduplicated"].includes(file.status) &&
-        file.season === season && file.week === week
+        file.season === learningSeason && file.week === learningWeek
       );
       if (!dryRun && learningEntryUser.trim() && selectedWeekLoaded) {
         setPendingAction("Building week learning report...");
         try {
           const report = await generateWeeklyLearningReport({
-            season, week, entry_user: learningEntryUser.trim(),
+            season: learningSeason, week: learningWeek, entry_user: learningEntryUser.trim(),
           });
           if (learningScopeRef.current === requestScope) {
             setLearningReport(report);
@@ -1733,14 +1937,14 @@ function App() {
   const runWeeklyLearningReport = async () => {
     const entryUser = learningEntryUser.trim();
     if (!entryUser) return;
-    const requestScope = `${season}:${week}`;
+    const requestScope = `${learningSeason}:${learningWeek}`;
     setLearningError(null);
     setPendingAction("Pulling weekly stats and building post-slate learning report...");
     try {
       window.localStorage.setItem("dfs-learning-entry-user", entryUser);
       const report = await generateWeeklyLearningReport({
-        season,
-        week,
+        season: learningSeason,
+        week: learningWeek,
         entry_user: entryUser,
       });
       if (learningScopeRef.current === requestScope) setLearningReport(report);
@@ -1800,6 +2004,17 @@ function App() {
         />
       </AppShell>
     );
+  }
+
+  if (viewMode === "tiers") {
+    return <AppShell slateOptions={slateOptions} activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onSlateChange={setActiveSlate} onNavigate={setViewMode}><Tiers season={season} week={week} /></AppShell>;
+  }
+  if (viewMode === "single-stat") {
+    return <AppShell slateOptions={slateOptions} activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onSlateChange={setActiveSlate} onNavigate={setViewMode}><SingleStat /></AppShell>;
+  }
+
+  if (viewMode === "analyst-reports") {
+    return <AppShell slateOptions={slateOptions} activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onSlateChange={setActiveSlate} onNavigate={setViewMode}><AnalystReports /></AppShell>;
   }
 
   if (viewMode === "preview") {
@@ -1905,27 +2120,48 @@ function App() {
 
   if (viewMode === "learning") {
     return (
-      <AppShell slateOptions={slateOptions} activeView={viewMode} season={season} week={week} slate={slate} runSelection={activeRunSelection} pendingAction={pendingAction} onSlateChange={setActiveSlate} onNavigate={setViewMode}>
+      <AppShell slateOptions={learningSlateOptions} activeView={viewMode} season={learningSeason} week={learningWeek} slate={learningSlate} pendingAction={pendingAction} onSlateChange={value => updateLearningContext({ slate: value })} onNavigate={setViewMode}>
         <div className="operations-workspace learning-workspace">
           <section className="operations-command" aria-labelledby="learning-command-title">
             <div className="operations-command-copy">
               <span className="operations-eyebrow"><i aria-hidden="true" /> Post-slate review</span>
               <h2 id="learning-command-title">Learn from a completed week.</h2>
-              <p>Load your contest results and inspect where forecasts and lineups differed from the field.</p>
+              <p>Choose a review season, week and slate. These selections are remembered separately from the rest of the app.</p>
             </div>
             <div className="operations-context" aria-label="Learning week controls">
               <label>
                 Season
-                <input type="number" value={season} onChange={(event) => setSeason(Number(event.target.value))} />
+                <input type="number" value={learningSeason} onChange={(event) => updateLearningContext({ season: Number(event.target.value) })} />
               </label>
               <label>
                 Week
-                <input type="number" min={1} max={25} value={week} onChange={(event) => setWeek(Number(event.target.value))} />
+                <input type="number" min={1} max={25} value={learningWeek} onChange={(event) => updateLearningContext({ week: Number(event.target.value) })} />
+              </label>
+              <label>
+                Review slate
+                <select value={learningSlate} onChange={event => updateLearningContext({ slate: event.target.value })}>
+                  <option value={ALL_LEARNING_SLATES}>All slates</option>
+                  {learningSlateOptions.map(option => <option key={option} value={option}>{option.replaceAll("_", " ")}</option>)}
+                </select>
               </label>
             </div>
           </section>
-          <EntryHistory key={season} year={season} directory={weeklyContestDirectory} />
-          <ShadowComparisons key={`${season}-${week}`} season={season} week={week} />
+          <div className="button-row" role="tablist" aria-label="Learning sections" onKeyDown={event => {
+            if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+            event.preventDefault();
+            const tabs = event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]');
+            const target = event.key === "Home" ? 0 : event.key === "End" ? 1 : learningTab === "review" ? 1 : 0;
+            tabs[target].focus(); tabs[target].click();
+          }}>
+            <button role="tab" id="learning-review-tab" aria-controls="learning-review-panel" tabIndex={learningTab === "review" ? 0 : -1} aria-selected={learningTab === "review"} onClick={() => setLearningTab("review")}>Review &amp; Imports</button>
+            <button role="tab" id="learning-results-tab" aria-controls="learning-results-panel" tabIndex={learningTab === "results" ? 0 : -1} aria-selected={learningTab === "results"} onClick={() => setLearningTab("results")}>Weekly Results</button>
+          </div>
+          {learningTab === "results" ? <div className="learning-workspace" style={{ minWidth: 0 }} role="tabpanel" id="learning-results-panel" aria-labelledby="learning-results-tab">
+            <WeeklyResults season={learningSeason} week={learningWeek} slate={learningSlate} entryUser={learningEntryUser} onWeekChange={value => updateLearningContext({ week: value })}
+              onEntryUserChange={value => { setLearningEntryUser(value); window.localStorage.setItem("dfs-learning-entry-user", value); }} />
+          </div> : <div className="learning-workspace" style={{ minWidth: 0 }} role="tabpanel" id="learning-review-panel" aria-labelledby="learning-review-tab">
+          <EntryHistory key={learningSeason} year={learningSeason} directory={weeklyContestDirectory} />
+          <ShadowComparisons key={`${learningSeason}-${learningWeek}`} season={learningSeason} week={learningWeek} slate={learningSlate} />
           <section className="panel operations-panel operations-data-panel" aria-labelledby="learning-import-title">
             <div className="operations-panel-heading">
               <span>01 · Import</span>
@@ -2006,7 +2242,7 @@ function App() {
                               [file.path]: { ...current[file.path], slate: event.target.value },
                             }))}>
                             <option value="">Choose slate</option>
-                            {slateOptions.map((option) => <option key={option} value={option}>{option.replaceAll("_", " ")}</option>)}
+                            {learningSlateOptions.map((option) => <option key={option} value={option}>{option.replaceAll("_", " ")}</option>)}
                           </select> : file.slate.replaceAll("_", " ")}</td>
                           <td>{file.status === "would_stage" || file.status === "staged"
                             ? weeklyContestSelections[file.path]?.slate ? "Ready to load" : "Needs slate"
@@ -2051,6 +2287,11 @@ function App() {
                 Build Week Learning Report
               </button>
             </div>
+            <WeeklyLearningLibrary entryUser={learningEntryUser} reportId={learningReport ? `${learningReport.report_id}:${learningReport.generated_at}` : undefined} onOpen={report => {
+              updateLearningContext({ season: report.season, week: report.week });
+              setLearningReport(report);
+              setLearningError(null);
+            }} />
             {learningError && <div className="error inline-error">{learningError}</div>}
             {learningReport && (
               <div className="status-card">
@@ -2078,7 +2319,11 @@ function App() {
                   {learningReport.missing_evidence.length} missing-evidence notices
                 </p>
                 <p className="helper-text">{learningReport.interpretation}</p>
-                {learningReport.slate_reports.map((report) => (
+                {learningSlate !== ALL_LEARNING_SLATES && <p className="helper-text">
+                  Summary and downloaded report cover the whole week. Review details below show {learningSlate.replaceAll("_", " ")} only.
+                  {!learningReport.slate_reports.some(report => normalizeSlateId(report.slate) === learningSlate) && " No saved review for this slate; evidence remains unknown."}
+                </p>}
+                {learningReport.slate_reports.filter(report => learningSlate === ALL_LEARNING_SLATES || normalizeSlateId(report.slate) === learningSlate).map((report) => (
                   <details className="learning-entry-results" key={report.report_id}>
                     <summary>
                       {report.slate.replaceAll("_", " ")} · {report.summary.entries} entries ·{" "}
@@ -2121,6 +2366,7 @@ function App() {
                             {entry.entry_evidence != null && typeof entry.entry_evidence === "object" && "url" in entry.entry_evidence && (
                               <> · <a href={String(entry.entry_evidence.url)} target="_blank" rel="noreferrer">Open saved decision and control evidence</a></>
                             )}
+                            <LearningEntryEvidence entry={entry} />
                             {players.length > 0 && (
                               <details>
                                 <summary>Player predictions and results</summary>
@@ -2155,6 +2401,7 @@ function App() {
               </div>
             )}
           </section>
+          </div>}
         </div>
       </AppShell>
     );
@@ -2198,10 +2445,29 @@ function App() {
       </section>
 
       <section className="panel operations-panel operations-basic-inputs" aria-labelledby="basic-inputs-title">
+        <details>
+          <summary>Add a custom slate</summary>
+          <form className="form-row" onSubmit={event => {
+            event.preventDefault();
+            if (pendingAction || !isValidSlateId(customSlateName)) return;
+            const name = normalizeSlateId(customSlateName);
+            const names = [...new Set([...customSlateNames, name])];
+            setCustomSlateNames(names);
+            try { window.localStorage.setItem(customSlateStorageKey, JSON.stringify(names)); } catch { /* Keep the session selection. */ }
+            setActiveSlate(name);
+            setCustomSlateName("");
+          }}>
+            <label>Custom slate name<input type="text" value={customSlateName} maxLength={64}
+              placeholder="SUNDAY_LATE_SF_SEA" onChange={event => setCustomSlateName(event.target.value)} /></label>
+            <button type="submit" disabled={Boolean(pendingAction) || !isValidSlateId(customSlateName)}>Select custom slate</button>
+          </form>
+          <p>Use a separate name for each game or contest slate, then choose Classic or Captain in Strategy and load its salary CSV. Names can contain letters, numbers, underscores and hyphens; spaces become underscores.</p>
+        </details>
         <div className="operations-panel-heading">
           <span>01 · Load files</span>
           <h2 id="basic-inputs-title">Slate files</h2>
           <p>Download the slate’s DraftKings salary CSV and FanDuel injury CSV, enter their local paths, then load each file. Sunday Early and Sunday Late share the Sunday Main injury file; no separate injury file is needed. Files already loaded do not need to be loaded again.</p>
+          {slate === "SUNDAY_MORNING" && <p>For a single-game CSV with CPT/FLEX rows, select Captain format. Enter the actual salary filename even if it differs from the slate label. If you have no Morning injury CSV, use Prepare slate to fetch sourced player-status evidence; missing or stale evidence will still block readiness. Sunday Morning does not inherit Sunday Main injuries.</p>}
         </div>
         <div className="basic-file-grid">
           <div className="form-row column">
@@ -2252,14 +2518,22 @@ function App() {
         <div className="operations-panel-heading">
           <span>02 · Prepare</span>
           <h2 id="prepare-slate-title">Prepare slate</h2>
-          <p>After loading files, prepare the selected {contestFormat === "classic" ? "Classic" : "Showdown"} slate. This checks identities, availability, projections, and ownership together. Running projections alone does not certify readiness.</p>
+          <p>After loading files, prepare the selected {contestFormat === "classic" ? "Classic" : "Showdown"} slate. This checks identities, availability, prior-week stats and snaps, spreads, game totals, projections, and ownership together. Missing historical stats or snaps are downloaded automatically before rebuilding. Every game needs valid market data within the freshness limit. Missing, stale or inconsistent spreads/totals block optimization. Running projections alone does not certify readiness.</p>
         </div>
         <div className="button-row">
-              <button onClick={prepareOptimizerSlate} disabled={Boolean(pendingAction) || preparationRunning}>Prepare slate for optimization</button>
+              <button onClick={() => void prepareOptimizerSlate()} disabled={Boolean(pendingAction) || preparationRunning}>Prepare slate for optimization</button>
               <small>{preparationStatus?.build_issue}</small>
               <strong role="status">{preparationRunning ? "Preparing slate…" : optimizerPrepared ? "Prepared — ready to optimize" : currentCheckError ? "Readiness check unavailable — see status beside Run Optimizer" : !preparationStatus ? "Checking saved slate readiness…" : "Preparation required before optimization"}</strong>
         </div>
-            {slateReadiness && slateReadiness.season === season && slateReadiness.week === week
+            {optimizerPrepared && <div className="readiness-preflight pass" role="status" data-testid="prepared-preflight">
+              <div>
+                <span>Slate preflight · {contestFormat} {effectiveOptimizerObjective}</span>
+                <strong>Ready — prepared inputs verified</strong>
+                <small>Sources, projections and ownership are verified for the prepared build used by Run Optimizer. Final game-day entry clearance remains separate.</small>
+                <small>Projection: {preparedBuild?.projection_run_id}</small>
+              </div>
+            </div>}
+            {!optimizerPrepared && slateReadiness && slateReadiness.season === season && slateReadiness.week === week
               && slateReadiness.slate.toUpperCase() === slate.toUpperCase() && (() => {
               const gateKey = optimizerReadinessGateKey(contestFormat, effectiveOptimizerObjective);
               const gate = slateReadiness.gates[gateKey];
@@ -2334,7 +2608,7 @@ function App() {
                   <option value="classic">Classic GPP</option>
                 </select>
               </label>
-              <p>{lineupControls.numLineups} requested lineup(s) · GPP tournament strategy · ranked for tournament play.</p>
+              <p>{highestProjection ? "1 unlocked lineup · highest baseline projection · optional stacks and bringbacks" : `${lineupControls.numLineups} requested lineup(s) · GPP tournament strategy · ranked for tournament play.`}</p>
             </div>
             <div className="operations-disclosure optimizer-options" data-testid="optimizer-options">
               <h3>Optimizer options</h3>
@@ -2357,6 +2631,11 @@ function App() {
                   </select>
                   <small>Applies to Captain in every lineup. WR Captain requires his team’s QB; RB Captain does not require a QB. Other positions remain eligible at FLEX; projections remain unchanged.</small>
                 </label>
+                {([['captain', 'Named Captain position exceptions'], ['questionable', 'Named questionable research eligibility']] as const).map(([key, label]) => <label className="text-label" key={key}>{label}
+                  <select aria-label={label} multiple value={namedResearch[key]} disabled={Boolean(pendingAction)} onChange={event => { const values = Array.from(event.target.selectedOptions, option => option.value); setNamedResearchPreferences(current => ({...current, [activeContextKey]: {...namedResearch, [key]: values}})); }}>
+                    {(optimizerStatus?.player_pool?.rows ?? []).map(player => <option key={player.player_id} value={player.player_id}>{player.player_name} · {player.position} · {player.team}</option>)}
+                  </select><small>{key === 'captain' ? 'Only these named players may bypass the Captain position filter. Other eligibility and QB rules still apply; this does not force selection.' : 'Only these named players bypass your questionable exclusion for research. Raw source status and model projections are unchanged. OUT/inactive and all other safety gates remain binding; this is not entry clearance.'}</small>
+                </label>)}
                 <label className="showdown-team-limit">Max players per team
                   <select value={showdownMaxPlayersPerTeam} disabled={Boolean(pendingAction)}
                     onChange={(event) => setShowdownMaxPlayersPerTeam(Number(event.target.value))}>
@@ -2544,7 +2823,7 @@ function App() {
             <div className="button-row">
               <div className="text-label">
                 <strong>Verified prepared inputs</strong>
-                <small>Prepare slate refreshes sources and verifies projections and ownership before optimization.</small>
+                <small>Prepare slate verifies spreads, totals, projections and ownership before optimization.</small>
                 <button type="button" onClick={() => { refreshOptimizerProjectionRuns().catch(() => undefined); }} disabled={optimizerProjectionPending}>
                   {optimizerProjectionPending ? "Checking projections…" : "Reload projection list"}
                 </button>
@@ -2555,7 +2834,28 @@ function App() {
 
             </div>
             </div>
-            <p className="optimizer-settings-summary">{contestFormat === "classic" ? "Classic" : "Captain / Showdown"} · {lineupControls.numLineups} requested GPP tournament lineup(s) · Questionable players: {excludeQuestionable ? "excluded" : "allowed"}</p>
+            {contestFormat === "classic" && <div className="readiness-preflight"><label>Classic selection objective
+              <select aria-label="Classic selection objective" value={highestProjection ? "baseline_mean" : "scenario"} disabled={Boolean(pendingAction)} onChange={event => setClassicSelectionObjectives(current => ({...current,[activeContextKey]:event.target.value as ClassicSelectionObjective}))}>
+                <option value="scenario">Analyst scenarios</option><option value="baseline_mean">Highest baseline projection · optional stacks</option>
+              </select></label>
+              {highestProjection && <p>One lineup with no player locks. Maximizes unchanged average projected points; QB stacks and opponent bringbacks are optional. Other eligibility, salary and roster settings remain binding. Scenario, ownership and ceiling scores are not added.</p>}
+            </div>}
+            {!highestProjection && <div className="readiness-preflight"><label>Optimization intent
+              <select aria-label="Optimization intent" value={optimizationIntent} disabled={Boolean(pendingAction)} onChange={event => {
+                setOptimizationIntents(current => ({...current, [activeContextKey]: event.target.value as OptimizationIntent}));
+                setAnalystModes(current => ({...current, [activeContextKey]: "AUTO"}));
+              }}><option value="EXPECTED_GAME">Expected Game</option><option value="CONTRARIAN">Contrarian</option><option value="MIXED">Mixed research (legacy)</option></select></label>
+              <p>{optimizationIntent === "EXPECTED_GAME" ? "The sourced primary game assessment and its upside. Explicit contrarian what-ifs are excluded; roster and exposure rules remain binding." : optimizationIntent === "CONTRARIAN" ? "Only the authored alternate story. Conditional opportunity and roster requirements remain explicit; this is not a prediction." : "Legacy mixed scenario research; expected and alternate worlds may influence the same portfolio."}</p>
+              <p>Both intents use automatic checked Analyst research from the same prepared build. Your lineup settings remain binding. Selected: {intentLabel(optimizationIntent)}.</p>
+            </div>}
+            {contestFormat === "showdown" && optimizationIntent === "EXPECTED_GAME" && <label className="checkbox-label"><input type="checkbox" checked={constructionComparison} disabled={Boolean(pendingAction)} onChange={event => setConstructionComparison(event.target.checked)} /><span>Original CONSTRUCTION comparison · checked Expected Game evidence recorded only; original generation and scoring policy</span></label>}
+            {!highestProjection && <><AnalystPreparationSummary handoff={preparedAnalystHandoff} mode={analystHandoffMode} busy={Boolean(pendingAction)} onAutomatic={() => setAnalystModes(current => ({...current,[activeContextKey]:"AUTO"}))} />
+            <AnalystPacketControls season={season} week={week} format={contestFormat} disabled={Boolean(pendingAction) || optimizationIntent !== "MIXED"}
+              selected={selectedAnalystPacket} onSelect={selectAnalystOverride} /></>}
+            {contestFormat === "classic" && <div id="preliminary-generation-controls">{stagedTeammateChoice && <p role="status">Staged cheaper branch: <strong>{stagedTeammateChoice.label}</strong> · original Analyst inputs selected. <button type="button" disabled={Boolean(pendingAction)} onClick={() => setTeammateChoices(current => ({...current,[activeContextKey]:null}))}>Clear cheaper branch</button></p>}<PreliminaryClassicControls scope={{season,week,slate}} preparation={preparationStatus} onPrepare={() => prepareOptimizerSlate(true)}
+              enabled={effectiveOptimizerObjective === "gpp" && selectedOptimizerStrategy === "classic_large_gpp_v1"} busy={Boolean(pendingAction)}
+              excludeQuestionable={excludeQuestionable} analystMode={highestProjection ? "BASELINE" : analystHandoffMode} optimizationIntent={highestProjection ? "MIXED" : optimizationIntent} analystOverride={selectedAnalystPacket ? {analyst_packet_sha256:selectedAnalystPacket.analyst_packet_sha256,analyst_strategy:selectedAnalystPacket.selected_strategy} : undefined} onSnapshot={snapshot => setPreliminaryAnalystInputs(current => ({...current,[activeContextKey]:snapshot}))} onAutomatic={() => setAnalystModes(current => ({...current,[activeContextKey]:"AUTO"}))} compatibleSnapshotHash={analystHandoffMode === "MANUAL" ? selectedAnalystPacket?.discovery_snapshot_sha256 : undefined} onGenerate={generatePreliminaryResearch} /></div>}
+            <p className="optimizer-settings-summary">{contestFormat === "classic" ? "Classic" : "Captain / Showdown"} · {highestProjection ? 1 : lineupControls.numLineups} requested {highestProjection ? "highest-projection lineup" : "GPP tournament lineup(s)"} · Questionable players: {excludeQuestionable ? "excluded" : "allowed"}</p>
             {error && <div role="alert" className="error inline-error">{error}</div>}
             <div id="optimizer-readiness-status" className="optimizer-readiness-status" role="status" aria-live="polite">
               {optimizerWait.busy && <progress aria-label="Optimizer readiness in progress" />}
@@ -2698,7 +2998,7 @@ function App() {
           </div>
           <SlatePreparation contestFormat={contestFormat} onStatus={setPreparationStatus} onCheckState={setPreparationCheck} scope={{ season, week, slate }} salaryPath={salaryFileToLoad ?? ""}
             injuryPath={injuryFileToLoad ?? ""} busy={Boolean(pendingAction)}
-            getAvailabilityOverrides={configuredAvailabilityOverrides} assumeQuestionableOut={contestFormat === "classic" && excludeQuestionable}
+            getAvailabilityOverrides={configuredAvailabilityOverrides} assumeQuestionableOut={false}
             onStartingQbs={runStartingQBs} />
           <details className="contest-evidence-editor">
             <summary>
@@ -3437,8 +3737,50 @@ function App() {
             contestFormat={contestFormat} objective={effectiveOptimizerObjective}
             selectedRunId={activeRunSelection.optimizerRunId} loadedRunId={optimizerStatus?.job_id}
             onOpen={openRecentOptimizer} />
+            {<AnalystIntentComparison key={activeContextKey} contextKey={activeContextKey} current={optimizerStatus} scope={{season,week,slate}} />}
+            {optimizerStatus?.preliminary_report && <div className="status-card">
+              <h3>Preliminary research · not entry cleared</h3>
+              <p>Both current injury assumptions and missing source evidence remain explicit. Contest CSV export is blocked for this research run.</p>
+              <details><summary>Frozen preliminary assumptions and normal readiness failures</summary>
+                <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{JSON.stringify(optimizerStatus.preliminary_report, null, 2)}</pre>
+              </details>
+            </div>}
+            {optimizerStatus?.football_analyst?.teammate_opportunity && <TeammateOpportunityReview report={optimizerStatus.football_analyst.teammate_opportunity} busy={Boolean(pendingAction)} focusOnly={selectedAnalystPacket?.selected_strategy === "MERGED_SCENARIOS" && selectedAnalystPacket.focus_mode === "SELECTED_ONLY"} onChoose={pair => void stageTeammateAlternative(pair)} />}
+            {optimizerStatus?.football_analyst && <details className="operations-disclosure">
+              <summary>Wones Football Analyst · {optimizerStatus.football_analyst.status ?? "construction report"}</summary>
+              {optimizerStatus.football_analyst.optimization_intent && <p>Intent: {intentLabel(optimizerStatus.football_analyst.optimization_intent.intent)} · {optimizerStatus.football_analyst.optimization_intent.assessment}</p>}
+              <PersonalThoughtSummary context={optimizerStatus.analyst_handoff_applied?.personal_context as PersonalContext | undefined} />
+              <p>Strategy: {optimizerStatus.football_analyst.mode ?? "ANALYST_CONSTRUCTION"} · {optimizerStatus.football_analyst.portfolio_mode ?? "conditional coverage"}</p>
+              {optimizerStatus.football_analyst.focus && <AnalystFocusSummary focus={optimizerStatus.football_analyst.focus} results={Array.isArray(optimizerStatus.results) ? optimizerStatus.results : []} />}
+              {optimizerStatus.football_analyst.challenger && <details><summary>Blind-spot hunter · {optimizerStatus.football_analyst.challenger.status}</summary><p>Targeted solves: {optimizerStatus.football_analyst.challenger.solver_calls} · New candidates: {optimizerStatus.football_analyst.challenger.accepted_candidate_count}</p><pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{JSON.stringify(optimizerStatus.football_analyst.challenger, null, 2)}</pre></details>}
+              {optimizerStatus.football_analyst.discovery && <div><p>Discovery: {optimizerStatus.football_analyst.discovery.scanned_games.length} games screened before allocation.</p>{optimizerStatus.football_analyst.discovery.findings.map(finding => <p key={finding.finding_id}>{finding.finding_id}: {finding.action_status} · {finding.decision_reason} · Constructed slots: {finding.actual_allocation_slots?.join(", ") || "none"}</p>)}</div>}
+              {optimizerStatus.football_analyst.scenario_allocation_plan && <details><summary>Football ideas allocated before construction · actual dependence audit</summary><pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{JSON.stringify(optimizerStatus.football_analyst.scenario_allocation_plan, null, 2)}</pre></details>}
+              <p style={{ overflowWrap: "anywhere" }}>Packet: {optimizerStatus.football_analyst.packet_sha256}</p>
+              {optimizerStatus.football_analyst.mode === "MERGED_SCENARIOS" && <>
+                <p>Quality screen: none · Baseline veto: disabled · Scenario sensitivities and allocation priorities: uncalibrated</p>
+                <p>Portfolio: {optimizerStatus.football_analyst.achieved_portfolio_size}/{optimizerStatus.football_analyst.requested_portfolio_size} · Solver: {optimizerStatus.football_analyst.selection?.solver_status}</p>
+                <p>{optimizerStatus.football_analyst.selection?.selection_reason}</p>
+                {optimizerStatus.football_analyst.captain_analysis && <details>
+                  <summary>Captain-specific Analyst · {optimizerStatus.football_analyst.captain_analysis.eligible_captain_count} assessed</summary>
+                  <p>Conditional FLEX comparisons preserve Captain identity. Missing evidence remains unknown; opponent players follow workload paths and roster rules.</p>
+                  {optimizerStatus.football_analyst.captain_analysis.assessments.map(assessment => <p key={assessment.player_master_id}>
+                    {assessment.player_name} · {assessment.team} {assessment.position} · {assessment.opponent_team}: {assessment.opponent_capability} · Captain mechanism: {assessment.mechanism_status} · {assessment.generated_candidate_count} alternatives, {assessment.selected_lineup_count} selected · {assessment.generation_status}
+                  </p>)}
+                </details>}
+                <details><summary>Scenario assumptions, scores and frozen comparison</summary>
+                  <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{JSON.stringify(optimizerStatus.football_analyst, null, 2)}</pre>
+                </details>
+              </>}
+              <p>Generated: {optimizerStatus.football_analyst.generated_candidate_count ?? optimizerStatus.football_analyst.generated_count ?? optimizerStatus.football_analyst.eligible_generated_count ?? "See per-step report"} · Selected: {optimizerStatus.football_analyst.selected_lineup_count ?? optimizerStatus.football_analyst.selected_count ?? "Recorded with lineup thesis IDs"}</p>
+              <p>Requested candidates: {optimizerStatus.football_analyst.requested_candidate_count ?? "See thesis report"} · Abstentions: {optimizerStatus.football_analyst.abstention_count ?? "See thesis report"}</p>
+              {optimizerStatus.football_analyst.theses?.map(thesis => <p key={thesis.thesis_id}>
+                {thesis.analyst_thought ?? thesis.thesis_id} · {thesis.status} · {thesis.achieved ?? 0}/{thesis.requested ?? 0} requested
+                {thesis.reasons?.length ? ` · ${thesis.reasons.join("; ")}` : ""}
+              </p>)}
+            </details>}
           {optimizerStatus?.contest_format === "showdown" && <div className="status-card">
             <h3>Showdown data readiness</h3>
+
             <p>Generation readiness: {String(optimizerStatus.data_readiness?.status ?? "Unverified archived run")}</p>
             {optimizerStatus.data_readiness && <details><summary>Frozen generation checks</summary><pre>{JSON.stringify(optimizerStatus.data_readiness, null, 2)}</pre></details>}
             <p>Entry ready: {optimizerStatus.entry_readiness?.entry_ready === true ? "Yes" : "No"} · {String(optimizerStatus.entry_readiness?.status ?? "Not evaluated for this saved run")}</p>
@@ -3528,10 +3870,15 @@ function App() {
                   (strategy) => strategy.id === optimizerStatus.strategy
                 )?.label ?? optimizerStatus.strategy}
               </h3>
+              {highestProjectionReport && <section aria-label="Highest baseline projection result">
+                <h4>Highest baseline projection · optional stacks</h4>
+                <p>{highestProjectionReport.solver_status} · {highestProjectionReport.base_mean?.toFixed(2)} projected points · ${highestProjectionReport.salary?.toLocaleString()} · No player locks</p>
+                <p>Highest among the eligible prepared pool under the remaining user rules. Baseline means only; no scenario, ownership, ceiling or correlation bonuses.</p>
+              </section>}
               {singleLineupReportHtml(optimizerStatus) && <div dangerouslySetInnerHTML={{ __html: singleLineupReportHtml(optimizerStatus) }} />}
-              {optimizerStatus.status === "completed" && optimizerStatus.objective === "gpp" && !optimizerStatus.gpp_recommendation &&
+              {optimizerStatus.status === "completed" && optimizerStatus.objective === "gpp" && !optimizerStatus.gpp_recommendation && !highestProjectionReport &&
                 <p>This saved run predates GPP recommendations. Run the optimizer to save a candidate comparison and one recommendation.</p>}
-              {optimizerStatus.status === "completed" && optimizerStatus.objective === "gpp" && optimizerStatus.gpp_recommendation &&
+              {optimizerStatus.status === "completed" && optimizerStatus.objective === "gpp" && optimizerStatus.gpp_recommendation && !highestProjectionReport && !optimizerStatus.preliminary_report &&
                 <GppRecommendation report={optimizerStatus.gpp_recommendation} pending={lineupExportPending}
                   onDownload={async () => {
                     setLineupExportPending(true); setLineupExportError(null);
@@ -3546,7 +3893,7 @@ function App() {
               <ClassicLargeGppReadinessReport key={optimizerStatus.job_id} optimizer={optimizerStatus}
                 onAssessment={value => setOptimizerStatus({ ...optimizerStatus, readiness_assessment: value })} />
               <ClassicConstructionReport key={`${optimizerStatus.job_id}:${enforceSingleTE}`} optimizer={optimizerStatus} enforceSingleTE={enforceSingleTE} />
-              {typeof optimizerStatus.strategy_config.description === "string" && (
+              {!highestProjectionReport && typeof optimizerStatus.strategy_config.description === "string" && (
                 <p>{optimizerStatus.strategy_config.description}</p>
               )}
               <p>{optimizerStatus.message}</p>
@@ -3555,8 +3902,8 @@ function App() {
                 const policy = first?.showdown_qb_preferences;
                 return <div className="status-card nested-card">
                   <h4>QB CONSTRUCTION POLICY</h4>
-                  <p>QB Captain allowed: {policy ? qbCaptainAllowed(policy) ? "Yes" : "No" : "Unavailable"} · Maximum starting QBs: {policy ? qbLineupLimit(policy) : "Unavailable"}</p>
-                  <p>Requested lineup count: {policy?.requested_portfolio_size ?? "Unavailable"} · Effective QB-Captain lineup limit: {policy ? qbCaptainAllowed(policy) ? 1 : 0 : "Unavailable"} · Effective starting-QB lineup limit: {policy ? qbLineupLimit(policy) : "Unavailable"}</p>
+                  <p>QB Captain allowed: {policy ? qbCaptainDescription(policy) : "Unavailable"} · Maximum starting QBs: {policy ? qbLineupLimit(policy) : "Unavailable"}</p>
+                  <p>Requested lineup count: {policy?.requested_portfolio_size ?? "Unavailable"} · Effective QB-Captain lineup limit: {policy ? qbCaptainLimitDescription(policy) : "Unavailable"} · Effective starting-QB lineup limit: {policy ? qbLineupLimit(policy) : "Unavailable"}</p>
                   <p>{captainPositionsDescription(first?.showdown_captain_preferences ?? {})}.</p>
                   <p>{teamLimitDescription(first?.showdown_team_constraints ?? {})}. Captain and FLEX count together.</p>
                   <p>User lineup constraints preserve model assessments.</p>
@@ -3743,7 +4090,7 @@ function App() {
               })()}
               <RbDstDiagnosticsPanel optimizer={optimizerStatus} />
               <ModelDisagreementPanel projectionRunId={optimizerStatus.projection_run_id} optimizer={optimizerStatus} />
-              {optimizerStatus.status === "completed" && <SkillExposureApprovalPanel optimizer={optimizerStatus} onNewRun={async (runId) => {
+              {optimizerStatus.status === "completed" && !optimizerStatus.preliminary_report && <SkillExposureApprovalPanel optimizer={optimizerStatus} onNewRun={async (runId) => {
                 const response = await fetchOptimizerResults(runId);
                 setOptimizerStatus(response);
                 updateActiveRunSelection({ optimizerRunId: runId,
@@ -3752,7 +4099,7 @@ function App() {
               {optimizerStatus.status === "completed" && Array.isArray(optimizerStatus.results) && optimizerStatus.results.length > 0 && (
                 <div>
                   <div className="button-row">
-                    <button disabled={lineupExportPending} onClick={async () => {
+                    <button disabled={lineupExportPending || Boolean(optimizerStatus.preliminary_report)} onClick={async () => {
                       setLineupExportPending(true);
                       setLineupExportError(null);
                       try {
@@ -3990,15 +4337,16 @@ function App() {
                     const sortedLineup = assignSlots(lineup);
                     return (
                       <div className="lineup-card" id={`optimizer-lineup-${idx + 1}`} key={`lineup-${idx}`}>
+                        <JointOpportunitySummary summary={lineup[0]?.analyst_joint_opportunity_summary} />
                         <div className="lineup-header">
-                          {optimizerStatus.gpp_recommendation?.recommended?.lineup_number === idx + 1 && <strong>Recommended GPP candidate · provisional</strong>}
+                          {!highestProjectionReport && optimizerStatus.gpp_recommendation?.recommended?.lineup_number === idx + 1 && <strong>Recommended GPP candidate · provisional</strong>}
                           <strong>{lineup.some((row: any) => row.cash_lineup_selection) ? idx === 0 ? "Primary recommendation" : `Additional requested lineup ${idx + 1}` : lineup[0]?.lineup_variant === "long_shot" ? "Long-shot lineup" : `Lineup ${idx + 1}`}</strong>
                           <span>Salary: {totalSalary.toLocaleString()}</span>
                           <span>Mean: {totalProj.toFixed(2)}</span>
                           {cashDiagnostic && <span>Downside: {Number(cashDiagnostic.downside_diagnostic).toFixed(2)} · Upside: {Number(cashDiagnostic.upside_diagnostic).toFixed(2)} · Proxy score: {Number(cashDiagnostic.selection_score).toFixed(2)}</span>}
                           <span>{ceilingSummary.label}: {ceilingSummary.value.toFixed(2)}</span>
                           {lineup[0]?.showdown_scenario && <span>Scenario: {lineup[0].showdown_scenario.label} · winner {lineup[0].showdown_scenario.conditioned_winner ?? "market"} · {lineup[0].showdown_scenario.decisive_margin_threshold}+ points · baseline mean {lineup.reduce((sum: number, row: any) => sum + Number(row.baseline_projection ?? row.projection ?? 0), 0).toFixed(2)} → discovery-conditioned {lineupConditionedTotal(lineup, "mean")} · baseline P90 {lineup.reduce((sum: number, row: any) => sum + Number(row.baseline_p90 ?? row.p90 ?? 0), 0).toFixed(2)} → discovery-conditioned {lineupConditionedTotal(lineup, "p90")}</span>}
-                          {hasContextScoring && (
+                          {hasContextScoring && !highestProjectionReport && (
                             <span>
                               Context: {totalContextAdjustment >= 0 ? "+" : ""}
                               {totalContextAdjustment.toFixed(2)}
@@ -4008,7 +4356,7 @@ function App() {
                             <span>Floor: {totalFloor.toFixed(2)} · Risk: {(totalProj - totalFloor).toFixed(2)}</span>
                           )}
                           {stackSummary && <span>Stack: {stackSummary}</span>}
-                          {correlationSummary && (
+                          {correlationSummary && !highestProjectionReport && (
                             <span>
                               Correlation: {correlationAdjustment >= 0 ? "+" : ""}
                               {correlationAdjustment.toFixed(2)}
@@ -4021,7 +4369,7 @@ function App() {
                               <span>
                                 {ownershipAvailable
                                   ? `Ownership: ${totalOwnership.toFixed(2)}`
-                                  : "GPP ownership unavailable — optimizing ceiling/correlation only"}
+                                  : highestProjectionReport ? "Ownership unavailable — not used in baseline objective" : "GPP ownership unavailable — optimizing ceiling/correlation only"}
                               </span>
                               {duplicationRisk?.ownership_available && (
                                 <span>
@@ -4035,7 +4383,7 @@ function App() {
                           )}
                         </div>
                         {!ACTIVE_OPTIMIZER_STRATEGIES.some(strategy => strategy.id === optimizerStatus.strategy) && <OptimizerControlComparison comparison={lineup[0]?.lineup_control_comparison} />}
-                        {correlationRules.length > 0 && (
+                        {correlationRules.length > 0 && !highestProjectionReport && (
                           <details>
                             <summary>
                               Correlation rules ({correlationRules.length})
@@ -4077,6 +4425,7 @@ function App() {
                           </thead>
                           <tbody>
                             {sortedLineup.map((player: any) => {
+                              const displayRosterPosition = highestProjectionReport ? player._slot ?? player.roster_position : player.roster_position;
                               const explanations = Array.isArray(player.symbolic_explanations)
                                 ? player.symbolic_explanations
                                 : [];
@@ -4090,9 +4439,9 @@ function App() {
                                 <tr key={`${idx}-${player.player_id}-${player.roster_position || player.position}`}>
                                   <td>{player.name || player.player_name || player.player_display_name || player.player_id}</td>
                                   <td>
-                                    {player.roster_position && player.position && player.roster_position !== player.position
-                                      ? `${player.roster_position} · ${player.position}`
-                                      : player.roster_position || player.position}
+                                    {displayRosterPosition && player.position && displayRosterPosition !== player.position
+                                      ? `${displayRosterPosition} · ${player.position}`
+                                      : displayRosterPosition || player.position}
                                   </td>
                                   <td>{player.player_team || player.team || player.recent_team}</td>
                                   <td>{Number(player.salary || 0).toLocaleString()}</td>

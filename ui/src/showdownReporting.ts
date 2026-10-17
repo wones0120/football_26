@@ -13,9 +13,22 @@ export function qbCaptainAllowed(report: Row): boolean {
   return !report.no_qbs && !report.no_qb_captain && report.allow_qb_captain !== false;
 }
 
+export function qbCaptainDescription(report: Row): string {
+  if (report.no_qbs || report.no_qb_captain) return "No";
+  if (report.allow_qb_captain === false && Array.isArray(report.named_captain_position_exception_ids)
+      && report.named_captain_position_exception_ids.length) return "Named exceptions may qualify";
+  return qbCaptainAllowed(report) ? "Yes" : "No";
+}
+
+export function qbCaptainLimitDescription(report: Row): string {
+  return qbCaptainDescription(report) === "Named exceptions may qualify"
+    ? "1 if a named QB is eligible" : qbCaptainAllowed(report) ? "1" : "0";
+}
+
 export function captainPositionsDescription(report: Row): string {
   if (!Array.isArray(report.allowed_positions)) return "Captain positions: unavailable in this saved report";
-  return `Captain positions: ${report.allowed_positions.length ? report.allowed_positions.join(", ") + " only" : "Any position"}`;
+  const exceptions = Array.isArray(report.named_position_exception_ids) ? report.named_position_exception_ids.length : 0;
+  return `Captain positions: ${report.allowed_positions.length ? report.allowed_positions.join(", ") + " only" : "Any position"}${exceptions ? `; ${exceptions} named position exception(s), subject to other eligibility rules` : ""}`;
 }
 
 export function teamLimitDescription(report: Row): string {

@@ -29,6 +29,14 @@ def list_optimizer_runs(engine, session, *, season, week, slate, contest_format,
         func.coalesce(counts.c.lineup_count, 0).label("lineup_count"),
         runs.c.constraint_config_json["num_lineups"].as_integer().label("requested_lineups"),
         runs.c.constraint_config_json["classic_expanded_discovery"].as_boolean().label("expanded_discovery"),
+        runs.c.constraint_config_json["analyst_optimization_intent"].as_string().label("optimization_intent"),
+        runs.c.constraint_config_json["classic_selection_objective"].as_string().label("classic_selection_objective"),
+        runs.c.constraint_config_json["entry_readiness"]["entry_ready"].as_boolean().label("entry_ready"),
+        runs.c.constraint_config_json["preliminary_report"].as_string().isnot(None).label("preliminary_export_blocked"),
+        ((runs.c.constraint_config_json["gpp_recommendation"]["policy_id"].as_string() == "gpp_projection_first_recommendation_v1")
+         & (runs.c.constraint_config_json["gpp_recommendation"]["status"].as_string() == "provisional")
+         & (runs.c.constraint_config_json["gpp_recommendation"]["optimizer_run_id"].as_string() == runs.c.optimizer_run_id)
+        ).label("saved_recommendation_available"),
         runs.c.constraint_config_json["decision_snapshot"]["captured_at"].as_string().label("snapshot_captured_at"),
     ).select_from(runs.outerjoin(counts, counts.c.optimizer_run_id == runs.c.optimizer_run_id)).where(
         runs.c.season == season, runs.c.week == week, func.upper(runs.c.slate_id) == slate.upper(),
@@ -60,7 +68,7 @@ def list_optimizer_runs(engine, session, *, season, week, slate, contest_format,
             "created_at": _iso(job.created_at), "updated_at": _iso(job.updated_at),
             "projection_run_id": payload.get("projection_run_id"), "lineup_count": 0,
             "requested_lineups": params.get("num_lineups"), "saved_report_available": False,
-            "expanded_discovery": bool(params.get("classic_expanded_discovery")), **row,
+            "expanded_discovery": bool(params.get("classic_expanded_discovery")), "optimization_intent": params.get("analyst_optimization_intent"), "classic_selection_objective": params.get("classic_selection_objective"), **row,
             "operational_job_id": job.job_id, "started_at": _iso(job.started_at),
             "completed_at": _iso(job.completed_at)}
         # A saved completed solve is recoverable even before its queue lease finishes.

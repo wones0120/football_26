@@ -254,9 +254,10 @@ def test_completed_frozen_run_is_reopened_without_refresh_and_interrupted_freeze
         run(service, optimizer_run_id=job.job_id)
 
 
+@pytest.mark.parametrize("preliminary", [False, True])
 @pytest.mark.parametrize("official_unresolved", [False, True])
 @pytest.mark.parametrize("identity_unresolved", [False, True])
-def test_existing_collectors_refresh_before_saved_projection_build_and_ownership(official_unresolved, identity_unresolved):
+def test_existing_collectors_refresh_before_saved_projection_build_and_ownership(official_unresolved, identity_unresolved, preliminary):
     from contextlib import ExitStack
     from types import SimpleNamespace
     from backend.app.product_services.showdown_data_readiness import refresh_live_sources
@@ -277,6 +278,7 @@ def test_existing_collectors_refresh_before_saved_projection_build_and_ownership
         mocked("backend.app.product_services.slate_preparation.require_prelock", return_value=NOW + timedelta(days=2))
         mocked("Database.player_identity.repair_salary_identities", side_effect=mark("salary", SimpleNamespace(salary_rows_quarantined=int(identity_unresolved))))
         mocked("backend.app.product_services.slate_preparation.capture_source", side_effect=mark("market", {}))
+        mocked("backend.app.product_services.historical_prerequisites.refresh_history", return_value={"captures": []})
         mocked("backend.app.services.source_capture.SourceCaptureService.capture_and_ingest_nflreadpy_weekly_rosters",
                side_effect=mark("status", capture))
         mocked("backend.app.services.source_capture.capture_nflreadpy_datasets", side_effect=mark("injuries", []))
@@ -292,7 +294,7 @@ def test_existing_collectors_refresh_before_saved_projection_build_and_ownership
                side_effect=mark("projection", {"projection_run_id":PROJECTION, "data_cutoff_at":AT}))
         ownership = mocked("backend.app.product_services.ownership.OwnershipService.run_projection_model",
                            side_effect=mark("ownership", SimpleNamespace(ownership_run_id="own-1")))
-        result = refresh_live_sources(service, season=NOW.year, week=5, slate="THURSDAY_NIGHT", params={})
+        result = refresh_live_sources(service, season=NOW.year, week=5, slate="THURSDAY_NIGHT", params={"preliminary_research":preliminary})
     if identity_unresolved:
         assert calls == ["market", "status", "salary"]
         assert result["projection_run_id"] is None
@@ -301,11 +303,11 @@ def test_existing_collectors_refresh_before_saved_projection_build_and_ownership
         ownership.assert_not_called()
         return
     expected = ["market", "status", "salary", "injuries", "official_status", "starters", "canonical_context", "projection", "ownership"]
-    if official_unresolved:
+    if official_unresolved and not preliminary:
         expected.remove("projection")
         assert result["report"]["projection"]["status"] == "blocked"
     assert calls == expected
-    assert result["projection_run_id"] == (None if official_unresolved else PROJECTION)
+    assert result["projection_run_id"] == (None if official_unresolved and not preliminary else PROJECTION)
     assert result["ownership_run_id"] == "own-1"
     assert ownership.call_args.kwargs["projection_run_id"] == result["projection_run_id"]
 
@@ -449,3 +451,40 @@ def test_projection_player_refresh_reuses_collectors_and_blocks_incomplete_trans
         report = refresh_projection_player_context(service,season=2026,week=5,slate="TEST")
         assert report["canonical_player_context"]["result"]["rows"] == 52
     assert events == ["collect"]
+
+
+def test_readiness_preserves_native_away_home_order_instead_of_alphabetical_order():
+    rows = ready_rows()
+    for row in rows:
+        row['game_id'] = row['game_id'].replace('AAA@BBB', 'BBB@AAA')
+    report = assess(rows)
+    assert report['status'] == 'READY'
+    assert report['matchup'] == 'BBB @ AAA'
+    assert (report['away_team'], report['home_team']) == ('BBB', 'AAA')
+    assert report['matchup_order_basis'] == 'native_salary_game_info'
+
+
+def test_native_matchup_does_not_invent_venue_for_unordered_game_id():
+    from backend.app.product_services.showdown_data_readiness import native_matchup
+    report = native_matchup([{'game_id':'unordered-game-id'}], ['AAA','BBB'])
+    assert report['matchup'] == 'AAA vs BBB'
+    assert report['away_team'] is None and report['home_team'] is None
+    assert report['matchup_order_basis'] == 'venue_order_unverified'
+
+
+def test_missing_prior_week_provider_blocks_build_without_stale_projection_fallback():
+    from backend.app.product_services.showdown_data_readiness import refresh_live_sources
+    service = service_fixture(ready_rows())
+    with patch('backend.app.product_services.slate_preparation.slate_games', return_value=[{'game_id':'test'}]), \
+         patch('backend.app.product_services.slate_preparation.require_prelock', return_value=NOW+timedelta(days=2)), \
+         patch('backend.app.product_services.slate_preparation.capture_source', return_value={}), \
+         patch('backend.app.product_services.historical_prerequisites.refresh_history', side_effect=ValueError('nflverse snap_counts Week 5 still lacks teams SEA')), \
+         patch('backend.app.product_services.showdown_data_readiness._refresh_player_sources') as player_sources, \
+         patch('backend.app.product_services.slate_preparation.execute_preparation') as build:
+        result = refresh_live_sources(service, season=2026, week=6, slate='THURSDAY_NIGHT', params={})
+    assert result['projection_run_id'] is None
+    assert result['ownership_run_id'] is None
+    assert 'Week 5' in result['report']['projection']['reason']
+    assert result['report']['historical_participation']['status'] == 'ERROR'
+    player_sources.assert_not_called()
+    build.assert_not_called()

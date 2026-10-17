@@ -146,3 +146,14 @@ def test_arizona_provider_abbreviation_is_not_dropped_from_selected_slate():
     rows = parse_official_report(html, season=2026, week=5, slate_teams={"ARI"})
     assert rows[0]["team"] == "ARI"
     assert rows[0]["practice_status"] == "Did Not Participate In Practice"
+
+
+def test_official_suffix_match_is_scoped_unique_and_preserves_native_conflicts():
+    row=dict(team="TB",position="WR",player_name="David Sills",source_key="/players/david-sills")
+    salary=dict(player_id="canonical",team="TB",position="WR",player_name="David Sills V",full_name="David Sills V")
+    assert resolve_official_player(row,[salary],[]) == ("canonical","team_position_normalized_name")
+    assert resolve_official_player(row,[dict(salary,team="ATL")],[])[0] is None
+    assert resolve_official_player(row,[dict(salary,position="TE")],[])[0] is None
+    assert resolve_official_player(row,[salary,dict(salary,player_id="duplicate")],[])[1] == "ambiguous"
+    alias=dict(player_master_id="foreign",source_system="nfl_official",source_key=row["source_key"],alias_name="David Sills")
+    assert resolve_official_player(row,[salary],[alias])[1] == "identity_conflict"

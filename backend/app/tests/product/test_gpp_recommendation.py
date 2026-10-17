@@ -1,5 +1,6 @@
 from copy import deepcopy
 from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 import csv
 import io
 
@@ -94,7 +95,11 @@ def test_captain_uses_slot_weighted_points_once_and_unconditioned_baseline():
 
 def test_recommended_export_has_exactly_one_lineup_and_preserves_all_candidates():
     j=job([lineup(0,10),lineup(20,11)])
-    response=download_optimizer_lineups('run', service=SimpleNamespace(get_job=lambda _:j), recommended_only=True)
+    with patch('backend.app.product_services.evaluation_record.record_export') as record:
+        response=download_optimizer_lineups('run', service=SimpleNamespace(get_job=lambda _:j, engine=MagicMock()), recommended_only=True)
+    assert record.call_args.args[1] == 'run'
+    assert record.call_args.args[3] == response.body
+    assert record.call_args.args[4] == [j.results[1]]
     rows=list(csv.reader(io.StringIO(response.body.decode())))
     assert len(rows)==2
     assert set(rows[1]) == {p['dk_player_id'] for p in j.results[1]}

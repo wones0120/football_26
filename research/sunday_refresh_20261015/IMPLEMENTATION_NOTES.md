@@ -1,0 +1,17 @@
+# Sunday Classic intent workflow repair
+
+The all-game research is immutable in v1/v2; v2 corrects Theo Johnson's salary prose ($2,500), preserving v1. Official source captures and fresh native-ID-linked salary/box/snap reads remain in v1. All ten actual Sunday afternoon games are checked; Thursday, London, SNF and MNF are excluded.
+
+Classic now supports automatic Expected Game and Contrarian selection, including the explicit preliminary research flow. Each freeze saves disjoint intent receipts against one exact salary/projection/ownership snapshot. Server binding rejects a missing or mismatched intent; saved scenario-first results retain intent lineage. Intent-scoped Classic allocation uses authored opportunity channels without adding a derived opposite script.
+
+The existing normal 50/25/50/25 season-rank preferences remain saved; this comparison explicitly uses the existing request-only research override. Five requested lineups, 100% player cap, minimum QB/RB $4,500, maximum four/team and five/game, single TE, no offense vs DST, favored RB/DST, Q exclusion and other current controls remain binding. Thursday Captain controls do not apply to Classic.
+
+The prepared pool is frozen at c772a7eef0b8e2bcac5c7baf7501aadb980cdc73eefad47e20b854e13f823738 (projection 7460c58b-219e-4099-a2a3-72ddaf1d7fc6; ownership db8e4815-e554-4be0-818b-685ae3484a40). Fresh unknown exclusions are Max Klare, CJ Daniels, Joshua Palmer and DJ Moore. Q preference and known unavailable safety exclusions remain separate. Final entry readiness is false.
+
+The raw authored channel sensitivities (1.12 factor, 0.5 elasticity) identify experimental worlds; the established scenario-first allocation engine applies its separately disclosed conserved 100-unit opportunity budgets, 0.12 shift and 0.7 elasticity. Saved runtime mathematical assumptions are authoritative for the generated candidates. None is a calibrated probability, role forecast, injury transfer or baseline projection edit.
+
+Profiling confirmed repeated copying of bulky pandas metadata. The existing ordinary Classic path already removes role_context after roles resolve; preliminary generation skipped that branch. The bounded parity fix removes this metadata from working frames while preserving the original snapshot, source history, values and checksum. It changes neither player moments nor roster rules. The already-running first job is allowed to finish under its original loaded code; an idle reload will apply this performance repair to later runs and is disclosed in the comparison.
+
+Targeted backend intent, scenario, snapshot, preparation, report and cash tests; UI intent/preliminary tests; TypeScript/Vite build; Python compilation and whitespace checks passed during implementation. Shared personal-thought and export work remains separately owned and unapproved personal thoughts do not alter these baseline portfolios. No contest entry or export is performed.
+
+Completed acceptance: Expected Game94f87903 and Contrarian572a2895 each saved5/5 and individually reopened. Same numeric source/pool inputs;6 versus5 distinct generated candidates. Latest catalog registration validated with12 passing Analyst-report tests; final git diff --check passed. Additional saved-roster checks cover5/game and no offense versus DST. Performance repair was loaded only after normal completed and before Contrarian; no active job was interrupted.

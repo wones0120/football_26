@@ -70,7 +70,7 @@ class DraftKingsBatchImportService:
     SUPPORTED_SUFFIXES = {".csv", ".tsv", ".tab", ".zip"}
     WEEKLY_SLATES = (
         "WEDNESDAY_NIGHT", "THURSDAY_NIGHT", "FRIDAY_NIGHT", "SATURDAY_NIGHT",
-        "SUNDAY_MAIN", "SUNDAY_EARLY", "SUNDAY_LATE", "SUNDAY_NIGHT",
+        "SUNDAY_MORNING", "SUNDAY_MAIN", "SUNDAY_EARLY", "SUNDAY_LATE", "SUNDAY_NIGHT",
         "SUNDAY_MONDAY", "MONDAY_NIGHT", "TUESDAY_NIGHT",
     )
 
@@ -192,10 +192,8 @@ class DraftKingsBatchImportService:
         for salary_path in sorted(root.rglob(f"DKSalaries_{season}_{week}_*.csv")):
             if salary_path.relative_to(root).parts[0].casefold() == "processed":
                 continue
-            slate = next((candidate for candidate in cls.WEEKLY_SLATES
-                          if salary_path.name.casefold() ==
-                          f"dksalaries_{season}_{week}_{candidate}.csv".casefold()), None)
-            if slate is None:
+            slate = salary_path.stem[len(f"DKSalaries_{season}_{week}_"):].upper()
+            if not cls._valid_contest_slate(slate):
                 continue
             try:
                 salaries = pd.read_csv(salary_path, usecols=["Name"], dtype=str)
@@ -237,6 +235,12 @@ class DraftKingsBatchImportService:
         labeled_parts = [path.stem, *(parent.name for parent in path.parents if parent != root and root in parent.parents)]
         for part in labeled_parts:
             normalized = re.sub(r"[^A-Z0-9]+", "_", part.upper()).strip("_")
+            # Match the explicitly assigned custom name before its built-in
+            # prefix; retain independent labels from other folders as conflicts.
+            selected_label = re.sub(r"[^A-Z0-9]+", "_", (selected_slate or "").upper()).strip("_")
+            if selected_label and re.search(rf"(?:^|_){re.escape(selected_label)}(?:_|$)", normalized):
+                hints.add(selected_slate.upper())
+                continue
             for candidate in self.WEEKLY_SLATES:
                 if re.search(rf"(?:^|_){candidate}(?:_|$)", normalized):
                     hints.add(candidate)
@@ -412,6 +416,12 @@ class DraftKingsBatchImportService:
             ],
         )
 
+    @staticmethod
+    def _valid_contest_slate(slate: str) -> bool:
+        return bool(re.fullmatch(r"[A-Z0-9][A-Z0-9_-]{0,63}", slate.upper())) and slate.upper() not in {
+            "UNKNOWN", "DEFAULT", "UNRESOLVED",
+        }
+
     def import_directory(
         self,
         directory: str,
@@ -447,7 +457,7 @@ class DraftKingsBatchImportService:
                     raise ValueError(f"Selected contest file is unavailable: {path}")
                 if path in selections:
                     raise ValueError(f"Contest file selected more than once: {path}")
-                if selected.slate.upper() not in self.WEEKLY_SLATES:
+                if not self._valid_contest_slate(selected.slate):
                     raise ValueError(f"Unsupported contest slate: {selected.slate}")
                 selections[path] = selected
             paths = sorted(selections)

@@ -419,3 +419,46 @@ def test_conflicting_vendor_alias_needs_corroboration_from_two_roster_sources():
     upsert_alias(session, native.player_master_id, "nfl_official", "profile", "Roster Player", "ARI", "RB", 2026, 5)
     session.commit()
     assert find_player_master_id(session, "draftkings", "next", "Roster Player", "ARI", "RB")[0] == native.player_master_id
+
+
+def test_nickname_vendor_conflict_requires_unique_roster_corroboration():
+    session = _session()
+    canonical = create_player_master(session, "Marquise Brown", "KC", "WR")
+    duplicate = create_player_master(session, "Hollywood Brown", "KC", "WR")
+    for key, pid in (("old-salary", duplicate.player_master_id),
+                     ("recent-salary", canonical.player_master_id)):
+        upsert_alias(session, pid, "draftkings", key, "Hollywood Brown", "PHI", "WR", 2026, 5)
+    upsert_alias(session, canonical.player_master_id, "nflreadpy", "gsis", "Marquise Brown", "PHI", "WR", 2026, 5)
+    session.commit()
+
+    assert find_player_master_id(session, "draftkings", "next-salary", "Hollywood Brown", "PHI", "WR")[0] is None
+    upsert_alias(session, canonical.player_master_id, "pfr", "pfr-id", "Marquise Brown", "PHI", "WR", 2026, 5)
+    session.commit()
+    pid, reason = find_player_master_id(session, "draftkings", "next-salary", "Hollywood Brown", "PHI", "WR")
+    assert pid == canonical.player_master_id
+    assert reason == "source_backed_alias_conflict_resolved"
+    assert canonical.primary_team == "KC"
+    assert duplicate.full_name == "Hollywood Brown"
+
+    upsert_alias(session, pid, "draftkings", "next-salary", "Hollywood Brown", "PHI", "WR", 2026, 6)
+    session.commit()
+    assert find_player_master_id(session, "draftkings", "next-salary", "Hollywood Brown", "PHI", "WR") == (pid, "alias_source_key")
+
+    upsert_alias(session, duplicate.player_master_id, "nfl_official", "conflicting-roster", "Hollywood Brown", "PHI", "WR", 2026, 6)
+    session.commit()
+    assert find_player_master_id(session, "draftkings", "future-salary", "Hollywood Brown", "PHI", "WR")[0] is None
+
+
+def test_nickname_alias_requires_matching_team_and_position():
+    session = _session()
+    canonical = create_player_master(session, "Marquise Brown", "KC", "WR")
+    upsert_alias(session, canonical.player_master_id, "nflreadpy", "gsis", "Marquise Brown", "PHI", "WR", 2026, 6)
+    session.commit()
+
+    assert find_player_master_id(session, "draftkings", "new", "Hollywood Brown", "PHI", "WR") == (canonical.player_master_id, "alias_normalized_name_team_position")
+    for name, team, position in (("Hollywood Brown", "BUF", "WR"),
+                                 ("Hollywood Brown", "PHI", "RB"),
+                                 ("Hollywood Brown", None, "WR"),
+                                 ("Hollywood Brown", "PHI", None),
+                                 ("Other Hollywood Brown", "PHI", "WR")):
+        assert find_player_master_id(session, "draftkings", "new", name, team, position)[0] is None

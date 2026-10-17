@@ -37,8 +37,14 @@ def git_revision() -> str | None:
 
 def serialize_artifact(*, model: Any, train: pd.DataFrame, target: pd.DataFrame,
                        feature_columns: list[str], calibration: dict,
-                       profiles: dict) -> tuple[bytes, str]:
+                       profiles: dict, dst_component: dict | None = None) -> tuple[bytes, str]:
+    from .dst_feature_support import LEGACY_DST_CONTRACT
+    for frame in (train, target):
+        policy = frame.attrs.get("dst_feature_policy")
+        if policy not in (None, LEGACY_DST_CONTRACT):
+            raise ValueError("Candidate DST features cannot be stored under the incumbent model contract")
     payload = {
+        "feature_contracts": {"dst": LEGACY_DST_CONTRACT, "candidate_model_activation": False},
         "model": model, "train": train, "target": target,
         "feature_columns": feature_columns, "calibration": calibration,
         "profiles": profiles, "explanation_version": EXPLANATION_VERSION,
@@ -46,6 +52,14 @@ def serialize_artifact(*, model: Any, train: pd.DataFrame, target: pd.DataFrame,
             target[feature_columns].apply(pd.to_numeric, errors="coerce").fillna(0.0)
         ),
     }
+    if dst_component is not None:
+        from .dst_deployment import score_component
+        overlay, _ = score_component(dst_component, target)
+        from .dst_deployment import CONTRACT
+        payload["feature_contracts"] = {"dst": CONTRACT, "shared_model_dst": LEGACY_DST_CONTRACT,
+                                        "candidate_model_activation": True}
+        payload["dst_component"] = dst_component
+        payload["dst_component_predictions"] = overlay[["player_master_id", "mean"]].copy()
     buffer = BytesIO()
     joblib.dump(payload, buffer, compress=3)
     data = buffer.getvalue()
@@ -58,11 +72,32 @@ def deserialize_artifact(data: bytes, expected_sha256: str) -> dict:
     payload = joblib.load(BytesIO(data))  # trusted bytes stored by this application
     if not isinstance(payload, dict) or "model" not in payload:
         raise ValueError("Fitted model artifact has an invalid payload")
+    from .dst_feature_support import LEGACY_DST_CONTRACT
+    contracts = payload.get("feature_contracts")
+    if contracts is not None:
+        from .dst_deployment import CONTRACT
+        legacy = (contracts.get("dst") == LEGACY_DST_CONTRACT
+                  and contracts.get("candidate_model_activation") is False
+                  and payload.get("dst_component") is None)
+        component = (contracts.get("dst") == CONTRACT
+                     and contracts.get("shared_model_dst") == LEGACY_DST_CONTRACT
+                     and contracts.get("candidate_model_activation") is True
+                     and payload.get("dst_component", {}).get("contract") == CONTRACT)
+        if not (legacy or component):
+            raise ValueError("Unsupported DST model artifact feature contract")
+    # Artifacts saved before this field retain their original legacy contract.
+    payload.setdefault("feature_contracts", {"dst": LEGACY_DST_CONTRACT,
+                                            "candidate_model_activation": False})
     matrix = payload["target"][payload["feature_columns"]].apply(
         pd.to_numeric, errors="coerce"
     ).fillna(0.0)
     if not np.array_equal(payload["model"].predict(matrix), payload["raw_predictions"]):
         raise ValueError("Reloaded model no longer reproduces its saved raw predictions")
+    if payload.get("dst_component") is not None:
+        from .dst_deployment import score_component
+        overlay, _ = score_component(payload["dst_component"], payload["target"])
+        pd.testing.assert_frame_equal(overlay[["player_master_id", "mean"]],
+                                      payload["dst_component_predictions"], check_exact=True)
     return payload
 
 
@@ -121,6 +156,20 @@ def explain_player(payload: dict, player_id: str) -> dict:
     # deep-copies attrs during every single-column probe; they are not scoring inputs.
     row.attrs = {}
     position = str(row.iloc[0].get("position") or "").upper()
+    if position == "DST" and payload.get("dst_component") is not None:
+        from .dst_deployment import score_component
+        overlay, audit = score_component(payload["dst_component"], row)
+        component = payload["dst_component"]
+        return {"player_id": player_id, "reloaded_model_mean": max(0., float(overlay.iloc[0]["mean"])) * float(row.iloc[0].get("pregame_availability_probability", 1.) or 0.),
+                "actual_inputs": {name: None if pd.isna(overlay.iloc[0][name]) else float(overlay.iloc[0][name])
+                                  for name in component["policies"].columns},
+                "counterfactuals": [], "top_positive_model_drivers": [], "top_negative_model_drivers": [],
+                "attribution_method": "Versioned DST component; shared offense tree attribution does not apply",
+                "explanation_version": component["contract"], "dst_feature_audit": audit,
+                "dst_policy": component["policy"],
+                "dst_deployment": payload.get("calibration", {}).get("dst_deployment", {}),
+                "dst_model_limitations": ["Reliable ranking superiority is unproven",
+                    "Historical evaluations are retrospective; original source capture clocks incomplete"]}
     if position == "K":
         return {"player_id": player_id, "counterfactuals": [],
                 "top_positive_model_drivers": [], "top_negative_model_drivers": [],

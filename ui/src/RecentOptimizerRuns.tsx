@@ -1,8 +1,9 @@
 import { canOpenSavedOptimizerReport, sameOptimizerRunScope } from "./optimizerHistory";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { downloadAiShowdownPacket, fetchAiShowdownChecklist, fetchOptimizerRuns, retryOptimizerJob, type OptimizerRunSummary } from "./api";
+import { checkSavedUploadReadiness, type SavedUploadClearance, downloadOptimizerLineups, downloadAiShowdownPacket, fetchAiShowdownChecklist, fetchOptimizerRuns, retryOptimizerJob, type OptimizerRunSummary } from "./api";
 import { ShowdownPrelockChecklist } from "./ShowdownPrelockChecklist";
 import { ShowdownSelectionReview } from "./ShowdownSelectionReview";
+import { downloadSavedRun, savedDownloadBlocker, type SavedDownloadMode } from "./savedRunDownloads";
 import type { ShowdownPrelockChecklist as Checklist } from "./showdownResearch";
 
 type Props = {
@@ -27,6 +28,47 @@ export function RecentOptimizerRuns({ season, week, slate, contestFormat, object
   const [reviewing, setReviewing] = useState<string | null>(null);
   const [selectionReviewRunId, setSelectionReviewRunId] = useState<string | null>(null);
   const reviewRequest = useRef(0);
+  const downloadRequest = useRef(0);
+  const [downloading, setDownloading] = useState<string | null>(null);
+  const [downloadFeedback, setDownloadFeedback] = useState<{ runId: string; message: string; error: boolean } | null>(null);
+  const [clearances, setClearances] = useState<Record<string, SavedUploadClearance>>({});
+  const [checkingUpload, setCheckingUpload] = useState<string | null>(null);
+  const checkUpload = async (run: OptimizerRunSummary) => {
+    const request = ++downloadRequest.current;
+    setCheckingUpload(run.optimizer_run_id);
+    setDownloadFeedback({runId: run.optimizer_run_id, error: false, message: "Capturing current official evidence and checking saved roster…"});
+    try {
+      const result = await checkSavedUploadReadiness(run.optimizer_run_id);
+      if (request === downloadRequest.current && result.optimizer_run_id === run.optimizer_run_id) {
+        setClearances(previous => ({...previous, [run.optimizer_run_id]: result}));
+        setDownloadFeedback({runId: run.optimizer_run_id, error: !result.upload_ready,
+          message: result.upload_ready ? `Upload check passed until ${new Date(result.valid_until).toLocaleTimeString()}. Final official inactives remain pending; this does not confirm game dressing.` : result.reasons.join("; ")});
+      }
+    } catch (reason) {
+      if (request === downloadRequest.current) setDownloadFeedback({runId: run.optimizer_run_id, error: true,
+        message: `Upload check unavailable: ${reason instanceof Error ? reason.message : String(reason)}`});
+    } finally { if (request === downloadRequest.current) setCheckingUpload(null); }
+  };
+  const downloadScope = {season, week, slate, contest_format: contestFormat};
+  useEffect(() => {
+    downloadRequest.current += 1; setDownloading(null); setDownloadFeedback(null); setClearances({}); setCheckingUpload(null);
+    return () => { downloadRequest.current += 1; };
+  }, [season, week, slate, contestFormat]);
+  const download = async (run: OptimizerRunSummary, mode: SavedDownloadMode) => {
+    const request = ++downloadRequest.current;
+    setDownloading(`${run.optimizer_run_id}:${mode}`);
+    setDownloadFeedback({runId: run.optimizer_run_id, message: "Preparing DraftKings file…", error: false});
+    try {
+      const clearance = clearances[run.optimizer_run_id];
+      await downloadSavedRun({...run, upload_ready: clearance?.upload_ready, upload_valid_until: clearance?.valid_until}, downloadScope, mode, downloadOptimizerLineups);
+      if (request === downloadRequest.current) setDownloadFeedback({runId: run.optimizer_run_id,
+        message: `DraftKings ${mode === "recommended" ? "recommended lineup" : `${run.lineup_count} saved lineup(s)`} download requested. Check your browser’s downloads.`, error: false});
+    } catch (reason) {
+      if (request === downloadRequest.current) setDownloadFeedback({runId: run.optimizer_run_id,
+        message: `Download unavailable: ${reason instanceof Error ? reason.message : String(reason)}`, error: true});
+    } finally { if (request === downloadRequest.current) setDownloading(null); }
+  };
+
   useEffect(() => {
     let cancelled = false;
     let timer: number | undefined;
@@ -87,7 +129,7 @@ export function RecentOptimizerRuns({ season, week, slate, contestFormat, object
 
   return <div className="status-card">
     <h3>Recent optimizer runs</h3>
-    <p>{season} Week {week} · {slate.replaceAll("_", " ")} · {contestFormat === "classic" ? "Classic" : "Captain / Showdown"}. Includes historical strategies. Reopen saved results without running the optimizer again.</p>
+    <p>{season} Week {week} · {slate.replaceAll("_", " ")} · {contestFormat === "classic" ? "Classic" : "Captain / Showdown"}. Includes historical strategies. Reopen saved results without running the optimizer again. Download Recommended uses this run’s frozen GPP recommendation; Download All includes its saved lineups. DraftKings files require export validation. Showdown upload checks can pass provisionally before final official inactives; they do not confirm game dressing or contest entry.</p>
     <button type="button" onClick={() => setRefreshKey((key) => key + 1)}>Refresh recent runs</button>
     {contestFormat === "showdown" && runs.some(run => run.strategy === "showdown_gpp_portfolio_v3") && <details><summary>Historical AI portfolio review settings</summary><label>AI requested entries
       <select value={aiRequestedEntries} onChange={(event) => setAiRequestedEntries(Number(event.target.value))}>
@@ -102,9 +144,13 @@ export function RecentOptimizerRuns({ season, week, slate, contestFormat, object
       <tbody>{runs.map((run) => {
         const end = run.completed_at ?? (run.status === "running" ? new Date().toISOString() : null);
         const seconds = run.started_at && end ? Math.round(Math.max(0, (Date.parse(end) - Date.parse(run.started_at)) / 1000)) : null;
+        const clearance = clearances[run.optimizer_run_id];
+        const downloadRun = {...run, upload_ready: clearance?.upload_ready, upload_valid_until: clearance?.valid_until};
+        const allBlocker = savedDownloadBlocker(downloadRun, downloadScope, "all");
+        const recommendedBlocker = savedDownloadBlocker(downloadRun, downloadScope, "recommended");
         return <tr key={run.optimizer_run_id}>
           <td>{timestamp(run.created_at)}<br /><small title={run.optimizer_run_id}>{run.optimizer_run_id.slice(0, 8)}</small></td>
-          <td>{run.strategy.replaceAll("_", " ")}{run.expanded_discovery && <><br /><small>Expanded discovery</small></>}</td>
+          <td>{run.strategy.replaceAll("_", " ")}{run.classic_selection_objective === "baseline_mean" || run.message?.includes("Highest baseline projection") ? <><br /><strong>Highest baseline projection · optional stacks</strong></> : run.optimization_intent && <><br /><strong>{run.optimization_intent === "EXPECTED_GAME" ? "Expected Game" : run.optimization_intent === "CONTRARIAN" ? "Contrarian" : "Mixed research"}</strong></>}{run.expanded_discovery && <><br /><small>Expanded discovery</small></>}</td>
           <td>{run.status}<br /><small>{canOpenSavedOptimizerReport(run) ? `${run.lineup_count} saved ${run.lineup_count === 1 ? "lineup" : "lineups"}` : `${run.requested_lineups ?? "Unknown"} requested`}</small>
             {run.status === "failed" ? <details><summary>Error details</summary><p>{run.message}</p></details>
               : run.status !== "completed" && <><br /><small>{run.message}</small></>}</td>
@@ -112,6 +158,20 @@ export function RecentOptimizerRuns({ season, week, slate, contestFormat, object
           <td>{canOpenSavedOptimizerReport(run) ? <button type="button" disabled={Boolean(opening)} onClick={() => void open(run)}>{opening === run.optimizer_run_id ? "Loading…" : loadedRunId === run.optimizer_run_id ? "Reopen results" : "Open results"}</button>
             : ["queued", "running"].includes(run.status) ? <button type="button" onClick={() => void open(run)} disabled={selectedRunId === run.optimizer_run_id}>{selectedRunId === run.optimizer_run_id ? "Watching run" : "Watch run"}</button>
               : null}
+            {(run.saved_report_available || run.lineup_count > 0) && <>
+              {contestFormat === "showdown" && run.status === "completed" && !run.preliminary_export_blocked && <button type="button"
+                disabled={Boolean(checkingUpload) || Boolean(downloading)} onClick={() => void checkUpload(run)}>
+                {checkingUpload === run.optimizer_run_id ? "Checking upload readiness…" : "Check upload readiness"}</button>}
+              <button type="button" title={recommendedBlocker ?? "Download this run’s saved recommended lineup for DraftKings"}
+                disabled={Boolean(checkingUpload) || Boolean(downloading) || Boolean(recommendedBlocker)} onClick={() => void download(run, "recommended")}>
+                {downloading === `${run.optimizer_run_id}:recommended` ? "Downloading…" : "Download Recommended"}</button>
+              <button type="button" title={allBlocker ?? `Download all ${run.lineup_count} saved lineups for DraftKings`}
+                disabled={Boolean(checkingUpload) || Boolean(downloading) || Boolean(allBlocker)} onClick={() => void download(run, "all")}>
+                {downloading === `${run.optimizer_run_id}:all` ? "Downloading…" : "Download All"}</button>
+              {clearance?.upload_ready && <small>Upload ready pending inactives · check expires {new Date(clearance.valid_until).toLocaleTimeString()}. Final game dressing unconfirmed.</small>}
+              {(allBlocker || recommendedBlocker) && <small>{allBlocker ?? recommendedBlocker}</small>}
+            </>}
+            {downloadFeedback?.runId === run.optimizer_run_id && <p role={downloadFeedback.error ? "alert" : "status"}>{downloadFeedback.message}</p>}
             {run.status === "completed" && run.saved_report_available && ["showdown_gpp_portfolio_v3", "captain_single_lineup_v1"].includes(run.strategy) && <>
               <button type="button" disabled={Boolean(exporting)} onClick={() => void exportPacket(run.optimizer_run_id, "md")}>Export AI Selection Packet</button>
               <button type="button" disabled={Boolean(exporting)} onClick={() => void exportPacket(run.optimizer_run_id, "json")}>Export packet JSON</button>

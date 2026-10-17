@@ -1,3 +1,4 @@
+import { SLATE_OPTIONS, defaultContestFormatForSlate } from "./workspaceContext";
 import { useEffect, useMemo, useState } from "react";
 import {
   createDigitalTwinImpactPreview,
@@ -113,11 +114,22 @@ const THOUGHT_DIRECTIONS: Array<{ value: BeliefDirection; label: string }> = [
 ];
 
 const RAW_THOUGHT_CONTEXTS: Array<{ value: ThoughtCaptureContext; label: string; detail: string }> = [
-  { value: "auto", label: "Auto-sort", detail: "Current slate + player matching" },
+  { value: "auto", label: "Auto-sort", detail: "Memory scope + player matching" },
   { value: "general", label: "General", detail: "Durable playbook thinking" },
-  { value: "slate", label: "This slate", detail: "Weekly thesis and construction" },
+  { value: "slate", label: "Memory slate", detail: "Weekly thesis and construction" },
   { value: "player", label: "One player", detail: "Anchor the full note to a player" },
 ];
+
+const THOUGHT_STUDIO_DRAFT_KEY = "football26.thoughtStudio.draft.v1";
+function storedThoughtStudio() {
+  try {
+    const value = JSON.parse(localStorage.getItem(THOUGHT_STUDIO_DRAFT_KEY) ?? "null");
+    if (!value || !Number.isInteger(value.context?.season) || !Number.isInteger(value.context?.week)
+        || typeof value.context?.slate !== "string" || !["classic", "showdown"].includes(value.context?.contestFormat)
+        || !["cash", "gpp"].includes(value.context?.objective)) return null;
+    return value as { context: {season:number;week:number;slate:string;contestFormat:"classic"|"showdown";objective:"cash"|"gpp"}; thought?:ThoughtDraft; raw?:RawThoughtDraft; editingBeliefId?:string|null; reviewingCandidateId?:string|null };
+  } catch { return null; }
+}
 
 function emptyThoughtDraft(season: number): ThoughtDraft {
   return {
@@ -270,10 +282,13 @@ export function DigitalTwin({
   const [readiness, setReadiness] = useState<SlateReadinessResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [errors, setErrors] = useState<string[]>([]);
-  const [thoughtDraft, setThoughtDraft] = useState<ThoughtDraft>(() => emptyThoughtDraft(season));
-  const [rawThoughtDraft, setRawThoughtDraft] = useState<RawThoughtDraft>(emptyRawThoughtDraft);
-  const [editingBeliefId, setEditingBeliefId] = useState<string | null>(null);
-  const [reviewingCandidateId, setReviewingCandidateId] = useState<string | null>(null);
+  const [thoughtContext, setThoughtContext] = useState(() => storedThoughtStudio()?.context ?? ({ season, week, slate, contestFormat, objective: optimizerObjective }));
+  const [analystTeam, setAnalystTeam] = useState("");
+  const [analystMechanism, setAnalystMechanism] = useState("");
+  const [thoughtDraft, setThoughtDraft] = useState<ThoughtDraft>(() => { const saved=storedThoughtStudio()?.thought; return saved && typeof saved.thought === "string" && THOUGHT_LANES.some(lane => lane.scope === saved.scope) ? saved : emptyThoughtDraft(thoughtContext.season); });
+  const [rawThoughtDraft, setRawThoughtDraft] = useState<RawThoughtDraft>(() => { const saved=storedThoughtStudio()?.raw; return saved && typeof saved.rawText === "string" && RAW_THOUGHT_CONTEXTS.some(item => item.value === saved.context) ? saved : emptyRawThoughtDraft(); });
+  const [editingBeliefId, setEditingBeliefId] = useState<string | null>(() => storedThoughtStudio()?.editingBeliefId ?? null);
+  const [reviewingCandidateId, setReviewingCandidateId] = useState<string | null>(() => storedThoughtStudio()?.reviewingCandidateId ?? null);
   const [thoughtCaptureBusy, setThoughtCaptureBusy] = useState(false);
   const [thoughtCaptureMessage, setThoughtCaptureMessage] = useState<{ tone: "saved" | "error"; text: string } | null>(null);
   const [beliefScopeFilter, setBeliefScopeFilter] = useState<BeliefScope | "all">("all");
@@ -288,6 +303,11 @@ export function DigitalTwin({
   const [variantBusy, setVariantBusy] = useState(false);
   const [variantMessage, setVariantMessage] = useState<{ tone: "saved" | "error"; text: string } | null>(null);
   const reportDate = localDateKey();
+  useEffect(() => {
+    try { localStorage.setItem(THOUGHT_STUDIO_DRAFT_KEY, JSON.stringify({context:thoughtContext, thought:thoughtDraft, raw:rawThoughtDraft, editingBeliefId, reviewingCandidateId})); }
+    catch { /* Draft remains in memory if browser storage is unavailable. */ }
+  }, [thoughtContext, thoughtDraft, rawThoughtDraft, editingBeliefId, reviewingCandidateId]);
+
 
   useEffect(() => {
     let cancelled = false;
@@ -301,9 +321,9 @@ export function DigitalTwin({
         fetchNewsMonitorReport(reportDate),
         fetchNewsMonitorFeedback(reportDate),
         fetchSlateReadiness({ season, week, slate }),
-        fetchDigitalTwinBeliefs({ season, week, slate, include_inactive: true }),
-        fetchDigitalTwinThoughtCaptures({ season, week, slate }),
-        fetchDigitalTwinImpactPreviews({ season, week, slate }),
+        fetchDigitalTwinBeliefs({ include_inactive: true }),
+        fetchDigitalTwinThoughtCaptures({}),
+        fetchDigitalTwinImpactPreviews({}),
         fetchDigitalTwinVariantSets({ season, week, slate, limit: 1 }),
         fetchAgentQuestions({ season, week, slate }),
       ]);
@@ -385,16 +405,6 @@ export function DigitalTwin({
     };
   }, [onProjectionRunChange, projectionRunId, reportDate, season, slate, week]);
 
-  useEffect(() => {
-    if (editingBeliefId || reviewingCandidateId) return;
-    setThoughtDraft((current) => ({
-      ...current,
-      seasonContext: current.scope === "season" ? current.seasonContext : season,
-      retrospective: current.scope === "global" || current.scope === "contest_profile"
-        ? false
-        : (current.scope === "season" ? current.seasonContext : season) < new Date().getFullYear(),
-    }));
-  }, [editingBeliefId, reviewingCandidateId, season]);
 
   const optimizerReady = optimizerStatus?.status === "completed";
   const readinessGateKey = `${contestFormat}_${optimizerObjective}` as SlateReadinessGateKey;
@@ -518,12 +528,12 @@ export function DigitalTwin({
     && (rawThoughtDraft.context !== "player" || rawThoughtDraft.subject.trim().length > 0);
 
   async function refreshBeliefs() {
-    const result = await fetchDigitalTwinBeliefs({ season, week, slate, include_inactive: true });
+    const result = await fetchDigitalTwinBeliefs({ include_inactive: true });
     setBeliefs(result.rows);
   }
 
   async function refreshThoughtCaptures() {
-    const result = await fetchDigitalTwinThoughtCaptures({ season, week, slate });
+    const result = await fetchDigitalTwinThoughtCaptures({});
     setThoughtCaptures(result.rows);
   }
 
@@ -533,20 +543,20 @@ export function DigitalTwin({
     setThoughtCaptureBusy(true);
     setThoughtCaptureMessage(null);
     const scopedToSlate = rawThoughtDraft.context !== "general";
-    const matchedSubject = predictions.find(
+    const matchedSubject = thoughtContext.season === season && thoughtContext.week === week && thoughtContext.slate === slate ? predictions.find(
       (player) => normalizedPlayerName(player.player_display_name) === normalizedPlayerName(rawThoughtDraft.subject),
-    );
+    ) : undefined;
     try {
       const capture = await createDigitalTwinThoughtCapture({
         context_type: rawThoughtDraft.context,
         raw_text: rawThoughtDraft.rawText.trim(),
         subject_label: rawThoughtDraft.context === "player" ? rawThoughtDraft.subject.trim() : null,
         subject_id: rawThoughtDraft.context === "player" ? matchedSubject?.player_id ?? null : null,
-        season: scopedToSlate ? season : null,
-        week: scopedToSlate ? week : null,
-        slate: scopedToSlate ? slate : null,
-        contest_format: scopedToSlate ? contestFormat : null,
-        objective: scopedToSlate ? optimizerObjective : null,
+        season: scopedToSlate ? thoughtContext.season : null,
+        week: scopedToSlate ? thoughtContext.week : null,
+        slate: scopedToSlate ? thoughtContext.slate : null,
+        contest_format: scopedToSlate ? thoughtContext.contestFormat : null,
+        objective: scopedToSlate ? thoughtContext.objective : null,
         source: "thought_inbox",
       });
       setThoughtCaptures((current) => [capture, ...current]);
@@ -568,9 +578,10 @@ export function DigitalTwin({
   function reviewThoughtCandidate(candidate: ThoughtCandidate) {
     setEditingBeliefId(null);
     setReviewingCandidateId(candidate.candidate_id);
+    setThoughtContext(current => ({ season: candidate.season ?? current.season, week: candidate.week ?? current.week, slate: candidate.slate ?? current.slate, contestFormat: candidate.contest_format ?? current.contestFormat, objective: candidate.objective ?? current.objective }));
     setThoughtDraft({
       scope: candidate.scope_type,
-      seasonContext: candidate.season ?? season,
+      seasonContext: candidate.season ?? thoughtContext.season,
       subject: candidate.subject_label ?? "",
       direction: candidate.direction,
       strength: candidate.strength,
@@ -586,7 +597,7 @@ export function DigitalTwin({
 
   function cancelCandidateReview() {
     setReviewingCandidateId(null);
-    setThoughtDraft(emptyThoughtDraft(season));
+    setThoughtDraft(emptyThoughtDraft(thoughtContext.season));
     setBeliefMessage(null);
   }
 
@@ -616,11 +627,11 @@ export function DigitalTwin({
     return {
       scope_type: thoughtDraft.scope,
       subject_label: subjectRequired ? thoughtDraft.subject.trim() : null,
-      season: thoughtDraft.scope === "season" ? thoughtDraft.seasonContext : contextualScope ? season : null,
-      week: weeklyScope ? week : null,
-      slate: weeklyScope ? slate : null,
-      contest_format: contestScope ? contestFormat : null,
-      objective: contestScope ? optimizerObjective : null,
+      season: thoughtDraft.scope === "season" ? thoughtDraft.seasonContext : contextualScope ? thoughtContext.season : null,
+      week: weeklyScope ? thoughtContext.week : null,
+      slate: weeklyScope ? thoughtContext.slate : null,
+      contest_format: contestScope ? thoughtContext.contestFormat : null,
+      objective: contestScope ? thoughtContext.objective : null,
       direction: thoughtDraft.direction,
       strength: thoughtDraft.strength,
       confidence: thoughtDraft.confidence,
@@ -659,7 +670,7 @@ export function DigitalTwin({
       });
       setEditingBeliefId(null);
       setReviewingCandidateId(null);
-      setThoughtDraft(emptyThoughtDraft(season));
+      setThoughtDraft(emptyThoughtDraft(thoughtContext.season));
     } catch (error) {
       setBeliefMessage({
         tone: "error",
@@ -673,9 +684,10 @@ export function DigitalTwin({
   function beginBeliefRevision(belief: HumanBelief) {
     setReviewingCandidateId(null);
     setEditingBeliefId(belief.belief_id);
+    setThoughtContext(current => ({ season: belief.season ?? current.season, week: belief.week ?? current.week, slate: belief.slate ?? current.slate, contestFormat: belief.contest_format === "classic" || belief.contest_format === "showdown" ? belief.contest_format : current.contestFormat, objective: belief.objective === "cash" || belief.objective === "gpp" ? belief.objective : current.objective }));
     setThoughtDraft({
       scope: belief.scope_type,
-      seasonContext: belief.season ?? season,
+      seasonContext: belief.season ?? thoughtContext.season,
       subject: belief.subject_label ?? "",
       direction: belief.direction,
       strength: belief.strength,
@@ -691,7 +703,7 @@ export function DigitalTwin({
 
   function cancelBeliefRevision() {
     setEditingBeliefId(null);
-    setThoughtDraft(emptyThoughtDraft(season));
+    setThoughtDraft(emptyThoughtDraft(thoughtContext.season));
     setBeliefMessage(null);
   }
 
@@ -759,6 +771,22 @@ export function DigitalTwin({
     }
   }
 
+  async function previewAnalystContext(belief: HumanBelief) {
+    if (impactBusy || !analystTeam || !analystMechanism.trim()) return;
+    setImpactBusy(true); setImpactBeliefId(belief.belief_id); setImpactMessage(null);
+    try {
+      const preview = await createDigitalTwinImpactPreview(belief.belief_id, {
+        usage: "analyst_context", target_team: analystTeam.toUpperCase(), conditional_mechanism: analystMechanism.trim(),
+        season: belief.season ?? thoughtContext.season, week: belief.week ?? thoughtContext.week,
+        slate: belief.slate ?? thoughtContext.slate,
+        contest_format: belief.contest_format === "classic" || belief.contest_format === "showdown" ? belief.contest_format : thoughtContext.contestFormat,
+        objective: belief.objective === "cash" || belief.objective === "gpp" ? belief.objective : thoughtContext.objective,
+      });
+      setImpactPreviews(current => [preview, ...current.filter(row => row.preview_id !== preview.preview_id)]);
+    } catch (error) { setImpactMessage({ tone: "error", text: error instanceof Error ? error.message : "Unable to preview Analyst context" }); }
+    finally { setImpactBusy(false); }
+  }
+
   async function decideImpactPreview(preview: BeliefImpactPreview, decision: "approved" | "rejected") {
     if (impactBusy) return;
     setImpactBusy(true);
@@ -769,7 +797,7 @@ export function DigitalTwin({
       setImpactMessage({
         tone: "saved",
         text: decision === "approved"
-          ? "Modifier approved for DT-703. The base model remains unchanged."
+          ? preview.modifier.modifier_type === "analyst_context_review" ? "Analyst evidence review approved. Prepare the matching slate to include this version; no construction effect is authorized." : "Modifier approved for DT-703. The base model remains unchanged."
           : "Preview rejected. No modifier will be used.",
       });
     } catch (error) {
@@ -1034,6 +1062,15 @@ export function DigitalTwin({
           </div>
         </header>
 
+        <fieldset className="thought-memory-context" data-testid="thought-memory-context">
+          <legend>Memory scope · independent of optimization</legend>
+          <p>This scope assigns thoughts. Changing it does not change the optimization slate. Existing drafts keep this scope when optimization changes.</p>
+          <label>Memory season <input aria-label="Memory season" type="number" min="2000" max="2100" value={thoughtContext.season} onChange={e => { const value=Number(e.target.value); setThoughtContext(c => ({...c, season:value})); setThoughtDraft(c => ({...c, seasonContext:value})); }} /></label>
+          <label>Memory week <input aria-label="Memory week" type="number" min="1" max="25" value={thoughtContext.week} onChange={e => setThoughtContext(c => ({...c, week:Number(e.target.value)}))} /></label>
+          <label>Memory slate <select aria-label="Memory slate" value={thoughtContext.slate} onChange={e => setThoughtContext(c => ({...c, slate:e.target.value, contestFormat:defaultContestFormatForSlate(e.target.value)}))}>{[...new Set([...SLATE_OPTIONS, thoughtContext.slate])].map(value => <option key={value}>{value}</option>)}</select></label>
+          <label>Memory format <select aria-label="Memory format" value={thoughtContext.contestFormat} onChange={e => setThoughtContext(c => ({...c, contestFormat:e.target.value as "classic" | "showdown"}))}><option value="classic">Classic</option><option value="showdown">Showdown</option></select></label>
+          <label>Memory objective <select aria-label="Memory objective" value={thoughtContext.objective} onChange={e => setThoughtContext(c => ({...c, objective:e.target.value as "cash" | "gpp"}))}><option value="gpp">GPP</option><option value="cash">Cash</option></select></label>
+        </fieldset>
         <section className="raw-thought-inbox" aria-labelledby="raw-thought-title">
           <form className="raw-thought-capture" onSubmit={captureRawThought}>
             <div className="raw-thought-head">
@@ -1152,9 +1189,9 @@ export function DigitalTwin({
                   onClick={() => setThoughtDraft((current) => ({
                     ...current,
                     scope: lane.scope,
-                    seasonContext: lane.scope === "season" ? Math.max(season, new Date().getFullYear()) : season,
+                    seasonContext: current.seasonContext,
                     subject: "",
-                    retrospective: lane.scope === "global" || lane.scope === "contest_profile" ? false : (lane.scope === "season" ? Math.max(season, new Date().getFullYear()) : season) < new Date().getFullYear(),
+                    retrospective: lane.scope === "global" || lane.scope === "contest_profile" ? false : current.seasonContext < new Date().getFullYear(),
                   }))}
                 >
                   {lane.shortLabel}
@@ -1238,7 +1275,7 @@ export function DigitalTwin({
             </div>
 
             <div className="thought-context-strip">
-              <span>{thoughtDraft.scope === "global" ? "All future slates" : thoughtDraft.scope === "contest_profile" ? `${contestFormat} · ${optimizerObjective}` : thoughtDraft.scope === "season" ? `${thoughtDraft.seasonContext} season outlook` : `${season} · Week ${week} · ${formatSlate(slate)}`}</span>
+              <span>{thoughtDraft.scope === "global" ? "All future slates" : thoughtDraft.scope === "contest_profile" ? `${thoughtContext.contestFormat} · ${thoughtContext.objective}` : thoughtDraft.scope === "season" ? `${thoughtDraft.seasonContext} season outlook` : `${thoughtContext.season} · Week ${thoughtContext.week} · ${formatSlate(thoughtContext.slate)}`}</span>
               <i>{thoughtDraft.direction}</i>
               <b>No model impact</b>
             </div>
@@ -1299,12 +1336,19 @@ export function DigitalTwin({
                       <span>v{belief.belief_version} · {latestImpact?.status ?? belief.impact_status.replaceAll("_", " ")}</span>
                       <div>
                         {belief.status === "active" && !belief.is_expired && (
-                          <button type="button" className="impact-preview-trigger" onClick={() => openImpactPreview(belief)} disabled={impactBusy || (!latestImpact && predictions.length === 0)}>{impactOpen ? "Close impact" : latestImpact ? "View impact" : "Preview impact"}</button>
+                          <button type="button" className="impact-preview-trigger" onClick={() => openImpactPreview(belief)} disabled={impactBusy}>{impactOpen ? "Close impact" : latestImpact ? "View impact" : "Preview impact"}</button>
                         )}
                         <button type="button" onClick={() => beginBeliefRevision(belief)} disabled={beliefSaving}>Revise</button>
                         <button type="button" onClick={() => changeBeliefStatus(belief)} disabled={beliefSaving}>{belief.status === "active" ? "Deactivate" : "Restore"}</button>
                       </div>
                     </div>
+
+                    {belief.status === "active" && !belief.is_expired && <div className="belief-analyst-context">
+                      <p>Analyst evidence review · qualitative only. Team scope is checked against canonical slate games during preparation.</p>
+                      <label>Canonical team <input aria-label="Analyst team" placeholder="PHI" maxLength={3} value={analystTeam} onChange={e => setAnalystTeam(e.target.value.toUpperCase())} /></label>
+                      <label>Conditional mechanism <textarea aria-label="Analyst conditional mechanism" value={analystMechanism} onChange={e => setAnalystMechanism(e.target.value)} placeholder="If this hypothesis holds, what football mechanism could matter? Include alternatives and unknowns." /></label>
+                      <button type="button" disabled={impactBusy || !analystTeam || !analystMechanism.trim()} onClick={() => previewAnalystContext(belief)}>Preview Analyst review</button>
+                    </div>}
 
                     {impactOpen && (
                       <div className="belief-impact-panel">
@@ -1312,7 +1356,7 @@ export function DigitalTwin({
                           <div><span>Guarded simulation</span><strong>Belief consequence preview</strong></div>
                           <b className={latestImpact?.status ?? "draft"}>{latestImpact?.status ?? "Draft"}</b>
                         </div>
-                        <div className="belief-impact-target">
+                        {latestImpact?.modifier.modifier_type !== "analyst_context_review" && <div className="belief-impact-target">
                           <label>
                             <span>Apply this thought to</span>
                             <select value={impactTargetPlayerId} onChange={(event) => setImpactTargetPlayerId(event.target.value)} disabled={impactBusy}>
@@ -1323,16 +1367,16 @@ export function DigitalTwin({
                             </select>
                           </label>
                           <button type="button" onClick={() => generateImpactPreview(belief)} disabled={!impactTargetPlayerId || impactBusy}>{impactBusy ? "Calculating…" : latestImpact ? "Run new preview" : "Calculate impact"}</button>
-                        </div>
+                        </div>}
 
                         {latestImpact ? (
                           <>
                             <div className="belief-impact-summary">
-                              <div><span>Player</span><strong>{latestImpact.target_label}</strong></div>
-                              <div><span>Policy move</span><strong className={latestImpact.adjustment_pct >= 0 ? "positive" : "negative"}>{latestImpact.adjustment_pct >= 0 ? "+" : ""}{(latestImpact.adjustment_pct * 100).toFixed(2)}%</strong></div>
+                              <div><span>{latestImpact.modifier.modifier_type === "analyst_context_review" ? "Review scope" : "Player"}</span><strong>{latestImpact.target_label}</strong></div>
+                              <div><span>{latestImpact.modifier.modifier_type === "analyst_context_review" ? "Construction effect" : "Policy move"}</span><strong className={latestImpact.adjustment_pct >= 0 ? "positive" : "negative"}>{latestImpact.modifier.modifier_type === "analyst_context_review" ? "Qualitative only" : `${latestImpact.adjustment_pct >= 0 ? "+" : ""}${(latestImpact.adjustment_pct * 100).toFixed(2)}%`}</strong></div>
                               <div><span>Model safety</span><strong>Base untouched</strong></div>
                             </div>
-                            <div className="belief-impact-metrics">
+                            {latestImpact.modifier.modifier_type === "analyst_context_review" ? <div><p>{latestImpact.season} · Week {latestImpact.week} · {latestImpact.slate} · {latestImpact.contest_format} · {latestImpact.objective}</p><p>Conditional mechanism: {String(latestImpact.modifier.conditional_mechanism ?? "")}</p></div> : <div className="belief-impact-metrics">
                               {[
                                 ["Mean projection", latestImpact.baseline.projection_mean, latestImpact.proposed.projection_mean, " pts"],
                                 ["Floor · P10", latestImpact.baseline.projection_p10, latestImpact.proposed.projection_p10, " pts"],
@@ -1346,7 +1390,7 @@ export function DigitalTwin({
                                   <p><del>{impactValue(before as number | null, String(suffix))}</del><i>→</i><strong>{impactValue(after as number | null, String(suffix))}</strong></p>
                                 </div>
                               ))}
-                            </div>
+                            </div>}
                             <div className="belief-impact-notices">
                               {latestImpact.notices.map((notice) => <p key={notice}>{notice}</p>)}
                             </div>
@@ -1363,7 +1407,7 @@ export function DigitalTwin({
                               {latestImpact.status === "pending" && (
                                 <div>
                                   <button type="button" className="reject" onClick={() => decideImpactPreview(latestImpact, "rejected")} disabled={impactBusy}>Reject</button>
-                                  <button type="button" className="approve" onClick={() => decideImpactPreview(latestImpact, "approved")} disabled={impactBusy}>Approve modifier</button>
+                                  <button type="button" className="approve" onClick={() => decideImpactPreview(latestImpact, "approved")} disabled={impactBusy}>{latestImpact.modifier.modifier_type === "analyst_context_review" ? "Approve Analyst review" : "Approve modifier"}</button>
                                 </div>
                               )}
                             </div>

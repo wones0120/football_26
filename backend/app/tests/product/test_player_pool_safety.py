@@ -220,3 +220,14 @@ def test_questionable_preference_applies_to_every_profile(
     if enabled:
         assert audit["exclusion_details"][0]["category"] == "user"
         assert audit["exclusion_details"][0]["rule_id"] == "user.preference.questionable_exclusion_v1"
+
+
+def test_named_questionable_research_eligibility_preserves_truth_and_unavailable_gate():
+    rows = [_row('allowed', player_status='Q'), _row('other', player_status='Q'), _row('out', player_status='OUT')]
+    result = _evaluate(rows, exclude_questionable=True, questionable_eligible_player_ids=['allowed','out'])
+    assert set(result.eligible_pool.player_id)=={'allowed'}
+    assert rows[0]['player_status']=='Q'
+    audit = {r['player_id']:r for r in result.audit_rows}
+    assert audit['allowed']['eligibility_assumption']['source_status_unchanged']
+    assert 'user_excluded_questionable' in audit['other']['exclusion_reasons']
+    assert audit['out']['included'] is False

@@ -1263,7 +1263,16 @@ def generate_portfolio(
     elevated_player_max_exposure: float | None = None,
     max_elevated_players_per_lineup: int | None = None,
     elevated_player_ids: Sequence[str] | None = None,
+    analyst_packet: dict | None = None,
+    analyst_candidates_per_thesis: int = 2,
 ) -> GPPOptimizerResult:
+    if analyst_packet is not None:
+        from .analyst_packets import validate
+        errors = validate(analyst_packet)
+        if errors:
+            raise ValueError("Invalid Analyst packet: " + "; ".join(errors))
+        if not 1 <= analyst_candidates_per_thesis <= 10:
+            raise ValueError("Analyst candidate budget must be 1 through 10")
     game_cap = resolve_primary_game_cap(max_lineups_per_primary_game)
     controls = dict(max_lineup_overlap=max_lineup_overlap,
         elevated_player_max_exposure=elevated_player_max_exposure,
@@ -1463,6 +1472,32 @@ def generate_portfolio(
                 excluded_primary_games=blocked_games,
                 solve_audit=audit,
             )
+            if analyst_packet is not None:
+                from .analyst_generation import classic_step_candidates
+                captured_models = []
+                _build_lineup(players, config, remaining, exclude_lineups,
+                    enforce_single_te=enforce_single_te, avoid_dst_opponents=avoid_dst_opponents,
+                    stack_rules=lineup_stack_rules, required_player_ids=required_now,
+                    solver_backend=solver_backend, precomputed_correlation_terms=correlation_terms,
+                    precomputed_format_terms=format_terms, maximum_player_groups=maximum_player_groups,
+                    excluded_primary_games=blocked_games, model_capture=captured_models.append)
+                analyst_report = classic_step_candidates(captured_models[0], players,
+                    packet=analyst_packet, season=season, week=week, slate=slate,
+                    budget=analyst_candidates_per_thesis, decision_at=datetime.now(UTC).isoformat())
+                baseline_score = audit.get("objective_score")
+                selected_ids = {players[i].player_id for i in (lineup_idxs or [])}
+                selected_theses = []
+                for candidate in analyst_report["shadow"]:
+                    candidate_ids = {p["player_master_id"] for p in candidate["roster"]}
+                    candidate["baseline_step_objective"] = baseline_score
+                    candidate["selected_at_step"] = candidate_ids == selected_ids
+                    candidate["selection_outcome"] = ("selected_same_roster" if candidate_ids == selected_ids
+                        else "baseline_objective_preferred" if baseline_score is not None and
+                        candidate["baseline_objective"] <= baseline_score + 1e-7 else "not_selected_no_baseline_solution")
+                    if candidate["selected_at_step"]:
+                        selected_theses.extend(candidate["thesis_ids"])
+                audit["football_analyst"] = analyst_report
+                audit["analyst_thesis_ids"] = sorted(set(selected_theses))
             audit["player_ids"] = [players[i].player_id for i in lineup_idxs] if lineup_idxs else []
             selection_trace.append(audit)
             if not lineup_idxs:
@@ -1647,6 +1682,8 @@ def run_gpp_pipeline(
     elevated_player_max_exposure: float | None = None,
     max_elevated_players_per_lineup: int | None = None,
     elevated_player_ids: Sequence[str] | None = None,
+    analyst_packet: dict | None = None,
+    analyst_candidates_per_thesis: int = 2,
 ) -> GPPOptimizerResult:
     """End-to-end entry point: load slate, build config, generate portfolio, export results."""
     result = generate_portfolio(
@@ -1679,6 +1716,8 @@ def run_gpp_pipeline(
         elevated_player_max_exposure=elevated_player_max_exposure,
         max_elevated_players_per_lineup=max_elevated_players_per_lineup,
         elevated_player_ids=elevated_player_ids,
+        analyst_packet=analyst_packet,
+        analyst_candidates_per_thesis=analyst_candidates_per_thesis,
     )
     if export_dir:
         csv_path = f"{export_dir}/lineups_{slate}_{season}w{week}.csv"

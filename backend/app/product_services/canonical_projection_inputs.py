@@ -1401,6 +1401,7 @@ def prepare_inputs(
     availability_overrides: list[dict] | None = None,
     allow_confirmed_inactive_override: bool = False,
     assume_questionable_out: bool = False,
+    preliminary_exclude_unknown: bool = False,
     injury_statuses: pd.DataFrame | None = None,
     opportunity_allocation_policy: str = "legacy_v1",
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
@@ -1435,6 +1436,7 @@ def prepare_inputs(
     classic_scope = None
     role_excluded_ids = set()
     quarantine_ids = set()
+    preliminary_excluded_ids = set()
     if canonical_context:
         from ..config import get_settings
         classic = not salaries['roster_position'].fillna('').str.upper().eq('CPT').any()
@@ -1456,7 +1458,11 @@ def prepare_inputs(
                 if assessed.get(str(pid)) != 'UNAVAILABLE' and str(pid) not in role_excluded_ids
                 and canonical_context.get(str(pid), {}).get('position') != 'DST'
                 and not classic_scope.get(str(pid), {}).get('role_current')})
-        if missing_status:
+        if missing_status and preliminary_exclude_unknown:
+            if not classic:
+                raise ValueError("Preliminary unknown exclusions require Classic format")
+            preliminary_excluded_ids = set(missing_status)
+        if missing_status and not preliminary_exclude_unknown:
             names = {str(r.player_master_id): str(r.player_name) for r in salaries.itertuples(index=False)}
             raise PlayerContextUnresolved(
                 "Current player availability or depth-chart role needs verification for "
@@ -1517,7 +1523,7 @@ def prepare_inputs(
     # Role exclusions are independent of unavailable salary/status exclusions.
     specialist_mask = salaries["player_master_id"].astype(str).isin(specialist_ids | role_excluded_ids)
     excluded_specialist_salary_row_ids = salaries.loc[specialist_mask, "curated_salary_id"].astype(int).tolist()
-    salaries = salaries.loc[eligibility_mask & ~specialist_mask].copy()
+    salaries = salaries.loc[eligibility_mask & ~specialist_mask & ~salaries["player_master_id"].astype(str).isin(preliminary_excluded_ids)].copy()
     if salaries.empty:
         raise ValueError(
             f"No eligible canonical salaries available for {season} week {week} slate {slate}; "
@@ -1881,6 +1887,8 @@ def prepare_inputs(
     metadata = {
         "source": "public.player_game_feature_matrix",
         "salary_source": "public.curated_salary",
+        "preliminary_research": {"enabled": preliminary_exclude_unknown, "policy": "exclude_unknown_availability_or_role",
+            "exclude_player_ids": sorted(preliminary_excluded_ids), "entry_ready": False},
         "canonical_player_pool": {
             "contract_id": CONTEXT_CONTRACT if canonical_context else None,
             "generation_eligible_player_ids": sorted(salaries["player_master_id"].dropna().astype(str).unique()),
@@ -1941,6 +1949,7 @@ def load_inputs(
     availability_overrides=None, allow_confirmed_inactive_override=False,
     assume_questionable_out=False,
     opportunity_allocation_policy=None,
+    preliminary_exclude_unknown=False,
 ):
     if opportunity_allocation_policy is None:
         from ..config import get_settings
@@ -2110,6 +2119,7 @@ def load_inputs(
         availability_overrides=availability_overrides,
         allow_confirmed_inactive_override=allow_confirmed_inactive_override,
         assume_questionable_out=assume_questionable_out,
+        preliminary_exclude_unknown=preliminary_exclude_unknown,
         injury_statuses=injury_statuses,
         opportunity_allocation_policy=opportunity_allocation_policy,
     )
@@ -2132,4 +2142,19 @@ def load_inputs(
             for row in injury_statuses.itertuples(index=False)
             if str(row.player_id) in used_ids
         ]
+    from .dst_feature_support import operational_support
+    metadata["dst_feature_support"] = operational_support(train, target, cutoff=cutoff)
+    return train, target, metadata
+
+
+def load_dst_candidate_inputs(engine, *, dst_candidate_context, dst_label_dataset, **kwargs):
+    """Explicit inactive adapter; live load_inputs and serving defaults are unchanged."""
+    from .dst_feature_pipeline import prepare_candidate_frames
+    from .dst_training_labels import select_corrected_dst_labels
+    train, target, metadata = load_inputs(engine, **kwargs)
+    train, label_audit = select_corrected_dst_labels(
+        train, dst_label_dataset, target_season=kwargs["season"], target_week=kwargs["week"])
+    train, target, audit = prepare_candidate_frames(train, target, dst_candidate_context)
+    metadata = {**metadata, "dst_candidate_features": audit,
+                "dst_candidate_labels": label_audit, "live_enabled": False}
     return train, target, metadata

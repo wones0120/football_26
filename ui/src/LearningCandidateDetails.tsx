@@ -33,8 +33,10 @@ export function LearningCandidateDetails({ report }: { report: SlateLearningRepo
       {error && <p role="alert">{error}</p>}
       {page && <>
         <p>{page.total ? `${page.offset + 1}–${page.offset + page.rows.length} of ${page.total}` : "No complete saved candidate pool for this run."}</p>
-        <div className="scroll-table"><table className="compact-table"><thead><tr><th>Pregame rank</th><th>Projected mean</th><th>Actual points</th><th>Selected</th><th>Entered</th></tr></thead><tbody>
+        <div className="scroll-table"><table className="compact-table"><thead><tr><th>Candidate ID</th><th>Saved lineup number</th><th>Selector rank</th><th>Projected mean</th><th>Actual points</th><th>Selected</th><th>Entered</th></tr></thead><tbody>
           {page.rows.map((row, index) => <tr key={String(row.pregame.candidate_id ?? index)}>
+            <td>{String(row.pregame.candidate_id ?? "—")}</td>
+            <td>{Array.isArray(row.pregame.saved_lineups) ? row.pregame.saved_lineups.map((saved: Record<string, unknown>) => String(saved.saved_lineup_number)).join(", ") || "—" : "—"}</td>
             <td>{String(row.pregame.selector_rank ?? "—")}</td><td>{typeof row.pregame.mean === "number" ? row.pregame.mean.toFixed(2) : "—"}</td>
             <td>{typeof row.postgame.actual_points === "number" ? row.postgame.actual_points.toFixed(2) : "Unscored"}</td><td>{row.postgame.selected ? "Yes" : "No"}</td><td>{row.postgame.entered ? "Yes" : "No"}</td>
           </tr>)}

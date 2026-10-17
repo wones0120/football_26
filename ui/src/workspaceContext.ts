@@ -40,6 +40,7 @@ export const SLATE_OPTIONS = [
   "THURSDAY_NIGHT",
   "FRIDAY_NIGHT",
   "SATURDAY_NIGHT",
+  "SUNDAY_MORNING",
   "SUNDAY_MAIN",
   "SUNDAY_EARLY",
   "SUNDAY_LATE",
@@ -51,6 +52,11 @@ export const SLATE_OPTIONS = [
 
 export function normalizeSlateId(slate: string) {
   return slate.trim().replaceAll(" ", "_").toUpperCase();
+}
+
+export function defaultContestFormatForSlate(slate: string): "classic" | "showdown" {
+  return ["THURSDAY_NIGHT", "SUNDAY_MORNING", "SUNDAY_NIGHT", "MONDAY_NIGHT"].includes(normalizeSlateId(slate))
+    ? "showdown" : "classic";
 }
 
 // Native/imported slates may have more than one game offering on the same day.

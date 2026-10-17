@@ -1,5 +1,77 @@
 # Post-slate learning reports
 
+## Weekly Results
+
+Open **Learning → Weekly Results**, enter the **Results username**, and select
+**Results week**. Learning has its own **Season**, **Week** and **Review slate**
+controls, persisted as `football-26-learning-context` in browser storage. On first
+visit it starts with the active season/week and **All slates**; subsequent review
+changes do not alter the app's active context, selected runs or optimizer format.
+Both Learning subtabs share this review context. **All slates** shows whole-week
+financial totals; a specific slate shows its existing totals, contests and entries
+without averaging ROIs or hiding missing-evidence warnings. Week-wide warnings
+are labeled separately. Available weeks come from that user's imported standings.
+**Refresh results** performs a read only: it does not ingest files, refresh public stats, rebuild reports, change
+assignments or run an optimizer. **Review & Imports** keeps the existing import
+and learning-review workflow.
+
+Review report details and shadow comparisons follow **Review slate**. Building
+or downloading a **Week Learning Report** still covers the whole review week;
+its summary and download are labeled as such when details are filtered. Folder
+scans use the review season/week as defaults; verified per-file scopes remain
+authoritative and the slate filter never assigns a file to a contest. Annual
+entry history uses the review season and remains explicitly calendar-year scoped.
+
+`GET /api/learning/results/weekly?season=2026&week=5&entry_user=wones0120`
+joins current normalized standings to deduplicated entry history by native
+contest and entry IDs, and reads the latest saved review per slate. It creates
+no records and needs no schema changes. Financial scope is imported standings
+for the selected user, not proven account-wide coverage; history entries without
+matching standings are outside these totals. Source hashes appear in entry
+drilldowns. Saved learning warnings retain their report ID/date and remain
+separate from current financial coverage, including missing intent and ambiguous
+origin warnings. Entries absent from a saved review are explicitly flagged.
+
+ROI is `(cash winnings - recorded fees) / recorded fees`, using summed amounts
+rather than averaging entry or slate ROIs. Cash rate is the fraction of entries
+with positive cash winnings; ticket prizes do not count as cash. Known zero-fee
+entries remain included and ticket prizes are reported separately. A zero fee
+does not establish ticket funding. Zero-fee ROI is N/A. Refunds, credits, actual
+funding sources and settlement state remain unmodeled; deposits and withdrawals
+are outside contest performance.
+
+Missing history winnings stay unknown; payout tiers are not substituted for
+realized personal winnings. Stored contest fees can supply known fees when
+history is missing. Conflicting history versions withhold the entry's financial
+amounts. Incomplete weeks show known fees, known winnings and the net subtotal
+for entries with both amounts, while complete-week net/ROI remain unknown.
+Cash rate remains unknown until every entry's cash payout is known. Empty weeks
+remain unknown, and each slate/contest shows its own evidence coverage. Changing
+week/user clears the prior result and ignores late responses from the old scope.
+
+Browser validation: after `npm --prefix ui run build`, run
+`PLAYWRIGHT_MODULE=/path/to/playwright node ui/tests/weeklyResults.e2e.mjs`
+with installed Chrome and Playwright. The fixture intercepts every API request,
+checks desktop/mobile and GET-only behavior, and writes screenshots to a fresh
+temporary directory. No live data is changed.
+
+Learning entry details and downloaded reports show **Intended / Exported / Observed evidence**.
+Intended means an explicit contest/entry assignment; its stored timestamp does not
+establish original submission timing. Exported includes portfolio artifacts and
+existing direct-download ledger records, with artifact IDs, recorded times, export
+rows and saved-roster links where available. A portfolio-only or run-only link is
+labeled; direct roster equality does not create an entry-specific export link.
+Observed means the imported standings entry and canonical roster, keyed by contest
+and entry ID. FLEX reordering can preserve roster equality while exact slots differ;
+Captain differences prevent equality. Multiple matching saved lineups are listed,
+including matches across optimizer runs; a newest run is not selected as proven origin.
+Missing assignment and lineage warnings remain. Exports, roster equality and standings
+do not prove original submission intent or timing, and a saved-versus-entered score
+difference alone is not an execution error. Newly built reports freeze this evidence
+and include it in entry drilldowns and hashes. Older immutable reports stay unchanged;
+their existing portfolio exports remain readable, with unavailable details explicit.
+No migration, submission workflow or historical backfill is required.
+
 For the proposed automatic outcome-registration, settlement, and controlled model-improvement workflow, see [Automated decision, quality control, and learning](product/automated_decision_quality_workflow.md). That architecture is not yet implemented; the behavior below describes the existing report/import workflow.
 
 For preserved Showdown observations, open **Research Lab → Showdown Research**.
@@ -57,7 +129,7 @@ apply.
 An analysis failure is shown separately and never changes a successful result
 import into a failed import.
 
-Builder `2026-10-05.3` produces compact v2 slate and weekly reports. It first
+Builder `2026-10-13.1` produces compact v2 slate and weekly reports. It first
 loads run metadata, then decodes the required saved candidate pools one run at a
 time. Decision snapshots, full controls, and evaluated candidates are stored as
 immutable content-addressed evidence by migration `0046_compact_learning_evidence.sql`.
@@ -341,3 +413,72 @@ outcomes. See `docs/HUMAN_OUTCOME_LEARNING.md` for timing and scoring rules.
 
 Migration `0032_slate_learning_reports.sql` creates
 `target.slate_learning_report` and refreshes the governed target-schema contract.
+
+
+## Evaluation evidence and recovery
+
+Apply `0050_evaluation_record.sql` before running the updated services. The
+append-only `target.evaluation_record` ledger stores content-addressed evidence;
+updates and deletes are rejected. Existing raw observations and learning reports
+remain intact. This changes evidence capture and evaluation, not projections,
+optimizer rules, or selection weights.
+
+Completed optimizer runs automatically retain their full original candidate pool,
+configuration, projection rows from the original projection run, saved lineups,
+cutoff, and available saved kickoff evidence. Sequential Classic runs explicitly
+save the accepted portfolio as their complete generated pool; recovery does not
+invent rejected candidates. A missing original pool or timing proof remains
+unavailable. Historical naive UTC database timestamps are retained; an original
+explicitly zoned frozen-input timestamp can establish prelock timing. New writes
+preserve UTC timezone information.
+
+Identifiers have separate meanings:
+
+- **Candidate ID**: `<optimizer_run_id>:candidate:<ordinal>`, scoped to the original
+  pool. Original source IDs and Showdown AI review IDs are retained as mappings.
+- **Lineup ID**: the persisted saved lineup identifier. **Saved lineup number** is
+  its display number within that run; multiple candidate variants can map to it.
+- **Selector rank**: only the explicitly saved selector rank. Generation order is
+  not silently converted into rank.
+
+App output, existing Showdown review decisions, portfolio entry assignments,
+lineup downloads, portfolio exports, and imported submissions are recorded at
+those actions. Export records include exact content and roster mappings; download
+or export alone does not confirm submission. Standings imports retain a submission
+snapshot and verify season/week against native contest-ID account history plus
+saved schedule evidence when available. Conflicts are rejected, and absent date
+proof is marked missing.
+
+Additional explicit app/AI/user recommendations can be recorded with
+`POST /api/optimizer/results/{job_id}/evaluation-recommendations`, using `actor`,
+`source_reference`, and `candidate_ids`. Optional `assignments` require a
+recommended candidate plus native `contest_id` and `entry_id`; any supplied
+`lineup_id` must match. Repeated identical requests reuse the content-addressed
+record. Server recording time is authoritative. Recommendation assignments
+received after the saved lock, or without lock proof, cannot establish prelock
+execution intent. Read complete evidence through
+`GET /api/evaluation-records/{record_id}`; compact learning reports link ledger
+record IDs rather than embedding all candidate inputs.
+
+Execution diagnostics compare the recorded intended roster with the submitted
+roster for the **same contest and entry**, using canonical identity and Captain
+slot. Without intent, execution is unassessable. A higher score in another saved
+lineup is a **hindsight gap**, evaluated separately for each contest. An exact
+submitted-roster match to an unsaved candidate proves candidate lineage only;
+it does not create a saved lineup, export, or recommendation.
+
+For evidence-only historical repair, use:
+
+```sh
+.venv/bin/python scripts/product/repair_evaluation_records.py \
+  --season 2026 --week 5 --entry-user wones0120 \
+  --output artifacts/week5_evaluation_repair --apply
+```
+
+Omit `--apply` for a dry run. `--reviews PATH` optionally accepts an operator-reviewed
+JSON list linking retained conversation files to unique run prefixes and saved
+lineup numbers. Conditional reviews remain conditional. The command preserves
+source archives, appends identity resolutions, corrects proven contest scope,
+recovers original candidate lineage and regenerates reports from saved actuals.
+It does not rerun optimization or fetch current projections. Missing final intent,
+export receipts, account fees/winnings, or timing evidence remain explicit.

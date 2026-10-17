@@ -206,6 +206,10 @@ class PortfolioService:
                 VALUES (:assignment_id, :portfolio_id, :template_id, :template_row_number,
                         :entry_id, :contest_id, :lineup_id, 'assigned')
             """), [asdict(row) for row in assignments])
+            from .evaluation_record import append_record
+            append_record(conn, "intended_entries", {"portfolio_id": portfolio_id,
+                "assignments": [asdict(row) for row in assignments]}, run_id=optimizer_run_id,
+                source={"table": "target.contest_entry_assignment"})
 
         return PortfolioResult(
             portfolio_id=portfolio_id,

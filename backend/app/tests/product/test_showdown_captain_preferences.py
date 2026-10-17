@@ -180,3 +180,30 @@ def test_minimum_salary_accepts_classic_and_rejects_locked_conflicts():
     with pytest.raises(ValueError,match='minimum player salary'):
         optimizer.run_job(season=2026,week=4,slate='THURSDAY_NIGHT',strategy='showdown_cash_baseline_v1',
             contest_format='showdown',objective='cash',params={'num_lineups':1,'minimum_player_salary':1700,'locked_captain_player_id':'p4'})
+
+
+def test_named_captain_position_exception_is_narrow_and_preserves_other_filters():
+    from backend.app.product_services.showdown_captain_shortlist import build_captain_shortlist
+    from backend.app.product_services.showdown_captain_preferences import captain_preference_exclusions
+    players = pool()
+    params = {'captain_positions':['WR','RB'], 'captain_position_exception_ids':['p0'], 'analyst_strategy':'MERGED_SCENARIOS'}
+    framed, report = build_captain_shortlist(players, params=params, flex_only_ids=set())
+    assert framed.loc[framed.player_id=='p0','showdown_captain_shortlisted'].all()
+    assert not captain_preference_exclusions(params, 'QB', 'p0')
+    assert captain_preference_exclusions(params, 'QB', 'p1')
+    _, blocked = build_captain_shortlist(players, params={**params,'no_qb_captain':True}, flex_only_ids=set())
+    assert 'p0' not in {row['player_id'] for row in blocked['shortlist']}
+    lineup = OptimizerService.__new__(OptimizerService)._solve_lineup(players, contest_type='captain', stack_params=params, locked_captain_player_id='p0', include_control_comparison=False)
+    assert lineup and next(r for r in lineup if r['roster_position']=='CPT')['player_id']=='p0'
+    valid, reason = OptimizerService._validate_showdown_lineups([lineup], requested_lineups=1, max_exposure=1, captain_positions=['WR','RB'], captain_position_exception_ids={'p0'})
+    assert valid, reason
+
+
+def test_named_exception_flows_from_run_to_solver_and_saved_audit():
+    optimizer=service()
+    job=optimizer.run_job(season=2026,week=4,slate='THURSDAY_NIGHT',strategy='showdown_gpp_portfolio_v3',contest_format='showdown',objective='gpp',params={'num_lineups':1,'captain_positions':['WR','RB'],'captain_position_exception_ids':['p0'],'locked_captain_player_id':'p0'})
+    assert job.status=='completed',job.message
+    assert next(r for r in job.results[0] if r['roster_position']=='CPT')['player_id']=='p0'
+    audit=next(r for r in job.params['strategy_runtime']['player_pool']['rows'] if r['player_id']=='p0')
+    assert not audit['captain_user_preference_exclusions']
+    assert job.results[0][0]['showdown_captain_preferences']['named_position_exception_ids']==['p0']

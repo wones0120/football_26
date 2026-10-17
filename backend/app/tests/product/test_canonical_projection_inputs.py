@@ -1191,3 +1191,28 @@ def test_canonical_prediction_runs_without_any_legacy_tables(tmp_path):
     assert result.records[0].predicted_p10 <= result.records[0].predicted_p50 <= result.records[0].predicted_p90
     assert persist.call_args.kwargs["source_versions"]["source"] == "public.player_game_feature_matrix"
     assert persist.call_args.kwargs["train_df"]["season"].tolist() == [2025]
+
+
+def test_explicit_preliminary_unknown_exclusion_preserves_facts_training_and_known_player_features():
+    from copy import deepcopy
+    from backend.app.product_services.showdown_player_context import CONTEXT_CONTRACT, PlayerContextUnresolved
+    matrix, salaries = inputs()
+    matrix = pd.concat([matrix, matrix.assign(player_master_id="canonical-2", player_id="source-2", player_game_feature_matrix_id=matrix.player_game_feature_matrix_id + 10)], ignore_index=True)
+    salaries = salaries[salaries.roster_position == 'FLEX'].copy()
+    known = salaries.iloc[0].to_dict()
+    known.update(player_master_id='canonical-2', curated_salary_id=3, source_player_key='dk-known', player_name='Known Player')
+    salaries = pd.concat([salaries, pd.DataFrame([known])],ignore_index=True)
+    context = pd.DataFrame([{'player_master_id':pid,'position':'WR','evidence_json':{'canonical_context_contract':CONTEXT_CONTRACT,'availability_state':state}}
+                           for pid,state in [('canonical-1','UNKNOWN'),('canonical-2','AVAILABLE')]])
+    before=deepcopy(context.to_dict('records'))
+    with patch('backend.app.product_services.canonical_projection_inputs.assess_availability',side_effect=lambda row,**kw:(row['availability_state'],[])), patch('backend.app.product_services.classic_player_pool.assess_pool_player',return_value={'role_exclusion_policy':None,'quarantine':False,'role_current':True}):
+        with pytest.raises(PlayerContextUnresolved):prepare(matrix,salaries,pregame_context=context)
+        train,target,audit=prepare(matrix,salaries,pregame_context=context,preliminary_exclude_unknown=True)
+        baseline_train,baseline,_=prepare(matrix,salaries.iloc[[1]],pregame_context=context.iloc[[1]])
+    assert target.player_id.tolist()==['canonical-2']
+    assert audit['preliminary_research']['exclude_player_ids']==['canonical-1']
+    assert audit['preliminary_research']['entry_ready'] is False
+    assert context.to_dict('records')==before
+    pd.testing.assert_frame_equal(train,baseline_train)
+    pd.testing.assert_frame_equal(target[FEATURE_COLUMNS],baseline[FEATURE_COLUMNS],check_dtype=False)
+    assert audit['canonical_player_pool']['explicitly_unavailable_player_ids']==[]

@@ -95,6 +95,20 @@ class DraftKingsBatchImportTests(unittest.TestCase):
             )
         self.assertEqual(resolved, (2026, 2, "SUNDAY_NIGHT", "123"))
 
+    def test_weekly_import_recognizes_sunday_morning_folder(self):
+        service = object.__new__(DraftKingsBatchImportService)
+        service.engine = MagicMock()
+        rows = service.engine.connect.return_value.__enter__.return_value.execute.return_value.mappings.return_value.all
+        rows.return_value = []
+        with patch("backend.app.product_services.batch_import.inspect") as inspect_engine:
+            inspect_engine.return_value.has_table.return_value = False
+            resolved = service._weekly_contest_scope(
+                Path("/tmp/NFL/SUNDAY_MORNING/contest-standings-123.zip"),
+                root=Path("/tmp/NFL"), season=2026, week=5,
+                source_file_id="morning-file",
+            )
+        self.assertEqual(resolved, (2026, 5, "SUNDAY_MORNING", "123"))
+
     def test_salary_player_pool_identifies_unique_slate_from_zip(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -121,6 +135,43 @@ class DraftKingsBatchImportTests(unittest.TestCase):
             self.assertEqual(slate, "SUNDAY_MAIN")
             self.assertIn("all 12 contest players", evidence)
             self.assertIn("DKSalaries_2026_3_SUNDAY_MAIN.csv", evidence)
+
+            (root / "DKSalaries_2026_3_THURSDAY_NIGHT.csv").write_text(
+                "Name\n" + "\n".join(players) + "\n",
+                encoding="utf-8",
+            )
+            ambiguous_slate, reason = DraftKingsBatchImportService._salary_slate_evidence(
+                contest, root, season=2026, week=3,
+            )
+            self.assertIsNone(ambiguous_slate)
+            self.assertIn("multiple salary slates", reason)
+
+    def test_custom_salary_file_participates_in_scope_evidence(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            players = [f"Player {index}" for index in range(12)]
+            contest = root / "contest-standings-123.zip"
+            with ZipFile(contest, "w") as archive:
+                archive.writestr(
+                    "contest-standings-123.csv",
+                    "Player\n" + "\n".join(players) + "\n",
+                )
+            (root / "DKSalaries_2026_3_SUNDAY_LATE_SF_SEA.csv").write_text(
+                "Name\n" + "\n".join(players + ["Another Player"]) + "\n",
+                encoding="utf-8",
+            )
+            (root / "DKSalaries_2026_3_THURSDAY_NIGHT.csv").write_text(
+                "Name\n" + "\n".join(players[:5]) + "\n",
+                encoding="utf-8",
+            )
+
+            slate, evidence = DraftKingsBatchImportService._salary_slate_evidence(
+                contest, root, season=2026, week=3,
+            )
+
+            self.assertEqual(slate, "SUNDAY_LATE_SF_SEA")
+            self.assertIn("all 12 contest players", evidence)
+            self.assertIn("DKSalaries_2026_3_SUNDAY_LATE_SF_SEA.csv", evidence)
 
             (root / "DKSalaries_2026_3_THURSDAY_NIGHT.csv").write_text(
                 "Name\n" + "\n".join(players) + "\n",
@@ -225,6 +276,44 @@ class DraftKingsBatchImportTests(unittest.TestCase):
             service._weekly_contest_scope.assert_called_once_with(
                 selected_path, root=root, season=2026, week=3,
                 source_file_id="dk_file_123", selected_slate="SUNDAY_MAIN",
+            )
+            self.assertTrue(other_path.exists())
+            self.assertFalse(selected_path.exists())
+
+    def test_selected_weekly_import_accepts_custom_slate(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            selected_path = root / "contest-standings-123.csv"
+            other_path = root / "contest-standings-456.csv"
+            content = "Rank,EntryId,Player,Roster Position,%Drafted\n1,10,Player A,QB,10%\n"
+            selected_path.write_text(content, encoding="utf-8")
+            other_path.write_text(content, encoding="utf-8")
+            service = object.__new__(DraftKingsBatchImportService)
+            service.engine = MagicMock()
+            service.ownership = MagicMock()
+            service._ensure_schema = MagicMock()
+            service.get_batch_result = MagicMock(return_value=None)
+            service._already_imported = MagicMock(return_value=False)
+            service._register_source_file = MagicMock()
+            service._mark_staged_contest_resolved = MagicMock()
+            service._weekly_contest_scope = MagicMock(return_value=(2026, 3, "SUNDAY_LATE_SF_SEA", "123"))
+            service.ownership._source_file_info.return_value = {"source_file_id": "dk_file_123"}
+            service.ownership.load_contest_standings.return_value = MagicMock(
+                target_persisted=True, rows_written=1, contest_id="123", message="Loaded contest"
+            )
+
+            result = service.import_directory(
+                str(root), season=2026, week=3, slate="UNRESOLVED", recursive=True,
+                weekly_contests_only=True, selected_files=[SelectedWeeklyContestFile(
+                    str(selected_path), "dk_file_123", 2026, 3, "SUNDAY_LATE_SF_SEA",
+                )],
+            )
+
+            self.assertEqual(result.discovered, 1)
+            self.assertEqual(result.imported, 1)
+            service._weekly_contest_scope.assert_called_once_with(
+                selected_path, root=root, season=2026, week=3,
+                source_file_id="dk_file_123", selected_slate="SUNDAY_LATE_SF_SEA",
             )
             self.assertTrue(other_path.exists())
             self.assertFalse(selected_path.exists())
@@ -524,3 +613,21 @@ class DraftKingsBatchImportTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_custom_contest_scope_folder_does_not_become_parent_slate():
+    service = object.__new__(DraftKingsBatchImportService)
+    service.engine = MagicMock()
+    service.engine.connect.return_value.__enter__.return_value.execute.return_value.mappings.return_value.all.return_value = []
+    with patch('backend.app.product_services.batch_import.inspect') as inspector:
+        inspector.return_value.has_table.return_value = False
+        assert service._weekly_contest_scope(
+            Path('/tmp/NFL/SUNDAY_LATE_SF_SEA/contest-standings-123.csv'), root=Path('/tmp/NFL'),
+            season=2026, week=5, source_file_id='file', selected_slate='SUNDAY_LATE_SF_SEA',
+        ) == (2026, 5, 'SUNDAY_LATE_SF_SEA', '123')
+
+
+def test_contest_slate_validation_rejects_placeholders_and_unsafe_names():
+    for slate in ['UNRESOLVED', 'UNKNOWN', 'DEFAULT', '../slate', '', 'X' * 65]:
+        assert not DraftKingsBatchImportService._valid_contest_slate(slate)
+    assert DraftKingsBatchImportService._valid_contest_slate('sunday_late_sf_sea')

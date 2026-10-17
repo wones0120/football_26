@@ -1,0 +1,29 @@
+.weekly-result-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.weekly-result-metrics > div {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--shell-line-strong);
+  border-radius: 8px;
+}
+
+.weekly-result-metrics dt { font-size: 0.75rem; }
+.weekly-result-metrics dd { margin: 6px 0 0; font-weight: 750; overflow-wrap: anywhere; }
+.weekly-results .scroll-table { max-height: none; }
+.weekly-results table { min-width: 720px; table-layout: auto; }
+.weekly-results th, .weekly-results td { white-space: nowrap; }
+.weekly-results th:first-child, .weekly-results td:first-child {
+  min-width: 110px;
+  max-width: 360px;
+  white-space: normal;
+  overflow-wrap: normal;
+}
+.learning-workspace [role="tab"][aria-selected="true"] {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}

@@ -153,11 +153,25 @@ start_submitted_backend() {
   exit 1
 }
 
+stop_extra_repo_workers() {
+  # launchd restart does not stop manually launched consumers from old sessions.
+  # Leave the managed worker to launchd; gracefully stop only this repo's extras.
+  local managed_worker_pid pid
+  managed_worker_pid="$(launchctl list | awk '$3 == "com.football26.worker" { print $1 }')"
+  while IFS= read -r pid; do
+    [[ -n "${pid}" && "${pid}" != "${managed_worker_pid}" ]] || continue
+    if is_repo_process "${pid}" "backend.app.worker"; then
+      stop_pid "${pid}" "extra football_26 worker"
+    fi
+  done < <(pgrep -f "backend\\.app\\.worker" 2>/dev/null || true)
+}
+
 restart_launchd_backend() {
   local scope="${1:-backend}"
   launchctl setenv PYTHONHASHSEED 0
   local restart_status=0
   if [[ "${scope}" != "api" ]]; then
+    stop_extra_repo_workers
     launchctl kickstart -k "gui/$(id -u)/com.football26.worker" || restart_status=$?
   fi
   launchctl kickstart -k "gui/$(id -u)/com.football26.api" || restart_status=$?

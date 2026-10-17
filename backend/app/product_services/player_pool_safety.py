@@ -400,6 +400,7 @@ def evaluate_player_pool_safety(
     context_max_age: timedelta = DEFAULT_CONTEXT_MAX_AGE,
     user_excluded_player_ids: Iterable[str] = (),
     exclude_questionable: bool = False,
+    questionable_eligible_player_ids: Iterable[str] = (),
 ) -> PlayerPoolSafetyResult:
     """Apply all Phase 2 hard gates and retain warning/explanation evidence."""
 
@@ -440,6 +441,7 @@ def evaluate_player_pool_safety(
         if str(team).strip()
     }
     excluded_ids = {str(player_id).strip() for player_id in user_excluded_player_ids}
+    questionable_exceptions = {str(pid) for pid in questionable_eligible_player_ids}
     rows = frame.to_dict(orient="records")
     canonical_ids = [_canonical_player_id(row) for row in rows]
     duplicate_ids = {
@@ -571,7 +573,7 @@ def evaluate_player_pool_safety(
             },
             "user": {
                 "excluded": bool(player_id and player_id in excluded_ids),
-                "exclude_questionable": exclude_questionable and (
+                "exclude_questionable": exclude_questionable and player_id not in questionable_exceptions and (
                     salary_status in {"Q", "QUESTIONABLE"}
                     or injury_status in {"Q", "QUESTIONABLE"}
                 ),
@@ -606,6 +608,8 @@ def evaluate_player_pool_safety(
                 "opponent_team": opponent,
                 "identity_resolved": identity_resolved,
                 "included": not evaluation.excluded,
+                "questionable_eligibility_exception": player_id in questionable_exceptions,
+                "eligibility_assumption": ({"reason_code": "user_named_questionable_research_eligibility", "category": "user_preference", "scope": "research_selection", "source_status_unchanged": True, "other_safety_gates_preserved": True} if player_id in questionable_exceptions else None),
                 "exclusion_reasons": list(evaluation.exclusion_reasons),
                 "exclusion_details": exclusions,
                 "warnings": warnings,

@@ -14,7 +14,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from Database.dst import normalize_team
-from Database.player_identity import normalize_player_name, normalize_position
+from Database.player_identity import normalize_player_name, normalize_position, strip_name_suffix
 from .pregame_context import PregameContextService
 from .showdown_player_context import PlayerContextUnresolved
 from ..services.source_capture import SourceCaptureService
@@ -117,11 +117,11 @@ def resolve_official_player(row, salaries, aliases):
               if a["source_system"] == SOURCE and a["source_key"] == row["source_key"]}
     if linked:
         return (next(iter(linked)), "source_native_id") if len(linked) == 1 and linked <= candidates else (None, "identity_conflict")
-    name = normalize_player_name(row["player_name"])
+    name = strip_name_suffix(row["player_name"])
     matching = {str(s["player_id"]) for s in salaries if str(s["player_id"]) in candidates
-                and name in {normalize_player_name(s["player_name"]), normalize_player_name(s["full_name"])}}
+                and name in {strip_name_suffix(s["player_name"]), strip_name_suffix(s["full_name"])}}
     matching.update(str(a["player_master_id"]) for a in aliases if str(a["player_master_id"]) in candidates
-                    and normalize_player_name(a["alias_name"]) == name)
+                    and strip_name_suffix(a["alias_name"]) == name)
     return (next(iter(matching)), "team_position_normalized_name") if len(matching) == 1 else (None, "ambiguous" if matching else "no_match")
 
 

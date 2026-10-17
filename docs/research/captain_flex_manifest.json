@@ -1,0 +1,34 @@
+{
+  "description": "Fixed research cohort; policy and priors are retrospective. No promotion or forecast changes.",
+  "slates": [
+    {
+      "label": "2026 W4 Thursday PIT-CLE",
+      "season": 2026, "week": 4, "slate": "THURSDAY_NIGHT",
+      "kind": "common_universe",
+      "source": "artifacts/week4_showdown_production_research_parity/20261001T153239Z/common_scored_universe.json",
+      "pool": "artifacts/week4_showdown_production_research_parity/20261001T153239Z/production_input_freeze.json",
+      "job": "artifacts/week4_showdown_production_research_parity/20261001T153239Z/production_job.json",
+      "kickoff": "2026-10-02T00:15:00+00:00",
+      "actuals": "artifacts/ai_showdown_selection_packet/policy_v2/THURSDAY_NIGHT-actuals.json",
+      "exposure_rates": {"starting_qb": 1.0, "core": 0.8, "cheap_punt": 0.4}
+    },
+    {
+      "label": "2026 W4 Monday ATL-NO",
+      "season": 2026, "week": 4, "slate": "MONDAY_NIGHT",
+      "kind": "saved_report",
+      "source": "artifacts/showdown_scenario_selection/reference/monday-week4.json",
+      "kickoff": "2026-10-06T00:15:00+00:00",
+      "actuals": "artifacts/captain_flex_research/monday-actuals-a8a0c0342857f504b0ec3ca403b1fa154f09b3c06f4b685c8899a45aed6cd5b8.json",
+      "exposure_rates": {"starting_qb": 1.0, "core": 0.8, "cheap_punt": 0.4}
+    },
+    {
+      "label": "2026 W4 Sunday DET-CAR (retrospective)",
+      "season": 2026, "week": 4, "slate": "SUNDAY_NIGHT",
+      "kind": "saved_report",
+      "source": "artifacts/showdown_scenario_selection/reference/sunday-week4.json",
+      "kickoff": "2026-10-05T00:20:00+00:00",
+      "actuals": "artifacts/ai_showdown_selection_packet/policy_v2/SUNDAY_NIGHT-actuals.json",
+      "exposure_rates": {"starting_qb": 1.0, "core": 0.8, "cheap_punt": 0.4}
+    }
+  ]
+}

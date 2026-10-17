@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Capture current nflverse schedule lines as immutable pre-lock market observations."""
+"""Capture ESPN sportsbook or nflverse schedule lines as immutable market observations."""
 
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from backend.app.product_services.espn_markets import fetch_scoreboard, parse_scoreboard, scoreboard_url
 from backend.app.db import SessionLocal
 from backend.app.models import IngestRun, RawNflSchedule
 from backend.app.product_services.market_snapshots import parse_nflverse_schedules
@@ -33,18 +34,20 @@ def main() -> int:
     parser.add_argument("--week", type=int, required=True)
     parser.add_argument("--slate", default="all-games")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--provider", choices=("nflverse", "espn"), default="nflverse")
     args = parser.parse_args()
 
-    # A capture must fetch the provider, even if filesystem caching is configured.
-    # This verifies a download, not the publication time of sportsbook quotes.
-    update_config(cache_mode=CacheMode.OFF, verbose=False)
-    # Fetch exactly once; the captured values, not a later upstream refresh, are parsed.
-    frame = nflreadpy.load_schedules(args.season).filter(
-        (pl.col("season") == args.season) & (pl.col("week") == args.week)
-    )
-    events = frame.to_dicts()
+    espn = args.provider == "espn"
+    if espn:
+        payload = fetch_scoreboard(args.season, args.week)
+        events = payload["events"]
+    else:
+        update_config(cache_mode=CacheMode.OFF, verbose=False)
+        frame = nflreadpy.load_schedules(args.season).filter(
+            (pl.col("season") == args.season) & (pl.col("week") == args.week))
+        events = frame.to_dicts()
     if not events:
-        raise SystemExit("No nflverse schedule games found for requested season/week")
+        raise SystemExit("No provider games found for requested season/week")
 
     with SessionLocal() as session:
         schedule_rows = list(session.scalars(select(RawNflSchedule).where(
@@ -78,10 +81,12 @@ def main() -> int:
             }
             if len(games) != len(salary_pairs):
                 raise SystemExit("Salary slate games do not exactly match the canonical schedule")
-            frame = frame.filter(pl.col("game_id").is_in(list(games)))
-            events = frame.to_dicts()
+            if not espn:
+                frame = frame.filter(pl.col("game_id").is_in(list(games)))
+                events = frame.to_dicts()
         check_at = datetime.now(UTC)
-        valid, rejected = parse_nflverse_schedules(events, schedule=games.values(),
+        parse = parse_scoreboard if espn else parse_nflverse_schedules
+        valid, rejected = parse(payload if espn else events, schedule=games.values(),
                                                     season=args.season, week=args.week,
                                                     captured_at=check_at)
         if rejected or len(valid) != len(games):
@@ -97,17 +102,21 @@ def main() -> int:
 
         # Retain a genuinely new capture clock even for unchanged numerical values.
         # Upstream quote publication remains unavailable; never claim quote currency.
-        raw = frame.to_pandas()
+        import pandas as pd
+        raw = (pd.DataFrame([{"response_json": json.dumps(payload, sort_keys=True)}])
+               if espn else frame.to_pandas())
         raw["capture_observed_at"] = check_at.isoformat()
         capture = SourceCaptureService(session).capture_dataframe(
-            raw, artifact_name=f"nflverse_market_{args.season}_w{args.week}.csv",
-            source_system="nflverse", dataset="schedule_market_snapshot",
+            raw, artifact_name=f"{args.provider}_market_{args.season}_w{args.week}.csv",
+            source_system="espn" if espn else "nflverse", dataset="schedule_market_snapshot",
             season=args.season, week=args.week, slate=args.slate,
-            source_license="nflverse/nfldata schedule data; upstream terms apply",
-            source_uri="https://github.com/nflverse/nflverse-data/releases/download/schedules/games.parquet",
+            source_license="ESPN/DraftKings public odds; upstream terms apply" if espn else "nflverse/nfldata schedule data; upstream terms apply",
+            source_uri=scoreboard_url(args.season, args.week) if espn else "https://github.com/nflverse/nflverse-data/releases/download/schedules/games.parquet",
             slate_lock_at=min(row.kickoff_at for row in valid),
             observation_basis="capture_clock",
-            metadata={"spread_semantics": "positive_home_margin", "source_loader": "nflreadpy.load_schedules",
+            metadata={"spread_semantics": "negative_favored_home" if espn else "positive_home_margin",
+                      "source_loader": "espn_scoreboard" if espn else "nflreadpy.load_schedules",
+                      "bookmaker": "DraftKings" if espn else None,
                       "cache_mode": "off", "quote_publication_time": None},
         )
         observed_at = capture.snapshot.observed_at
@@ -120,7 +129,7 @@ def main() -> int:
                               "status": "already_ingested"}))
             return 0
         session.add(IngestRun(
-            ingest_run_id=ingest_id, source_system="nflverse", source_table="market_snapshot",
+            ingest_run_id=ingest_id, source_system="espn" if espn else "nflverse", source_table="market_snapshot",
             source_path=capture.snapshot.artifact_path,
             source_checksum=capture.snapshot.content_sha256,
             season=args.season, week=args.week, slate=args.slate.lower(), status="completed",
@@ -147,7 +156,9 @@ def main() -> int:
         session.commit()
         SourceCaptureService(session).link_ingest_run(capture.snapshot.snapshot_id, ingest_id)
         print(json.dumps({"ingest_run_id": ingest_id, "snapshot_id": capture.snapshot.snapshot_id,
-                          "observed_at": observed_at.isoformat(), "games": len(valid)}))
+                          "observed_at": observed_at.isoformat(), "games": len(valid),
+                          "source": "espn_draftkings" if espn else "nflverse_schedules",
+                          "quote_publication_time": None}))
     return 0
 
 

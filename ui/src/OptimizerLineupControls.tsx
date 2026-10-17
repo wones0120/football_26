@@ -30,6 +30,13 @@ export function OptimizerLineupControls({ value, onChange, format, disabled }: {
       </>}
     </div>
     {format === "classic" && <>
+      <h4>Require favored teams</h4>
+      <div className="form-row">
+        {([["QB", "favoredQb"], ["RB", "favoredRb"], ["WR", "favoredWr"], ["TE", "favoredTe"], ["DST", "favoredDst"]] as const).map(([pos, key]) => <label key={key}>
+          <input type="checkbox" checked={value[key] === 1} onChange={event => set(key, event.target.checked ? 1 : 0)} aria-label={`Require favored team for ${pos}`} />{pos} on favored team
+        </label>)}
+      </div>
+      <small>Defaults: RB, TE and DST on; QB and WR off. All five options are editable. Every player at a selected position must have a negative team spread in the prepared inputs. RB/WR/TE includes FLEX. Pick’em and missing spreads do not qualify. Projections stay unchanged.</small>
       <div className="form-row">
         {([["QB", "seasonRankQb"], ["RB", "seasonRankRb"], ["WR", "seasonRankWr"], ["TE", "seasonRankTe"]] as const).map(([pos, key]) => <label key={key}>Season-average {pos} rank
           <select aria-label={`Season-average ${pos} rank`} value={value[key] ?? ""} onChange={event => set(key, event.target.value === "" ? null : Number(event.target.value))}>

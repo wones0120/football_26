@@ -858,7 +858,7 @@ class LineupLearningService:
     def __init__(self, session: Session) -> None:
         self.session = session
         self._game_context_cache: dict[tuple[int, int], dict[str, dict[str, float]]] = {}
-        self._dst_actual_cache: dict[tuple[int, int], dict[str, float]] = {}
+        self._dst_actual_cache: dict[tuple[int, int, tuple[str, ...] | None], dict[str, float]] = {}
         self._dst_projection_cache: dict[tuple[int, int], dict[str, tuple[float, float]]] = {}
         self._player_projection_cache: dict[
             tuple[str, int, int, str],
@@ -1050,8 +1050,13 @@ class LineupLearningService:
                 filtered.append((season, week, slate))
         return filtered
 
-    def _compute_dst_actual_points(self, *, season: int, week: int) -> dict[str, float]:
-        cache_key = (season, week)
+    def _compute_dst_actual_points(
+        self, *, season: int, week: int, teams: set[str] | None = None
+    ) -> dict[str, float]:
+        scoped_teams = {_canonical_team(team) for team in teams} if teams is not None else None
+        if scoped_teams is not None and (not scoped_teams or None in scoped_teams):
+            raise ValueError("DST actual lookup requires canonical slate teams")
+        cache_key = (season, week, tuple(sorted(scoped_teams)) if scoped_teams is not None else None)
         cached = self._dst_actual_cache.get(cache_key)
         if cached is not None:
             return cached
@@ -1064,6 +1069,23 @@ class LineupLearningService:
                 )
             )
         ).scalars().all()
+        if scoped_teams is not None:
+            # A Sunday forecast needs labels only for its own imported teams,
+            # not a completed Thursday game elsewhere in the same NFL week.
+            schedule_rows = [row for row in schedule_rows if
+                {_canonical_team(row.home_team), _canonical_team(row.away_team)} & scoped_teams]
+            scheduled_teams = {team for row in schedule_rows for team in
+                (_canonical_team(row.home_team), _canonical_team(row.away_team))}
+            if scoped_teams - scheduled_teams:
+                raise ValueError("Missing schedule evidence for slate DST teams: "
+                    + ", ".join(sorted(scoped_teams - scheduled_teams)))
+        # A missing completed result is unknown, not a zero-point DST label.
+        # This guard does not activate corrected labels or refit live models.
+        from ..product_services.dst_scoring_reconciliation import require_completed_schedule_scores
+        require_completed_schedule_scores(
+            [dict(game_id=row.game_id, raw_row_json=row.raw_row_json) for row in schedule_rows],
+            now=datetime.now(UTC),
+        )
         points_allowed_by_team: dict[str, float] = {}
         opponent_by_team: dict[str, str] = {}
         for row in schedule_rows:
@@ -1094,6 +1116,15 @@ class LineupLearningService:
                 )
             )
         ).all()
+
+        observed_teams = {_canonical_team(team) for team, payload in offense_agg_rows if payload}
+        missing_teams = set(opponent_by_team) - observed_teams
+        if missing_teams:
+            from ..product_services.dst_scoring_reconciliation import DstScoringUnresolved
+            raise DstScoringUnresolved(
+                "Completed DST outcome lacks weekly-stat coverage; refusing zero counters: "
+                + ", ".join(sorted(missing_teams))
+            )
 
         sacks_allowed_by_team: dict[str, float] = defaultdict(float)
         interceptions_thrown_by_team: dict[str, float] = defaultdict(float)
@@ -1167,7 +1198,10 @@ class LineupLearningService:
         if not salary_rows:
             return []
 
-        dst_points_by_team = self._compute_dst_actual_points(season=season, week=week)
+        dst_points_by_team = self._compute_dst_actual_points(
+            season=season, week=week,
+            teams={_canonical_team(row.team) for row in salary_rows},
+        )
         game_context_by_team = self._game_context_by_team(season=season, week=week)
 
         actual_points_by_master: dict[str, float] = {}
@@ -4582,7 +4616,14 @@ class LineupLearningService:
         weeks: list[int] | None = None,
         progress_hook: Callable[[str], None] | None = None,
         status_hook: Callable[[int, int, dict[str, Any]], None] | None = None,
+        dst_candidate_context=None,
+        persist: bool = True,
     ) -> dict[str, Any]:
+        if dst_candidate_context is not None and persist:
+            raise ValueError("DST candidate features require persist=False; live matrix is protected")
+        if not persist and dst_candidate_context is None:
+            raise ValueError("Nonpersistent rebuild requires an explicit DST candidate context")
+        candidate_rows: list[dict[str, Any]] = []
         start = min(season_start, season_end)
         end = max(season_start, season_end)
         slices = self._fetch_available_slate_slices(
@@ -4781,6 +4822,17 @@ class LineupLearningService:
                     )
                     unique_rows[key] = payload
                 payload_rows = list(unique_rows.values())
+                if dst_candidate_context is not None:
+                    import pandas as pd
+                    from ..product_services.dst_feature_pipeline import repair_dst_frame
+                    candidate_frame, candidate_audit = repair_dst_frame(
+                        pd.DataFrame(payload_rows), dst_candidate_context, matrix_generation=True)
+                    candidate_rows.extend(candidate_frame.to_dict("records"))
+                    slates_completed += 1
+                    rows.append({"season": season, "week": week, "slate": current_slate,
+                                 "status": "candidate_only", "rows_written": 0,
+                                 "dst_feature_audit": candidate_audit})
+                    continue
 
                 self.session.execute(
                     delete(PlayerGameFeatureMatrix).where(
@@ -4872,6 +4924,7 @@ class LineupLearningService:
         self._player_projection_cache.clear()
 
         return {
+            **({"candidate_rows": candidate_rows, "live_enabled": False} if dst_candidate_context is not None else {}),
             "source_system": source_system,
             "season_start": start,
             "season_end": end,

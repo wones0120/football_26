@@ -32,7 +32,7 @@ def resolve_observations(rows: pd.DataFrame, salaries: pd.DataFrame) -> pd.DataF
         evidence = []
         for candidate in matches.to_dict('records'):
             evidence.append({key: None if pd.isna(candidate.get(key)) else str(candidate.get(key))
-                             for key in ('curated_salary_id', 'ingest_run_id', 'source_player_key', 'player_master_id', 'team', 'opponent', 'position', 'roster_position')})
+                             for key in ('curated_salary_id', 'ingest_run_id', 'source_player_key', 'player_master_id', 'team', 'opponent', 'position', 'roster_position', 'optimizer_run_id', 'snapshot_sha256')})
         identities = {(candidate['player_master_id'], candidate['team'], candidate['position']) for candidate in evidence}
         complete = evidence and all(all(candidate.get(key) for key in ('source_player_key', 'player_master_id', 'team', 'opponent')) for candidate in evidence)
         status = 'resolved' if complete and len(identities) == 1 else 'ambiguous' if len(identities) > 1 else 'unresolved'
@@ -54,6 +54,20 @@ def attach_salary_identities(engine, rows: pd.DataFrame) -> pd.DataFrame:
                 FROM curated_salary WHERE season=:season AND week=:week AND upper(slate)=upper(:slate)
                 AND source_system='draftkings' ORDER BY curated_salary_id '''), connection,
                 params={'season': int(season), 'week': int(week), 'slate': str(slate)})
+        # Current salary scope can have been replaced by another upload. Saved
+        # authenticated frames are evidence too, not an excuse to guess a name.
+        with engine.connect() as connection:
+            runs = [dict(r) for r in connection.execute(text("""SELECT optimizer_run_id,
+                created_at AS optimizer_created_at,data_cutoff_at,
+                jsonb_build_object('showdown_evidence_snapshot',
+                    constraint_config_json->'showdown_evidence_snapshot') AS constraint_config_json
+                FROM target.optimizer_run WHERE season=:season AND week=:week
+                AND upper(slate_id)=upper(:slate) AND status='completed'
+                AND constraint_config_json ? 'showdown_evidence_snapshot'"""),
+                {'season': int(season), 'week': int(week), 'slate': str(slate)}).mappings()]
+        frozen = frozen_salary_rows(runs)
+        if not frozen.empty:
+            salaries = pd.concat([salaries, frozen], ignore_index=True)
         groups.append(resolve_observations(group, salaries))
     return pd.concat(groups).sort_index() if groups else rows.copy()
 
@@ -77,3 +91,37 @@ def persist_observations(engine, rows: pd.DataFrame) -> dict:
                         :player_id,:resolution_status,:actual_ownership,:actual_points,CAST(:evidence_json AS JSONB))
                 ON CONFLICT (observation_id) DO NOTHING'''), payloads)
     return {status: int((rows['resolution_status'] == status).sum()) for status in ('resolved', 'unresolved', 'ambiguous')}
+
+
+def frozen_salary_rows(runs):
+    """Recover canonical salary identities from authenticated prelock frames.
+
+    Never use current global master names or infer team from the outcome roster.
+    Multiple saved native mappings remain visible to the ambiguity check.
+    """
+    from .showdown_data_readiness import validate_frozen_evidence
+    from .optimizer_effectiveness import chronological_validation
+    recovered = []
+    for run in runs:
+        snapshot = (run.get('constraint_config_json') or {}).get('showdown_evidence_snapshot') or {}
+        if not snapshot:
+            continue
+        try:
+            validate_frozen_evidence(snapshot)
+        except ValueError:
+            continue
+        rows = snapshot.get('native_player_pool') or snapshot.get('player_pool') or []
+        timing = chronological_validation(run, {'status': 'slate_source_pool', 'candidates': []})
+        if timing['status'] != 'predecision':
+            continue
+        for row in rows:
+            for slot, source_id in [('FLEX', row.get('dk_player_id')), ('CPT', row.get('dk_captain_id'))]:
+                if not source_id:
+                    continue
+                recovered.append(dict(curated_salary_id=None, ingest_run_id=None,
+                    source_player_key=str(source_id), player_master_id=row.get('player_id'),
+                    player_name=row.get('player_name') or row.get('name'),
+                    team=row.get('player_team') or row.get('team'), opponent=row.get('opponent_team'),
+                    position=row.get('position'), roster_position=slot,
+                    optimizer_run_id=run['optimizer_run_id'], snapshot_sha256=snapshot['sha256']))
+    return pd.DataFrame(recovered)

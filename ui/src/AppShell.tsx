@@ -11,7 +11,10 @@ export type ViewMode =
   | "learning"
   | "workspace"
   | "preview"
-  | "news-brief";
+  | "news-brief"
+  | "analyst-reports"
+  | "single-stat"
+  | "tiers";
 
 type AppShellProps = {
   activeView: ViewMode;
@@ -34,7 +37,10 @@ const NAV_ITEMS: Array<{ view: ViewMode; label: string; shortLabel: string; icon
   { view: "war-room", label: "War Room", shortLabel: "War", icon: "war" },
   { view: "research", label: "Research Lab", shortLabel: "Lab", icon: "research" },
   { view: "learning", label: "Learning", shortLabel: "Learn", icon: "learning" },
+  { view: "single-stat", label: "Single Stat", shortLabel: "Stat", icon: "models" },
+  { view: "tiers", label: "Tiers", shortLabel: "Tiers", icon: "models" },
   { view: "contest-workflow", label: "Delivery", shortLabel: "Deliver", icon: "delivery" },
+  { view: "analyst-reports", label: "Analyst Reports", shortLabel: "Reports", icon: "news" },
   { view: "news-brief", label: "Intelligence", shortLabel: "Intel", icon: "news" },
   { view: "workspace", label: "Operations", shortLabel: "Ops", icon: "operations" },
 ];
@@ -45,6 +51,8 @@ const COMMAND_ITEMS = [
 ];
 
 const VIEW_META: Record<ViewMode, { eyebrow: string; title: string; description: string }> = {
+  tiers: { eyebrow: "NFL Tier Research", title: "Tiers", description: "Choose one player per native tier using explicit frozen baseline evidence." },
+  "single-stat": { eyebrow: "NFL Stat Research", title: "Single Stat", description: "Build three-player touchdown and yardage lineups from native contest pools." },
   "digital-twin": {
     eyebrow: "Personal Intelligence",
     title: "Digital Twin",
@@ -74,6 +82,11 @@ const VIEW_META: Record<ViewMode, { eyebrow: string; title: string; description:
     eyebrow: "Execution",
     title: "Contest Delivery",
     description: "Import entries, assign lineups, validate, and export with confidence.",
+  },
+  "analyst-reports": {
+    eyebrow: "Football Research",
+    title: "Analyst Reports",
+    description: "Read football briefings, specialist evidence and saved lineup reviews.",
   },
   "news-brief": {
     eyebrow: "Live Intelligence",
@@ -135,7 +148,7 @@ export function AppShell({
   const firstCommandRef = useRef<HTMLButtonElement>(null);
   const meta = VIEW_META[activeView];
   const contextLabel = useMemo(
-    () => `${season} · W${week} · ${activeView === "learning" ? "All slates" : formatSlate(slate)}`,
+    () => `${season} · W${week} · ${slate === "ALL" ? "All slates" : formatSlate(slate)}`,
     [activeView, season, week, slate],
   );
   const runContextLabel = useMemo(() => {
@@ -156,7 +169,7 @@ export function AppShell({
         event.preventDefault();
         setPaletteOpen((current) => !current);
       }
-      const shortcutIndex = Number(event.key) - 1;
+      const shortcutIndex = event.key === "0" ? 9 : Number(event.key) - 1;
       if (paletteOpen && shortcutIndex >= 0 && shortcutIndex < COMMAND_ITEMS.length) {
         event.preventDefault();
         onNavigate(COMMAND_ITEMS[shortcutIndex].view);
@@ -209,9 +222,9 @@ export function AppShell({
             <Icon name="vision" /><span>Experience Lab</span>
           </button>
           <div className="shell-context-card">
-            <span><i /> Active context</span>
+            <span><i /> {activeView === "learning" ? "Review context" : "Active context"}</span>
             <strong>{season} · Week {week}</strong>
-            <small>{activeView === "learning" ? "All slates" : formatSlate(slate)}</small>
+            <small>{slate === "ALL" ? "All slates" : formatSlate(slate)}</small>
             {runContextLabel && <small title={runContextLabel}>Run · {runContextLabel}</small>}
           </div>
         </div>
@@ -228,7 +241,7 @@ export function AppShell({
             {activeView === "learning" ? (
               <div className="shell-slate-chip shell-week-chip">
                 <span>Review context</span>
-                <strong>{season} · Week {week} · All slates</strong>
+                <strong>{season} · Week {week} · {slate === "ALL" ? "All slates" : formatSlate(slate)}</strong>
               </div>
             ) : (
               <label className="shell-slate-chip">
@@ -286,7 +299,7 @@ export function AppShell({
                 <button ref={index === 0 ? firstCommandRef : undefined} type="button" key={item.view} onClick={() => navigate(item.view)}>
                   <span className="command-item-icon"><Icon name={item.icon} /></span>
                   <span><strong>{item.label}</strong><small>{VIEW_META[item.view].description}</small></span>
-                  <kbd>{index + 1}</kbd>
+                  <kbd>{index === 9 ? "0" : index + 1}</kbd>
                 </button>
               ))}
             </div>

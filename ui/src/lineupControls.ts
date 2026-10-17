@@ -1,6 +1,7 @@
 import { DEFAULT_LARGE_GPP_CONTROLS, largeGppControlParams, type LargeGppControls } from "./classicLargeGppControls.ts";
 
 export type LineupControls = LargeGppControls & {
+  favoredQb: number; favoredRb: number; favoredWr: number; favoredTe: number; favoredDst: number;
   numLineups: number; maxExposure: number; primaryGameCap: number | null;
   maxPlayersPerTeam: number; maxPlayersPerGame: number;
   seasonRankQb: number | null; seasonRankRb: number | null; seasonRankWr: number | null; seasonRankTe: number | null;
@@ -9,7 +10,7 @@ export type LineupControls = LargeGppControls & {
 export const LINEUP_CONTROLS_STORAGE_KEY = "football-26-lineup-controls";
 export const MAX_LINEUPS = 500;
 export function defaultLineupControls(format: "classic" | "showdown"): LineupControls {
-  return { ...DEFAULT_LARGE_GPP_CONTROLS, numLineups: 5, maxExposure: 100, primaryGameCap: null,
+  return { favoredQb: 0, favoredRb: format === "classic" ? 1 : 0, favoredWr: 0, favoredTe: format === "classic" ? 1 : 0, favoredDst: format === "classic" ? 1 : 0, ...DEFAULT_LARGE_GPP_CONTROLS, numLineups: 5, maxExposure: 100, primaryGameCap: null,
     maxPlayersPerTeam: 4, maxPlayersPerGame: format === "classic" ? 5 : 6,
     seasonRankQb: format === "classic" ? 50 : null, seasonRankRb: format === "classic" ? 25 : null, seasonRankWr: format === "classic" ? 50 : null, seasonRankTe: format === "classic" ? 25 : null,
     minimumQbSalary: format === "classic" ? 4500 : null, minimumRbSalary: format === "classic" ? 4500 : null, minimumPlayerSalary: null, captainMaxExposure: 100, coreMaxExposure: 100, startingQbMaxExposure: 100, cheapPuntMaxExposure: 100 };
@@ -23,6 +24,10 @@ export function lineupControlParams(value: LineupControls, format: "classic" | "
     params.minimum_player_salary = value.minimumPlayerSalary;
   }
   if (format === "classic") {
+    for (const [pos, input] of [["qb", value.favoredQb], ["rb", value.favoredRb], ["wr", value.favoredWr], ["te", value.favoredTe], ["dst", value.favoredDst]] as const) {
+      if (input !== 0 && input !== 1) throw new Error(`Favored-team ${pos.toUpperCase()} must be on or off.`);
+      params[`force_favored_${pos}`] = input;
+    }
     for (const [pos, input] of [["qb", value.seasonRankQb], ["rb", value.seasonRankRb], ["wr", value.seasonRankWr], ["te", value.seasonRankTe]] as const) {
       if (input === null) continue;
       if (![25, 50, 75, 100].includes(input)) throw new Error(`Season-average ${pos.toUpperCase()} rank must be 25, 50, 75, 100 or No restriction.`);
@@ -86,9 +91,14 @@ export function restoreLineupControls(raw: string | null, legacyClassic: string 
   const showdown = parseLineupControls(JSON.stringify(saved.showdown ?? null), "showdown");
   // Apply the new Captain default once to old saved five-player caps.
   if (saved.captainDefaultsVersion !== 1 && showdown.maxPlayersPerTeam === 5) showdown.maxPlayersPerTeam = 4;
-  return { classic: parseLineupControls(classicRaw, "classic"), showdown };
+  const classic = parseLineupControls(classicRaw, "classic");
+  // Adopt the requested defaults once; later explicit choices survive reloads.
+  if (saved.favoredDefaultsVersion !== 1) {
+    Object.assign(classic, { favoredQb: 0, favoredRb: 1, favoredWr: 0, favoredTe: 1, favoredDst: 1 });
+  }
+  return { classic, showdown };
 }
 
 export function serializeLineupControls(controls: { classic: LineupControls; showdown: LineupControls }): string {
-  return JSON.stringify({ ...controls, captainDefaultsVersion: 1 });
+  return JSON.stringify({ ...controls, captainDefaultsVersion: 1, favoredDefaultsVersion: 1 });
 }

@@ -1,10 +1,11 @@
 """Account-owned realized results from immutable DraftKings entry-history exports."""
 import csv
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 
 from sqlalchemy import text
@@ -125,13 +126,15 @@ class EntryHistoryService:
             contests=[dict(r) for r in c.execute(text('SELECT contest_id,slate_id,week,contest_type FROM target.dfs_contest')).mappings()]
         return dict(summarize(entries,contests,year,conflicts),snapshot_count=len(snapshots))
 
-    def import_file(self, path, year, dry_run=False):
+    def import_file(self, path, year, dry_run=False, expected_sha256=None):
         path=Path(path).expanduser()
         if not path.is_file() or path.suffix.lower() != '.csv':
             raise ValueError('Choose an existing entry-history CSV file')
         raw=path.read_bytes()
-        rows=parse_history(raw)
         sha=hashlib.sha256(raw).hexdigest()
+        if expected_sha256 is not None and sha != expected_sha256:
+            raise ValueError("File changed since scanning; scan the folder again")
+        rows=parse_history(raw)
         if dry_run:
             return dict(status='validated',rows=len(rows),content_sha256=sha)
         self._ensure_schema()
@@ -142,9 +145,164 @@ class EntryHistoryService:
                 RETURNING content_sha256
             '''),dict(sha=sha,path=str(path),raw=raw,entries=json.dumps(rows,allow_nan=False))).scalar()
         from .gpp_shadow_learning import refresh_after_import
-        message = refresh_after_import(self.engine)
+        warnings = []
+        try:
+            message = refresh_after_import(self.engine)
+        except Exception as exc:
+            message = 'Saved; shadow comparison refresh pending'
+            warnings.append(str(exc))
+        try:
+            report = self.report(year)
+        except Exception as exc:
+            report = None
+            warnings.append(f'Saved; summary refresh pending: {exc}')
         return dict(status='imported' if inserted else 'deduplicated',rows=len(rows),content_sha256=sha,
-                    report=self.report(year), shadow_comparison_status=message)
+                    report=report, shadow_comparison_status=message, warnings=warnings)
+
+
+    @staticmethod
+    def _root(directory):
+        root = Path(directory).expanduser().absolute()
+        if not root.is_dir():
+            raise ValueError('Choose an existing entry-history folder')
+        if any(p.is_symlink() for p in (root, *root.parents)):
+            raise ValueError('Symlinked entry-history folders are not supported')
+        if any(part.casefold() == 'processed' for part in root.parts):
+            raise ValueError('Choose the download folder, not Processed')
+        return root
+
+    @staticmethod
+    def _source(root, path):
+        source = Path(path).expanduser().absolute()
+        relative = source.relative_to(root)
+        if '..' in relative.parts or any(part.casefold() == 'processed' for part in relative.parts):
+            raise ValueError('Choose a CSV inside the download folder, outside Processed')
+        if any(p.is_symlink() for p in (source, *source.parents)):
+            raise ValueError('Symlinked entry-history files are not supported')
+        if source.suffix.lower() != '.csv' or not source.is_file():
+            raise ValueError('Choose an existing entry-history CSV file')
+        return source
+
+    def scan_directory(self, directory, year):
+        root = self._root(directory)
+        files = []
+        # Match content, not the export filename. Never follow links or scan archives.
+        for base, dirs, names in os.walk(root, followlinks=False):
+            dirs[:] = sorted(d for d in dirs if d.casefold() != 'processed'
+                             and not (Path(base) / d).is_symlink())
+            for name in sorted(names):
+                path = Path(base) / name
+                if path.suffix.lower() != '.csv' or path.is_symlink():
+                    continue
+                item = dict(path=str(path), status='unrecognized', rows=0)
+                try:
+                    raw = path.read_bytes()
+                    item['content_sha256'] = hashlib.sha256(raw).hexdigest()
+                    headers = next(csv.reader(io.StringIO(raw.decode('utf-8-sig'))), [])
+                    if not REQUIRED.issubset(headers):
+                        continue
+                    rows = parse_history(raw)
+                    item.update(status='validated', rows=len(rows))
+                except (ValueError, OSError, UnicodeError, csv.Error) as exc:
+                    item.update(status='failed', error=str(exc))
+                files.append(item)
+        return dict(directory=str(root), year=year, dry_run=True, files=files)
+
+    @staticmethod
+    def _archive(source, root, sha, result):
+        # The immutable DB snapshot is committed before creating this archive receipt.
+        # A hard link reserves the destination without ever overwriting another export.
+        archive = root / 'Processed' / source.relative_to(root).parent
+        if any(p.is_symlink() for p in (archive, *archive.parents)):
+            raise ValueError('Symlinked archive folders are not supported')
+        archive.mkdir(parents=True, exist_ok=True)
+        if source.is_symlink() or hashlib.sha256(source.read_bytes()).hexdigest() != sha:
+            raise ValueError('Source changed after import; original left in place')
+        destination = archive / f'{source.stem}__{sha}{source.suffix}'
+        receipt = destination.with_suffix(destination.suffix + '.receipt.json')
+        if destination.exists():
+            if destination.is_symlink() or hashlib.sha256(destination.read_bytes()).hexdigest() != sha:
+                raise FileExistsError('Archive collision; existing file preserved')
+        else:
+            os.link(source, destination)
+        payload = dict(original_path=str(source), archive_path=str(destination),
+                       content_sha256=sha, rows=result['rows'], import_status=result['status'],
+                       archived_at=datetime.now(timezone.utc).isoformat())
+        # Preserve the first receipt on retries, including its original timestamp.
+        try:
+            with receipt.open('x') as handle:
+                json.dump(payload, handle, sort_keys=True)
+                handle.flush()
+                os.fsync(handle.fileno())
+        except FileExistsError:
+            if receipt.is_symlink():
+                raise ValueError('Symlinked archive receipt is not supported')
+            saved = json.loads(receipt.read_text())
+            if any(saved.get(k) != payload[k] for k in ('original_path', 'archive_path', 'content_sha256')):
+                raise ValueError('Archive receipt collision; source preserved')
+        if source.is_symlink() or hashlib.sha256(source.read_bytes()).hexdigest() != sha:
+            raise ValueError('Source changed during archiving; source preserved')
+        directory_fd = os.open(archive, os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+        source.unlink()
+        return str(destination), str(receipt)
+
+    def import_directory(self, directory, year, files):
+        root = self._root(directory)
+        results = []
+        for selected in files:
+            item = dict(path=selected['path'], content_sha256=selected['content_sha256'], rows=0)
+            try:
+                source = Path(selected['path']).expanduser().absolute()
+                if not source.exists():
+                    relative = source.relative_to(root)
+                    if '..' in relative.parts or any(p.casefold() == 'processed' for p in relative.parts):
+                        raise ValueError('Choose a source inside the download folder')
+                    sha = selected['content_sha256']
+                    destination = root / 'Processed' / relative.parent / f'{source.stem}__{sha}{source.suffix}'
+                    receipt = destination.with_suffix(destination.suffix + '.receipt.json')
+                    if any(p.is_symlink() for p in (destination, receipt, *destination.parents)):
+                        raise ValueError('Symlinked archives are not supported')
+                    saved = json.loads(receipt.read_text())
+                    if saved.get('original_path') != str(source) or saved.get('content_sha256') != sha:
+                        raise ValueError('Archive receipt does not match this request')
+                    raw = destination.read_bytes()
+                    if hashlib.sha256(raw).hexdigest() != sha:
+                        raise ValueError('Archive content does not match this request')
+                    self._ensure_schema()
+                    with self.engine.connect() as connection:
+                        committed = connection.execute(text('''
+                            SELECT content_sha256 FROM target.dk_entry_history_snapshot
+                            WHERE content_sha256=:sha
+                        '''), dict(sha=sha)).scalar()
+                    if not committed:
+                        raise ValueError('Archive has no committed entry-history snapshot')
+                    item.update(status='deduplicated', rows=len(parse_history(raw)),
+                                archive_status='processed', archive_path=str(destination), receipt_path=str(receipt))
+                    results.append(item)
+                    continue
+                source = self._source(root, selected['path'])
+                result = self.import_file(source, year, expected_sha256=selected['content_sha256'])
+                item.update({k: v for k, v in result.items() if k != 'report'})
+            except Exception as exc:
+                item.update(status='failed', error=str(exc))
+                results.append(item)
+                continue
+            try:
+                destination, receipt = self._archive(source, root, result['content_sha256'], result)
+                item.update(archive_status='processed', archive_path=destination, receipt_path=receipt)
+            except Exception as exc:
+                item.update(archive_status='pending', error=f'Import saved; archive pending: {exc}')
+            results.append(item)
+        response = dict(directory=str(root), year=year, dry_run=False, files=results)
+        try:
+            response['report'] = self.report(year)
+        except Exception as exc:
+            response['warning'] = f'Summary refresh pending: {exc}'
+        return response
 
 
 def enrich_contests(contests, entries):

@@ -69,18 +69,22 @@ class ShowdownPortfolioSelectionTests(unittest.TestCase):
         self.assertEqual(summary["missing_ownership_players"], ["e"])
         self.assertEqual(summary["salary_left_unused"], 15000)
 
-    def test_direct_solver_rejects_partial_role_ownership_scoring(self):
+    def test_role_objective_keeps_missing_ownership_as_diagnostic_only(self):
         pool = pd.DataFrame([
-            {"player_id": "c", "name": "Captain", "position": "RB", "player_team": "A",
+            {"player_id": str(i), "name": f"Player {i}", "position": "RB", "player_team": "A" if i < 3 else "B",
              "salary": 5000, "projection": 10, "p90": 20, "captain_ownership": None,
-             "flex_ownership": 12},
+             "flex_ownership": 12}
+            for i in range(6)
         ])
         service = OptimizerService.__new__(OptimizerService)
-        with self.assertRaisesRegex(ValueError, "complete finite CPT/FLEX ownership"):
-            service._solve_lineup(
-                pool, score_col="projection", contest_type="captain",
-                stack_params={"use_role_ownership": True},
-            )
+        result = service._solve_lineup(
+            pool, score_col="projection", contest_type="captain",
+            stack_params={"use_role_ownership": True},
+        )
+        self.assertIsNotNone(result)
+        self.assertEqual(result[0]["solver_objective_value"], 80)
+        self.assertEqual(result[0]["solver_ownership_weight"], 0)
+        self.assertIsNone(next(row for row in result if row["roster_position"] == "CPT")["ownership"])
 
 
 if __name__ == "__main__":

@@ -49,6 +49,12 @@ class Settings(BaseSettings):
     matchup_outcome_model_path: str = "docs/matchup_outcome_intelligence_2024_2025.json"
     matchup_outcome_prior_strength: float = 0.15
     matchup_prior_gate_model_path: str = "docs/matchup_prior_gate_20slates_5000.json"
+    # Input support is separate from model activation; no live means are changed.
+    dst_feature_support_manifest_path: str = ""
+    dst_feature_support_manifest_sha256: str = ""
+    dst_feature_support_output_root: str = "artifacts/dst_feature_support"
+    dst_deployment_manifest_path: str = ""
+    dst_deployment_manifest_sha256: str = ""
     source_snapshot_root: str = "artifacts/source_snapshots"
     weather_forecast_snapshot_root: str = "artifacts/weather_forecasts"
     weather_forecast_provider: str = "open_meteo_previous_runs"

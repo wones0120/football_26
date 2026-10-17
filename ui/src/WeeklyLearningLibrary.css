@@ -1,0 +1,12 @@
+.weekly-learning-library { margin: 1.25rem 0; padding: 1rem; border: 1px solid #245361; border-radius: 12px; background: #101d2e; color: #eef6fc; }
+.weekly-learning-library h3 { color: #fff; margin: 0 0 .6rem; }
+.weekly-learning-library p,.weekly-learning-library small { color: #b9cfdb; }
+.weekly-library-actions { display:flex; gap:1rem; align-items:center; flex-wrap:wrap; }
+.weekly-library-actions label { display:flex; align-items:center; gap:.5rem; }
+.weekly-library-scroll { overflow-x:auto; }
+.weekly-learning-library table { width:100%; border-collapse:collapse; }
+.weekly-learning-library th,.weekly-learning-library td { padding:.8rem .5rem; text-align:left; border-bottom:1px solid #244453; vertical-align:top; }
+.weekly-learning-library small { display:block; margin-top:.3rem; }
+.weekly-learning-library button { background:#153c49; color:#f4fbff; border:1px solid #3c98a3; border-radius:6px; padding:.45rem .7rem; }
+.weekly-learning-library button:disabled { opacity:.5; }
+.weekly-learning-library a { display:block; color:#6de2df; margin-top:.6rem; }

@@ -5,6 +5,24 @@ const escape = (value: unknown) => String(value ?? "Unavailable").replaceAll("&"
 const json = (value: unknown) => `<pre style="white-space:pre-wrap;overflow-wrap:anywhere">${escape(JSON.stringify(value, null, 2))}</pre>`;
 
 export function largeGppReadinessHtml(optimizer: OptimizerResponse): string {
+  const preliminary = optimizer.preliminary_report as Row | undefined;
+  if (preliminary) {
+    const assumptions = preliminary.assumption_manifest ?? {};
+    const normal = preliminary.normal_readiness ?? optimizer.data_readiness ?? {};
+    const sourceChecks = normal.required_sources ?? {};
+    const sourceLabels: Record<string, string> = {salary_pool: "Salary identity and freshness", market: "Spreads and totals", projection: "Current projections", ownership: "Ownership", player_status: "Player availability and roles"};
+    const analyst = optimizer.analyst_handoff_applied ?? optimizer.football_analyst?.prepared_research ?? {};
+    return `<h3>Preliminary research · not entry cleared</h3>
+      <p><strong>Research optimizer: ${escape(optimizer.status)} · ${Array.isArray(optimizer.results) ? optimizer.results.length : 0} ${optimizer.status === "completed" ? "saved" : "reported"} lineups · ENTRY READY: NO</strong></p>
+      <p>Normal source readiness: ${escape(normal.status)}. Missing evidence below remains unresolved; research assumptions do not establish current game-day clearance. Contest CSV export is blocked.</p>
+      <table><thead><tr><th>Retained source check</th><th>Status</th></tr></thead><tbody>${Object.entries(sourceChecks).map(([name,value]) => `<tr><td>${escape(sourceLabels[name] ?? name)}</td><td>${escape((value as Row).status)}</td></tr>`).join("")}</tbody></table>
+      <p>Normal source blockers: ${escape((normal.reason_codes ?? []).join(", "))}</p>
+      <p style="overflow-wrap:anywhere">Research snapshot: ${escape(preliminary.snapshot_sha256)}<br>Assumption receipt: ${escape(preliminary.assumption_manifest_sha256)}<br>Checked Analyst packet: ${escape((analyst as Row).checked_packet_sha256)}<br>Compatibility receipt: ${escape((analyst as Row).compatibility_sha256)}</p>
+      <p>Frozen assumptions: ${escape(assumptions.declared_at)} · ${escape(assumptions.exclude_player_ids?.length ?? 0)} conservative exclusions.</p>
+      <p>${escape(assumptions.practice_assumption)} ${escape(assumptions.source_truth)}</p>
+      <details><summary>Per-player research decisions and original unknown evidence</summary><table><thead><tr><th>Player</th><th>Original source assessment / missing checks</th><th>Research decision</th></tr></thead><tbody>${(assumptions.players ?? []).map((player:Row) => `<tr><td>${escape(player.player ?? player.player_id)}</td><td>${escape(player.availability)} · ${escape((player.reason_codes ?? []).join(", "))}</td><td>Excluded from research; original facts unchanged</td></tr>`).join("")}</tbody></table></details>
+      <details><summary>Immutable research receipt and retained normal readiness</summary>${json(preliminary)}</details>`;
+  }
   const readiness = (optimizer.readiness_assessment ?? optimizer.entry_readiness) as Row | undefined;
   const checks = readiness?.checks ?? {};
   const generation = optimizer.data_readiness as Row | undefined;

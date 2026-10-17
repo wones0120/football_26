@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   availableSlateOptions,
+  defaultContestFormatForSlate,
   ACTIVE_SLATE_CONTEXT_STORAGE_KEY,
   RUN_SELECTIONS_STORAGE_KEY,
   parsePersistedRunSelections,
@@ -17,10 +18,36 @@ import {
   type PersistedRunSelections,
 } from "../src/workspaceContext.ts";
 
+test("slate strategy defaults select Classic subsets and Captain single-game slates", () => {
+  for (const slate of ["SUNDAY_MAIN", "SUNDAY_EARLY", "SUNDAY_LATE"]) {
+    assert.equal(defaultContestFormatForSlate(slate), "classic");
+  }
+  for (const slate of ["THURSDAY_NIGHT", "SUNDAY_MORNING", " sunday morning ", "SUNDAY_NIGHT", "MONDAY_NIGHT", " sunday night "]) {
+    assert.equal(defaultContestFormatForSlate(slate), "showdown");
+  }
+  for (const slate of ["SUNDAY_MONDAY", "CUSTOM_SLATE"]) {
+    assert.equal(defaultContestFormatForSlate(slate), "classic");
+  }
+});
+
 test("starts the 2026 Week 1 slate menu with Wednesday night", () => {
   assert.equal(DEFAULT_SLATE, "WEDNESDAY_NIGHT");
   assert.equal(SLATE_OPTIONS[0], DEFAULT_SLATE);
   assert.equal(new Set(SLATE_OPTIONS).size, SLATE_OPTIONS.length);
+});
+
+test("Sunday Morning is selectable and keeps its runs separate from other Sunday slates", () => {
+  assert.ok(availableSlateOptions("SUNDAY_MAIN").includes("SUNDAY_MORNING"));
+  const morning = { season: 2026, week: 5, slate: "SUNDAY_MORNING" };
+  const main = { ...morning, slate: "SUNDAY_MAIN" };
+  const monday = { ...morning, slate: "SUNDAY_MONDAY" };
+  let runs = updateRunSelection({}, main, { optimizerRunId: "main" });
+  runs = updateRunSelection(runs, monday, { optimizerRunId: "sunday-monday" });
+  runs = updateRunSelection(runs, morning, { optimizerRunId: "morning" });
+  assert.deepEqual(parsePersistedActiveSlateContext(serializeActiveSlateContext(morning)), morning);
+  assert.equal(runs[slateContextKey(main)].optimizerRunId, "main");
+  assert.equal(runs[slateContextKey(monday)].optimizerRunId, "sunday-monday");
+  assert.equal(parsePersistedRunSelections(JSON.stringify(runs))[slateContextKey(morning)].optimizerRunId, "morning");
 });
 
 test("reload restores the optimizer selection by scope before a run completes", () => {

@@ -1,5 +1,127 @@
 # Release Notes
 
+Verified the accepted ensemble in an actual 285-player Sunday projection, including all 20 DST means/quantiles/Gold inputs and 265 unaffected non-DST means. Saved five preliminary lineups; a matched defense-only generation comparison changes 4/5 rosters. Normal availability guards remain unresolved and no entry/submission occurs. See `artifacts/dst_deployments/20261016/v1/FINAL_REPORT.md`.
+
+Fixed local launchd restart leaving stale manually started repo workers consuming jobs. Full restart gracefully removes extra repo consumers while preserving managed/unrelated processes; added focused cleanup regression tests. Actual projection lineage verification caught and preserved an initial legacy refresh rather than mislabeling it corrected.
+
+Activated the corrected Week 6 DST ensemble after explicit user acceptance of unproven ranking advantage. API and durable worker attest the pinned selection; preserved configuration, projection pointers and exact previous artifact support guarded rollback. Added runtime attestation and same-input incumbent DST counterfactual diagnostics. No research gate was relabelled. See [rollout](docs/product/dst_production_rollout.md).
+
+Added the versioned corrected DST serving component in normal Prepare, with explicit acceptance, checksum/expiry guards, separate calibration, saved-artifact parity and rollback. Subsequent accepted activation is recorded above; ranking superiority remains unproven. See [DST production rollout](docs/product/dst_production_rollout.md).
+
+Wired verified DST input support into normal canonical load/Prepare metadata with checksum-pinned sources and immutable corrected-label/home/history sidecars. Incumbent numerical frames/forecasts remain unchanged; new fitted artifacts declare the legacy DST contract and reject candidate inputs, with older-artifact compatibility. Failed ranking alternatives remain inactive. See `docs/product/dst_feature_support.md`.
+
+Completed a bounded, tie-aware DST ranking study: flat five-point forecasts come from a tiny three-week MAE selection advantage, not missing repaired inputs. Ensemble/ranking alternatives fail reliability gates on five rolling recent weeks; no live ranking/model/projection change. See `research/dst_rank_stability_20261016/v1/REVIEW.md`.
+
+Added template-verified Single Stat research CSV downloads using the exact three duplicate FLEX columns and preserved instructions/reference pool. Downloads validate native/canonical identity, full pool/game scope and locks, require research acceptance and save immutable not-submitted receipts. The supplied Main TD template matches; the supplied HOU–JAX yards template correctly blocks export of the saved DAL–GB lineup. No entry assignments, submissions or readiness upgrades occur.
+
+Repaired DST home/history delivery through an explicitly inactive, nonpersistent candidate pipeline used by both training and inference. The repaired dedicated policy passes declared statistical noninferiority gates (MAE4.329 vs original4.322/corrected-shared4.448); shared/history alternatives fail. Its selected full-history artifact is a5-point median with no differentiated defense rank. Live projections remain unchanged. See `research/dst_pipeline_repair_20261016/v1/REVIEW.md`.
+
+Verified the supplied Week 6 native Single Stat pools against official public DraftKings draftables: DAL–GB Total Yards (44 IDs) and Main Touchdowns (425 IDs). Added BOM-preserving Game Info mapping, scoped identity-alias persistence and captured OUT/IR/doubtful/disabled status exclusions while retaining model assessments. Reports expose native status and measured-subset ranking scope. Real-pool Chrome import/generate/reopen validation replaces fixture-only testing; no contest entry/export occurred.
+
+Added a separate corrected-data DST research model with canonical prior-game features, explicit missingness and chronological inner model selection. It fails the frozen MAE improvement gate (4.322→4.357), despite lower RMSE and improved calibration bias/rank correlation; no live model or projections changed. See `research/dst_dedicated_20261016/v1/REVIEW.md`.
+
+## 2026-10-16 — Entry-history folder imports
+
+- Entry history now scans CSV contents in the configured results folder, imports selected validated exports, and moves committed files into `Processed` with content-hash names and provenance receipts. Per-file errors and archive retries preserve financial deduplication and existing evidence.
+- Fix dark entry-history path text while typing, focusing, selecting, and autofilling. Manual validation and path imports remain available.
+
+Corrected-label DST retraining failed its frozen validation gate (MAE 4.3225→4.4484 on identical corrected truth), so live Sunday projections remain unchanged. A preserved DST-only Sunday shadow comparison changes 13/20 rank numbers but keeps the same $49,800 optimal roster. Added strict candidate label-selection checks; opponent-QB features remain excluded. See `research/dst_retrain_20261016/v1/REVIEW.md`.
+
+Saved Showdown QB construction summaries now disclose named Captain exceptions and their conditional eligibility instead of incorrectly showing a blanket “No” and zero limit. Explicit No QBs/No QB Captain overrides remain authoritative; optimizer eligibility and projections are unchanged.
+
+Added versioned, event-level DST research corrections with official-gamebook verification, canonical row lineage, and missing-final/stat-coverage guards. All 33 flagged labels are corrected in a separate source snapshot; live projections/models remain unchanged. The matched opponent-QB ablation still fails to improve point MAE. See `docs/product/dst_scoring_reconciliation.md`.
+
+Added a separate **Single Stat** workspace for NFL touchdowns, total yards and passing yards: native CSV evidence packages, exact Game Sets, canonical source-ID joins, traceable unresolved rows, time-safe observed-stat baselines, legal three-player optimization, immutable reports and source-attested actual accounting. Missing TD categories and pool history remain explicit; partial/subset research requires opt-in. No salary/position cap, Classic/Showdown projection reuse or entry export is inferred. Actual native pool/template evidence remains required for live contest use.
+
+Added Classic **Highest baseline projection · optional stacks**, an exact one-lineup baseline-mean solve with no player locks or hidden Analyst QB/team/receiver/bringback requirements. It preserves other eligibility and roster settings, saves the legal model and objective proof, and clearly labels reopened results separately from GPP recommendations. Showdown and existing scenario strategies remain unchanged.
+
+- Added separate, append-only saved Showdown CSV upload checks with current official availability/native-ID/salary validation, expiry, semantic invalidation and export receipt linkage. Pending final inactives stays explicit; historical research readiness is unchanged.
+
+Added **Download Recommended** and **Download All** to each saved optimizer run, using the existing DraftKings Classic/Showdown exporter. Recommended preserves the frozen GPP choice; All exports saved selected lineups. Run-bound readiness/recommendation messages and server-side uncleared-research blocking remain explicit. Repeated large ZIP downloads and export receipt lineage are deterministic; no contest entry or upload is performed.
+
+Added independent Thought Studio memory scope selectors and immutable, version-specific Analyst evidence-review previews/approvals. Exact approved current versions pass into scoped preparation and saved optimizer receipts; draft, expired, wrong-scope and revoked versions are excluded or require re-preparation. Reports distinguish a thought read from a construction effect or measured roster change. This qualitative approval never invents numerical scenario adjustments or changes baseline model truth.
+
+Broadened Expected Game and Contrarian Showdown candidate discovery across current eligible Captains, with multiple distinct legal supporting rosters per story. Saved provenance records the initial pool, per-Captain coverage, infeasible branches and bounded search budget before unchanged scenario portfolio selection. User exposure limits, identity and opportunity gates remain binding; Classic, legacy mixed research and original CONSTRUCTION behavior are unchanged.
+
+Added **Prepare preliminary research inputs** for Classic research when injury/role evidence is missing or stale. It refreshes markets, builds new research projections and ownership, excludes unknown players with an immutable per-player assumption receipt, and freezes the automatic Analyst handoff. Normal readiness and final entry clearance remain blocked. Preparation status now rejects older or wrong-slate replies; Showdown leader-history failures name the actual preference to change. Constraint failures after evidence is frozen also save a terminal failed optimizer status while preserving frozen inputs.
+
+Added automatic prepared Analyst handoff to normal optimization and preliminary Classic freezes. The UI carries the checked packet without requiring manual hash selection, displays compatibility lineage and compact changed/unknown checks, and preserves explicit baseline/strategy/focus/optional-tool choices. Missing or mismatched checked research remains an explicit error; original snapshots and reports are preserved.
+
+Connected Prepare Slate to automatic scoped Analyst selection, fresh canonical compatibility checks and immutable checked-packet handoff into durable optimization. Receipts expose research/check dates, changes, missing checks and exact saved lineage. Manual overrides and explicit baseline/focus choices remain distinct; Sunday preliminary freeze carries its own matching checked artifact without changing normal source or entry gates.
+
+Added selected-only Analyst generation controls and saved-run focus summaries for Classic and Showdown. Empty, unsupported or unloaded selections fail before submission; selected-only mode rejects incompatible saved cheaper branches. Reports show saved stories and construction checks, with explicit score what-ifs distinguished from forecasts.
+
+Added typed last-week-to-current-week Analyst review with native game/event identity, fumbles versus lost, actual post-event usage, sourced coach/QB reactions and competing role branches. All scoped Classic/Showdown games retain history gaps and model accounting. Distinct measured role findings can reuse bounded discovery constructions; psychological stories and unsupported promotion/benching claims cannot change forecasts.
+
+Added a read-only **Analyst Reports** tab with the main briefing first, week/slate/type filters, preserved report versions and explicit research versus saved-run comparison labels. A bounded allowlist serves Markdown and approved text evidence; tables/citations render safely, raw HTML stays escaped, and unavailable local links remain explicit. No generation, packet import, projection/default change or entry action occurs from reading.
+
+Added scoped frozen-input selection and an explicit preliminary Classic generation panel, with immutable injury assumptions, Q exclusion and request-only season-rank relaxation. Saved cheaper-teammate pairs expose complete roster costs and deliberate staging into the next research request; rejected pairs stay unavailable, current hard preferences are rechecked and final entry readiness/export blocking remain intact.
+
+Added separate canonical defense/kicker Analyst evidence contracts, complete game screens and exact same-Captain included/omitted Showdown FLEX comparisons. Reports disclose unavailable pressure/protection/stall/weather evidence, source clocks, displaced players and infeasible branches. Classic excludes kickers; no specialist is forced, no Captain ban is inferred and baseline projections/user constraints remain intact.
+
+Added a separate typed preliminary Classic research workflow with immutable input and injury-assumption snapshots, shared old/merged strategy comparisons, retained normal readiness failures and a visible not-entry-cleared classification. Current questionable players are excluded; source/model truth remains unchanged. Preliminary reports cannot be upgraded to final entry readiness or downloaded as contest CSVs. Ordinary optimizer preparation requirements remain intact.
+
+Added opt-in Captain-specific Analyst packets for Showdown merged scenarios. Every current eligible/locked Captain receives conditional opponent-capability branches and legal supporting FLEX alternatives; candidate scores and global selection preserve canonical Captain identity. Saved reports include sourced/disconfirming assessments, explicit unknowns, infeasibility and actual FLEX changes against a fixed-Captain baseline. The UI exposes activation and per-Captain results. Unknown capability retains competing sensitivity hypotheses; no automatic skill-player bringback, probability claim, projection mutation or legacy 95% veto is added. Original packets/strategies and Classic behavior remain unchanged.
+
+Added an explicit opt-in **Merged Analyst + math scenarios** strategy for Sunday Main Classic and Captain/Showdown. Typed bounded volume/concentration/workload-transfer assumptions affect conditional candidate generation and global portfolio coverage selection; no legacy 95% quality veto applies. Saved reports preserve base projections, the legal-model snapshot, scenario lineage, comparison roster, hard user limits and infeasibility. Scenario weights and uncertainty responses remain disclosed research assumptions. Original strategies retain their behavior.
+
+Activated the local Analyst import and normal Thursday generation workflow with persisted READY-source runs. Analyst candidate merging now preserves existing football-scenario variants and their scores; canonical roster overlap retains thesis attribution without claiming unique origin. Readiness uses native away/home order instead of alphabetical teams, and the Analyst summary is visible for Classic and Showdown. Entry clearance and underfilled-portfolio exposure warnings remain separate from generation readiness.
+
+Learning now remembers its own review season, week and slate without changing the active context or selected runs elsewhere. **Review slate** filters Weekly Results, saved review details and shadow comparisons; **All slates** shows the full week. Whole-week report summaries/downloads and week-wide warnings stay explicit. Existing evidence, imports and backend interfaces are unchanged.
+
+Added **Learning → Weekly Results** with week/user selection, fees, cash winnings, net profit, ROI, cash rate and slate/contest/entry drilldowns. It reads current imported history and preserves dated saved learning warnings, including missing intent and ambiguous roster origins. Unknown payouts remain unknown; incomplete weeks show known subtotals and withhold complete-week ROI; zero-fee ROI is N/A. Existing **Review & Imports**, stored records and report versions remain intact. No schema or optimizer changes.
+
+New Classic and Captain/Showdown runs retain shared versioned workload evidence for all pool players, with canonical references for selected lineups and saved candidate manifests. Exported reports distinguish historical observations and measured zero from missing/zero-filled history, allocated count proxies, explicit pregame forecasts, and availability/depth evidence. Saved learning reports read the original packets; older snapshots remain unavailable. No projection, scoring, selection, eligibility or default changes.
+
+Projection jobs now explain upstream roster/injury refresh failures alongside unresolved current player context, and progress reports the unresolved availability count. Collector outages still allow scoring when saved evidence passes the canonical gate. Unpublished or mismatched weekly reports remain blocked; repeating preparation cannot manufacture current evidence.
+
+Recovered 2026 Week 6 DEN/SEA projections using newly observed official club roster facts through existing immutable snapshots and canonical context APIs. The normal worker completed 37 persisted projections without stale roster substitution or a readiness override. This scoped import is not a new automatic club collector; game-day clearance and current-week injury designations remain pending.
+
+Learning entry details and Markdown downloads now distinguish **Intended / Exported / Observed evidence**. Existing direct-download ledger artifacts appear without portfolio assignments; available timestamps, export rows and roster links retain their limitations. Identical saved rosters across runs show ambiguous matches instead of a newest-run origin. Missing assignment/lineage warnings remain, and score differences alone imply no execution error. No schema, optimizer or live-data changes.
+
+Salary/injury imports and preparation now recognize the exact Hollywood Brown / Marquise Brown nickname equivalence. Conflicting vendor aliases can resolve through the existing two-source roster corroboration rule; team/position checks and ambiguity quarantine remain enforced. Reconciliation saves the new native source ID without rewriting player masters or reimporting raw files.
+
+Corrected offline Monday game research history gating so stale schedule scores cannot omit eligible Week 4 weekly actuals. Added red-zone play/role calibration to shrunk historical touchdown shares and held-out FLEX structure comparisons by position, team and opportunity role for each top-four P90 captain, including QBs. Existing lineup constraints and production remain unchanged; probabilities still require historical validation.
+
+Added separate [Monday football game simulation research](docs/product/monday_game_simulation.md): event-derived player scores, QB/receiver and team-score accounting checks, exhaustive legal FLEX comparison for all four P90 captains including QBs, and independent selection/evaluation games. Reports preserve source lineage and show projection calibration gaps. No production optimizer changes; the new model still requires historical validation.
+
+Showdown requests for **4 lineups with a 25% captain maximum** now build one legal lineup per top-four eligible pregame P90 captain, including QBs when captain preferences allow them. Injury and user eligibility filters run before ranking. Global mean/P90 quality floors are warnings in this mode; reports show each lineup’s projection gaps and any hard-constraint underfill without substituting a fifth captain. See [Showdown preferences](docs/showdown_lineup_preferences.md#four-lineups-at-25-captain-coverage).
+
+Added research-only [Monday captain scenario reports](docs/product/captain_scenario_research.md), including QB-eligible top-four P90 shortlists, fixed legal lineup evaluation, imported-data cutoff checks, and native/hypothetical actual-result backtests. Reports separate scenario FLEX construction from simulation-only captain ranking. No production optimizer or projection changes; probabilities remain uncalibrated.
+
+ESPN market capture accepts both “DraftKings” and “Draft Kings” for provider ID 100; current-line, game identity and ambiguity checks still apply.
+
+Showdown final validation now independently rejects captains outside the frozen top-four eligible P90 shortlist. Restart both the API and durable worker after optimizer code changes; API-only reloads leave the worker on its previously loaded code.
+
+Showdown now shortlists the top four captain-eligible players across both teams by unmultiplied pregame P90, breaking ties by canonical player ID. The optimizer scores captain at 1.5× P90 and FLEX at mean, and charges 1.5× captain salary. The shortlist leaves FLEX eligibility unchanged; existing roster, salary and user constraints still apply. Saved reports list the shortlist and exclusions separately from model projections.
+
+
+Added a research-only [Captain ceiling + conditional FLEX comparison](docs/product/captain_flex_research.md), with per-player explanations, role/competition sensitivity checks and frozen historical replay. Two pregame-clock-eligible Week 4 slates show no best-lineup improvement; a post-kickoff Sunday archive is labeled retrospective. No live optimizer defaults or forecasts changed.
+
+Evaluation records now retain immutable original candidate pools, frozen inputs, app/AI decisions, exports and submitted rosters. Candidate IDs, saved lineup numbers and selector ranks are labeled separately. Learning calls score-only differences **hindsight gaps**; an execution error requires a recorded intended entry that differs from the submission. Apply migration `0050_evaluation_record.sql`. See [evaluation evidence and recovery](docs/POST_SLATE_LEARNING.md#evaluation-evidence-and-recovery).
+
+Weekly contest-result imports now accept custom slate identifiers such as `SUNDAY_LATE_SF_SEA`, allowing those results into week learning reports. Custom salary filenames participate in scope checks; an explicitly selected custom folder is not mistaken for its Sunday Late prefix. Conflicting saved contest scope and ambiguous salary evidence remain checked.
+
+The Slate menu now discovers imported DraftKings salary slates for the selected season/week directly from the server, even without a saved contest or browser custom-name entry. Imported data does not by itself certify readiness.
+
+The custom slate name field uses the standard readable dark-theme text styling. Use **Add a custom slate** in Slate files to select a separate game such as `SUNDAY_LATE_SF_SEA`. Custom names stay in the Slate menu for that season/week in this browser. Then select **Captain GPP** for CPT/FLEX salaries, load the actual salary CSV, prepare inputs, and run. Creating a name does not import data or establish readiness.
+
+Canonical QB roles now resolve the latest team starter across all salary QBs. A newer starter observation supersedes an older retained assignment, including evidence shared from Sunday Main to Early/Late. Original source clocks and IDs remain auditable; conflicting same-time reports and future evidence cannot establish a starter.
+
+**Strategy** defaults to Classic GPP for Sunday Main, Sunday Early and Sunday Late, and Captain GPP for Thursday Night, Sunday Morning, Sunday Night and Monday Night. The default applies on app startup and when switching slates. Manual strategy selection remains available; lineup controls retain their saved values. Sunday Morning restores Captain by default so its CPT/FLEX salary pool is not assessed as Classic after a reload or slate switch. Other slates retain the Classic default. Existing saved runs remain available after lock; new pregame preparation is still blocked.
+
+**Sunday Morning** is now a distinct Slate option and weekly contest-import folder scope. CPT/FLEX salary files use Captain format. The UI explains preparation without a separate injury CSV through existing sourced status collectors; missing/stale evidence still blocks. No Main-injury fallback or preference changes.
+
+**Exclude questionable (Q) players** now defaults on in both Classic and Captain. You can turn it off independently per format during the session. This controls lineup eligibility only; preparation does not treat those players as out or alter their projections.
+
+Preflight now uses the same currently verified preparation as **Run Optimizer**. A ready prepared build shows its exact projection run instead of a contradictory older general source report; changed inputs, failed preparation and expired evidence still block through the existing preparation checks.
+
+**Prepare slate** now fetches current DraftKings spreads and totals from ESPN without an API key for both Classic and Captain. Every selected game must match the canonical teams/kickoff and supply consistent pregame lines; a failed refresh blocks preparation instead of reusing an older capture. **Refresh sportsbook lines** captures the same source manually. Saved snapshots retain the ESPN event ID and raw response for projection lineage. Retrieval time is shown; ESPN does not supply the sportsbook’s quote-update timestamp, so exact quote age remains unknown.
+
+Preparation now explicitly displays the existing mandatory market checks: valid spreads and game totals for every game, consistent team implied totals, and source observations within the configured freshness limit (default six hours). Classic and Captain block missing, stale or inconsistent evidence. nflverse capture freshness does not certify live sportsbook quote freshness.
+
+Classic lineup options now include independent **Require favored teams** controls for QB, RB, WR, TE and DST. Defaults require favorites for RB, TE and DST; QB and WR remain unrestricted. All five controls are editable. Existing saved settings adopt these defaults once; later changes persist. Selected positions require a negative prepared team spread, including RB/WR/TE at FLEX; pick’em and unknown spreads do not qualify. These preferences leave projections unchanged.
+
 Read-only [Classic/Captain generation-versus-selection audit](docs/product/generation_selection_audit_2026_w1_w4.md): Sunday Main shortlisting/ranking remains the first priority; Captain requires evaluating quality-screen losses under current WR/RB preferences. No live selector changes.
 
 Sunday Early and Sunday Late reuse the **Sunday Main injury file**. Load it once for the season/week; each Classic subset selects matching canonical players and teams, preserving original source timestamps. Salary files, projections and lineups remain slate-specific. Early/Late also reuse Main’s original player-role evidence, with its original timestamps and normal freshness checks.
@@ -2094,3 +2216,67 @@ WR/RB Captain shadow: `--wr-rb-captain` tests WR Captain with same-team QB FLEX 
 - Centrality remains a shadow diagnostic and does not change fantasy projections or optimizer behavior.
 
 Captain team-leader preferences now use prior-week season averages instead of projections. Require at least one defaults on; home-team-only defaults off. The leader may be Captain or FLEX. Missing/ambiguous history remains unranked; missing team history or Week 1 fails explicitly without falling back to projections. Frozen run metadata records prior-game scores, averages, source lineage and tied leader IDs. Existing historical runs are unchanged.
+
+### Wones Football Analyst optimizer integration
+
+- Added validated, idempotent packet import and metadata lookup endpoints, with no filesystem paths exposed in the API response.
+- Added optional packet import/hash selection to the existing Optimizer flow, showing active scope and provenance. Clear Analyst restores the baseline request.
+- Added typed hash and candidate-budget validation, preserving request parameters through the durable worker for Classic and Showdown. Baseline requests omit Analyst params; projections and lineup rules remain unchanged.
+
+- Added an optional fitted team/game outlook contract for Analyst scenarios: saved scoring, volume and empirical script probabilities with canonical identity, chronology and conservation checks. Classic and Captain consume shared saved evidence while preserving baseline player projections and legacy behavior. First retrospective study and offline previews are under `research/team_game_outlook_20261013`; forward calibration and injury clearance remain unresolved.
+
+Classic MERGED_SCENARIOS now defaults to scenario-first allocation before roster solves, conserved pass/run sensitivities and generic actual-roster dependence limits. Prior conditional coverage is explicitly reproducible; CONSTRUCTION and preliminary/final-entry separation are unchanged.
+
+Added `analyst_discovery_v1` investigations before Classic scenario allocation, deterministic all-game screening, bounded reserved construction slots and conserved target/carry share sensitivities. Saved reports retain model-accounting/counterevidence and actual influence; existing CONSTRUCTION/Showdown and final-entry gates remain unchanged.
+
+Added explicit opt-in Classic scenario-first `analyst_challenger_v1`: sourced contrary-script/downside audit, at most3 targeted solves, role-aware canonical dedup, reuse of existing selection gaps, hard-constrained bounded reallocation and retained opportunity costs. Legacy/default strategy and final entry gates remain unchanged; Showdown challenger requests fail explicitly.
+
+Added bounded all-game cheaper-teammate comparisons with conserved conditional opportunities, whole-roster salary reinvestment/cost, break-even and explicit saved-alternative apply. Scoped imported-packet selection enables available experimental tools; the preliminary snapshot panel makes Sunday research builds usable while retaining entry-clearance blocks. Combined packets consume saved unproven team/game conditional mix and Captain evidence; automatic DST/K screens preserve watchlists without artificial boosts. Legacy strategies and base projections remain unchanged.
+
+Corrected merged Captain portfolio scoring: other Captain rosters retain actual scores in shared football worlds, equivalent numeric worlds do not multiply coverage votes, and legal eligibility alone cannot authorize unsupported high-end stories. Added typed contrarian findings, all-game watchlist screening and explicit selected-story-only construction for both formats, including labeled user score-target what-ifs. Weekly event/role/trust evidence is consumed as sourced competing hypotheses; current Cook/Kyle findings remain watchlists without invented workload cuts or motivation boosts. Existing strategy and entry gates remain unchanged.
+
+Fixed explicit unchecked Analyst tool preferences surviving automatic preparation defaults, and comparison exposure/Captain table rendering in Analyst Reports. Saved lineup inputs and numeric results are unchanged.
+
+Prepare Slate now checks regular-season stats and snap team coverage for every prior week, automatically captures and ingests only missing weeks/datasets, and validates coverage before rebuilding. Immutable source snapshots and ingest IDs are retained in `source_refresh.historical_participation`. An unpublished/incomplete provider slice blocks with retry guidance; user leader/rank rules remain unchanged.
+
+For Showdown merged research, an underfilled initial candidate pool with too few distinct Captains for the requested Captain exposure now triggers a bounded unseen-Captain search against the same frozen legal model and authored scenario worlds. The report retains initial candidate count, added candidates and solver status in `captain_exposure_coverage`; eligibility, locks, scenario/focus requirements and exposure limits remain binding. This is candidate generation expansion, not a constraint relaxation or a controlled selector comparison.
+
+- Added separate Showdown Expected Game and Contrarian research intents, immutable automatic scoped packets/receipts, persisted scenario lineage and intent labels, and a matched-input saved-run comparison. Expected Game excludes explicit user what-ifs; Contrarian retains its declared conditional story. User constraints and model projections remain unchanged. Separate candidate pools are disclosed as generation experiments.
+
+- Added canonical named Showdown Captain-position and questionable research-eligibility exceptions, scoped to the active context and preserving source/model truth and all other safety gates. Expected Game can explicitly compare original CONSTRUCTION generation on its same automatic checked packet and frozen prepared inputs; differing candidate pools/scoring remain disclosed.
+
+### Classic preliminary intent comparison
+
+Classic now exposes **Optimization intent** for **Expected Game** and **Contrarian**. **Prepare preliminary research inputs** and its freeze save separate automatic checked intent packets against the same salary/projection/ownership snapshot. Changing intent chooses that exact receipt; unavailable intents fail without mixed fallback. Both runs retain the displayed conservative exclusions, request-only rank preference, user controls and final-entry false. Reopen each saved run to compare the actual rosters; generated candidate pools differ.
+
+Intent-scoped Classic scenario allocation uses only authored opportunity channels; it does not invent the opposite passing/rushing script. Saved scenario-first reports retain the exact optimization intent and scenario lineage.
+
+- Added shadow-only opponent-QB context features with canonical identity, strict source-clock gating, missingness and starter-change provenance. Chronological DST ablation and an impossible-label guard retain evidence; live projection features/defaults remain unchanged. See `docs/product/opponent_qb_context.md`.
+
+Automatic native-pool lineup downloads: Single Stat now renders positional FLEX,FLEX,FLEX columns and exact saved native IDs directly from immutable imported CSV evidence. Per-slate templates are optional compatibility checks; canonical/source binding, exact scope, distinct-player/team/role rules, locks and explicit research acceptance remain enforced. Legacy reports retain their original assessments and source proof requirements. No entry assignment, submission or readiness promotion occurs.
+
+### NFL Tiers native research workflow
+
+- Added immutable native Tiers ingestion with canonical mapping/unresolved queue, exact one-per-tier/two-game ranking, independent settings and saved app reports. Existing projection/model/default settings remain unchanged.
+- Added automatic salary-native T1–Tn CSV downloads, exact roster/source receipts and current locks/identity checks; optional verified template mode preserves instruction/reference cells. No contest assignment, submission or final clearance is implied.
+- Added dated Week6 tier-by-tier Analyst review, all40 alternatives and scenario rosters. Validated21targeted Tiers backend tests plus14official-injury tests,2UI tests, UI build and actual Chrome downloaded-byte equality.
+
+- Repaired official injury suffix mapping (unique team/position/native-ID guards), and added append-only Tiers injury-source refresh without projection changes. Successful source refresh retains unknown final designations; it does not renew frozen projection clocks or infer health. Automatic downloads reparse and hash-check original source bytes and enforce report/pool scope.
+
+### Durable Week Learning Report library
+
+- Persist newly generated weekly aggregates as immutable server-side artifacts and list latest reports per season/week and DraftKings username, with earlier versions and exact original JSON download. App refresh reloads the library; opening never rebuilds evidence.
+- Recovered three existing report originals without regeneration, including Week5 October13 13:28UTC partial report. Preserve original dates, status, evidence gaps and hashes; recovered snapshots are labeled explicitly.
+- Added username/scope/latest-version/hash/API persistence tests and a navy/white/teal review library.
+
+- Verified saved weekly library survives an actual app refresh, reopens both recovered weeks without rebuilding, and downloads byte-identical JSON;11targeted backend tests,1UI test and TypeScript/Vite build pass.
+
+### Joint-opportunity evidence review — no activation
+
+- Added an isolated, production-blocked shared-opportunity construction prototype and per-lineup success/dependency disclosures for research. Same-team combinations remain legal; no new game-total cutoff or teammate penalty was activated.
+- Rejected promotion after the touch-only proxy clipped lone-RB touchdown/efficiency upside. Preserved exact highest-mean selection, current settings and all live model/projection outputs. Recorded matched5v5generation and common-world reconciliation with explicit preliminary-source limits.
+-49targeted backend tests and14UI tests pass; UI build succeeds. Code checks do not establish football validity; user-requested evidence-first activation hold remains.
+
+Single Stat and Tiers: **Download lineup CSV** is available as soon as native identity, roster, format and lock checks pass, without a download acknowledgment checkbox. Coverage limitations remain visible; downloads do not submit entries.
+
+CSV download errors now appear in the workspace instead of saving an API JSON error as a file. Successful responses are checked for CSV content and the correct roster headers before a `.csv` download is started.

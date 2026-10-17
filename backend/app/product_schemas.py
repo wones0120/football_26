@@ -93,6 +93,27 @@ class PregameContextCurrentResponse(BaseModel):
     player_pool: List[dict[str, Any]] = Field(default_factory=list)
 
 
+class AnalystPacketImportRequest(BaseModel):
+    packet: dict[str, Any]
+
+
+class AnalystPacketMetadataResponse(BaseModel):
+    contract_id: str
+    packet_id: str
+    analyst_name: str
+    analyst_packet_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    decision_at: datetime
+    frozen_at: datetime
+    assessment_count: int
+    scenario_count: int = 0
+    captain_analysis_contract: str | None = None
+    discovery_contract: str | None = None
+    discovery_finding_count: int = 0
+    discovery_snapshot_sha256: str | None = None
+    scenario_options: list[dict[str, Any]] = Field(default_factory=list)
+    games: list[dict[str, Any]]
+
+
 class OptimizerRunRequest(BaseModel):
     season: int
     week: int
@@ -105,9 +126,90 @@ class OptimizerRunRequest(BaseModel):
     rule_run_id: Optional[str] = None
     data_cutoff_at: Optional[datetime] = None
     params: dict = Field(default_factory=dict)
+    analyst_packet_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$", exclude=True)
+    analyst_candidates_per_thesis: int | None = Field(default=None, ge=1, le=10, strict=True, exclude=True)
+    analyst_strategy: Literal["CONSTRUCTION", "MERGED_SCENARIOS"] | None = Field(default=None, exclude=True)
 
     @model_validator(mode="after")
     def normalize_showdown_te_control(self):
+        import re
+        for key in ("analyst_packet_sha256", "analyst_candidates_per_thesis", "analyst_strategy"):
+            value = getattr(self, key)
+            if value is not None:
+                if key in self.params and self.params[key] != value:
+                    raise ValueError(f"Conflicting {key} request values")
+                self.params[key] = value
+        if self.params.get("analyst_portfolio_mode", "SCENARIO_FIRST") not in {"SCENARIO_FIRST", "CONDITIONAL_COVERAGE"}:
+            raise ValueError("Unknown Analyst portfolio mode")
+        if self.params.get("scenario_allocation_controls") is not None:
+            from .product_services.scenario_allocation import AllocationControls
+            AllocationControls.model_validate(self.params["scenario_allocation_controls"])
+        if self.params.get('analyst_teammate_choice') is not None:
+            from uuid import UUID
+            choice=self.params['analyst_teammate_choice']
+            if not isinstance(choice,dict) or set(choice)!={'source_optimizer_run_id','pair_id','branch'} or choice['branch']!='cheaper':raise ValueError('Typed saved cheaper-teammate choice required')
+            UUID(choice['source_optimizer_run_id'])
+            if not isinstance(choice['pair_id'],str) or not 1<=len(choice['pair_id'])<=250:raise ValueError('Invalid canonical teammate pair reference')
+            if self.params.get('analyst_teammate_enabled') is not True:raise ValueError('Saved teammate choice requires explicit teammate research enablement')
+        if self.params.get('analyst_teammate_controls') is not None:
+            from .product_services.teammate_opportunity import TeammateControls
+            TeammateControls.model_validate(self.params['analyst_teammate_controls'])
+        if 'analyst_teammate_enabled' in self.params and type(self.params['analyst_teammate_enabled']) is not bool:
+            raise ValueError('Teammate research enablement must be an explicit boolean')
+        if self.params.get('analyst_teammate_point_checks') is not None:
+            import math
+            from uuid import UUID
+            checks=self.params['analyst_teammate_point_checks']
+            if not isinstance(checks,dict) or len(checks)>4:raise ValueError('Bounded canonical player point checks required')
+            for pid,values in checks.items():
+                UUID(pid)
+                if not isinstance(values,list) or not 1<=len(values)<=3 or any(type(v) not in (int,float) or not math.isfinite(v) or not 0<=v<=40 for v in values):raise ValueError('Finite bounded conditional point checks required')
+        if self.params.get('analyst_challenger_controls') is not None:
+            from .product_services.analyst_challenger import ChallengerControls
+            ChallengerControls.model_validate(self.params['analyst_challenger_controls'])
+        if 'analyst_challenger_enabled' in self.params and type(self.params['analyst_challenger_enabled']) is not bool:
+            raise ValueError('Challenger enablement must be an explicit boolean')
+        if self.params.get('analyst_discovery_controls') is not None:
+            from .product_services.analyst_discovery import DiscoveryControls
+            DiscoveryControls.model_validate(self.params['analyst_discovery_controls'])
+        if 'analyst_discovery_enabled' in self.params and type(self.params['analyst_discovery_enabled']) is not bool:
+            raise ValueError('Discovery enablement must be an explicit boolean')
+        intent=self.params.get('analyst_optimization_intent','MIXED')
+        if not isinstance(intent,str) or intent not in {'MIXED','EXPECTED_GAME','CONTRARIAN'}:raise ValueError('Unknown Analyst optimization intent')
+        preliminary_classic_intent = self.contest_format == 'classic' and self.strategy == 'classic_large_gpp_v1' and bool(self.params.get('analyst_handoff_compatibility_sha256'))
+        if intent!='MIXED' and (self.params.get('analyst_handoff_mode','AUTO')!='AUTO' or not (self.params.get('prepared_input_job_id') or preliminary_classic_intent)):
+            raise ValueError('Optimization intents require automatic checked prepared or preliminary research')
+        if intent!='MIXED' and ((self.params.get('analyst_strategy','MERGED_SCENARIOS')!='MERGED_SCENARIOS' and not (intent=='EXPECTED_GAME' and self.params.get('analyst_strategy')=='CONSTRUCTION')) or self.params.get('analyst_scenario_focus_mode','MIXED')!='MIXED'):
+            raise ValueError('Optimization intents require automatic scoped generation without manual scenario focus; original CONSTRUCTION comparison is supported only for Expected Game')
+        analyst_strategy = self.params.get("analyst_strategy", "CONSTRUCTION")
+        focus = self.params.get('analyst_scenario_focus_mode', 'MIXED')
+        ids = self.params.get('analyst_scenario_focus_ids', [])
+        if not isinstance(focus,str) or focus not in {'MIXED','SELECTED_ONLY'}:raise ValueError('Unknown Analyst scenario focus mode')
+        if not isinstance(ids,list) or len(ids)>24 or any(not isinstance(v,str) or not 1<=len(v)<=180 for v in ids) or len(set(ids))!=len(ids):raise ValueError('Invalid selected Analyst scenario IDs')
+        if focus=='SELECTED_ONLY':
+            if analyst_strategy!='MERGED_SCENARIOS' or not ids:raise ValueError('Selected-only focus requires merged strategy and selected scenario IDs')
+            if self.params.get('analyst_challenger_enabled') or self.params.get('analyst_teammate_enabled') or self.params.get('analyst_teammate_choice'):raise ValueError('Selected-only focus cannot introduce unselected challenger/teammate branches')
+        elif ids:raise ValueError('Scenario IDs require explicit selected-only focus')
+        if self.params.get("analyst_teammate_enabled") and (self.contest_format != "classic" or analyst_strategy != "MERGED_SCENARIOS" or self.params.get("analyst_portfolio_mode", "SCENARIO_FIRST") != "SCENARIO_FIRST"):
+            raise ValueError("Teammate opportunity research requires Classic scenario-first merged strategy")
+        if self.params.get("analyst_challenger_enabled") and (self.contest_format != "classic" or analyst_strategy != "MERGED_SCENARIOS" or self.params.get("analyst_portfolio_mode", "SCENARIO_FIRST") != "SCENARIO_FIRST"):
+            raise ValueError("Bounded challenger requires Classic scenario-first merged strategy")
+        if analyst_strategy not in {"CONSTRUCTION", "MERGED_SCENARIOS"}:
+            raise ValueError("Unknown Analyst strategy")
+        if analyst_strategy == "MERGED_SCENARIOS" and self.objective == "cash":
+            raise ValueError("Merged Analyst scenarios require a GPP strategy")
+        if analyst_strategy == "MERGED_SCENARIOS" and not self.params.get("analyst_packet_sha256") and not (self.params.get("prepared_input_job_id") and self.params.get("analyst_handoff_mode", "AUTO") == "AUTO"):
+            raise ValueError("Merged Analyst strategy requires a packet")
+        packet_hash = self.params.get("analyst_packet_sha256")
+        budget = self.params.get("analyst_candidates_per_thesis")
+        if packet_hash is not None and (not isinstance(packet_hash, str) or re.fullmatch(r"[0-9a-f]{64}", packet_hash) is None):
+            raise ValueError("analyst_packet_sha256 must be a lowercase SHA-256 hash")
+        if budget is not None and (type(budget) is not int or not 1 <= budget <= 10):
+            raise ValueError("analyst_candidates_per_thesis must be an integer from 1 to 10")
+        if budget is not None and packet_hash is None:
+            raise ValueError("Analyst candidate budget requires a selected packet")
+        if packet_hash is not None:
+            self.params.setdefault("analyst_candidates_per_thesis", 2)
         from .product_services.single_lineup import SINGLE_LINEUP_STRATEGIES, normalize_single_lineup_params
         if self.strategy in SINGLE_LINEUP_STRATEGIES:
             expected_format = SINGLE_LINEUP_STRATEGIES[self.strategy]
@@ -184,9 +286,14 @@ class OptimizerStatusResponse(BaseModel):
     strategy_config: dict = Field(default_factory=dict)
     contest_format: str
     objective: str
+    preliminary_report: Optional[dict[str, Any]] = None
     construction_summary: Optional[dict[str, Any]] = None
     entry_readiness: Optional[dict[str, Any]] = None
     data_readiness: Optional[dict[str, Any]] = None
+    football_analyst: Optional[dict[str, Any]] = None
+    highest_projection: Optional[dict[str, Any]] = None
+    analyst_handoff_applied: Optional[dict[str, Any]] = None
+    showdown_captain_coverage: Optional[dict[str, Any]] = None
     single_lineup_selection: Optional[dict[str, Any]] = None
     gpp_recommendation: Optional[dict[str, Any]] = None
     classic_game_environment_review: Optional[dict[str, Any]] = None
@@ -529,6 +636,9 @@ class ThoughtCaptureListResponse(BaseModel):
 
 
 class BeliefImpactPreviewRequest(BaseModel):
+    usage: Literal["player_modifier", "analyst_context"] = "player_modifier"
+    target_team: Optional[str] = None
+    conditional_mechanism: Optional[str] = Field(default=None, max_length=5000)
     target_player_id: Optional[str] = None
     season: int = Field(..., ge=2000)
     week: int = Field(..., ge=1, le=25)
@@ -833,6 +943,18 @@ class EntryHistoryImportRequest(BaseModel):
     path: str = Field(..., min_length=1)
     year: int = Field(..., ge=2000, le=2100)
     dry_run: bool = False
+
+
+class EntryHistorySelectedFile(BaseModel):
+    path: str = Field(..., min_length=1)
+    content_sha256: str = Field(..., pattern=r"^[0-9a-f]{64}$")
+
+
+class EntryHistoryFolderRequest(BaseModel):
+    directory: str = Field(..., min_length=1)
+    year: int = Field(..., ge=2000, le=2100)
+    dry_run: bool = True
+    files: list[EntryHistorySelectedFile] = Field(default_factory=list, max_length=1000)
 
 
 class DraftKingsBatchImportRequest(BaseModel):

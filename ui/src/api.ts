@@ -209,6 +209,11 @@ export type OptimizerResponse = {
   construction_summary?: ConstructionSummary | null;
   entry_readiness?: Record<string, unknown> | null;
   data_readiness?: Record<string, unknown> | null;
+  preliminary_report?: { classification: string; entry_ready: boolean; snapshot_sha256: string; assumption_manifest_sha256: string; assumption_manifest?: Record<string, unknown>; normal_readiness?: Record<string, unknown> } | null;
+  analyst_handoff_applied?: Record<string, unknown> | null;
+  highest_projection?: {objective_label: string; solver_status: string; base_mean?: number; salary?: number; optimal: boolean; locked_player_ids: string[]; input_snapshot_sha256: string} | null;
+  football_analyst?: { optimization_intent?: import("./analystIntent").IntentScope; prepared_research?: Record<string, unknown>; preparation_compatibility?: Record<string, unknown>; focus?: import("./AnalystFocusSummary").AnalystFocus; teammate_opportunity?: import("./teammateOpportunity").TeammateOpportunity; challenger?: { status: string; solver_calls: number; accepted_candidate_count: number; candidate_pool_count?: number; attempts: { classification?: string; status?: string; reason?: string }[] }; discovery?: { scanned_games: unknown[]; findings: { finding_id: string; action_status?: string; decision_reason?: string; actual_allocation_slots?: number[] }[] }; portfolio_mode?: string; scenario_allocation_plan?: Record<string, unknown>; captain_analysis?: { eligible_captain_count: number; forced_bringback: boolean; assessments: { player_master_id: string; player_name: string; team: string; position: string; opponent_team: string; opponent_capability: string; mechanism_status: string; generation_status: string; generated_candidate_count: number; selected_lineup_count: number }[] }; requested_portfolio_size?: number; achieved_portfolio_size?: number; selection?: { solver_status?: string; selection_reason?: string }; mode?: string; status?: string; packet_sha256?: string; eligible_generated_count?: number; generated_count?: number; selected_count?: number; generated_candidate_count?: number; requested_candidate_count?: number; selected_lineup_count?: number; abstention_count?: number; theses?: { thesis_id: string; analyst_thought?: string; requested?: number; achieved?: number; status?: string; reasons?: string[] }[]; steps?: { status?: string; eligible_generated_count?: number }[] } | null;
+  showdown_captain_coverage?: Record<string, unknown> | null;
   single_lineup_selection?: Record<string, unknown> | null;
   gpp_recommendation?: import("./GppRecommendation").GppRecommendationReport | null;
   classic_game_environment_review?: import("./classicGameEnvironment").GameEnvironmentReview | null;
@@ -276,6 +281,7 @@ export type OptimizerResponse = {
       player_name: string;
       position: string;
       opportunity_diagnostic?: Record<string, unknown> | null;
+      workload_evidence?: Record<string, unknown> | null;
       team: string;
       opponent_team?: string | null;
       salary: number;
@@ -1170,6 +1176,12 @@ export function fetchPlayerWhy(runId: string, playerId: string): Promise<Record<
   return getJson(`/predict/audit/${encodeURIComponent(runId)}/player/${encodeURIComponent(playerId)}`);
 }
 
+export type SavedUploadClearance = { optimizer_run_id: string; upload_ready: boolean; final_active_confirmed: boolean;
+  status: string; valid_until: string; reasons: string[]; record_id: string; limitations: string[] };
+export function checkSavedUploadReadiness(jobId: string): Promise<SavedUploadClearance> {
+  return postJson(`/optimizer/results/${encodeURIComponent(jobId)}/draftkings/readiness`, {});
+}
+
 export async function downloadOptimizerLineups(jobId: string, recommendedOnly = false): Promise<void> {
   const response = await fetch(`${API_BASE}/optimizer/results/${encodeURIComponent(jobId)}/draftkings/download${recommendedOnly ? "?recommended_only=true" : ""}`);
   if (!response.ok) throw new Error(await extractError(response));
@@ -1287,6 +1299,8 @@ function newIdempotencyKey(jobType: string): string {
 
 export type PreparationScope = { season: number; week: number; slate: string };
 export type PreparedBuild = PreparationScope & {
+  analyst_handoff?: import("./analystPreparation").AnalystHandoff | null;
+  analyst_intent_handoffs?: Partial<Record<"EXPECTED_GAME" | "CONTRARIAN", import("./analystPreparation").AnalystHandoff>>;
   audit_url?: string;
   action?: string; contest_format?: "classic" | "showdown"; data_readiness?: { status: string };
   availability_overrides?: unknown[]; assume_questionable_out?: boolean;
@@ -1305,7 +1319,8 @@ export function fetchPreparation(scope: PreparationScope): Promise<PreparationSt
   return getJson(`/slate/preparation?${new URLSearchParams({ season: String(scope.season), week: String(scope.week), slate: scope.slate })}`);
 }
 export function queuePreparation(payload: PreparationScope & {
-  ownership_required?: boolean;
+  ownership_required?: boolean; preliminary_research?: boolean;
+  analyst_mode?: import("./analystPreparation").AnalystHandoffMode; analyst_packet_sha256?: string; analyst_strategy?: "CONSTRUCTION" | "MERGED_SCENARIOS";
   action: "salary" | "injuries" | "markets" | "weather" | "rebuild" | "prepare";
   contest_format?: "classic" | "showdown";
   path?: string; native_draft_group?: string; injury_source?: "draftkings" | "fanduel";
@@ -1591,6 +1606,8 @@ export function runOptimizer(payload: {
   projection_run_id?: string;
   rule_run_id?: string;
   data_cutoff_at?: string;
+  analyst_packet_sha256?: string;
+  analyst_candidates_per_thesis?: number;
   params?: Record<string, unknown>;
 }, onDetached?: () => void, portfolioSummaryParams?: Record<string, number | null>): Promise<OptimizerResponse> {
   return startOptimizerAndRecover(payload, onDetached, portfolioSummaryParams);
@@ -1635,7 +1652,14 @@ export type OptimizerRunSummary = {
   operational_job_id: string | null;
   requested_lineups: number | null; lineup_count: number;
   expanded_discovery: boolean | null;
+  optimization_intent?: string | null;
+  classic_selection_objective?: string | null;
   saved_report_available?: boolean;
+  entry_ready?: boolean | null;
+  preliminary_export_blocked?: boolean;
+  saved_recommendation_available?: boolean | null;
+  upload_ready?: boolean;
+  upload_valid_until?: string;
   projection_run_id: string | null;
 };
 
@@ -1695,6 +1719,10 @@ export type SavedContestScope = {
 
 export function fetchSavedContestScopes(): Promise<{ scopes: SavedContestScope[] }> {
   return getJson("/optimizer/contests/saved/scopes");
+}
+
+export function fetchImportedSlateScopes(season: number, week: number): Promise<{ scopes: { season: number; week: number; slate: string }[] }> {
+  return getJson(`/slate/imported-scopes?season=${season}&week=${week}`);
 }
 
 export function fetchSavedOptimizerContests(params: {
@@ -2623,6 +2651,9 @@ export function fetchDigitalTwinImpactPreviews(params?: {
 export function createDigitalTwinImpactPreview(
   beliefId: string,
   payload: {
+    usage?: "player_modifier" | "analyst_context";
+    target_team?: string;
+    conditional_mechanism?: string;
     target_player_id?: string | null;
     season: number;
     week: number;
@@ -2763,9 +2794,47 @@ export type EntryHistoryReport = {
 };
 export const fetchEntryHistory = (year: number) =>
   getJson<EntryHistoryReport>(`/imports/draftkings/entry-history?year=${year}`);
+
+export type WeeklyResultTotals = {
+  entries: number; fees_known_entries: number; winnings_known_entries: number; financial_complete_entries: number;
+  known_fees: number; known_winnings: number; known_net_profit: number;
+  fees: number | null; winnings: number | null; net_profit: number | null; roi: number | null;
+  cash_rate: number | null; known_cash_entries: number; known_free_entries: number; ticket_winnings: number;
+};
+export type WeeklyResultEntry = {
+  contest_id: string; entry_id: string; slate: string; contest_name: string;
+  entry_fee: number | null; cash_winnings: number | null; ticket_winnings: number | null;
+  financial_source: string; source_hashes: string[]; warnings: string[];
+};
+export type WeeklyResultsReport = {
+  season: number; week: number; entry_user: string; available_weeks: number[]; summary: WeeklyResultTotals;
+  warnings: string[]; limitations: string[];
+  slates: { slate: string; summary: WeeklyResultTotals; report_id: string | null;
+    report_created_at: string | null; missing_evidence: string[];
+    contests: { contest_id: string; contest_name: string; summary: WeeklyResultTotals; entries: WeeklyResultEntry[] }[] }[];
+};
+export function fetchWeeklyResults(season: number, week: number, entryUser: string): Promise<WeeklyResultsReport> {
+  const query = new URLSearchParams({ season: String(season), week: String(week), entry_user: entryUser });
+  return getJson(`/learning/results/weekly?${query}`);
+}
 export const importEntryHistory = (path: string, year: number, dry_run = false) =>
-  postJson<{status: string; rows: number; report?: EntryHistoryReport; shadow_comparison_status?: string}>(
+  postJson<{status: string; rows: number; report?: EntryHistoryReport; shadow_comparison_status?: string; warnings?: string[]}>(
     '/imports/draftkings/entry-history', {path, year, dry_run});
+
+export type EntryHistoryFile = {
+  path: string; content_sha256: string; status: string; rows: number;
+  error?: string; warnings?: string[]; archive_status?: string; archive_path?: string; receipt_path?: string;
+};
+export type EntryHistoryFolderResult = {
+  directory: string; year: number; dry_run: boolean; files: EntryHistoryFile[];
+  report?: EntryHistoryReport; warning?: string;
+};
+export const scanEntryHistoryFolder = (directory: string, year: number) =>
+  postJson<EntryHistoryFolderResult>('/imports/draftkings/entry-history/folder', {directory, year, dry_run: true});
+export const importEntryHistoryFolder = (directory: string, year: number, files: EntryHistoryFile[]) =>
+  postJson<EntryHistoryFolderResult>('/imports/draftkings/entry-history/folder', {
+    directory, year, dry_run: false, files: files.map(({path, content_sha256}) => ({path, content_sha256})),
+  });
 
 export type ShadowComparison = {
   experiment_id: string; label: string; slate: string; evaluated_at: string | null;
@@ -2783,4 +2852,41 @@ export function fetchShadowComparisons(season: number, week: number) {
 }
 export function refreshShadowComparisons(season: number, week: number) {
   return postJson<{experiments: ShadowComparison[]}>(`/learning/shadow-comparisons/refresh?season=${season}&week=${week}`, {});
+}
+
+export function importAnalystPacket(packet: Record<string, unknown>): Promise<import("./analystPacket").AnalystPacketMetadata> {
+  return postJson("/optimizer/analyst-packets", { packet });
+}
+
+export function fetchAnalystPacket(hash: string): Promise<import("./analystPacket").AnalystPacketMetadata> {
+  return getJson(`/optimizer/analyst-packets/${encodeURIComponent(hash)}`);
+}
+
+// Read-only report library; browsing never imports or applies an Analyst packet.
+export function fetchAnalystReports(): Promise<{ rows: import("./analystReportLibrary").AnalystReport[] }> {
+  return getJson("/analyst-reports");
+}
+export function fetchAnalystReport(reportId: string): Promise<import("./analystReportLibrary").AnalystReportContent> {
+  return getJson(`/analyst-reports/${encodeURIComponent(reportId)}`);
+}
+export function fetchAnalystReportEvidence(reportId: string, evidenceId: string): Promise<import("./analystReportLibrary").ReportEvidence> {
+  return getJson(`/analyst-reports/${encodeURIComponent(reportId)}/evidence/${encodeURIComponent(evidenceId)}`);
+}
+
+export function fetchPreliminarySnapshots(scope: PreparationScope): Promise<{ rows: import("./preliminaryResearch").PreliminarySnapshot[]; warnings: string[] }> {
+  return getJson(`/optimizer/preliminary/snapshots?${new URLSearchParams({season:String(scope.season),week:String(scope.week),slate:scope.slate})}`);
+}
+export function freezePreliminarySnapshot(preparationJobId: string, analyst: { analyst_mode?: import("./analystPreparation").AnalystHandoffMode; analyst_packet_sha256?: string; analyst_strategy?: "CONSTRUCTION" | "MERGED_SCENARIOS" } = {}): Promise<import("./preliminaryResearch").PreliminarySnapshot> {
+  return postJson("/optimizer/preliminary/snapshots", { preparation_job_id: preparationJobId, injury_policy: "exclude_unknown_and_questionable", ...analyst });
+}
+export async function runPreliminaryOptimizer(snapshot: import("./preliminaryResearch").PreliminarySnapshot, optimizer: Parameters<typeof runOptimizer>[0], onQueued: () => void): Promise<OptimizerResponse> {
+  const receipt = await recoverOptimizerReceipt(() => postJson<OperationalJobCreateResponse>("/optimizer/preliminary/jobs", {snapshot_sha256:snapshot.snapshot_sha256,optimizer},30_000));
+  onQueued();
+  try { await waitForOperationalJob(receipt.job.job_id); }
+  catch (error) { if (isOptimizerTransportError(error)) throw new Error(`Connection interrupted while following preliminary optimizer ${optimizer.optimizer_run_id}. Reopen it in Recent optimizer runs; do not submit another copy.`); throw error; }
+  return fetchOptimizerResults(optimizer.optimizer_run_id);
+}
+
+export function fetchAvailableAnalystPackets(scope: {season:number;week:number;format:"classic"|"showdown"}): Promise<{rows:import("./analystPacket").AnalystPacketMetadata[]}> {
+  return getJson(`/optimizer/analyst-packets?${new URLSearchParams({season:String(scope.season),week:String(scope.week),format:scope.format})}`);
 }

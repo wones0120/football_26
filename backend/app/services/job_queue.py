@@ -20,6 +20,7 @@ BENCHMARK_JOB = "benchmark_suite"
 FEATURE_MATRIX_JOB = "feature_matrix_build"
 PROJECTION_JOB = "projection_build"
 OPTIMIZER_JOB = "optimizer_run"
+PRELIMINARY_OPTIMIZER_JOB = "preliminary_optimizer_run"
 RESEARCH_SIMULATION_JOB = "research_simulation"
 SLATE_SIMULATION_JOB = "slate_simulation"
 SYMBOLIC_JOB = "symbolic_run"
@@ -32,6 +33,7 @@ SUPPORTED_JOB_TYPES = frozenset(
         FEATURE_MATRIX_JOB,
         PROJECTION_JOB,
         OPTIMIZER_JOB,
+        PRELIMINARY_OPTIMIZER_JOB,
         RESEARCH_SIMULATION_JOB,
         SLATE_SIMULATION_JOB,
         SYMBOLIC_JOB,

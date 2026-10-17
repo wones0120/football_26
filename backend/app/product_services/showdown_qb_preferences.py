@@ -22,6 +22,7 @@ def showdown_qb_preference_report(params: dict) -> dict:
     return {
         **{key: params.get(key, False) for key in QB_PREFERENCE_LABELS},
         "allow_qb_captain": captain_allowed,
+        "named_captain_position_exception_ids": params.get("captain_position_exception_ids", []),
         "max_starting_qbs_per_lineup": maximum,
         "requested_portfolio_size": int(params.get("num_lineups", 1)),
         "effective_qb_captain_limit": int(captain_allowed),

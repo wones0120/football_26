@@ -12,6 +12,10 @@ priority or status after repository consolidation.
 
 ## North Star
 
+### Deferred until current Sunday lineup work is complete (2026-10-17)
+
+- [ ] **UI-DOWNLOAD-001 — Consistent lineup download buttons.** Replace plain download links in Single Stat and Tiers with the same accessible button appearance used by Classic/Showdown. Use the existing black/navy, white and teal theme and consistent action labels, focus, hover and disabled states. Preserve native download behavior and identity/readiness checks; do not reintroduce acknowledgment checkboxes. Verify all contest pages. User explicitly requested this wait until lineup building is finished.
+
 ### Next architecture-led delivery sequence (2026-10-10)
 
 **Next live slate: Sunday Main.** Shared Classic/Captain code repairs and fixture validation are recorded in the [shared-path audit](product/shared_classic_captain_path_audit.md); do not infer live data clearance from those tests. Prioritize Sunday Main readiness and preserve its GPP settings.

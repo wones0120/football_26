@@ -429,6 +429,11 @@ class OwnershipService:
             slate=slate,
             content_sha256=source_info["content_sha256"],
         )
+        from .contest_scope import saved_history_scope
+        with self.engine.connect() as connection:
+            verified_scope = saved_history_scope(connection, resolved_contest_id, season, week)
+        if verified_scope["status"] == "conflict":
+            raise ValueError(f"Contest date conflicts with requested season/week: {verified_scope}")
         normalized_tiers = self._normalize_payout_tiers(
             payout_tiers or [],
             field_size=resolved_field_size,
@@ -472,6 +477,17 @@ class OwnershipService:
             payout_tiers=normalized_tiers,
             entries=entries,
         )
+
+        if target_persisted:
+            from .evaluation_record import append_record
+            with self.engine.begin() as connection:
+                append_record(connection, "contest_submission_snapshot", {
+                    "contest_id": resolved_contest_id, "season": season, "week": week,
+                    "slate": slate, "contest_format": resolved_format,
+                    "verified_scope": verified_scope, "entry_fee": entry_fee,
+                    "payout_tiers": normalized_tiers,
+                    "submitted_entries": json.loads(entries.to_json(orient="records")),
+                }, source=source_info)
 
         if target_persisted and not ownership_source.empty:
             persist_observations(self.engine, ownership_source)
@@ -1228,7 +1244,7 @@ class OwnershipService:
                 "source_file_import",
                 "dfs_contest",
                 "dfs_contest_payout_tier",
-                "dfs_contest_entry_result",
+                "dfs_contest_entry_result", "evaluation_record",
             ),
         )
         try:

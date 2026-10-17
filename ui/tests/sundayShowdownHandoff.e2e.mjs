@@ -74,12 +74,12 @@ try {
   assert.equal(await page.getByTestId("optimizer-options").getByRole("heading", { name: "Optimizer options" }).isVisible(), true);
   assert.equal(await page.getByLabel("No QB Captain", { exact: true }).count(), 0);
   await page.getByTestId("preparation-tools").locator(":scope > summary").click();
-  assert.equal(await page.getByLabel("Exclude questionable (Q) players").isChecked(), false, "Classic default is unchanged");
+  assert.equal(await page.getByLabel("Exclude questionable (Q) players").isChecked(), true, "Classic defaults to excluding Q");
   await page.locator(".operations-optimizer-panel").getByRole("combobox", { name: /Format/ }).selectOption("showdown");
   assert.equal(await page.getByLabel("Exclude questionable (Q) players").isChecked(), true, "Showdown defaults to excluding Q");
   await page.getByLabel("Exclude questionable (Q) players").uncheck();
   await page.locator(".operations-optimizer-panel").getByRole("combobox", { name: /Format/ }).selectOption("classic");
-  assert.equal(await page.getByLabel("Exclude questionable (Q) players").isChecked(), false);
+  assert.equal(await page.getByLabel("Exclude questionable (Q) players").isChecked(), true);
   await page.locator(".operations-optimizer-panel").getByRole("combobox", { name: /Format/ }).selectOption("showdown");
   assert.equal(await page.getByLabel("Exclude questionable (Q) players").isChecked(), false, "Explicit choice survives format switching");
   await page.getByLabel("Exclude questionable (Q) players").check();
@@ -93,7 +93,7 @@ try {
   await page.getByLabel("No QB Captain", { exact: true }).check();
   await page.getByLabel("No 2 QBs in the lineup", { exact: true }).check();
   const prep = page.getByTestId("slate-preparation");
-  await prep.getByRole("button", { name: "Capture nflverse markets", exact: true }).click();
+  await prep.getByRole("button", { name: "Refresh sportsbook lines", exact: true }).click();
   await page.waitForFunction(() => document.querySelector('[data-testid="slate-preparation"]')?.textContent?.includes("markets: queued"));
   assert.equal(await prep.getByRole("button", { name: "Rebuild slate features and projections" }).isDisabled(), true);
   let result = await (await fetch(api + "/fixture/work", { method: "POST" })).json();

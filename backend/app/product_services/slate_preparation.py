@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Literal
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import load_only
 from ..injury_scope import injury_slate_sql, injury_subset_membership_sql
@@ -39,6 +39,7 @@ class SlatePreparationRequest(BaseModel):
     action: Literal["salary", "injuries", "markets", "weather", "rebuild", "prepare"]
     contest_format: Literal["classic", "showdown"] = "classic"
     ownership_required: bool = False
+    preliminary_research: bool = False
     path: str | None = None
     injury_source: Literal["draftkings", "fanduel"] = "fanduel"
     native_draft_group: str | None = None
@@ -46,6 +47,16 @@ class SlatePreparationRequest(BaseModel):
     # The ordinary prediction schema validates these scenario choices below.
     availability_overrides: list[dict] = Field(default_factory=list, max_length=50)
     assume_questionable_out: bool = False
+    analyst_mode: Literal["AUTO", "MANUAL", "BASELINE"] = "AUTO"
+    analyst_packet_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    analyst_strategy: Literal["MERGED_SCENARIOS", "CONSTRUCTION"] = "MERGED_SCENARIOS"
+
+    @model_validator(mode="after")
+    def validate_preliminary_scope(self):
+        if self.preliminary_research and (self.contest_format != "classic" or self.action not in {"prepare", "rebuild"}
+                or self.availability_overrides or self.assume_questionable_out):
+            raise ValueError("Preliminary research requires Classic preparation without availability overrides")
+        return self
 
 
 def digest(value):
@@ -155,6 +166,8 @@ def capture_source(request, games):
     args = [sys.executable, str(ROOT / "scripts" / (
         "capture_nflverse_markets.py" if request.action == "markets" else "capture_current_weather_forecasts.py")),
         "--season", str(request.season), "--week", str(request.week), "--slate", request.slate]
+    if request.action == "markets":
+        args += ["--provider", "espn"]
     if request.action == "weather":
         args += ["--slate-lock-at", lock.isoformat(), "--apply", "--verify-artifacts"]
         for game in games:
@@ -388,7 +401,7 @@ def preparation_status(session, request):
             "entry_ready": False, "limitations": [
                 "Official final availability clearance remains unverified. Practice, designation, starter evidence and workload are separate facts.",
                 "Salary publication time/freshness policy unavailable; import time is not source publication time. Check the native DraftKings draft group.",
-                "nflverse schedule capture has no upstream quote-publication time. Quote freshness remains unknown.",
+                "ESPN sportsbook retrieval (and legacy nflverse captures) has no upstream quote-publication time. Exact quote age remains unknown.",
                 "Weather has venue/roof and forecast timing evidence, but is not consumed by projections. No scoring change is made."]}
 
 
@@ -409,11 +422,16 @@ def validate_prepared_optimizer(session, payload, *, verify_current=True):
     if not job or job.status != "completed" or job.request_json.get("action") not in {"rebuild", "prepare"}:
         raise ValueError("Preparation is missing, still running, or failed. Rebuild features and projections first.")
     request = SlatePreparationRequest.model_validate(job.request_json)
+    if request.preliminary_research:
+        raise ValueError("Preliminary preparations require the frozen preliminary research workflow; they cannot certify normal optimization")
     if live_required and request.action != "prepare":
         raise ValueError("Prepare slate for optimization first. A projection rebuild alone does not certify source readiness.")
     if not same_scope(payload, request):
         raise ValueError("Prepared inputs belong to another season/week/slate.")
     result = job.result_json or {}
+    from .analyst_preparation import bind_handoff, handoff_for_intent
+    if payload.get("strategy") or payload.get("objective") or (payload.get("params") or {}).get("analyst_handoff_mode"):
+        bind_handoff(payload, result)
     if request.action == "prepare":
         if payload.get("contest_format") != request.contest_format:
             raise ValueError("Prepared inputs belong to another contest format. Prepare this slate first.")
@@ -462,6 +480,8 @@ def validate_prepared_optimizer(session, payload, *, verify_current=True):
             "prepared_input_job_id": job_id, "projection_run_id": result["projection_run_id"],
             "feature_run_id": result["feature_run_id"], "source_sha256": result["source_sha256"],
             "projection_lineage_sha256": result["projection_lineage_sha256"],
+            "analyst_handoff": handoff_for_intent(result,params.get("analyst_optimization_intent","MIXED")),
+            "analyst_intent_handoffs": result.get("analyst_intent_handoffs", {}),
             "consumption": result["consumption"], "limitations": result["limitations"],
             "games": result["source_manifest"]["games"],
             "native_draft_groups": sorted({str((r.get("metadata_json") or {}).get("native_draft_group"))
@@ -540,7 +560,8 @@ def execute_preparation(context, payload, *, refresh_training_before_cutoff=Fals
             from .showdown_data_readiness import refresh_training_labels
             context.progress("training_labels", 1, 4, "Verifying completed prior-week training labels.")
             with SessionLocal() as session:
-                refresh_training_labels(session.get_bind(), **scope(request))
+                refresh_training_labels(session.get_bind(), **scope(request),
+                    **({"preliminary_exclude_unknown": True} if request.preliminary_research else {}))
         cutoff = checkpoint.get("data_cutoff_at") or datetime.now(UTC).isoformat()
         checkpoint.update(source_sha256=digest(manifest), data_cutoff_at=cutoff)
         context.progress("projections", 2, 4, "Rebuilding projections from the frozen source selection.", checkpoint=checkpoint)
@@ -552,7 +573,8 @@ def execute_preparation(context, payload, *, refresh_training_before_cutoff=Fals
             context.progress(stage, current, total, message, checkpoint=checkpoint)
         child = SimpleNamespace(run_id=checkpoint["projection_run_id"], checkpoint=checkpoint,
                                 progress=projection_progress)
-        result = _projection_handler(child, prediction.model_dump(mode="json"))
+        result = _projection_handler(child, prediction.model_dump(mode="json"),
+            **({"preliminary_exclude_unknown": True} if request.preliminary_research else {}))
         if any(result.get(k) != checkpoint[k] for k in ("projection_run_id", "feature_run_id", "model_run_id")):
             raise ValueError("Dependent pipeline reused an older build. Start a new preparation.")
         with SessionLocal() as session:
@@ -625,12 +647,14 @@ def prepare_optimizer_inputs(context, request):
     from . import classic_data_readiness as classic
     from . import showdown_data_readiness as showdown
 
+    if request.preliminary_research and (request.contest_format != "classic" or request.availability_overrides or request.assume_questionable_out):
+        raise ValueError("Preliminary preparation requires Classic without projection availability overrides")
     service = OptimizerService()
     gate = classic if request.contest_format == "classic" else showdown
     refreshed = gate.refresh_live_sources(service, **scope(request),
         params={"availability_overrides": request.availability_overrides,
                 "assume_questionable_out": request.assume_questionable_out, "refresh_ownership": True,
-                "ownership_required": request.ownership_required},
+                "ownership_required": request.ownership_required, "preliminary_research": request.preliminary_research},
         progress=context.progress)
     build = (refreshed["report"].get("projection", {}).get("result") or {})
     result = {**build, **scope(request), "action": "prepare", "contest_format": request.contest_format,
@@ -639,15 +663,44 @@ def prepare_optimizer_inputs(context, request):
               "availability_overrides": request.availability_overrides,
               "assume_questionable_out": request.assume_questionable_out,
               "data_cutoff_at": aware(refreshed["data_cutoff_at"]).isoformat(),
-              "source_refresh": _json_safe(refreshed["report"])}
+              "source_refresh": _json_safe(refreshed["report"]), "preliminary_research": request.preliminary_research}
     context.progress("source_checks", 0, 1, "Checking prepared inputs before optimization.",
                      checkpoint={"preparation_result": result})
     if not result["projection_run_id"]:
         raise ValueError("Slate preparation blocked: " + str(refreshed["report"].get("projection", {}).get("reason", "No verified projection")))
     readiness = assess_prepared_inputs(service, request, result)
     result["data_readiness"] = readiness
+    from .analyst_preparation import prepare_handoff
+    cached_analyst_rows=None
+    def analyst_rows():
+        nonlocal cached_analyst_rows
+        if cached_analyst_rows is not None:return cached_analyst_rows
+        prepared_pool = service._load_player_pool(request.season, request.week, request.slate,
+            projection_run_id=result["projection_run_id"], ownership_run_id=result.get("ownership_run_id"),
+            evidence_cutoff_at=aware(result["data_cutoff_at"]), require_explicit_runs=True)
+        from .kicker_roles import assign_kicker_roles
+        from .player_roles import resolve_player_roles
+        prepared_pool, _ = assign_kicker_roles(prepared_pool)
+        prepared_pool, _ = resolve_player_roles(prepared_pool)
+        cached_analyst_rows=_json_safe(prepared_pool.to_dict("records"))
+        return cached_analyst_rows
+    from .analyst_personal_context import load_inputs
+    personal_context_inputs = _json_safe(load_inputs(service.engine))
+    result["analyst_handoff"] = prepare_handoff(request=request, result=result,
+        row_loader=analyst_rows, checked_at=datetime.now(UTC).isoformat(), personal_context_inputs=personal_context_inputs)
+    if request.analyst_mode=="AUTO":
+        result["analyst_intent_handoffs"]={intent:prepare_handoff(request=request,result=result,
+            row_loader=analyst_rows,checked_at=datetime.now(UTC).isoformat(),optimization_intent=intent,personal_context_inputs=personal_context_inputs)
+            for intent in ("EXPECTED_GAME","CONTRARIAN")}
+    context.progress("analyst_checks", 1, 1, "Checked published Analyst research against the prepared scope and fresh canonical evidence.",
+        checkpoint={"preparation_result": result})
     context.progress("readiness", 1, 1, "Prepared source checks saved.",
                      checkpoint={"preparation_result": result})
+    if request.preliminary_research:
+        # A completed research build retains the failed normal report. Freeze still
+        # verifies salary identity, fresh markets and projection/ownership lineage.
+        result["entry_ready"] = False
+        return result
     if readiness["status"] != "READY":
         error = classic.ClassicDataNotReady if request.contest_format == "classic" else showdown.ShowdownDataNotReady
         raise error(readiness)

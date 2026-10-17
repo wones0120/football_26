@@ -17,9 +17,12 @@ from statistics import median
 from typing import Any, Callable, Iterable, Mapping
 from zoneinfo import ZoneInfo
 
+from .workload_evidence import CONTRACT_ID as WORKLOAD_CONTRACT_ID
+
 
 POOL_PATHS = (
     ("strategy_runtime", "single_lineup", "all_candidates"),
+    ("strategy_runtime", "strategy_contract_audit", "candidate_rosters"),
     ("strategy_runtime", "classic_small_field", "all_candidates"),
     ("strategy_runtime", "showdown_portfolio_policy", "candidate_selection", "ranked_metrics"),
     ("strategy_runtime", "single_entry", "all_candidates"),
@@ -96,6 +99,12 @@ def extract_saved_pool(config: Any, contest_format: str) -> dict[str, Any]:
             value = value.get(key) if isinstance(value, Mapping) else None
         if not isinstance(value, list) or not value:
             continue
+        if path[1] == "strategy_contract_audit":
+            effective = _mapping(_mapping(source.get("effective_strategy_contract")).get("effective"))
+            if effective.get("generation") != "sequential exposure-aware ILP; accepted candidates are the selected portfolio":
+                continue
+            if len(value) != effective.get("entry_count"):
+                return {"status": "unavailable", "reason": "incomplete_sequential_candidate_pool"}
         forbidden = {"postgame", "actual_points", "actual_score", "actual_rank"}
         if any(forbidden.intersection(row) or any(
                 forbidden.intersection(player) for player in (row.get("roster") or row.get("players") or [])
@@ -120,9 +129,28 @@ def extract_saved_pool(config: Any, contest_format: str) -> dict[str, Any]:
 def candidate_snapshot(config: Any, contest_format: str) -> dict[str, Any]:
     """Small deterministic lineage manifest for the already persisted pregame pool."""
     pool = extract_saved_pool(config, contest_format)
-    return {"contract_id": "candidate_pool_manifest_v1",
+    manifest = {"contract_id": "candidate_pool_manifest_v1",
             **{key: pool[key] for key in ("status", "source_path", "sha256", "count",
                                          "unique_roster_count", "scenario_variant_duplicates", "reason") if key in pool}}
+    evidence = saved_workload_evidence(config)
+    if evidence:
+        manifest["workload_evidence"] = {
+            "contract_id": WORKLOAD_CONTRACT_ID, "sha256": _digest(evidence),
+            "player_count": len(evidence),
+            "source_path": "strategy_runtime.player_pool.rows[player_id].workload_evidence",
+            "linkage": "canonical player_id; shared by all saved candidate variants and CPT/FLEX roles",
+        }
+    return manifest
+
+
+def saved_workload_evidence(config: Any) -> dict[str, dict]:
+    """Only read saved packets; never reconstruct missing historical evidence."""
+    runtime = _mapping(_mapping(config).get("strategy_runtime"))
+    return {str(row["player_id"]): row["workload_evidence"]
+            for row in _mapping(runtime.get("player_pool")).get("rows", [])
+            if isinstance(row, Mapping) and row.get("player_id")
+            and isinstance(row.get("workload_evidence"), Mapping)
+            and row["workload_evidence"].get("contract_id") == WORKLOAD_CONTRACT_ID}
 
 
 def chronological_validation(run: Mapping[str, Any], pool: Mapping[str, Any]) -> dict[str, Any]:
@@ -130,9 +158,25 @@ def chronological_validation(run: Mapping[str, Any], pool: Mapping[str, Any]) ->
     if pool.get("status") not in {"original_candidate_pool", "slate_source_pool"}:
         return {"status": "unavailable", "reason": "original_candidate_pool_unavailable"}
     kicks = []
-    for candidate in pool["candidates"]:
+    game_rows = list(pool["candidates"]) + [{"games_represented": run.get("saved_lineup_games", [])}]
+    for candidate in game_rows:
         for game in candidate.get("games_represented") or []:
             match = re.search(r"\b(\d{2}/\d{2}/\d{4} \d{2}:\d{2}[AP]M) ET\b", str(game))
+            if match:
+                kicks.append(datetime.strptime(match.group(1), "%m/%d/%Y %I:%M%p")
+                             .replace(tzinfo=ZoneInfo("America/New_York")))
+    # The frozen input frame contains all slate games, including games absent
+    # from selected candidates. Never substitute today's schedule or salaries.
+    config = _mapping(run.get("constraint_config_json"))
+    runtime = _mapping(config.get("strategy_runtime"))
+    frozen = _mapping(config.get("showdown_evidence_snapshot"))
+    classic = _mapping(_mapping(runtime.get("classic_run_input_snapshot")).get("payload"))
+    frames = [frozen.get("player_pool") or [], classic.get("players") or [],
+              _mapping(_mapping(config.get("effective_strategy_contract")).get("effective")).get("players") or []]
+    for rows in frames:
+        for row in rows:
+            game = str(row.get("game_id") or "")
+            match = re.search(r"\b(\d{2}/\d{2}/\d{4} \d{2}:\d{2}[AP]M) ET\b", game)
             if match:
                 kicks.append(datetime.strptime(match.group(1), "%m/%d/%Y %I:%M%p")
                              .replace(tzinfo=ZoneInfo("America/New_York")))
@@ -140,6 +184,17 @@ def chronological_validation(run: Mapping[str, Any], pool: Mapping[str, Any]) ->
         return {"status": "unavailable", "reason": "saved_kickoff_evidence_unavailable"}
     cutoff = run.get("data_cutoff_at")
     created = run.get("optimizer_created_at")
+    created_basis = "optimizer_database_timestamp"
+    # Older writers inserted naive UTC into a session-local TIMESTAMPTZ column.
+    # Recover only from an explicitly zoned timestamp in the ORIGINAL snapshot.
+    frozen_created = frozen.get("frozen_at") or _mapping(classic.get("metadata")).get("created_at")
+    if isinstance(frozen_created, str):
+        try:
+            observed = datetime.fromisoformat(frozen_created)
+            if observed.tzinfo is not None:
+                created, created_basis = observed, "original_frozen_input_timestamp"
+        except ValueError:
+            pass
     try:
         cutoff = datetime.fromisoformat(cutoff) if isinstance(cutoff, str) else cutoff
         created = datetime.fromisoformat(created) if isinstance(created, str) else created
@@ -149,7 +204,10 @@ def chronological_validation(run: Mapping[str, Any], pool: Mapping[str, Any]) ->
         valid = False
     return {"status": "predecision" if valid else "unavailable",
             "reason": None if valid else "cutoff_or_run_creation_not_before_saved_kickoff",
-            "first_saved_kickoff_at": min(kicks).isoformat()}
+            "first_saved_kickoff_at": min(kicks).isoformat(),
+            "decision_at": created.isoformat() if isinstance(created, datetime) else created,
+            "decision_time_basis": created_basis,
+            "input_cutoff_at": cutoff.isoformat() if isinstance(cutoff, datetime) else cutoff}
 
 
 def actual_points_by_player(observations: Iterable[Mapping[str, Any]], contest_format: str) -> dict[str, float]:
@@ -451,9 +509,12 @@ def correlation_samples(rows: Iterable[Mapping[str, Any]]) -> list[dict[str, Any
 def _pregame(candidate: Mapping[str, Any], rank: int, run: Mapping[str, Any]) -> dict[str, Any]:
     components = _mapping(candidate.get("components"))
     return {
-        "candidate_id": candidate.get("candidate_id") or f"{run['optimizer_run_id']}:{rank}",
+        "candidate_id": f"{run['optimizer_run_id']}:candidate:{rank}",
+        "source_candidate_id": candidate.get("candidate_id"),
+        "candidate_ordinal": rank,
         "optimizer_run_id": str(run["optimizer_run_id"]), "generation_rank": candidate.get("generation_rank"),
-        "selector_rank": candidate.get("rank") or rank,
+        "selector_rank": candidate.get("selector_rank", candidate.get("rank")),
+        "order_basis": "recorded_selector_rank" if candidate.get("rank") is not None or candidate.get("selector_rank") is not None else "saved_generation_order",
         "mean": _number(candidate.get("mean")), "p90": _number(candidate.get("p90")),
         "objective_score": _number(candidate.get("objective_score") or candidate.get("single_entry_score") or candidate.get("selector")),
         "ownership_sum": _number(candidate.get("ownership_sum")),
@@ -477,13 +538,20 @@ def evaluate_run(
     run: Mapping[str, Any], selected_lineups: Iterable[Mapping[str, Any]],
     entered_lineups: Iterable[Mapping[str, Any]], actuals: Mapping[str, float],
     benchmarks: Mapping[str, Mapping[str, Any]],
+    contest_submissions: Iterable[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
+    selected_lineups, entered_lineups = list(selected_lineups), list(entered_lineups)
+    contest_submissions = list(contest_submissions) if contest_submissions is not None else entered_lineups
     fmt = str(run.get("contest_format") or "").lower()
     pool = extract_saved_pool(run.get("constraint_config_json"), fmt)
     output: dict[str, Any] = {"optimizer_run_id": str(run["optimizer_run_id"]),
                               "contest_format": fmt, "strategy": run.get("strategy"),
                               "candidate_pool": {k: v for k, v in pool.items() if k != "candidates"},
                               "chronological_validation": chronological_validation(run, pool)}
+    workload = saved_workload_evidence(run.get("constraint_config_json"))
+    output["workload_evidence"] = {"contract_id": WORKLOAD_CONTRACT_ID,
+                                   "status": "saved" if workload else "unavailable_in_saved_run",
+                                   "players": workload}
     if pool["status"] != "original_candidate_pool":
         output["status"] = "candidate_pool_unavailable"
         output["replay_status"] = "not_attempted_without_verified_point_in_time_reproducibility"
@@ -509,12 +577,18 @@ def evaluate_run(
         assert signature is not None
         points, missing = score_signature(signature, actuals)
         pregame = _pregame(candidate, index, run)
-        is_selected = (int(pregame["selector_rank"]) in selected_ranks
+        if workload:
+            pregame["workload_evidence_player_ids"] = sorted({pid for pid, _ in signature if pid in workload})
+            pregame["workload_evidence_missing_player_ids"] = sorted({pid for pid, _ in signature if pid not in workload})
+        is_selected = (int(pregame["selector_rank"] or index) in selected_ranks
                        if selected_ranks else signature in selected)
         is_entered = signature in entered and (
             is_selected if signature in selected_variant_signatures
             else first_rank_by_signature[signature] == index
         )
+        pregame["saved_lineups"] = [
+            {"lineup_id": row.get("lineup_id"), "saved_lineup_number": row.get("lineup_number")}
+            for row in selected_lineups if tuple(row.get("signature") or ()) == signature]
         pregame["portfolio_selected"] = is_selected
         pregame["selection_reason"] = (candidate.get("selection_reason") or
                                        omissions.get(str(pregame["selector_rank"])) or
@@ -545,7 +619,7 @@ def evaluate_run(
     best_entered = max((row["postgame"]["actual_points"] for row in entered_scored), default=None)
     best_observed = max(scored, key=lambda row: row["postgame"]["actual_points"], default=None)
     top_selected = min((row for row in candidates if row["postgame"]["selected"]),
-                       key=lambda row: row["pregame"]["selector_rank"], default=None)
+                       key=lambda row: row["pregame"]["selector_rank"] or row["pregame"]["candidate_ordinal"], default=None)
     rank_comparison = None
     if best_observed and top_selected:
         contender = best_observed["pregame"]
@@ -569,7 +643,7 @@ def evaluate_run(
     selected_count = len(selected)
     entered_count = len(entered)
     complete = len(unique_scored) == pool["unique_roster_count"]
-    ordered = sorted(candidates, key=lambda row: (row["pregame"]["selector_rank"], row["pregame"]["candidate_id"]))
+    ordered = sorted(candidates, key=lambda row: (row["pregame"]["selector_rank"] or row["pregame"]["candidate_ordinal"], row["pregame"]["candidate_id"]))
     top_k = {str(k): {"best_scored_actual": max((row["postgame"]["actual_points"] for row in ordered[:k]
                                                    if row["postgame"]["actual_points"] is not None), default=None),
                        "scored": sum(row["postgame"]["actual_points"] is not None for row in ordered[:k]),
@@ -579,6 +653,11 @@ def evaluate_run(
         if benchmark.get("status") != "available":
             field[contest_id] = {"status": "unavailable", "reason": benchmark.get("reason")}
             continue
+        contest_entered = [row for row in contest_submissions if str(row.get("contest_id")) == str(contest_id)]
+        contest_entered_scores = [_number(row.get("entry_points")) for row in contest_entered]
+        contest_best_entered = max((v for v in contest_entered_scores if v is not None), default=None)
+        contest_entered_signatures = {tuple(row["signature"]) for row in contest_entered if row.get("signature")}
+        contest_entered_scored = [row for row in unique_scored if row["signature"] in contest_entered_signatures]
         thresholds = {**benchmark["thresholds"], "cash": benchmark["cash_line"], "winner": benchmark["winner"]}
         for row in scored:
             points = row["postgame"]["actual_points"]
@@ -592,7 +671,7 @@ def evaluate_run(
             attainment[key] = {"generated_scored": sum(row["postgame"]["actual_points"] >= threshold - 0.005 for row in unique_scored) if threshold is not None else None,
                                 "generated_variant_scored": sum(row["postgame"]["actual_points"] >= threshold - 0.005 for row in scored) if threshold is not None else None,
                                 "selected_scored": sum(row["postgame"]["actual_points"] >= threshold - 0.005 for row in selected_scored) if threshold is not None else None,
-                                "entered_scored": sum(row["postgame"]["actual_points"] >= threshold - 0.005 for row in entered_scored) if threshold is not None else None}
+                                "entered_scored": sum(row["postgame"]["actual_points"] >= threshold - 0.005 for row in contest_entered_scored) if threshold is not None else None}
         field[contest_id] = {"status": "available", "winner": benchmark["winner"],
                              "median": benchmark["median"], "thresholds": benchmark["thresholds"],
                              "cash_line": benchmark["cash_line"], "attainment": attainment,
@@ -600,7 +679,10 @@ def evaluate_run(
                              "top_1_gap": round(benchmark["thresholds"]["top_1_percent"] - best, 2) if best is not None else None,
                              "best_generated_field_rank": field_rank(best, benchmark["field_scores_desc"]) if best is not None else None,
                              "best_selected_field_rank": field_rank(best_selected, benchmark["field_scores_desc"]) if best_selected is not None else None,
-                             "best_entered_field_rank": field_rank(best_entered, benchmark["field_scores_desc"]) if best_entered is not None else None}
+                             "best_entered_field_rank": field_rank(contest_best_entered, benchmark["field_scores_desc"]) if contest_best_entered is not None else None,
+                             "best_entered_actual": contest_best_entered,
+                             "entered_count": len(contest_entered),
+                             "selected_vs_entered_hindsight_gap": round(best_selected - contest_best_entered, 2) if best_selected is not None and contest_best_entered is not None else None}
     output.update({"status": "complete" if complete else "incomplete_player_actuals",
                    "generated_count": len(candidates), "unique_roster_count": pool["unique_roster_count"],
                    "scored_count": len(scored), "unique_scored_roster_count": len(unique_scored),
@@ -641,9 +723,10 @@ def _diagnose(best: float | None, selected: float | None, entered: float | None,
         if selected_count and selected is not None and best > selected + .005:
             findings.append({"stage": "CANDIDATE_SELECTION", "contest_id": contest_id,
                              "evidence": f"Best scoreable generated {best:.2f}; best selected {selected:.2f}; observed regret {best-selected:.2f}."})
-        if entered_count and entered is not None and selected is not None and selected > entered + .005:
-            findings.append({"stage": "EXECUTION", "contest_id": contest_id,
-                             "evidence": f"Best selected {selected:.2f}; best entered {entered:.2f}."})
+        contest_entered = row.get("best_entered_actual")
+        if contest_entered is not None and selected is not None and selected > contest_entered + .005:
+            findings.append({"stage": "HINDSIGHT_GAP", "contest_id": contest_id,
+                             "evidence": f"Best saved selection {selected:.2f}; this contest's best submission {contest_entered:.2f}. No execution error is implied."})
     if not complete:
         findings.append({"stage": "EVIDENCE_GAP", "evidence": "Unscored candidates prevent an exact generation ceiling and final actual ranks."})
     return findings
@@ -707,6 +790,7 @@ def build_optimizer_effectiveness(
                                  for row in entry["players"]))
         entered[run_id].append({"entry_id": entry["entry_id"], "contest_id": entry["contest_id"],
                                 "entry_points": entry.get("entry_points"), "signature": signature})
+    execution = execution_diagnostics(slate_report.get("entries", []), [*evidence.get("assignments", []), *evidence.get("recommendation_assignments", [])], saved)
     output = []
     for run_id in sorted(evaluated_run_ids, key=lambda value: (value not in attached, value)):
         run = runs.get(run_id)
@@ -717,7 +801,12 @@ def build_optimizer_effectiveness(
             run = {**run, **run_loader(run_id)}
         fmt = str(run.get("contest_format") or "").lower()
         actuals = actual_points_by_player(evidence.get("observations", []), fmt)
-        evaluated = evaluate_run(run, selected[run_id], entered[run_id], actuals, benchmarks)
+        evaluated = evaluate_run(run, selected[run_id], entered[run_id], actuals, benchmarks,
+            contest_submissions=[{**entry, "signature": tuple(sorted((str(p["player_id"]), p.get("roster_position")=="CPT")
+                for p in entry.get("players", []))) if entry.get("identity_complete") else None}
+                for entry in slate_report.get("entries", [])])
+        evaluated["execution_diagnostics"] = [row for row in execution if row.get("optimizer_run_id") == run_id]
+        evaluated.setdefault("diagnostic", []).extend(row for row in evaluated["execution_diagnostics"] if row["status"] == "mismatch")
         evaluated["run_scope"] = ("entry_linked" if run_id in attached else
                                   "explicit_diagnostic" if run_id in requested else "other_completed_saved_pool")
         if run_loader:
@@ -819,8 +908,37 @@ def build_optimizer_effectiveness(
             "unavailable_completed_run_ids": sorted(set(runs) - evaluated_run_ids),
             "field_benchmarks": public_benchmarks,
             "entered_field_comparisons": entered_field,
+            "execution_diagnostics": execution,
             "best_entered_slate_actual": max((x for x in entered_points if x is not None), default=None),
             "unmatched_entered_entries": [row["entry_id"] for row in slate_report.get("entries", [])
                                            if not row.get("optimizer_run_id")],
             "scope_note": "Run metrics use canonical matched entries. Slate entry totals include unmatched submissions."
         }
+
+
+def execution_diagnostics(entries, assignments, saved):
+    """A score difference is never an execution error; require entry-specific intent."""
+    by_entry = defaultdict(list)
+    for assignment in assignments:
+        by_entry[(str(assignment["contest_id"]), str(assignment["entry_id"]))].append(assignment)
+    output = []
+    for entry in entries:
+        key = (str(entry["contest_id"]), str(entry["entry_id"]))
+        intent = by_entry.get(key, [])
+        row = {"contest_id": key[0], "entry_id": key[1], "status": "intended_entry_unavailable"}
+        if len(intent) == 1:
+            assignment = intent[0]
+            players = assignment.get("intended_players") or saved.get(str(assignment.get("lineup_id")), [])
+            expected = tuple(sorted((str(p["player_id"]), p.get("roster_position") == "CPT") for p in players))
+            actual = tuple(sorted((str(p["player_id"]), p.get("roster_position") == "CPT") for p in entry.get("players", [])))
+            row.update(optimizer_run_id=assignment.get("optimizer_run_id"), intended_lineup_id=assignment.get("lineup_id"))
+            if players and entry.get("identity_complete"):
+                row["status"] = "matched" if expected == actual else "mismatch"
+                if expected != actual:
+                    row.update(stage="EXECUTION", evidence="Recorded intended entry roster differs from the submitted roster.")
+            else:
+                row["status"] = "identity_or_intended_roster_unavailable"
+        elif intent:
+            row["status"] = "conflicting_intended_entries"
+        output.append(row)
+    return output

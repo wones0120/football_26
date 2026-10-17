@@ -94,6 +94,23 @@ def is_excluded_specialist(row, *, cutoff, evaluated_at, max_age_hours):
 def compose_player_contexts(salaries, facts, *, cutoff, max_age_hours):
     """Merge independent current facts once per canonical native salary player."""
     cutoff = aware(cutoff)
+    # A starter observation describes the team's QB relationship, not just the
+    # named player's role. Carry it to the other canonical QBs so a newer
+    # starter supersedes their retained older starter assignments as well.
+    # Preserve the original clocks/IDs, including when Main facts are reused.
+    facts = list(facts)
+    starters = [f for f in facts if f.get("kind") == "starting_qb"
+                and f.get("role") == "expected_starter"
+                and f.get("position") == "QB" and not f.get("team_starting_qb_player_id")]
+    for salary in salaries:
+        if salary.get("position") != "QB":
+            continue
+        pid = str(salary.get("player_id") or salary.get("player_master_id") or "")
+        for starter in starters:
+            if (str(starter.get("player_id")) != pid and
+                    normalize_team(str(starter.get("team") or "")) == normalize_team(str(salary.get("team") or ""))):
+                facts.append({**starter, "player_id": pid, "role": "expected_backup",
+                              "team_starting_qb_player_id": str(starter["player_id"])})
     results = []
     for salary in salaries:
         pid = str(salary.get("player_id") or salary.get("player_master_id") or "")

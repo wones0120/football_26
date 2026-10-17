@@ -675,3 +675,33 @@ def test_classic_season_rank_filters_candidates_preserves_model():
     audit=next(r for r in job.params['strategy_runtime']['player_pool']['rows'] if r['player_id']==cheap['player_id'])
     assert 'user_season_ppg_rank_rb' in audit['exclusion_reasons']
     assert audit['user_preference_exclusions']
+
+
+def test_classic_favored_filter_preserves_model_and_reports_user_exclusion():
+    from backend.app.tests.product.test_classic_data_readiness import fixture, service_fixture, refresh_result, NOW
+    from backend.app.product_services import classic_data_readiness as gate
+    rows,evidence=fixture()
+    for market in evidence['source_manifest']['markets']:market['home_spread']=-3
+    for row in rows:
+        game=next(g for g in evidence['source_manifest']['games'] if g['game_id']==row['canonical_game_id'])
+        row['team_spread_line']=-3 if row['player_team']==game['home_team'] else 3
+        row['team_implied_total']=(48-row['team_spread_line'])/2
+    removed=next(r for r in rows if r['position']=='RB' and r['team_spread_line']>0)
+    original_projection=removed['projection']
+    service=service_fixture(rows)
+    service._attach_symbolic_explanations=MagicMock()
+    def discover(pool,solve,**kwargs):
+        assert removed['player_id'] not in set(pool.player_id)
+        saved=service._persist_optimizer_run.call_args.args[0]
+        original=next(p for p in saved.params['classic_evidence_snapshot']['player_pool'] if p['player_id']==removed['player_id'])
+        assert original['projection']==original_projection and original['team_spread_line']==3
+        lineup=OptimizerService._solve_lineup(service,pool,**{**kwargs['base_kwargs'],'include_control_comparison':False})
+        return [lineup] if lineup else []
+    with prepared_optimizer(service,return_value=refresh_result()),patch.object(gate,'read_evidence',return_value=evidence),patch('backend.app.product_services.optimizer.generate_single_lineup_candidates',side_effect=discover):
+        job=service.run_job(season=NOW.year,week=1,slate='SUNDAY_MAIN',strategy=CLASSIC,
+            params={'num_lineups':1,'force_favored_rb':1,'exclude_questionable':False})
+    assert job.status=='completed',job.message
+    assert all(p['player_id']!=removed['player_id'] for r in job.results for p in r)
+    audit=next(r for r in job.params['strategy_runtime']['player_pool']['rows'] if r['player_id']==removed['player_id'])
+    assert 'user_favored_team_rb' in audit['exclusion_reasons']
+    assert audit['user_preference_exclusions']

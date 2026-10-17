@@ -236,6 +236,9 @@ class SelectionDecisionStore:
                        "previous": record["previous_decision_id"], "key": request.idempotency_key, "request": request_hash,
                        "status": record["status"], "now": now, "kickoff": _date(record["run_identity"]["kickoff_at"]),
                        "record": json.dumps(record)})
+            from .evaluation_record import append_record
+            append_record(c, "showdown_selection_decision", record, run_id=run_id,
+                          source={"table": "target.showdown_selection_decision", "decision_id": record["decision_id"]})
         return record
 
     def append_decision(self, review: dict, request: DecisionRequest) -> dict:

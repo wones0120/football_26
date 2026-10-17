@@ -36,6 +36,8 @@ class _ImpactConnection:
     def execute(self, statement, params=None):
         sql = str(statement)
         params = params or {}
+        if "pg_advisory_xact_lock" in sql:
+            return _MappingsResult([])
         if "INSERT INTO target.belief_impact_preview" in sql:
             row = dict(params)
             row["baseline_json"] = json.loads(row["baseline_json"])

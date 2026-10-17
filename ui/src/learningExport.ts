@@ -1,4 +1,5 @@
 import type { WeeklyLearningReport } from "./api.ts";
+import { entrySubmissionSections, submissionEvidenceLimitation } from "./entrySubmissionEvidence.ts";
 
 type Row = Record<string, unknown>;
 const obj = (value: unknown): Row => value && typeof value === "object" && !Array.isArray(value) ? value as Row : {};
@@ -109,8 +110,8 @@ export function weeklyLearningReportMarkdown(report: WeeklyLearningReport): stri
       lines.push("", `### ${slate.slate.replaceAll("_", " ")} · ${cell(run.strategy)} · ${cell(run.optimizer_run_id)}`, "",
         `Candidate generation: ${cell(run.generated_count)} saved variants, ${cell(run.unique_roster_count)} distinct rosters; ${cell(run.unique_scored_roster_count ?? run.scored_count)} distinct rosters scoreable; best scoreable ${points(run.best_generated_actual)}.`,
         `Candidate selection: best selected ${points(run.best_selected_actual)}; observed regret ${points(run.selection_regret_observed)}.`,
-        `Entry execution: best matched entered ${points(run.best_entered_actual)}; observed entry regret ${points(run.entry_regret_observed)}.`, "");
-      if (best) lines.push(`Best scoreable candidate: pregame rank ${cell(obj(best.pregame).selector_rank)}, actual ${points(obj(best.postgame).actual_points)}, projected mean ${points(obj(best.pregame).mean)}, summed player ceiling ${points(obj(best.pregame).p90)}, selector ${points(obj(best.pregame).objective_score)}.`, "");
+        `Retrospective entry comparison: best matched entered ${points(run.best_entered_actual)}; hindsight gap ${points(run.entry_regret_observed)}.`, "");
+      if (best) lines.push(`Best scoreable candidate ID ${cell(obj(best.pregame).candidate_id)}: selector rank ${cell(obj(best.pregame).selector_rank)}, actual ${points(obj(best.postgame).actual_points)}, projected mean ${points(obj(best.pregame).mean)}, summed player ceiling ${points(obj(best.pregame).p90)}, selector ${points(obj(best.pregame).objective_score)}.`, "");
       const comparison = obj(run.best_candidate_pregame_rank_comparison);
       if (Object.keys(comparison).length) lines.push(
         `Pregame rank comparison with selected rank ${cell(comparison.reference_selected_rank)}: selector delta ${points(comparison.objective_score_delta)}, mean delta ${points(comparison.mean_delta)}, summed player ceiling delta ${points(comparison.p90_sum_delta)}.`,
@@ -119,8 +120,8 @@ export function weeklyLearningReportMarkdown(report: WeeklyLearningReport): stri
           Object.entries(obj(comparison.objective_component_deltas)).map(([name, delta]) => [name, points(delta)])),
         "",
       );
-      if (selected.length) lines.push(...table(["Selected pregame rank", "Actual", "Actual rank among scoreable", "Entered"],
-        selected.map((candidate) => [obj(candidate.pregame).selector_rank, points(obj(candidate.postgame).actual_points),
+      if (selected.length) lines.push(...table(["Candidate ID", "Saved lineup number(s)", "Selector rank", "Actual", "Actual rank among scoreable", "Entered"],
+        selected.map((candidate) => [obj(candidate.pregame).candidate_id, rows(obj(candidate.pregame).saved_lineups).map((r) => r.saved_lineup_number).join(", "), obj(candidate.pregame).selector_rank, points(obj(candidate.postgame).actual_points),
           obj(candidate.postgame).actual_rank ?? (Array.isArray(obj(candidate.postgame).actual_rank_bounds)
             ? `${(obj(candidate.postgame).actual_rank_bounds as number[]).join("–")} (bounds)` : "unavailable"),
           obj(candidate.postgame).entered === true ? "yes" : "no"])), "");
@@ -220,6 +221,11 @@ export function weeklyLearningReportMarkdown(report: WeeklyLearningReport): stri
       ),
     );
     for (const entry of slate.entries) {
+      lines.push("", `### Intended / Exported / Observed · contest ${cell(entry.contest_id)} · entry ${cell(entry.entry_id)}`, "");
+      for (const section of entrySubmissionSections(entry)) {
+        lines.push(`**${section.label}**`, "", ...list(section.lines), "");
+      }
+      lines.push(submissionEvidenceLimitation, "");
       const players = Array.isArray(entry.players) ? entry.players as Row[] : [];
       lines.push("", `### Entry ${cell(entry.entry_id)} · contest ${cell(entry.contest_id)}`, "");
       const entryEvidence = obj(entry.entry_evidence);

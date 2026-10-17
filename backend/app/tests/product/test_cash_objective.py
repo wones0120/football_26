@@ -1,7 +1,7 @@
 import json
 import unittest
 from datetime import datetime
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pandas as pd
 
@@ -247,7 +247,9 @@ class ClassicCashObjectiveTests(unittest.TestCase):
             results=[[scored_row]],
         )
 
-        self.assertTrue(service._persist_optimizer_run(job))
+        with patch("backend.app.product_services.evaluation_record.capture_run") as capture:
+            self.assertTrue(service._persist_optimizer_run(job))
+        capture.assert_called_once_with(connection, "cash-run-1")
 
         run_payload = next(
             call.args[1]
@@ -257,6 +259,8 @@ class ClassicCashObjectiveTests(unittest.TestCase):
             and call.args[1].get("optimizer_run_id") == "cash-run-1"
             and "objective_config_json" in call.args[1]
         )
+        self.assertIsNotNone(run_payload["created_at"].tzinfo)
+        self.assertEqual(run_payload["created_at"].utcoffset().total_seconds(), 0)
         self.assertEqual(json.loads(run_payload["objective_config_json"])["objective_id"], CASH_OBJECTIVE_ID)
         lineup_payload = next(
             call.args[1]

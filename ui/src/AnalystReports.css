@@ -1,0 +1,25 @@
+.analyst-reports { min-width: 0; }
+.report-library-intro { padding: 0 0 20px; max-width: 900px; }
+.report-library-intro h2 { margin-top: 0; }
+.report-library-filters { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
+.report-library-filters label { display: grid; gap: 6px; min-width: 160px; }
+.report-library-layout { display: grid; grid-template-columns: minmax(240px, 310px) minmax(0, 1fr); gap: 28px; align-items: start; }
+.report-library-list h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; }
+.report-card { display: grid; gap: 8px; width: 100%; text-align: left; white-space: normal; padding: 14px; margin: 0 0 10px; line-height: 1.45; }
+.report-card span { font-size: 12px; opacity: .85; }
+.report-card.selected { outline: 2px solid var(--accent, #67b8ff); outline-offset: 1px; }
+.report-library-reader { min-width: 0; padding: 20px; border: 1px solid var(--border, #344155); border-radius: 12px; }
+.report-reader-meta { border-bottom: 1px solid var(--border, #344155); padding-bottom: 16px; margin-bottom: 24px; }
+.report-reader-meta h2 { margin-top: 0; }
+.report-markdown { line-height: 1.7; overflow-wrap: anywhere; }
+.report-markdown h1 { font-size: 24px; }
+.report-markdown h2 { font-size: 20px; margin-top: 32px; }
+.report-markdown h3 { margin-top: 24px; }
+.report-markdown table { border-collapse: collapse; min-width: 100%; font-size: 13px; }
+.report-markdown td, .report-markdown th { border: 1px solid var(--border, #344155); padding: 10px; vertical-align: top; text-align: left; }
+.report-markdown pre, .report-evidence { overflow: auto; max-height: 65vh; white-space: pre; font-size: 12px; }
+.report-markdown blockquote { border-left: 3px solid var(--accent, #67b8ff); padding-left: 16px; margin-left: 0; }
+.report-inline-link { display: inline; border: 0; padding: 0; background: none; color: var(--accent, #67b8ff); text-decoration: underline; font: inherit; cursor: pointer; }
+.report-unavailable-link small { opacity: .65; }
+.report-library-error { color: #ffb0b0; }
+@media (max-width: 850px) { .report-library-layout { grid-template-columns: minmax(0, 1fr); } .report-library-reader { padding: 14px; } }

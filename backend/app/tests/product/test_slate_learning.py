@@ -140,7 +140,7 @@ def test_evidence_loader_fetches_full_optimizer_configuration_only_per_run():
         MagicMock(), season=2026, week=4, slate="SUNDAY_MAIN", entry_user="wones0120",
     )
     queries = [call.args[1] for call in service._rows.call_args_list]
-    run_query = next(sql for sql in queries if "FROM target.optimizer_run\n" in sql)
+    run_query = next(sql for sql in queries if "AS configuration_hash" in sql)
     player_query = next(sql for sql in queries if "JOIN target.lineup_player player" in sql)
     assert "constraint_config_json" in run_query
     assert "constraint_config_json" not in player_query
@@ -613,7 +613,9 @@ def test_weekly_report_requires_imported_user_entries():
     assert failure.value.status_code == 422
 
 
-def test_weekly_report_refreshes_requested_stats_once_before_all_slates():
+def test_weekly_report_refreshes_requested_stats_once_before_all_slates(tmp_path, monkeypatch):
+    from backend.app.product_services import weekly_learning_library
+    monkeypatch.setattr(weekly_learning_library, "LEDGER", tmp_path)
     service = SlateLearningService(engine=MagicMock())
     service._ensure_schema = MagicMock()
     service._rows = MagicMock(side_effect=[
@@ -631,6 +633,9 @@ def test_weekly_report_refreshes_requested_stats_once_before_all_slates():
     calls.attach_mock(service.generate, "generate")
 
     report = service.generate_week(season=2026, week=2, entry_user=" wones0120 ")
+    saved = weekly_learning_library.list_reports(entry_user="wones0120")[0]
+    from fastapi.encoders import jsonable_encoder
+    assert weekly_learning_library.load_report(saved["sha256"], entry_user="wones0120")[1] == jsonable_encoder(report)
 
     assert [call[0] for call in calls.mock_calls] == ["refresh", "generate", "generate"]
     service._refresh_weekly_stats.assert_called_once_with(season=2026, week=2)

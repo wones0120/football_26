@@ -160,7 +160,9 @@ def test_worker_does_not_claim_unsaved_or_failed_results_are_recoverable(monkeyp
         _optimizer_handler(SimpleNamespace(run_id="queued-1", progress=lambda *args: None), request())
 
 
-def test_queued_game_cap_is_saved_exactly_and_invalid_cap_never_enqueues(history_db):
+def test_queued_game_cap_is_saved_exactly_and_invalid_cap_never_enqueues(history_db, monkeypatch):
+    # Isolate queue payload normalization; real preparation gates have their own fixture.
+    monkeypatch.setattr("backend.app.product_services.slate_preparation.validate_prepared_optimizer", lambda *_args, **_kwargs: None)
     engine, factory = history_db
     app = FastAPI(); app.include_router(router)
     def session_dependency():
@@ -223,3 +225,45 @@ def test_normal_history_retains_original_objectives_and_strategies(history_db):
         rows = list_optimizer_runs(engine, session, **query)
     assert {(r["strategy"], r["objective"]) for r in rows} == {
         ("classic_small_field_gpp", "gpp"), ("classic_single_lineup_v1", "cash")}
+
+
+def test_worker_finishes_saved_running_status_on_constraint_exception(monkeypatch):
+    from copy import deepcopy
+    from contextlib import nullcontext
+    from backend.app.services import job_handlers
+    from backend.app.product_services import optimizer
+    frozen={'showdown_evidence_snapshot':{'sha256':'original','player_pool':[{'player_id':'canonical'}]}}
+    original=deepcopy(frozen)
+    job=SimpleNamespace(job_id='queued-1',status='running',message='Evidence frozen',params=frozen)
+    saved=[]
+    def fail(**kwargs):raise ValueError('Explicit leader preference needs history')
+    service=SimpleNamespace(run_job=fail,get_job=lambda run_id:job,_persist_optimizer_run=lambda value:saved.append(value))
+    monkeypatch.setattr(optimizer,'OptimizerService',lambda:service)
+    monkeypatch.setattr(job_handlers,'SessionLocal',lambda:nullcontext(object()))
+    monkeypatch.setattr('backend.app.product_services.slate_preparation.validate_prepared_optimizer',lambda *_args:None)
+    with pytest.raises(PermanentJobError,match='Explicit leader preference'):
+        job_handlers._optimizer_handler(SimpleNamespace(run_id='queued-1',progress=lambda *_args:None),request())
+    assert saved==[job] and job.status=='failed' and 'needs history' in job.message
+    assert job.params==original
+
+
+def test_history_exposes_saved_download_clearance_without_loading_lineups(history_db):
+    engine,factory=history_db
+    saved(engine,'research',params={'entry_readiness':{'entry_ready':False},'preliminary_report':{'status':'research'}})
+    saved(engine,'ready',params={'entry_readiness':{'entry_ready':True},'gpp_recommendation':{
+        'policy_id':'gpp_projection_first_recommendation_v1','status':'provisional','optimizer_run_id':'ready'}})
+    saved(engine,'wrong-recommendation',params={'gpp_recommendation':{
+        'policy_id':'gpp_projection_first_recommendation_v1','status':'provisional','optimizer_run_id':'other'}})
+    with factory() as session:rows={row['optimizer_run_id']:row for row in list_optimizer_runs(engine,session,**scope())}
+    assert rows['research']['entry_ready'] is False and rows['research']['preliminary_export_blocked'] is True
+    assert rows['ready']['entry_ready'] is True and rows['ready']['saved_recommendation_available'] is True
+    assert not rows['wrong-recommendation']['saved_recommendation_available']
+    assert 'constraint_config_json' not in rows['ready']
+
+
+def test_highest_baseline_projection_mode_survives_saved_history(history_db):
+    engine,factory=history_db
+    saved(engine,params={'num_lineups':1,'classic_selection_objective':'baseline_mean','analyst_optimization_intent':'MIXED'})
+    with factory() as session:
+        rows=list_optimizer_runs(engine,session,**scope())
+    assert rows[0]['classic_selection_objective']=='baseline_mean'

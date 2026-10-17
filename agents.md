@@ -20,6 +20,24 @@ Build a DFS analytics platform that ingests multi-source NFL data, resolves play
 3. Event-style lineage for data quality and debugging.
 4. Tight feedback loop: detect, explain, and fix unresolved records from UI.
 
+## Football Awareness First
+Football realism is the primary domain acceptance criterion for projections, simulations, Analyst research, optimization and lineup recommendations. Mathematical validity or a higher objective alone does not make a result suitable for use. Read and apply [the football-awareness review](skills/football-awareness/SKILL.md) for those tasks; ordinary UI/import maintenance need not invent football analysis.
+
+- Explain how the complete lineup succeeds through plausible game outcomes, roles and shared opportunities, and compare credible alternatives and salary tradeoffs.
+- Reject methods that violate football mechanics, double-count opportunities, suppress legitimate individual upside or depend on unsupported role assumptions. Diagnose the cause instead of adding arbitrary penalties or teammate limits.
+- Distinguish a plausible story from its probability. Use calibrated evidence where available; label unknown likelihood and conditional Analyst judgments without invented percentages. Unusual outcomes are not automatically implausible.
+- Football reasoning and empirical validation must agree before promotion. Do not override measured evidence with reputation, hindsight or an attractive narrative; document contradictions and test them. Preserve user preferences separately from model truth and preserve explicitly requested baseline objectives as comparisons.
+- Apply this review before recommendations or activation, and expose material assumptions in the app/report workflow. A dormant report or passing code tests alone does not establish a football-valid model.
+
+## Evidence and Experiments
+1. Intended assignment, exported artifact, and observed contest entry are separate evidence states. Preserve their source identifiers, timestamps, and linkage independently.
+2. Compare rosters using canonical player identity and format-relevant roles, including Showdown Captain identity. Roster equality alone does not prove unique origin, submission intent, or timing. Preserve ambiguous matches and missing evidence explicitly; do not pick a newest run as proven origin.
+3. Preserve original historical evidence. Corrections and new evaluations create separately identified records with lineage; reconstructed inputs must not be presented as original snapshots.
+4. Historical evaluations identify the scoring definition/version and retain evidence that inputs were available before the applicable decision and lock times. A stored cutoff alone is insufficient proof; missing chronology remains explicit.
+5. Preserve candidate variants and report distinct canonical roster counts separately. Candidate identity, saved lineup identity, generation order, and selector rank are not interchangeable.
+6. Disclose previously inspected outcomes as retrospective evidence. Freezing a later analysis does not restore outcome blindness or create fresh held-out validation.
+7. Controlled selector comparisons use the same frozen candidate pool, inputs, seed, and constraints except for the declared treatment. Identify generation experiments separately and report pool changes. Record requested and achieved portfolio size, solver status, and infeasibility; report any constraint relaxation as a separate comparison.
+
 ## Canonical Identity Strategy
 1. Canonical player key: `player_master_id` (UUID).
 2. Alias table stores all known name variants and source IDs.
@@ -53,7 +71,7 @@ Build a DFS analytics platform that ingests multi-source NFL data, resolves play
 3. Safety rails:
    - Dry-run mode.
    - Confirmation for destructive actions.
-   - Retry with idempotency key.
+   - Payload-aware retries: the same scoped idempotency key and equivalent semantic payload return the original result; changed assignment or export content under that key is rejected explicitly. Preserve the original artifact and receipt.
 
 ## Modeling Requirements
 1. Separate model families:
@@ -81,24 +99,24 @@ Build a DFS analytics platform that ingests multi-source NFL data, resolves play
    - Ingest transforms.
    - Feature leakage checks.
    - API contracts for UI workflows.
-5. CI gates: lint, type-check, unit tests, selected integration tests.
+5. Current application CI runs Python compilation and tests, UI tests, and the TypeScript/Vite build. Schema CI runs migration and drift checks for affected paths. Distinguish desired gates from implemented checks.
+
+## Working Tree and Validation
+1. Before editing, inspect working-tree status and relevant existing changes. Preserve pre-existing modified and untracked work; do not revert, overwrite, delete, or attribute unrelated changes to the task. Review task changes against that baseline; clarify only when overlap cannot be reconciled safely.
+2. Start with affected tests; broaden validation only for a scope or regression reason. Inspect service/database prerequisites and output destinations first, use isolated fixtures or a test database for mutation checks, and preserve existing artifacts. Report missing prerequisites and skipped checks accurately.
+3. Verified local command patterns from the repository root:
+   - Backend: `PYTHONPATH=. .venv/bin/python -m pytest <affected-test-path> -q` with the local Python environment installed.
+   - UI unit tests: `node --experimental-strip-types --test ui/tests/<affected>.test.ts` with a supported Node runtime (CI uses Node 22).
+   - UI type-check/build when warranted: `npm --prefix ui run build` with UI dependencies installed.
+4. Browser checks require their documented browser, Playwright, and fixture prerequisites; inspect each script's artifact paths before running. Source inspection alone is not visual validation.
 
 ## Model efficiency
 
-Use the least expensive model that is appropriate for the task.
-
-- **Luna Medium**: Prefer for simple, localized, low-risk, or repetitive changes such as UI styling, spacing, labels, minor component edits, straightforward tests, documentation, renames, and mechanical refactoring.
-- **Terra Medium**: Default for normal software development, including feature work, multi-file changes, debugging, state/data-flow changes, meaningful refactoring, and work requiring broader understanding of the codebase.
-- **Sol Medium**: Reserve for unusually difficult debugging, architectural decisions, ambiguous cross-cutting problems, or when Terra has already struggled to solve the task correctly.
-- **Sol High**: Use only for exceptional problems where Sol Medium is insufficient.
-
-Do not recommend a more expensive model for a marginal quality improvement.
-
-If the currently selected model is unnecessarily expensive for the task, tell me before substantial work begins and recommend the cheaper model. If the task materially requires a stronger model, tell me why and recommend the appropriate upgrade before substantial work begins.
-
-Do not switch models silently; I will make the model change.
+Follow the global Model selection and efficiency guidance; this repository does not define a separate model ladder. Explicit user model choices take precedence. Do not infer model generation from an unqualified family name or switch models silently.
 
 ## Delivery Workflow
+Delivery phases and the platform Definition of Done below are roadmap milestones. Individual tasks complete against their requested scope, relevant regression checks, and affected operational documentation. The identity, ingest, leakage, and API test requirements apply when those behaviors change.
+
 1. Build incrementally in phases:
    - Phase 1: data foundation + identity layer.
    - Phase 2: UI ingest and issue resolution console.

@@ -1,0 +1,8 @@
+.intent-comparison { margin: 1.5rem 0; }
+.intent-comparison-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; }
+.intent-comparison article { border: 1px solid var(--border-color, #334155); padding: 1rem; border-radius: 10px; overflow-wrap: anywhere; }
+.intent-comparison table { width: 100%; font-size: .9rem; }
+.intent-comparison th, .intent-comparison td { text-align: left; padding: .4rem; }
+.intent-comparison h5 { margin: 1rem 0 .5rem; }
+@media (max-width: 850px) { .intent-comparison-columns { grid-template-columns: 1fr; } }
+.intent-comparison article h4 { position: sticky; top: 96px; z-index: 2; background: var(--panel-background, #101720); padding: .6rem 0; }

@@ -1,6 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { captainFamilies, conditionedTotal, teamLimitDescription, exposureWarning, qbLineupLimit, qbCaptainAllowed, captainPositionsDescription, showdownPreflightLabel } from "../src/showdownReporting.ts";
+import { captainFamilies, conditionedTotal, teamLimitDescription, exposureWarning, qbLineupLimit, qbCaptainAllowed, qbCaptainDescription, qbCaptainLimitDescription, captainPositionsDescription, showdownPreflightLabel } from "../src/showdownReporting.ts";
+
+test("named Captain exceptions cannot be summarized as a blanket QB ban or permission", () => {
+  const report = {allow_qb_captain: false, named_captain_position_exception_ids: ["named-player"]};
+  assert.equal(qbCaptainDescription(report), "Named exceptions may qualify");
+  assert.equal(qbCaptainLimitDescription(report), "1 if a named QB is eligible");
+  for (const override of [{no_qbs: true}, {no_qb_captain: true}]) {
+    assert.equal(qbCaptainDescription({...report, ...override}), "No");
+    assert.equal(qbCaptainLimitDescription({...report, ...override}), "0");
+  }
+  assert.match(captainPositionsDescription({allowed_positions: ["WR", "RB"], named_position_exception_ids: ["a", "b"]}), /2 named position exception/);
+});
 
 test("Captain position reports honor saved restrictions and effective QB eligibility", () => {
   assert.equal(captainPositionsDescription({allowed_positions: ["WR", "RB", "TE"]}), "Captain positions: WR, RB, TE only");

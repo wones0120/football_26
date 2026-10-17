@@ -281,3 +281,63 @@ def test_projection_refresh_failure_stops_before_training(monkeypatch):
     monkeypatch.setattr(job_handlers, "refresh_projection_player_context", refresh)
     with pytest.raises(PermanentJobError, match="identities require review"):
         job_handlers._projection_handler(_Context(), {"season": 2026, "week": 5, "slate": "THURSDAY_NIGHT"})
+
+
+@pytest.mark.parametrize("blocked", [True, False])
+def test_projection_reports_source_failures_only_when_current_context_blocks(monkeypatch, blocked):
+    from backend.app.product_services.showdown_player_context import PlayerContextUnresolved
+
+    report = {
+        "player_status": {
+            "status": "ERROR",
+            "reason": "Provider has weeks [1, 2, 3, 4, 5]; requested week 6 is unavailable",
+        },
+        "official_player_status": {
+            "status": "ERROR",
+            "reason": "Official injury report season/week does not match the requested slate",
+        },
+        "canonical_player_context": {
+            "status": "completed", "result": {"availability_counts": {"UNKNOWN": 44}},
+        },
+    }
+
+    class _Predictions:
+        def __init__(self, _connection_string):
+            pass
+
+        def fetch_completed_run_summary(self, _run_id):
+            return None
+
+        def train_and_predict(self, **kwargs):
+            if blocked:
+                raise PlayerContextUnresolved(
+                    "Current player availability or depth-chart role needs verification for Bo Nix. "
+                    "Prepare the slate again to refresh roster, injury and depth-chart evidence."
+                )
+            return SimpleNamespace(
+                records=[object()], target_persisted=True,
+                feature_run_id=kwargs["feature_run_id"], model_run_id=kwargs["model_run_id"],
+                projection_run_id=kwargs["projection_run_id"], data_cutoff_at=kwargs["data_cutoff_at"],
+                calibration_metrics={},
+            )
+
+    monkeypatch.setattr(job_handlers, "PredictionsService", _Predictions)
+    monkeypatch.setattr(job_handlers, "get_connection_string", lambda: "local")
+    monkeypatch.setattr(job_handlers, "refresh_projection_player_context", lambda *_args, **_kwargs: report)
+    context = _Context()
+    payload = {"season": 2026, "week": 6, "slate": "THURSDAY_NIGHT"}
+    if blocked:
+        with pytest.raises(PermanentJobError) as caught:
+            job_handlers._projection_handler(context, payload)
+        message = str(caught.value)
+        assert "Bo Nix" in message
+        assert "2026 week 6 THURSDAY_NIGHT" in message
+        assert "requested week 6 is unavailable" in message
+        assert "Official injury report season/week does not match" in message
+        assert "Repeating preparation without new source evidence will remain blocked" in message
+        assert "Prepare the slate again" not in message
+    else:
+        assert job_handlers._projection_handler(context, payload)["rows_written"] == 1
+    assert context.checkpoint["automatic_player_context_refresh"] == report
+    assert any("44 player availability records remain unresolved" in row["message"]
+               for row in context.progress_rows)

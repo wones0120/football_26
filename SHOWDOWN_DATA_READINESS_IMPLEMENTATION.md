@@ -1,5 +1,79 @@
 # Showdown data readiness implementation
 
+## Projection source readiness before weekly publication
+
+The October 13 projection job `35a7b039-c89f-4845-8e89-db0ee1f60df8`
+requested 2026 Week 6 `THURSDAY_NIGHT` (DEN/SEA), without a historical
+cutoff. The worker did collect current sources. Its weekly-roster provider
+returned weeks 1–5 only; the official NFL report failed the requested
+season/week check. A fresh read-only provider check confirmed zero Week 6
+roster rows and the official page selecting `/injuries/league/2026/reg5`.
+Canonical composition produced 56 contexts: 44 unknown,
+4 available and 8 unavailable. A read-only replay at the original cutoff
+`2026-10-13T12:52:33.247338+00:00` reproduced the same availability block.
+
+The worker now includes failed collectors and their reasons in the saved
+job error when the canonical context gate blocks. The existing API/UI job
+polling surfaces that error. Refresh progress reports unresolved availability
+instead of claiming every source refreshed. Collector errors alone do not
+reject usable, current saved evidence; explicit historical-cutoff behavior
+is unchanged.
+
+Recovery requires new verified evidence for the requested week. Retry after
+the roster/report sources publish, or supply verified current pregame player
+context with its source and observation time. Repeating preparation while
+the sources remain unavailable cannot resolve this gap. No prior-week roster
+is relabeled as current, and blank injury status does not certify availability.
+Restart the durable worker to load the updated error reporting. The original
+failed job and its projection run `a5edcc29-472a-4cfc-b796-f21dd6c95758`
+remain preserved; this reporting repair does not produce missing projections.
+
+### Verified club roster recovery
+
+The supported current-context alternative succeeded before weekly publication.
+At `2026-10-13T13:18:56+00:00`, live [Denver](https://www.denverbroncos.com/team/players-roster/)
+and [Seattle](https://www.seahawks.com/team/players-roster/) roster observations
+provided explicit Active, Reserve/Injured, PUP and Practice Squad sections.
+HTTP response/cache clocks, full responses and original receipt times were
+retained. Exact team/position/normalized-name checks resolved 53 non-defense
+salary players. The only position exception, Mitchell Fraboni (DraftKings TE,
+official LS), was corroborated by his previously captured current native
+GSIS `00-0036943` depth-chart fact; no raw-name-only join was used.
+
+The existing source capture and canonical context APIs persisted two immutable
+snapshots (`1828e5fb-2821-519b-96f3-296634050bd9` and
+`abd674e6-4ea0-5971-af12-704101d99e88`) and 56 player contexts: 38 available,
+18 unavailable, zero unknown. These facts establish current roster membership,
+not health, final dressing or final workload clearance. Neither club's injury
+page was treated as a Week 6 report: each still showed its previous opponent.
+No status was inferred from absence on an injury list.
+
+Normal projection job `221b3095-72de-4c42-850a-ebcd62739750` completed with
+37 persisted projections in run `116e6a12-cc86-4d99-9c2c-0db547ce6639`,
+cutoff `2026-10-13T13:23:47.123653+00:00`. The existing automatic training
+repair rebuilt 1,451 prior-game labeled feature rows across eight slate slices;
+historical model inputs remained separate from current availability evidence.
+Persistence checks confirmed 37 distinct player/feature rows, ordered P10/P90,
+one active selection and both roster snapshot IDs in consumed feature lineage.
+The sourced long snapper was excluded by the existing specialist policy.
+The original failed job remains failed and unchanged.
+
+Evidence and the scoped operational scripts are retained in
+`artifacts/projection_source_readiness_recovery/`, including
+`verified_context_plan.json`, `context_import_result.json`,
+`projection_job_final.json` and `persistence_verification.json`.
+The NFL official schedule, ESPN scoreboard and local salary scope agree on
+SEA at DEN, October 15 at 8:15 PM ET (`2026-10-16T00:15:00+00:00`).
+
+This is a reviewed operational recovery, not a new production collector.
+Live **Run projections**, preparation and optimizer refresh already fetch
+nflverse rosters/injuries/depth and official NFL weekly status on demand.
+They do not yet automatically observe official club roster sections. Add
+that collector to the shared player-source refresh for unattended early-week
+recovery, preserving HTTP observation clocks, native/canonical identity checks,
+explicit unavailable sections and ambiguity blocking. Freshness remains 24 hours;
+the October 13 observations cannot certify October 15 readiness without a refresh.
+
 ## Projection rerun after an injury import
 
 The October 8 Models projection job `1a64a04f-fb4c-463d-b2af-b1d48152220e`

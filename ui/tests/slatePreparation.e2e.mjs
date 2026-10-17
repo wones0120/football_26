@@ -131,7 +131,7 @@ try {
   await page.getByLabel("Lock canonical player IDs (advanced)").fill("synthetic-player");
   await tools.locator(":scope > summary").click();
   const prep = page.getByTestId("slate-preparation");
-  await prep.getByRole("button", { name: "Capture nflverse markets", exact: true }).click();
+  await prep.getByRole("button", { name: "Refresh sportsbook lines", exact: true }).click();
   await page.waitForFunction(() => document.querySelector('[data-testid="slate-preparation"]')?.textContent?.includes("markets: queued"));
   assert.equal(await prep.getByRole("button", { name: "Rebuild slate features and projections" }).isDisabled(), true);
   // Controls can be edited while preparation runs; callbacks must not replace them.

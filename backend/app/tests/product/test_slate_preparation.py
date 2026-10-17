@@ -15,7 +15,8 @@ from backend.app.services.job_queue import enqueue_job
 
 
 @pytest.fixture
-def fixture():
+def fixture(monkeypatch):
+    monkeypatch.setattr("backend.app.product_services.analyst_personal_context.load_inputs", lambda engine: [])
     value = PreparationFixture()
     yield value
     value.close()
@@ -177,6 +178,7 @@ def test_actual_collector_interfaces_and_clock_preservation():
         capture_source(request, games)
         args = run.call_args.args[0]
         assert args[1].endswith("capture_nflverse_markets.py")
+        assert args[args.index("--provider") + 1] == "espn"
         assert "--apply" not in args and "--game-id" not in args
     with pytest.raises(ValueError, match="lock has passed"):
         require_prelock(games, datetime(2099, 1, 1, 17, tzinfo=UTC))
@@ -322,3 +324,15 @@ def test_status_history_scopes_in_sql_and_defers_heavy_audits(fixture):
     assert summary['data_readiness'] == {'status':'READY','reason_codes':[]}
     assert summary['source_refresh']['projection'] == {'status':'blocked','reason':'missing source'}
     assert raw['source_manifest'] == {'large':'immutable'}
+
+
+def test_preliminary_request_is_explicit_classic_only_and_cannot_certify_normal_optimizer(fixture):
+    for changed in ({'contest_format':'showdown'}, {'availability_overrides':[{'player_id':'canonical','availability':'assume_out'}]}, {'action':'markets'}):
+        payload={'season':2000,'week':1,'slate':'SUNDAY_MAIN','action':'prepare','preliminary_research':True,**changed}
+        assert fixture.client.post('/api/slate/preparation/jobs',json=payload).status_code==422
+    job_id=enqueue(fixture);fixture.work()
+    with fixture.factory() as db:
+        job=db.get(OperationalJob,job_id)
+        job.request_json={**job.request_json,'preliminary_research':True};db.commit()
+        with pytest.raises(ValueError,match='cannot certify normal optimization'):
+            validate_prepared_optimizer(db,{'season':2000,'week':1,'slate':'SUNDAY_MAIN','params':{'prepared_input_job_id':job_id}})

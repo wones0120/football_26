@@ -17,7 +17,12 @@ def validate_leader_preferences(params, *, showdown):
 def leader_preference(pool, params, *, engine=None, season=None, week=None):
     if not params.get('require_team_leader'):
         return dict(enabled=False,required_player_ids=[])
-    evidence=load_rankings(engine, season=season, week=week, include_kickers=True)
+    try:
+        evidence=load_rankings(engine, season=season, week=week, include_kickers=True)
+    except ValueError as exc:
+        raise ValueError("The season-average non-QB team-leader preference needs complete prior-week history. "
+            "Refresh historical stats and snaps, or explicitly turn off Require at least one season-average non-QB team leader. "
+            + str(exc)) from exc
     history={r['player_id']:r for r in evidence['rows']}
     teams={};homes=set();unranked=[]
     for row in pool.to_dict('records'):

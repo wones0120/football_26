@@ -1,0 +1,123 @@
+import json
+from pathlib import Path
+import unittest
+from validator import validate
+
+class PacketTests(unittest.TestCase):
+    def setUp(self):
+        self.packet = json.loads((Path(__file__).parent/'packet.json').read_text())
+    def rejected(self, fragment):
+        self.assertTrue(any(fragment in error for error in validate(self.packet)), validate(self.packet))
+    def test_malformed_array(self):
+        self.packet['sources'] = None
+        self.rejected('expected array of objects')
+    def test_invalid_kickoff_clock_rejected_without_crash(self):
+        self.packet['games'][0]['kickoff_at'] = 'invalid'
+        self.rejected('missing timezone clock')
+    def test_numeric_uncertainty(self):
+        self.packet['hypotheses'][0]['uncertainty'] = 0.8
+        self.rejected('unquantified text')
+    def test_analyst_judgment_cannot_be_fact(self):
+        self.packet['analyst_assessments'][0]['kind'] = 'observed_fact'
+        self.rejected('cannot become baseline fact')
+    def test_analyst_judgment_cannot_be_weight(self):
+        self.packet['analyst_assessments'][0]['selection_weight'] = 0.3
+        self.rejected('effect/weight prohibited')
+    def test_analyst_judgment_requires_alternative(self):
+        self.packet['analyst_assessments'][0]['strongest_alternative'] = ''
+        self.rejected('missing strongest_alternative')
+    def test_analyst_judgment_is_not_probability(self):
+        self.packet['analyst_assessments'][0]['confidence_label'] = 0.6
+        self.rejected('must remain unquantified')
+    def test_analyst_judgment_scope(self):
+        self.packet['analyst_assessments'][0]['formats'] = ['CLASSIC']
+        self.rejected('format out of scope')
+    def test_construction_must_reference_assessed_identity(self):
+        self.packet['analyst_assessments'][0]['construction_implications'][0]['roles']['CPT'] = ['unknown']
+        self.rejected('construction canonical identity')
+    def test_partial_coverage_opinion_is_allowed(self):
+        self.assertFalse(self.packet['slate_synthesis']['all_games_reviewed'])
+        self.assertTrue(self.packet['slate_synthesis']['ranked_upside_leans'])
+        self.assertEqual(validate(self.packet), [])
+    def test_partial_ranking_requires_honest_label(self):
+        self.packet['slate_synthesis']['status'] = 'complete_research'
+        self.rejected('requires coverage label')
+    def test_fabricated_factual_premise_rejected(self):
+        self.packet['analyst_assessments'][-1]['factual_premises'][0]['text'] = 'Denver tackles poorly'
+        self.rejected('fabricated factual premise')
+    def test_unknown_fact_reference_rejected(self):
+        self.packet['analyst_assessments'][-1]['factual_premises'][0]['fact_key'] = 'increased_targets'
+        self.rejected('fabricated factual premise')
+    def test_cannot_claim_complete_sunday_review(self):
+        self.packet['slate_synthesis']['all_games_reviewed'] = True
+        self.rejected('inconsistent with checklist')
+    def test_valid_pregame_packet(self):
+        self.assertEqual(validate(self.packet), [])
+    def test_unknown_identity(self):
+        self.packet['hypotheses'][0]['player_master_ids'] = ['unresolved']
+        self.rejected('hypothesis player')
+    def test_malformed_canonical_id(self):
+        self.packet['players'][0]['player_master_id'] = 'name-only'
+        self.rejected('canonical player identity')
+    def test_missing_native_identity(self):
+        self.packet['players'][0]['source_native_key'] = None
+        self.rejected('native identity key')
+    def test_missing_clock(self):
+        self.packet['sources'][0]['available_at'] = None
+        self.rejected('missing timezone clock')
+    def test_naive_clock(self):
+        self.packet['sources'][0]['available_at'] = '2026-10-13T12:00:00'
+        self.rejected('missing timezone clock')
+    def test_future_source(self):
+        self.packet['sources'][0]['available_at'] = '2026-10-15T12:00:00Z'
+        self.rejected('available after decision')
+    def test_postgame_decision(self):
+        self.packet['decision_at'] = self.packet['frozen_at'] = '2026-10-16T02:00:00Z'
+        self.rejected('not pregame')
+    def test_unknown_scope(self):
+        self.packet['hypotheses'][0]['game_id'] = 'UNKNOWN'
+        self.rejected('game scope')
+    def test_thursday_not_sunday_main(self):
+        self.packet['hypotheses'][0]['formats'] = ['CLASSIC']
+        self.rejected('format not in game scope')
+    def test_both_format_contract_with_confirmed_classic_scope(self):
+        self.packet['games'][0]['format_membership']['CLASSIC'] = 'confirmed_in_scope'
+        self.packet['hypotheses'][0]['formats'] = ['CLASSIC', 'SHOWDOWN']
+        self.assertEqual(validate(self.packet), [])
+    def test_numeric_adjustment(self):
+        self.packet['hypotheses'][0]['numeric_effect_proposal'] = {'targets':2}
+        self.rejected('numeric workload')
+    def test_arbitrary_probability(self):
+        self.packet['hypotheses'][0]['probability'] = 0.7
+        self.rejected('numeric hypothesis')
+    def test_conditional_in_baseline(self):
+        self.packet['baseline_facts'][0]['kind'] = 'conditional_assumption'
+        self.rejected('conditional assumption in baseline')
+    def test_missing_contrary_evidence(self):
+        self.packet['hypotheses'][0]['contrary_evidence'] = []
+        self.rejected('contrary_evidence')
+    def test_unsupported_action(self):
+        self.packet['hypotheses'][1]['action'] = 'increase_projection'
+        self.rejected('abstain from action')
+    def test_unavailable_source_cannot_support_actionable_monitor(self):
+        self.packet['sources'][0]['coverage'] = 'unavailable'
+        self.rejected('source coverage unavailable')
+    def test_baseline_unchanged(self):
+        self.packet['baseline_mutation'] = True
+        self.rejected('baseline mutation')
+    def test_filled_zero_is_not_measurement(self):
+        self.packet['players'][0]['workload_evidence']['historical'] = {'targets_mean_3':{'value':0,'stored_value':0,'status':'observed','available':False}}
+        self.rejected('measurement flag')
+        self.rejected('measured zero')
+    def test_expired_hypothesis(self):
+        self.packet['hypotheses'][0]['expires_at'] = '2026-10-12T12:00:00Z'
+        self.rejected('expired')
+    def test_missing_evidence(self):
+        self.packet['hypotheses'][0]['source_ids'] = []
+        self.rejected('missing source references')
+    def test_unknown_source(self):
+        self.packet['hypotheses'][0]['source_ids'] = ['UNKNOWN']
+        self.rejected('unknown source')
+
+if __name__ == '__main__':
+    unittest.main()

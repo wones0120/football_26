@@ -28,4 +28,5 @@ test("Sunday Classic subsets share Main injury source and filename", () => {
       "~/NFL/FanDuel_injuries_2026_5_SUNDAY_MAIN.csv");
   }
   assert.equal(injurySourceSlate("SUNDAY_NIGHT"), "SUNDAY_NIGHT");
+  assert.equal(injurySourceSlate("SUNDAY_MORNING"), "SUNDAY_MORNING");
 });

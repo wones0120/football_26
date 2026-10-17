@@ -91,3 +91,15 @@ test("Saved-input validation cannot launch refresh, optimization, or change form
     assert.doesNotMatch(handler, /setLargeGppControls|setMaxExposure|setNumLineups|setMaxPlayersPerTeam|setMaxPlayersPerGame|setEnforceSingleTE|setExcludeOpponent|setExcludePlayer|setLockedPlayer/);
   }
 });
+
+test("preliminary report shows the frozen research receipt and never presents normal clearance", () => {
+  const optimizer = {strategy:"classic_large_gpp_v1",status:"completed",results:[[]],
+    entry_readiness:{entry_ready:true,current_entry_clearance:"VERIFIED",checks:{invented:{status:"PASS"}}},
+    analyst_handoff_applied:{checked_packet_sha256:"checked-packet",compatibility_sha256:"checked-compatibility"},
+    preliminary_report:{entry_ready:false,snapshot_sha256:"frozen-research",assumption_manifest_sha256:"frozen-assumptions",
+      normal_readiness:{status:"ERROR",reason_codes:["player_status_missing"],required_sources:{market:{status:"READY"},player_status:{status:"NOT_READY"}}},
+      assumption_manifest:{declared_at:"2026-10-14T16:00:00Z",exclude_player_ids:["unknown"],source_truth:"Original facts unchanged",players:[{player:"Unknown <player>",availability:"unknown",reason_codes:["player_status_missing"]}]}}} as unknown as OptimizerResponse;
+  const html=largeGppReadinessHtml(optimizer);
+  for (const value of ["Preliminary research · not entry cleared","ENTRY READY: NO","frozen-research","frozen-assumptions","checked-packet","checked-compatibility","NOT_READY","player_status_missing","Unknown &lt;player&gt;"]) assert.ok(html.includes(value),value);
+  assert.ok(!html.includes("Solver called: unrecorded") && !html.includes("Not frozen") && !html.includes("ENTRY READY: YES"));
+});

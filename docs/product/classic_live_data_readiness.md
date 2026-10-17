@@ -1,5 +1,32 @@
 # Classic Large-GPP live source readiness
 
+Weekly contest-result imports now accept custom slate identifiers such as `SUNDAY_LATE_SF_SEA`, allowing those results into week learning reports. Custom salary filenames participate in scope checks; an explicitly selected custom folder is not mistaken for its Sunday Late prefix. Conflicting saved contest scope and ambiguous salary evidence remain checked.
+
+The Slate menu now discovers imported DraftKings salary slates for the selected season/week directly from the server, even without a saved contest or browser custom-name entry. Imported data does not by itself certify readiness.
+
+The custom slate name field uses the standard readable dark-theme text styling. Use **Add a custom slate** in Slate files to select a separate game such as `SUNDAY_LATE_SF_SEA`. Custom names stay in the Slate menu for that season/week in this browser. Then select **Captain GPP** for CPT/FLEX salaries, load the actual salary CSV, prepare inputs, and run. Creating a name does not import data or establish readiness.
+
+Canonical QB roles now resolve the latest team starter across all salary QBs. A newer starter observation supersedes an older retained assignment, including evidence shared from Sunday Main to Early/Late. Original source clocks and IDs remain auditable; conflicting same-time reports and future evidence cannot establish a starter.
+
+**Strategy** defaults to Classic GPP for Sunday Main, Sunday Early and Sunday Late, and Captain GPP for Thursday Night, Sunday Morning, Sunday Night and Monday Night. The default applies on app startup and when switching slates. Manual strategy selection remains available; lineup controls retain their saved values. Sunday Morning restores Captain by default so its CPT/FLEX salary pool is not assessed as Classic after a reload or slate switch. Other slates retain the Classic default. Existing saved runs remain available after lock; new pregame preparation is still blocked.
+
+**Exclude questionable (Q) players** now defaults on in both Classic and Captain. You can turn it off independently per format during the session. This controls lineup eligibility only; preparation does not treat those players as out or alter their projections.
+
+Preflight now uses the same currently verified preparation as **Run Optimizer**. A ready prepared build shows its exact projection run instead of a contradictory older general source report; changed inputs, failed preparation and expired evidence still block through the existing preparation checks.
+
+## Current sportsbook source
+
+Classic and Captain preparation fetch DraftKings lines through ESPN's public NFL scoreboard. No API key is required. The collector matches canonical home/away teams and kickoff (within 60 seconds), checks regular-season/week scope and pregame state, and requires two-sided current spreads and matching over/under totals for every selected game. Opening lines are never substituted. Sunday Main, Early, Late and Captain use their own salary-derived game scope.
+
+The existing immutable market snapshot path stores the full response, retrieval clock, ESPN event ID and sportsbook attribution. Projections must consume those exact normalized snapshot IDs. A failed refresh blocks the new preparation; there is no silent fallback to nflverse or old market rows. Existing six-hour maximum observation-age checks still apply at optimization. A new preparation refreshes the feed again.
+
+ESPN's response does not expose a sportsbook quote-update timestamp. Retrieval freshness therefore means the app just fetched ESPN's displayed lines, not that their exact upstream age is certified. This public endpoint can change or become unavailable; coverage/schema failures are surfaced as preparation errors. The legacy `scripts/capture_nflverse_markets.py` remains available for research; application preparation explicitly passes `--provider espn`. A read-only live check is:
+
+```bash
+PYTHONPATH=. .venv/bin/python scripts/capture_nflverse_markets.py --season 2026 --week 5 --slate SUNDAY_MAIN --provider espn --dry-run
+```
+
+
 Normal live Classic and Showdown requests use a durable upstream
 `POST /api/slate/preparation/jobs` action `prepare` with explicit `contest_format`.
 **Prepare slate for optimization** repairs identities, refreshes sources, rebuilds
@@ -296,6 +323,8 @@ The earlier October 9 follow-up live check was **not ready**: five unresolved sa
 
 Imports and preparation call `backend.app.services.matching.find_player_master_id`. Source-native mappings take precedence, followed by scoped aliases and normalized team/position/name evidence. Accent, punctuation and suffix variants use sourced aliases before master rows. Conflicting vendor aliases remain ambiguous unless at least two roster-identity source systems corroborate one candidate and none supports a competing candidate. Salary labels never overwrite canonical football positions. Preparation saves newly resolved source aliases and closes the corresponding open ingest queue entries.
 
+The exact nickname `Hollywood Brown` also supplies `Marquise Brown` name evidence through `Database.player_identity._name_keys`. This lets current roster aliases corroborate the canonical identity when legacy vendor aliases point to duplicate nickname masters. It does not allow substring nickname matching or bypass team/position and conflict checks. Existing native source-ID mappings retain precedence; historical resolved salaries and player masters are not rewritten by unresolved-salary reconciliation.
+
 Preparation refreshes roster identities, reconciles salaries, and stops on unresolved identities before feature/projection/ownership builds. Direct projections also reject unresolved salaries. Ownership for an explicit projection reads current canonical salaries with original cutoff-safe import clocks; historical ownership training keeps its historical salary snapshots. NFL.com's `AZ` abbreviation normalizes to `ARI`, preserving Arizona's current practice evidence.
 
 Verified source snapshots and the five saved identity mappings are in `artifacts/shared_identity_pipeline/verified_identity_mappings.json`; the read-only replay of all 587 salary rows is recorded in `reimport_resolution_check.json`. No salary re-import was used to renew source clocks.
@@ -368,3 +397,19 @@ indicator recognizes both DraftKings and FanDuel injury imports. Captain slates
 do not inherit Sunday Main injury evidence.
 
 Sunday subsets also reuse Main’s original canonical player source facts (including depth-chart roles), filtered by canonical player ID, team and position. Derived Main projections and workload assessments are not copied. Original observation and receipt timestamps remain unchanged, so stale or future facts cannot satisfy current readiness.
+
+## Sunday Morning scope
+
+`SUNDAY_MORNING` is a separate built-in slate option, including weekly contest-folder discovery and persisted run selection. It does not inherit Sunday Main injury evidence. For single-game CPT/FLEX salaries, use Captain format and the actual file path even when the filename has a different label. The selected scope and native salary game identities determine preparation; the label alone does not certify a slate.
+
+A separate Morning injury CSV is not a prerequisite for the existing **Prepare slate** source refresh: it collects roster, official injury and canonical player-context evidence. Missing or stale coverage remains a blocker, and final active status is not inferred from a blank salary status. This menu addition does not certify a new live Morning preparation or change existing user controls.
+
+## Favored-team position preferences
+
+Classic controls `force_favored_qb`, `force_favored_rb`, `force_favored_wr`, `force_favored_te`, and `force_favored_dst` accept booleans or 0/1. The UI defaults RB/TE/DST on and QB/WR off, with a one-time saved-settings migration; subsequent overrides persist. Omitted API controls remain off for compatibility with existing callers. They apply to every player at each selected natural position, including FLEX. Eligibility requires finite `team_spread_line < 0` from prepared inputs; pick’em and missing/invalid spreads are excluded. Home-team status is not used as a substitute.
+
+Filtering occurs after the model evidence snapshot and records `user_favored_team_<position>` exclusions. Final lineup validation enforces the same requirement. Locks conflicting with the filter fail explicitly; the optimizer never relaxes it. The options persist in Classic UI settings and are omitted from Captain requests. No market, projection, ownership or historical labels are altered. A changed forecast requires preparation again, not a preference toggle.
+
+## Mandatory market readiness
+
+Preparation and optimizer revalidation already require sourced spread/game-total coverage for every Classic game and both Captain teams, internally consistent team implied totals, and observations within `classic_market_max_age_hours` / `showdown_market_max_age_hours` (both default six hours). The preparation UI now states this requirement explicitly. Missing, stale, future or inconsistent evidence blocks optimization. This uses provider observation/capture clocks, not verified upstream sportsbook quote publication time. Moneyline prices and betting juice are not required inputs in the current model; they are not certified by READY.

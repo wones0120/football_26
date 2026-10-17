@@ -22,6 +22,7 @@ def prepared_optimizer(service, *, return_value=None, side_effect=None):
 
     with patch.object(service, "run_job", side_effect=run), \
          patch("backend.app.product_services.slate_preparation.validate_prepared_optimizer", return_value=evidence) as lookup, \
+         patch("backend.app.product_services.analyst_preparation.bind_saved_preparation"), \
          patch("backend.app.product_services.classic_data_readiness.refresh_live_sources") as classic, \
          patch("backend.app.product_services.showdown_data_readiness.refresh_live_sources") as showdown:
         yield lookup

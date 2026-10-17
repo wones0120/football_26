@@ -28,6 +28,7 @@ from ..product_services.data_quality import DataQualityService
 from ..product_services.canonical_projection_inputs import StaleTrainingOutcomeError
 from ..product_services.predictions import PredictionsService
 from ..product_services.showdown_data_readiness import refresh_projection_player_context
+from ..product_services.showdown_player_context import PlayerContextUnresolved
 from ..product_services.simulations import SimulationService as SlateSimulationService
 from ..product_services.starters import StartingQBService
 from ..schemas import (
@@ -46,6 +47,7 @@ from .job_queue import (
     FEATURE_MATRIX_JOB,
     PROJECTION_JOB,
     OPTIMIZER_JOB,
+    PRELIMINARY_OPTIMIZER_JOB,
     RESEARCH_SIMULATION_JOB,
     SLATE_SIMULATION_JOB,
     SYMBOLIC_JOB,
@@ -278,6 +280,7 @@ def _benchmark_handler(
 def _projection_handler(
     context: ExecutionContext,
     payload: dict[str, Any],
+    *, preliminary_exclude_unknown: bool = False,
 ) -> dict[str, Any]:
     request = PredictionRunRequest.model_validate(payload)
     connection_string = get_connection_string()
@@ -327,7 +330,11 @@ def _projection_handler(
             refresh_message = starter_result.message
         else:
             checkpoint["automatic_player_context_refresh"] = jsonable_encoder(player_refresh)
-            refresh_message = "Refreshed Showdown roster, injury, starter and canonical player evidence."
+            counts = player_refresh.get("canonical_player_context", {}).get("result", {}).get("availability_counts", {})
+            refresh_message = (
+                "Showdown player-source refresh completed; "
+                f"{counts.get('UNKNOWN', 0)} player availability records remain unresolved."
+            )
         # Jobs freeze a cutoff when queued. Evidence recorded by this worker
         # would otherwise be invisible to the time-safe projection loader.
         checkpoint["data_cutoff_at"] = datetime.now(UTC).isoformat()
@@ -363,7 +370,31 @@ def _projection_handler(
             ],
             allow_confirmed_inactive_override=request.allow_confirmed_inactive_override,
             assume_questionable_out=request.assume_questionable_out,
+            **({"preliminary_exclude_unknown": True} if preliminary_exclude_unknown else {}),
         )
+
+    def projection_error(exc: ValueError) -> PermanentJobError:
+        refresh = checkpoint.get("automatic_player_context_refresh") or {}
+        failures = [
+            f"{source}: {row.get('reason', 'source refresh failed')}"
+            for source, row in refresh.items()
+            if row.get("status") in {"ERROR", "blocked"}
+        ]
+        if request.data_cutoff_at is None and isinstance(exc, PlayerContextUnresolved) and failures:
+            # Collector failure alone is not fatal when saved evidence is still
+            # current. Explain it only when the canonical scoring gate blocks.
+            detail = str(exc).removesuffix(
+                " Prepare the slate again to refresh roster, injury and depth-chart evidence."
+            )
+            return PermanentJobError(
+                f"Source refresh failures for {request.season} week {request.week} "
+                f"{request.slate}: {'; '.join(failures)}. "
+                f"{detail} "
+                "Retry after the requested-week sources are available, or supply "
+                "verified current pregame player context. Repeating preparation "
+                "without new source evidence will remain blocked."
+            )
+        return PermanentJobError(str(exc))
 
     try:
         result = train(data_cutoff_at)
@@ -426,9 +457,9 @@ def _projection_handler(
         try:
             result = train(data_cutoff_at)
         except ValueError as retry_exc:
-            raise PermanentJobError(str(retry_exc)) from retry_exc
+            raise projection_error(retry_exc) from retry_exc
     except ValueError as exc:
-        raise PermanentJobError(str(exc)) from exc
+        raise projection_error(exc) from exc
 
     coverage = (result.calibration_metrics or {}).get("input_coverage", {})
     warnings = []
@@ -582,15 +613,38 @@ def _optimizer_handler(context: ExecutionContext, payload: dict[str, Any]) -> di
         payload = {**payload, "params": {**payload.get("params", {}), "prepared_input_evidence": preparation}}
     request = OptimizerRunRequest.model_validate({**payload, "optimizer_run_id": context.run_id})
     context.progress("optimizer", 0, 1, "Preparing the optimizer request; live evidence must pass before generation.")
+    service = OptimizerService()
     try:
-        job = OptimizerService().run_job(**request.model_dump(), progress=context.progress)
+        job = service.run_job(**request.model_dump(), progress=context.progress)
     except ValueError as exc:
+        # A constraint/input exception can occur after immutable evidence was
+        # saved. Finish that run's status too, preserving its frozen inputs.
+        failed = service.get_job(context.run_id)
+        if failed is not None and failed.status in {"queued", "running"}:
+            failed.status = "failed"
+            failed.message = str(exc)
+            failed.updated_at = datetime.now(UTC).replace(tzinfo=None)
+            service._persist_optimizer_run(failed)
         raise PermanentJobError(str(exc)) from exc
     if job.status != "completed" or not job.lineage_persisted:
         raise PermanentJobError(job.message or "Optimizer did not save a completed result.")
     context.progress("optimizer", 1, 1, "Optimizer results saved; ready to reopen.")
     # Keep queue polling lightweight; the full report lives in optimizer lineage.
     return {"optimizer_run_id": job.job_id, "status": job.status}
+
+
+def _preliminary_optimizer_handler(context: ExecutionContext, payload: dict[str, Any]) -> dict[str, Any]:
+    from ..product_services.preliminary_optimizer import PreliminaryOptimizerRequest, run_preliminary
+    if not context.run_id:
+        raise PermanentJobError("Preliminary queue item has no run ID")
+    context.progress("preliminary_snapshot", 0, 1, "Verifying immutable research assumptions; final entry readiness remains blocked.")
+    try:
+        job = run_preliminary(PreliminaryOptimizerRequest.model_validate(payload), run_id=context.run_id, context=context)
+    except ValueError as exc:
+        raise PermanentJobError(str(exc)) from exc
+    if job.status != "completed" or not job.lineage_persisted:
+        raise PermanentJobError(job.message or "Preliminary optimizer did not save results")
+    return {"optimizer_run_id": job.job_id, "status": job.status, "classification": "PRELIMINARY_RESEARCH", "entry_ready": False}
 
 
 def _preparation_handler(context: ExecutionContext, payload: dict[str, Any]) -> dict[str, Any]:
@@ -603,6 +657,7 @@ HANDLERS = {
     FEATURE_MATRIX_JOB: _feature_matrix_handler,
     PROJECTION_JOB: _projection_handler,
     OPTIMIZER_JOB: _optimizer_handler,
+    PRELIMINARY_OPTIMIZER_JOB: _preliminary_optimizer_handler,
     RESEARCH_SIMULATION_JOB: _research_simulation_handler,
     SLATE_SIMULATION_JOB: _slate_simulation_handler,
     SYMBOLIC_JOB: _symbolic_handler,

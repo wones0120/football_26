@@ -3,6 +3,7 @@ import io
 import unittest
 import zipfile
 from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 from fastapi import HTTPException
 from backend.app.api.product_routes import download_optimizer_lineups
 
@@ -111,7 +112,9 @@ class DraftKingsExportTests(unittest.TestCase):
 
     def test_download_route_uses_saved_run_and_handles_unavailable_runs(self):
         job = SimpleNamespace(status="completed", contest_format="showdown", job_id="saved", results=[self.raw_showdown()])
-        response = download_optimizer_lineups("saved", service=SimpleNamespace(get_job=lambda _: job))
+        with patch("backend.app.product_services.evaluation_record.record_export") as record:
+            response = download_optimizer_lineups("saved", service=SimpleNamespace(get_job=lambda _: job, engine=MagicMock()))
+        self.assertEqual(record.call_args.args[3], response.body)
         self.assertEqual(response.status_code, 200)
         self.assertIn("saved.csv", response.headers["content-disposition"])
         for value, status in [(None, 404), (SimpleNamespace(status="running"), 409)]:
@@ -272,3 +275,68 @@ class DraftKingsExportTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_download_route_blocks_explicit_uncleared_and_preliminary_without_artifacts():
+    for params in [{'entry_readiness':{'entry_ready':False,'status':'DEVELOPMENT_PREVIEW'}},
+                   {'preliminary_report':{'status':'research'},'entry_readiness':{'entry_ready':True}}]:
+        job=SimpleNamespace(job_id='saved',status='completed',contest_format='showdown',
+            params=params,results=[DraftKingsExportTests.raw_showdown()])
+        for recommended in [False,True]:
+            with patch('backend.app.product_services.evaluation_record.record_export') as record:
+                try:download_optimizer_lineups('saved',service=SimpleNamespace(get_job=lambda _:job),recommended_only=recommended)
+                except HTTPException as error:assert error.status_code==409 and ('entry' in error.detail.lower() or 'upload readiness' in error.detail.lower())
+                else:raise AssertionError('Uncleared research exported')
+                record.assert_not_called()
+
+
+def test_all_download_uses_only_saved_selected_rosters_and_stable_content():
+    # A completed underfill downloads its two actual saved lineups, never the
+    # requested five or the larger internal candidate pool.
+    job=SimpleNamespace(job_id='saved',status='completed',contest_format='showdown',
+        params={'num_lineups':5,'entry_readiness':{'entry_ready':True,'status':'DEVELOPMENT_PREVIEW'},
+                'strategy_runtime':{'football_analyst':{'candidates':[{}]*20}}},
+        results=[DraftKingsExportTests.raw_showdown(),DraftKingsExportTests.raw_showdown(10)])
+    requested=[]
+    service=SimpleNamespace(get_job=lambda id:(requested.append(id) or job),engine=MagicMock())
+    with patch('backend.app.product_services.evaluation_record.record_export') as record:
+        first=download_optimizer_lineups('saved',service=service)
+        again=download_optimizer_lineups('saved',service=service)
+    assert requested==['saved','saved'] and first.body==again.body
+    assert len(list(csv.reader(io.StringIO(first.body.decode()))))==3
+    assert record.call_args.args[1]=='saved' and record.call_args.args[4]==job.results
+    assert 'saved.csv' in first.headers['content-disposition']
+
+
+def test_repeated_large_saved_downloads_have_stable_zip_content_and_identity():
+    lineups=[DraftKingsExportTests.raw_showdown(i*10) for i in range(501)]
+    first=DraftKingsExportService.build_lineup_download(contest_format='showdown',run_id='saved',lineups=lineups)
+    second=DraftKingsExportService.build_lineup_download(contest_format='showdown',run_id='saved',lineups=lineups)
+    assert first==second
+    with zipfile.ZipFile(io.BytesIO(first[2])) as archive:
+        assert all(info.date_time==(1980,1,1,0,0,0) for info in archive.infolist())
+
+
+def test_export_receipt_preserves_ambiguous_saved_lineage_in_stable_order():
+    from backend.app.product_services.evaluation_record import record_export, digest
+    lineup=DraftKingsExportTests.raw_showdown()
+    saved=[dict(lineup_id=id,players=lineup) for id in ['z','a']]
+    receipts=[]
+    for matches in [saved,list(reversed(saved))]:
+        conn=MagicMock();lookup=MagicMock();lookup.mappings.return_value=matches
+        format_lookup=MagicMock();format_lookup.scalar_one.return_value='showdown'
+        conn.execute.side_effect=[lookup,format_lookup]
+        with patch('backend.app.product_services.evaluation_record.append_record',side_effect=lambda c,k,p,**kw:(receipts.append(p) or digest(p))):
+            record_export(conn,'saved','saved.csv',b'fixed', [lineup])
+    assert receipts[0]==receipts[1]
+    assert receipts[0]['rows'][0]['saved_lineup_ids']==['a','z']
+    assert receipts[0]['submission_confirmed'] is False
+
+
+def test_download_route_rejects_wrong_cached_run_before_creating_receipt():
+    job=SimpleNamespace(job_id='other-run',status='completed',params={},results=[])
+    with patch('backend.app.product_services.evaluation_record.record_export') as record:
+        try:download_optimizer_lineups('clicked-run',service=SimpleNamespace(get_job=lambda _:job))
+        except HTTPException as error:assert error.status_code==409 and 'match' in error.detail
+        else:raise AssertionError('Wrong run exported')
+        record.assert_not_called()

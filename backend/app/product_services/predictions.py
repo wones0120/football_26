@@ -7,7 +7,7 @@ import hashlib
 import json
 import math
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, List, Optional, Any
@@ -958,6 +958,9 @@ def prediction_code_hash() -> str:
         + Path(__file__).with_name("kicker_roles.py").read_bytes()
         + Path(__file__).with_name("offensive_role.py").read_bytes()
         + Path(__file__).with_name("model_artifacts.py").read_bytes()
+        + Path(__file__).with_name("dst_deployment.py").read_bytes()
+        + Path(__file__).with_name("dst_feature_pipeline.py").read_bytes()
+        + Path(__file__).with_name("dst_rank_policy.py").read_bytes()
     ).hexdigest()
 
 
@@ -1287,6 +1290,7 @@ class PredictionsService:
         source_versions: dict[str, Any] | None = None,
         fitted_model: GradientBoostingRegressor | None = None,
         calibration_profiles: dict | None = None,
+        dst_component: dict | None = None,
     ) -> bool:
         """Persist append-only active prediction lineage in the target schema."""
         validate_target_schema(
@@ -1306,16 +1310,26 @@ class PredictionsService:
         )
         if fitted_model is None:
             raise ValueError("A fitted model is required for auditable projection persistence")
+        dst_feature_rows = {}
+        if dst_component is not None:
+            from .dst_deployment import score_component
+            overlay, _ = score_component(dst_component, source_features)
+            dst_feature_rows = {str(row.player_master_id): {
+                col: _json_safe(row.get(col)) for col in
+                ["game_id", *dst_component["policies"].columns]}
+                for _, row in overlay.iterrows()}
         artifact_bytes, artifact_sha256 = serialize_artifact(
             model=fitted_model, train=train_df, target=source_features,
             feature_columns=feature_cols, calibration=calibration_metrics or {},
-            profiles=calibration_profiles or {},
+            profiles=calibration_profiles or {}, dst_component=dst_component,
         )
         reloaded = deserialize_artifact(artifact_bytes, artifact_sha256)
         matrix = source_features[feature_cols].apply(pd.to_numeric, errors="coerce").fillna(0.0)
         if not np.array_equal(fitted_model.predict(matrix), reloaded["model"].predict(matrix)):
             raise RuntimeError("Reloaded fitted artifact changes raw projection values")
         artifact_uri = f"db://target.model_artifact/{context.model_run_id}"
+        persisted_model_id = (ACTIVE_MODEL_ID if dst_component is None else
+                              f"{ACTIVE_MODEL_ID}+{dst_component['contract']}:{dst_component['policy']}")
         dataset_sha256 = training_fingerprint(train_df)
         revision = git_revision()
         try:
@@ -1373,7 +1387,7 @@ class PredictionsService:
                         """
                     ),
                     {
-                        "model_id": ACTIVE_MODEL_ID,
+                        "model_id": persisted_model_id,
                         "model_version": MODEL_VERSION,
                         "artifact_uri": artifact_uri,
                         "trained_on_start": training_start,
@@ -1399,12 +1413,13 @@ class PredictionsService:
                     ),
                     {
                         "model_run_id": context.model_run_id,
-                        "model_id": ACTIVE_MODEL_ID,
+                        "model_id": persisted_model_id,
                         "feature_run_id": context.feature_run_id,
                         "data_cutoff_at": context.data_cutoff_at,
                         "params_json": json.dumps(
                             {
                                 "algorithm": "GradientBoostingRegressor",
+                                "dst_deployment": _json_safe((source_versions or {}).get("dst_deployment", {})),
                                 "random_state": 42,
                                 "training_rows": len(train_df),
                                 "feature_columns": feature_cols,
@@ -1481,6 +1496,8 @@ class PredictionsService:
                         for col in persisted_feature_columns
                         if col in source.index
                     }
+                    if player_id in dst_feature_rows:
+                        feature_payload["dst_serving_component_inputs"] = dst_feature_rows[player_id]
                     feature_rows.append(
                         {
                             "feature_run_id": context.feature_run_id,
@@ -1639,6 +1656,7 @@ class PredictionsService:
         availability_overrides=None,
         allow_confirmed_inactive_override=False,
         assume_questionable_out=False,
+        preliminary_exclude_unknown=False,
     ) -> PredictionRunResult:
         from .canonical_projection_inputs import (
             FEATURE_COLUMNS,
@@ -1657,6 +1675,7 @@ class PredictionsService:
             availability_overrides=availability_overrides,
             allow_confirmed_inactive_override=allow_confirmed_inactive_override,
             assume_questionable_out=assume_questionable_out,
+            preliminary_exclude_unknown=preliminary_exclude_unknown,
         )
         baseline_target = None
         if assume_questionable_out or any(
@@ -1668,6 +1687,20 @@ class PredictionsService:
                 cutoff=context.data_cutoff_at,
                 positions=list(positions) if positions else None,
             )
+        from .dst_deployment import configured_component, apply_component, component_profile
+        dst_component, dst_deployment_audit = configured_component(target)
+        if dst_component is not None:
+            # Validate canonical identities, time scope and corrected inference
+            # before any fit or persistence; default legacy frames stay intact.
+            _, dst_deployment_audit["inference"] = apply_component(
+                np.zeros(len(target)), target, dst_component)
+        if dst_component is not None:
+            context = replace(context, feature_set_hash=hashlib.sha256(json.dumps({
+                "shared_columns": FEATURE_COLUMNS, "dst_columns": dst_component["policies"].columns,
+                "dst_feature_policy": dst_component["feature_policy"], "dst_policy": dst_component["policy"],
+                "dst_artifact_sha256": dst_deployment_audit["artifact_sha256"],
+            }, sort_keys=True).encode()).hexdigest())
+        sources["dst_deployment"] = dst_deployment_audit
         residuals = generate_walk_forward_residuals(train, FEATURE_COLUMNS)
         profiles, metrics = build_position_calibration(residuals, train)
         metrics["historical_role_calibration"] = historical_role_calibration(residuals)
@@ -1683,6 +1716,8 @@ class PredictionsService:
         )
         metrics["salary_status_policy"] = sources.get("salary_status_policy", {})
         metrics["opportunity_features"] = sources.get("opportunity_features", {})
+        metrics["dst_feature_support"] = sources.get("dst_feature_support", {})
+        metrics["dst_deployment"] = dst_deployment_audit
         metrics["pregame_context"] = sources.get("pregame_context", {})
         metrics["availability_scenario"] = sources.get("availability_scenario", {})
         metrics["kicker_role_gate"] = sources.get("kicker_role_gate", {})
@@ -1704,6 +1739,8 @@ class PredictionsService:
             baseline_means, _ = apply_opportunity_point_adjustment(
                 baseline_means, train, baseline_target
             )
+            if dst_component is not None:
+                baseline_means, _ = apply_component(baseline_means, baseline_target, dst_component)
             baseline_positions = baseline_target["position"].astype(str).str.upper()
             baseline_availability = pd.to_numeric(
                 baseline_target["pregame_availability_probability"], errors="coerce"
@@ -1762,6 +1799,11 @@ class PredictionsService:
                 if elasticity.get("status") == "validated_positive_response"
                 else "review_required_unvalidated_market_response"
             )
+        if dst_component is not None:
+            # The component owns its market features; do not add the incumbent
+            # shared-tree elasticity/opportunity adjustment a second time.
+            means, _ = apply_component(means, target, dst_component)
+            market_point_adjustments[target.position.astype(str).str.upper().eq("DST")] = 0.
         metrics["market_context"] = sources.get("market_context", {})
         target["market_team_point_adjustment"] = market_point_adjustments
         for column in opportunity_details.columns:
@@ -1803,6 +1845,8 @@ class PredictionsService:
             conditional_mean = max(0.0, float(means[index]))
             if position == "K":
                 conditional_mean = max(0.0, float(kicker_estimates.loc[index]))
+            if position == "DST" and dst_component is not None:
+                profile = component_profile(dst_component)
             conditional_quantiles = apply_residual_calibration(
                 conditional_mean, profile
             )
@@ -1819,7 +1863,9 @@ class PredictionsService:
                 predicted_mean=mean, adj_mean=mean,
                 predicted_p10=quantiles["p10"], predicted_p25=quantiles["p25"],
                 predicted_p50=quantiles["p50"], predicted_p75=quantiles["p75"],
-                predicted_p90=quantiles["p90"], model="GradientBoosting",
+                predicted_p90=quantiles["p90"], model=(
+                    f"{dst_component['contract']}:{dst_component['policy']}"
+                    if position == "DST" and dst_component is not None else "GradientBoosting"),
                 feature_run_id=context.feature_run_id, model_run_id=context.model_run_id,
                 projection_run_id=context.projection_run_id, data_cutoff_at=context.data_cutoff_at,
                 game_id=prediction_game_id(row.to_dict(), season=season, week=week),
@@ -1854,7 +1900,7 @@ class PredictionsService:
             feature_lineage_cols=PREGAME_LINEAGE_COLUMNS,
             train_df=train, source_features=target,
             projections=projections, calibration_metrics=metrics, source_versions=sources,
-            fitted_model=model, calibration_profiles=profiles,
+            fitted_model=model, calibration_profiles=profiles, dst_component=dst_component,
         ):
             raise RuntimeError("Canonical projections could not be persisted; the run is not complete.")
         return PredictionRunResult(
@@ -1877,6 +1923,7 @@ class PredictionsService:
         availability_overrides: list[dict] | None = None,
         allow_confirmed_inactive_override: bool = False,
         assume_questionable_out: bool = False,
+        preliminary_exclude_unknown: bool = False,
     ) -> PredictionRunResult:
         if inspect(self.engine).has_table("curated_salary"):
             return self._train_canonical(
@@ -1886,7 +1933,10 @@ class PredictionsService:
                 availability_overrides=availability_overrides,
                 allow_confirmed_inactive_override=allow_confirmed_inactive_override,
                 assume_questionable_out=assume_questionable_out,
+                preliminary_exclude_unknown=preliminary_exclude_unknown,
             )
+        if preliminary_exclude_unknown:
+            raise ValueError("Preliminary research requires canonical projection inputs")
         if assume_questionable_out or availability_overrides:
             raise ValueError("Availability scenarios require canonical projection inputs.")
         df = self._load_features(season)

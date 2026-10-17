@@ -1,0 +1,8 @@
+from pathlib import Path
+import json
+from datetime import datetime,UTC
+from backend.app.product_services.analyst_reports import Catalog
+p=Path('research/analyst_reports/catalog.json');raw=p.read_text();data=json.loads(raw);rid='sunday-main-refreshed-scenarios-2026w6-v4';assert not any(x['report_id']==rid for x in data['reports'])
+base='sunday_scenario_refresh_20261016/v4/'
+data['reports'].append(dict(report_id=rid,title='Sunday Main — refreshed scenarios and full-roster alternatives',category='lineup_review',season=2026,week=6,slates=['SUNDAY_MAIN'],version='v4',recorded_at=datetime.now(UTC).isoformat(),preliminary=True,application_status='saved_run_comparison',saved_run_ids=['398efe88-a871-47fa-a4f1-4d3e9924a825','824caba7-5c8c-4e2d-a68e-ff201e8de8eb','bebc581f-cda1-4db9-b0a1-352eeba6efea'],summary='Friday all10game refresh; explicit primary/opponent-response roles; matched frozen c886 comparison. Five saved Mixed lineups plus separately labeled legal Allen/Jeanty review alternative. No Rams cap; preliminary.',path=base+'REVIEW.md',evidence=[dict(evidence_id=k,path=path) for k,path in [('packet',base+'packet.json'),('validation',base+'validation.json'),('comparison',base+'comparison.json'),('preferred-review-alternative',base+'preferred_review_alternative.json'),('current-markets','sunday_scenario_refresh_20261016/v1/current_market_review.json'),('canonical-statuses','sunday_scenario_refresh_20261016/v2/current_canonical_status_review.json')]]))
+Catalog.model_validate(data);assert p.read_text()==raw,'Concurrent catalog edit; reread before adding';p.write_text(json.dumps(data,indent=2)+'\n');print('published',rid,'reports',len(data['reports']))

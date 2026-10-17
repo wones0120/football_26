@@ -1,0 +1,7 @@
+# Frozen promotion criteria — 2026-10-16
+
+Recorded before this experiment's fits/results. Compare the production shared GradientBoosting(random_state=42), same 27 explicit features, zero filling, 80/20 history blend, same samples and chronological train/calibration/test splits. Change only verified DST training labels. Both arms use corrected heldout truth and corrected calibration truth. Keep all opponent-QB shadow features excluded. Do not tune hyperparameters.
+
+Retrospective blocks: train through 2024W13, calibrate 2024W14–18, evaluate 2025; train through 2025W14, calibrate remaining 2025, evaluate 2026W1–3 and separately the already inspected W4–5. No outcome blindness or complete historical capture-clock proof is claimed.
+
+Promote only if all identity/scoring/cutoff and feature exclusion audits pass; aggregate DST MAE does not worsen more than 0.10 point and RMSE more than 2%; combined 2026 MAE does not worsen more than 0.25 point; absolute aggregate bias is at most 1 point or improves; 80% interval coverage is 70–90% with no >5 percentage point decline; and paired week-cluster 95% upper MAE difference is <=0.40 point. Report individual blocks and uncertainty. These bounded noninferiority limits allow removal of known wrong labels without requiring a noisy small-sample win, but reject material degradation. No retraining on evaluation rows to pass. If failed, no promotion, no live projection refresh. A fitted full-history shadow artifact may support an explicitly non-deployed Sunday impact comparison, never validation.

@@ -359,7 +359,10 @@ class DraftKingsExportService:
         output = io.BytesIO()
         with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
             for number, content in enumerate(parts, 1):
-                archive.writestr(f"{stem}_part_{number}.csv", content)
+                # Stable saved-run content/receipt hashes across repeated downloads.
+                member = zipfile.ZipInfo(f"{stem}_part_{number}.csv", date_time=(1980, 1, 1, 0, 0, 0))
+                member.compress_type = zipfile.ZIP_DEFLATED
+                archive.writestr(member, content)
         return f"{stem}.zip", "application/zip", output.getvalue()
 
     def _ensure_schema(self) -> None:
@@ -600,6 +603,12 @@ class DraftKingsExportService:
                     "contest_format": portfolio["contest_format"], "file_name": file_name,
                     "row_count": len(rows), "content_sha256": digest,
                     "columns_json": json.dumps(columns), "csv_content": csv_content})
+            from .evaluation_record import append_record
+            append_record(conn, "portfolio_export", {"export_id": export_id, "portfolio_id": portfolio_id,
+                "validation_id": validation.validation_id, "content_sha256": digest,
+                "csv_content": csv_content, "assignments": [dict(a) for a in assignments],
+                "submission_confirmed": False}, run_id=str(run_id),
+                source={"table": "target.dk_upload_export"})
         return DraftKingsExportResult(export_id, portfolio_id, str(portfolio["contest_format"]), file_name, len(rows), digest, csv_content, validation.validation_id)
 
     def get_export(self, export_id: str) -> DraftKingsExportResult | None:

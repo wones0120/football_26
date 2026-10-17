@@ -100,3 +100,25 @@ test("Classic season-rank defaults serialize, migrate missing fields, persist ov
   assert.equal(lineupControlParams({...next.showdown,seasonRankQb:50},"showdown").season_ppg_top_pct_qb,undefined);
   assert.throws(()=>lineupControlParams({...next.classic,seasonRankTe:30},"classic"));
 });
+
+test("favored position controls default RB/TE/DST on, serialize independently, persist, and omit Captain", () => {
+  const defaults = defaultLineupControls("classic");
+  for (const pos of ["qb", "rb", "wr", "te", "dst"]) assert.equal(lineupControlParams(defaults, "classic")[`force_favored_${pos}`], ["rb", "te", "dst"].includes(pos) ? 1 : 0);
+  const selected = { ...defaults, favoredRb: 1, favoredDst: 1 };
+  const restored = parseLineupControls(JSON.stringify(selected), "classic");
+  assert.equal(restored.favoredRb, 1);
+  assert.equal(restored.favoredDst, 1);
+  assert.equal(lineupControlParams(restored, "classic").force_favored_rb, 1);
+  assert.equal(lineupControlParams(restored, "classic").force_favored_qb, 0);
+  assert.equal(lineupControlParams(restored, "showdown").force_favored_rb, undefined);
+  assert.equal(parseLineupControls('{"favoredRb":2}', "classic").favoredRb, 1);
+});
+
+
+test("favored defaults migrate once and all later user overrides persist", () => {
+  const old = { classic: { favoredQb: 1, favoredRb: 0, favoredWr: 1, favoredTe: 0, favoredDst: 0 } };
+  const migrated = restoreLineupControls(JSON.stringify(old), null);
+  assert.deepEqual([migrated.classic.favoredQb, migrated.classic.favoredRb, migrated.classic.favoredWr, migrated.classic.favoredTe, migrated.classic.favoredDst], [0, 1, 0, 1, 1]);
+  Object.assign(migrated.classic, { favoredQb: 1, favoredRb: 0, favoredWr: 1, favoredTe: 0, favoredDst: 0 });
+  assert.deepEqual(restoreLineupControls(serializeLineupControls(migrated), null), migrated);
+});

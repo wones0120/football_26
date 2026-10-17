@@ -30,10 +30,11 @@ from ..services.source_capture import (
 
 from .target_schema import validate_target_schema
 from .optimizer_effectiveness import build_optimizer_effectiveness, correlation_samples, metric_correlations
+from .entry_submission_evidence import submission_evidence
 
 
 LEARNING_REPORT_CONTRACT = "slate_learning_report_v1"
-LEARNING_REPORT_BUILDER_VERSION = "2026-10-05.3"
+LEARNING_REPORT_BUILDER_VERSION = "2026-10-13.1"
 WEEKLY_LEARNING_REPORT_CONTRACT = "weekly_learning_report_v1"
 LEARNING_EFFECT_TOLERANCE = 0.25
 OUTCOME_TAGS = frozenset({
@@ -437,7 +438,18 @@ def build_slate_learning_report(
 
         match_basis = "unavailable"
         matched_lineup_id: str | None = None
+        candidates = sorted(signature_matches.get(_signature(resolved_players), [])) if identity_complete else []
+        saved_matches = [{
+            "lineup_id": lineup_id,
+            "optimizer_run_id": saved_by_lineup[lineup_id][0].get("optimizer_run_id"),
+            "created_at": saved_by_lineup[lineup_id][0].get("optimizer_created_at"),
+            "roster_equal": True,
+            "exact_slot_equal": [(p["player_id"], p["roster_position"]) for p in resolved_players]
+                == [(p["player_id"], p["roster_position"]) for p in saved_by_lineup[lineup_id]],
+        } for lineup_id in candidates]
         assignment = assigned.get((contest_id, str(entry["entry_id"])))
+        if not assignment:
+            missing.add(f"entry:{contest_id}:{entry['entry_id']}:contest_entry_assignment")
         if assignment:
             candidate_id = str(assignment["lineup_id"])
             candidate = saved_by_lineup.get(candidate_id, [])
@@ -447,15 +459,12 @@ def build_slate_learning_report(
             else:
                 missing.add(f"entry:{contest_id}:{entry['entry_id']}:assignment_signature_conflict")
         elif identity_complete:
-            missing.add(f"entry:{contest_id}:{entry['entry_id']}:contest_entry_assignment")
-            candidates = signature_matches.get(_signature(resolved_players), [])
-            if candidates:
-                candidates.sort(
-                    key=lambda lineup_id: str(saved_by_lineup[lineup_id][0].get("optimizer_created_at") or ""),
-                    reverse=True,
-                )
+            if len(candidates) == 1:
                 matched_lineup_id = candidates[0]
                 match_basis = "canonical_lineup_signature"
+            elif candidates:
+                match_basis = "ambiguous_canonical_lineup_signature"
+                missing.add(f"entry:{contest_id}:{entry['entry_id']}:ambiguous_saved_lineup_matches")
 
         saved_rows = saved_by_lineup.get(matched_lineup_id or "", [])
         saved_by_identity = {
@@ -682,6 +691,7 @@ def build_slate_learning_report(
                 "unresolved_players": unresolved_players,
                 "lineup_match_basis": match_basis,
                 "lineup_id": matched_lineup_id,
+                "saved_lineup_number": saved_rows[0].get("lineup_number") if saved_rows else None,
                 "optimizer_run_id": optimizer_run_id,
                 "projection_run_id": projection_run_id,
                 "rule_run_id": rule_run_id,
@@ -697,6 +707,9 @@ def build_slate_learning_report(
                 "financial": financial,
                 "portfolio": dict(portfolio) if portfolio else None,
                 "exports": related_exports,
+                "submission_evidence": submission_evidence(
+                    entry, resolved_players, identity_complete, assignment, saved_by_lineup,
+                    saved_matches, related_exports, evidence.get("export_records", []), []),
                 "opt_007_control": control,
                 "opt_007_outcome": control_outcome,
                 "decision_snapshot": optimizer_runs_by_id.get(optimizer_run_id, {}).get(
@@ -992,7 +1005,27 @@ def build_slate_learning_report(
             family["net_profit"] += profit
         else:
             family["profit_complete"] = False
+    for entry in entry_reports:
+        links = [r for r in evidence.get("entry_candidate_lineage", [])
+                 if str(r["contest_id"]) == str(entry["contest_id"]) and str(r["entry_id"]) == str(entry["entry_id"])]
+        matches = [m for r in links for m in r.get("matches", [])]
+        entry["candidate_lineage"] = matches
+        matching_runs = {m["optimizer_run_id"] for m in matches}
+        saved_match_runs = {m["optimizer_run_id"] for m in entry["submission_evidence"]["saved_lineup_matches"]}
+        if not entry["optimizer_run_id"] and len(matching_runs) == 1 and len(saved_match_runs) <= 1:
+            entry["optimizer_run_id"] = next(iter(matching_runs))
+            entry["projection_run_id"] = matches[0].get("projection_run_id")
+            entry["lineup_match_basis"] = "original_candidate_signature_only"
+            run_ids["optimizer_run_ids"].add(entry["optimizer_run_id"])
+            if entry["projection_run_id"]:
+                run_ids["projection_run_ids"].add(entry["projection_run_id"])
+        entry["submission_evidence"] = submission_evidence(
+            entry["submission_evidence"]["observed"], entry["players"], entry["identity_complete"],
+            assigned.get((str(entry["contest_id"]), str(entry["entry_id"]))), saved_by_lineup,
+            entry["submission_evidence"]["saved_lineup_matches"], entry["exports"],
+            evidence.get("export_records", []), matches)
     report = {
+        "evaluation_records": evidence.get("evaluation_records", []),
         "contract_id": LEARNING_REPORT_CONTRACT,
         "builder_version": LEARNING_REPORT_BUILDER_VERSION,
         "season": season,
@@ -1005,7 +1038,7 @@ def build_slate_learning_report(
             "contests": len(contests),
             "entries": len(entries),
             "identity_complete_entries": sum(entry["identity_complete"] for entry in entry_reports),
-            "matched_optimizer_entries": sum(entry["lineup_id"] is not None for entry in entry_reports),
+            "matched_optimizer_entries": sum(entry["optimizer_run_id"] is not None for entry in entry_reports),
             "entries_with_opt_007": sum(entry["opt_007_control"] is not None for entry in entry_reports),
             "duplicate_entries": duplicate_entries,
             "projection_player_observations": len(projection_errors),
@@ -1139,12 +1172,16 @@ def build_slate_learning_report(
             "assignments": assignments,
             "portfolios": portfolios,
             "exports": exports,
+            "export_records": evidence.get("export_records", []),
             "rule_applications": rule_applications,
             "beliefs": beliefs,
             "belief_impacts": belief_impacts,
             "agent_questions": agent_questions,
             "payout_tiers": evidence.get("payout_tiers", []),
             "entry_history": evidence.get("entry_history", []),
+            "entry_candidate_lineage": evidence.get("entry_candidate_lineage", []),
+            "evaluation_records": evidence.get("evaluation_records", []),
+            "recommendation_assignments": evidence.get("recommendation_assignments", []),
             "entry_history_sources": evidence.get("entry_history_sources", []),
             "entry_history_conflicts": evidence.get("entry_history_conflicts", []),
             "cash_lines": evidence.get("cash_lines", []),
@@ -1355,7 +1392,7 @@ class SlateLearningService:
                 "dk_upload_export", "dk_export_validation", "symbolic_rule_application",
                 "belief_impact_preview", "belief_impact_decision",
                 "agent_question", "agent_question_answer", "player_outcome_event",
-                "slate_learning_run_detail", "dk_entry_history_snapshot",
+                "slate_learning_run_detail", "dk_entry_history_snapshot", "evaluation_record",
             ),
         )
 
@@ -1444,8 +1481,11 @@ class SlateLearningService:
                 SELECT optimizer_run_id, contest_format, strategy,
                        encode(sha256(convert_to(constraint_config_json::text, 'UTF8')), 'hex') AS configuration_hash,
                        pg_column_size(constraint_config_json) AS configuration_bytes, data_cutoff_at,
-                       projection_run_id, created_at AS optimizer_created_at
-                FROM target.optimizer_run
+                       projection_run_id, created_at AS optimizer_created_at,
+                       (SELECT jsonb_agg(DISTINCT p.player_json->>'game_id')
+                        FROM target.lineup l JOIN target.lineup_player p USING(lineup_id)
+                        WHERE l.optimizer_run_id=run.optimizer_run_id AND p.player_json ? 'game_id') AS saved_lineup_games
+                FROM target.optimizer_run run
                 WHERE season=:season AND week=:week AND upper(slate_id)=:slate
                   AND status='completed'
                 ORDER BY created_at, optimizer_run_id
@@ -1586,6 +1626,51 @@ class SlateLearningService:
         evidence['entry_history_conflicts'] = [key for key in conflicts if key[0] in contest_ids]
         evidence['entry_history_sources'] = [row['content_sha256'] for row in snapshots]
         evidence['contests'] = enrich_contests(contests, evidence['entry_history'])
+        evidence['entry_candidate_lineage'] = self._rows(connection, """
+            SELECT DISTINCT ON (record_json#>>'{payload,contest_id}',record_json#>>'{payload,entry_id}')
+                (record_json->'payload')->>'contest_id' AS contest_id,
+                (record_json->'payload')->>'entry_id' AS entry_id,
+                record_json#>'{payload,matches}' AS matches
+            FROM target.evaluation_record WHERE kind='entry_candidate_lineage'
+                AND record_json#>>'{payload,season}'=CAST(:season AS TEXT)
+                AND record_json#>>'{payload,week}'=CAST(:week AS TEXT)
+                AND upper(record_json#>>'{payload,slate}')=:slate
+            ORDER BY record_json#>>'{payload,contest_id}',record_json#>>'{payload,entry_id}',recorded_at DESC
+        """, params)
+        evidence['evaluation_records'] = self._rows(connection, """
+            SELECT record.record_id,record.kind,record.optimizer_run_id,record.evidence_sha256,
+                   record.recorded_at FROM target.evaluation_record record
+            LEFT JOIN target.optimizer_run run USING(optimizer_run_id)
+            WHERE (run.season=:season AND run.week=:week AND upper(run.slate_id)=:slate)
+               OR (record.kind IN ('contest_evidence','scope_correction','contest_submission_snapshot')
+                   AND record.record_json#>>'{payload,contest_id}' IN (
+                       SELECT contest_id FROM target.dfs_contest WHERE season=:season AND week=:week
+                       AND upper(slate_id)=:slate))
+            ORDER BY record.recorded_at,record.record_id
+        """, params)
+        evidence['export_records'] = self._rows(connection, """
+            SELECT record.record_id, record.kind, record.optimizer_run_id, record.recorded_at,
+                   jsonb_build_object(
+                       'filename', coalesce(record.record_json#>'{payload,filename}', to_jsonb(artifact.file_name)),
+                       'export_id', record.record_json#>'{payload,export_id}',
+                       'content_sha256', record.record_json#>'{payload,content_sha256}',
+                       'rows', record.record_json#>'{payload,rows}',
+                       'assignments', record.record_json#>'{payload,assignments}') AS payload
+            FROM target.evaluation_record record JOIN target.optimizer_run run USING (optimizer_run_id)
+            LEFT JOIN target.dk_upload_export artifact
+              ON artifact.export_id=record.record_json#>>'{payload,export_id}'
+            WHERE record.kind IN ('export', 'portfolio_export')
+              AND run.season=:season AND run.week=:week AND upper(run.slate_id)=:slate
+            ORDER BY record.recorded_at, record.record_id
+        """, params)
+        recommendations = self._rows(connection, """
+            SELECT record.optimizer_run_id,record.recorded_at,record.record_json->'payload' AS payload
+            FROM target.evaluation_record record JOIN target.optimizer_run run USING(optimizer_run_id)
+            WHERE record.kind='recommendation' AND run.season=:season AND run.week=:week
+              AND upper(run.slate_id)=:slate
+        """, params)
+        from .evaluation_record import prelock_recommendation_assignments
+        evidence['recommendation_assignments'] = prelock_recommendation_assignments(recommendations)
         return evidence
 
     def _load_optimizer_config(self, connection, run_id: str, expected_hash: str) -> dict[str, Any]:
@@ -1593,9 +1678,16 @@ class SlateLearningService:
             SELECT encode(sha256(convert_to(constraint_config_json::text, 'UTF8')), 'hex') AS configuration_hash,
                 jsonb_build_object(
                     'ownership_run_id', constraint_config_json->'ownership_run_id',
+                    'effective_strategy_contract', constraint_config_json->'effective_strategy_contract',
+                    'showdown_evidence_snapshot', jsonb_build_object('frozen_at', constraint_config_json#>'{showdown_evidence_snapshot,frozen_at}', 'player_pool', (
+                        SELECT coalesce(jsonb_agg(jsonb_build_object('game_id', p->'game_id')), '[]'::jsonb)
+                        FROM jsonb_array_elements(coalesce(constraint_config_json#>'{showdown_evidence_snapshot,player_pool}', '[]'::jsonb)) p)),
                     'correlation_profile', constraint_config_json->'correlation_profile',
                     'strategy_runtime', jsonb_build_object(
                         'candidate_pool_manifest', constraint_config_json#>'{strategy_runtime,candidate_pool_manifest}',
+                        'classic_run_input_snapshot', jsonb_build_object('payload', jsonb_build_object('metadata', constraint_config_json#>'{strategy_runtime,classic_run_input_snapshot,payload,metadata}')),
+                        'single_lineup', jsonb_build_object('all_candidates', constraint_config_json#>'{strategy_runtime,single_lineup,all_candidates}'),
+                        'strategy_contract_audit', jsonb_build_object('candidate_rosters', constraint_config_json#>'{strategy_runtime,strategy_contract_audit,candidate_rosters}'),
                         'classic_small_field', jsonb_build_object('all_candidates', constraint_config_json#>'{strategy_runtime,classic_small_field,all_candidates}'),
                         'single_entry', jsonb_build_object('all_candidates', constraint_config_json#>'{strategy_runtime,single_entry,all_candidates}'),
                         'three_max', jsonb_build_object('all_candidates', constraint_config_json#>'{strategy_runtime,three_max,all_candidates}'),
@@ -1667,6 +1759,7 @@ class SlateLearningService:
                         ORDER BY slot_index LIMIT 1)) AS evidence
                     FROM target.optimizer_run run WHERE optimizer_run_id=:run_id
                 """), {"lineup_id": entry["lineup_id"], "run_id": entry["optimizer_run_id"]}).scalar_one()
+                payload["submission_evidence"] = entry["submission_evidence"]
                 entry["entry_evidence"] = self._store_run_detail(connection, {
                     "optimizer_run_id": entry["optimizer_run_id"], "entry_evidence": payload,
                 })
@@ -1755,7 +1848,8 @@ class SlateLearningService:
             rows = self._rows(connection, """
                 SELECT coalesce(detail.detail_json->'entry_evidence', jsonb_build_object(
                     'decision_snapshot', entry.value->'decision_snapshot',
-                    'opt_007_control', entry.value->'opt_007_control')) AS evidence,
+                    'opt_007_control', entry.value->'opt_007_control',
+                    'submission_evidence', entry.value->'submission_evidence')) AS evidence,
                     entry.value->'entry_evidence'->>'evidence_hash' AS evidence_hash,
                     entry.value->'entry_evidence'->>'detail_id' IS NOT NULL AND detail.detail_id IS NULL AS detail_missing
                 FROM target.slate_learning_report report
@@ -1893,6 +1987,8 @@ class SlateLearningService:
         if (report["telemetry"]["serialized_report_bytes"] > 2_000_000
                 or report["telemetry"]["elapsed_seconds"] > 60):
             logging.getLogger(__name__).warning("Weekly learning report %s exceeds response or duration budget", report["report_id"])
+        from .weekly_learning_library import save_report
+        save_report(report)
         return report
 
     def latest(self, *, season: int, week: int, slate: str, entry_user: str) -> dict[str, Any] | None:

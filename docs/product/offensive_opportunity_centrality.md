@@ -1,5 +1,17 @@
 # Offensive opportunity centrality
 
+## Shared workload evidence
+
+New optimizer executions serialize `workload_evidence_v1` under `strategy_runtime.player_pool.rows[*].workload_evidence` for both Classic and Captain/Showdown. The same canonical player context yields the same packet regardless of salary or CPT/FLEX assignment. QB/RB/WR/TE receive explicit evidence status; K/DST are not applicable, and unknown positions remain explicit.
+
+The packet separates `historical` snap/count/share values and trends, `historical_coverage` (existing policy, window and sample count), `derived_proxies` (existing projected target/carry allocations), `explicit_pregame` inputs, `availability_depth`, and `lineage`. `explicit_pregame_lineage` preserves projection-time workload attribution independently of a later availability/depth refresh; known availability/role source IDs and clocks remain separate. Existing role confidence is copied under `existing_assessment`; no new confidence score is estimated. Availability flags determine whether historical values are measured. A measured zero retains `observed`; a false flag returns `unavailable` and preserves the zero-fill separately as `stored_value`; absent flags return `coverage_unknown`. Non-null values alone do not establish measurement coverage.
+
+Known projection/feature/context IDs and clocks are retained. Historical source row IDs, exact windows/sample counts and observation clocks absent from the saved inputs remain unavailable. The existing point-in-time input loader remains authoritative; packets suppress workload values with known clocks after the execution cutoff. A cutoff alone does not prove source chronology. Skill-player target and RB carry aggregates remain incomplete team-volume proxies, not pass/rush attempts or red-zone totals. Historical participation and derived allocations never populate explicit expected snaps/routes/targets/carries.
+
+Selected lineup players carry `workload_evidence_ref` to the shared pool. The saved `candidate_pool_manifest` records the shared evidence hash, count and canonical linkage, without duplicating packets in every candidate variant. Learning evaluations expose saved packets once and candidate player-ID references, including missing-player IDs. Read paths do not reconstruct or backfill old snapshots. Exported optimizer HTML shows shared evidence across all pool salaries; the existing low-cost eligibility diagnostic remains a separate policy explanation.
+
+This contract only exposes evidence. Mean/P10/P90, optimizer objectives/bonuses, shortlist, gates, eligibility, exposures, user preferences and configuration defaults remain unchanged. In particular, optimizer role scoring continues to consume explicit pregame inputs; it does not consume historical/proxy evidence from this packet. Resolving that discrepancy would be a separate behavior change requiring validation.
+
 `offensive_opportunity_centrality` is a diagnostic of who receives an offense's opportunities. It does not use fantasy points, fantasy projections, ceilings, salary, ownership, DFS value, or optimizer results.
 
 ## Dimensions

@@ -1,5 +1,72 @@
 # Showdown lineup preferences
 
+Named Captain position exceptions bypass only the position filter for the selected canonical players. Saved app and readable reports show **Named exceptions may qualify** and **1 if a named QB is eligible** when the saved position filter otherwise excludes QBs; explicit **No QBs** or **No QB Captain** still shows **No** and zero. The Captain position summary retains the base positions and named-exception count. This wording does not certify any named player's availability or override other eligibility rules.
+
+## Four lineups at 25% captain coverage
+
+A Showdown request with `num_lineups: 4` and `captain_max_exposure: 0.25`
+(or `25`) activates captain coverage. After injury, player-pool and user
+eligibility filtering, it freezes the top four eligible pregame P90 players,
+including QBs unless excluded by a captain/player preference. In the UI, choose
+**Any position** to remove the default WR/RB captain restriction.
+
+Each shortlisted captain is solved once in P90 order, selecting the best legal
+FLEX combination using the existing role objective and 1.5× captain salary and
+points. Salary, roster size, team limits, locks, QB correlations, other hard
+constraints and remaining portfolio exposure limits still apply. FLEX may use
+the same players across lineups when exposure limits allow it. Existing behavior
+is unchanged for other lineup counts or captain caps.
+
+The global quality floors (85% of reference mean and 90% of reference P90) are
+**diagnostic warnings only**. The reference is the best role-objective lineup
+before fixing a captain or consuming portfolio exposure. The saved
+`showdown_captain_coverage` report and exported HTML show each lineup's mean and
+P90 projection gap (reference minus lineup), plus the amount below either floor.
+A negative gap means the lineup is above the reference on that metric. These
+summed player P90s are not calibrated lineup outcome percentiles.
+
+A failed captain is never replaced by the fifth-ranked player. Generation
+continues for the other shortlisted captains; the report records underfill and
+the conflicting hard constraints, with canonical player IDs in constraint
+expressions. Fewer than four eligible captains also produces explicit underfill.
+A fixed captain lock is retained and reported as a conflict for other captains.
+No constraint is relaxed to fill the request. Solver failures are distinguished
+from proven infeasibility. Reports remain available when no lineup is feasible.
+
+## Top-four P90 captain shortlist
+
+Captain candidates are the top four eligible players across both teams ranked by
+unmultiplied pregame `p90`, descending, then canonical `player_id` ascending.
+Captain-only preferences (position limits, No QB Captain, and FLEX-only players)
+apply before ranking. Existing player-pool eligibility checks still apply.
+With fewer than four eligible players, all qualify; an empty shortlist is
+infeasible. A locked captain outside the shortlist is rejected explicitly.
+
+Final validation independently checks each selected captain against the frozen shortlist before accepting results.
+
+The shortlist is frozen before candidate generation. Exposure exhaustion,
+scenario discovery and forced-captain solves cannot promote a fifth player.
+Players outside the shortlist remain available at FLEX under the existing pool
+and roster rules. Model projections, ownership and football assessments are
+unchanged by preferences or the cutoff.
+
+The solve objective is exactly **1.5 × captain pregame P90 + sum of FLEX means**.
+Captain salary is **1.5 × base salary**; FLEX salary is unchanged. Existing
+salary cap, one captain plus five FLEX, unique-player, team, user and portfolio
+constraints remain in effect. Legacy captain-prior, context, correlation and
+ownership adjustments do not enter this solve objective. Final single-lineup
+ranking uses the same role-specific score; existing multi-entry portfolio
+constraints and diversification policies remain in effect. This score is not
+a calibrated lineup P90 or payout forecast.
+
+Saved runtime and lineup metadata contain `showdown_captain_shortlist`, including
+raw P90, model rank, eligible rank, the shortlist and captain-only exclusions.
+The exported optimizer report displays these details. `outside_top_four_p90`
+is an `optimizer_policy` reason; user restrictions remain `user_preference`
+reasons, with model values retained. Missing/nonfinite P90 cannot qualify for
+captain and is reported explicitly; it does not itself remove FLEX eligibility.
+
+
 Operations → Portfolio optimizer shows the full **Optimizer options** form without
 expanding a disclosure. Preparation and data tools (including Open Model and Run
 Simulation) and Weekly pipeline remain collapsed by default.
@@ -95,3 +162,5 @@ to four once; later explicit overrides persist, and existing three-player caps r
 Omitted API parameters and saved historical runs retain their existing semantics.
 
 Captain team-leader preferences now use prior-week season averages instead of projections. Require at least one defaults on; home-team-only defaults off. The leader may be Captain or FLEX. Missing/ambiguous history remains unranked; missing team history or Week 1 fails explicitly without falling back to projections. Frozen run metadata records prior-game scores, averages, source lineage and tied leader IDs. Existing historical runs are unchanged.
+
+After optimizer changes, restart both local API and durable worker before rerunning. Fresh preparation remains required; ESPN provider ID 100 accepts the display names DraftKings and Draft Kings without relaxing line validation.

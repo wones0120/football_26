@@ -8,6 +8,7 @@ from __future__ import annotations
 from copy import deepcopy
 from datetime import UTC, datetime
 import math
+import re
 
 from .replay import parse_slate_lock
 from .slate_preparation import aware, digest
@@ -103,6 +104,24 @@ def assess_current_inputs(service, *, season, week, slate, projection_run_id):
         season=season, week=week, slate=slate, projection_run_id=projection_run_id,
         evidence_cutoff=now, evaluated_at=now, rules=freshness_rules(get_settings()),
         require_canonical_context=True)
+
+
+def native_matchup(rows, teams):
+    """Retain verified native away/home order; alphabetical teams have no venue meaning."""
+    from .market_snapshots import normalize_team
+    pairs = set()
+    for row in rows:
+        match = re.match(r"^\s*([A-Za-z]{2,3})\s*@\s*([A-Za-z]{2,3})(?:\s|$)", str(row.get("game_id") or ""))
+        if match:
+            away, home = (normalize_team(match.group(1)), normalize_team(match.group(2)))
+            if {away, home} == set(teams):
+                pairs.add((away, home))
+    if len(pairs) == 1:
+        away, home = next(iter(pairs))
+        return {"matchup": away + " @ " + home, "away_team": away, "home_team": home,
+                "matchup_order_basis": "native_salary_game_info"}
+    return {"matchup": " vs ".join(teams), "away_team": None, "home_team": None,
+            "matchup_order_basis": "venue_order_unverified"}
 
 
 def evaluate_readiness(rows, *, season, week, slate, projection_run_id,
@@ -285,7 +304,7 @@ def evaluate_readiness(rows, *, season, week, slate, projection_run_id,
     (required if ownership_required else optional)["ownership"] = ownership
     reasons = sorted({code for c in required.values() for code in c["reason_codes"]})
     result = {"contract_id": CONTRACT, "slate_identifier": {"season": season, "week": week, "slate": slate},
-            "matchup": " @ ".join(teams), "kickoff_at": aware(kickoff).isoformat() if kickoff else None,
+            **native_matchup(native_rows, teams), "kickoff_at": aware(kickoff).isoformat() if kickoff else None,
             "evaluated_at": now.isoformat(), "evidence_cutoff": cutoff.isoformat(),
             "status": "NOT_READY" if reasons else "READY", "reason_codes": reasons,
             "required_sources": required, "optional_sources": optional, "ownership": ownership,
@@ -319,13 +338,14 @@ def validate_frozen_evidence(value):
     return value["data_readiness"]
 
 
-def refresh_training_labels(engine, *, season, week, slate):
+def refresh_training_labels(engine, *, season, week, slate, preliminary_exclude_unknown=False):
     """Repair stale completed labels before taking the live projection cutoff."""
     from sqlalchemy.orm import Session
     from .canonical_projection_inputs import load_inputs, StaleTrainingOutcomeError
     from ..services.lineup_learning import LineupLearningService
     try:
-        load_inputs(engine,season=season,week=week,slate=slate,cutoff=datetime.now(UTC))
+        load_inputs(engine,season=season,week=week,slate=slate,cutoff=datetime.now(UTC),
+            **({"preliminary_exclude_unknown": True} if preliminary_exclude_unknown else {}))
         return {"periods": [], "rows_written": 0}
     except StaleTrainingOutcomeError as exc:
         periods = exc.periods
@@ -452,7 +472,8 @@ def refresh_live_sources(service, *, season, week, slate, params, progress=None,
 
     request = SlatePreparationRequest(season=season, week=week, slate=slate, action="rebuild",
         availability_overrides=params.get("availability_overrides", []),
-        assume_questionable_out=params.get("assume_questionable_out", False))
+        assume_questionable_out=params.get("assume_questionable_out", False),
+        preliminary_research=params.get("preliminary_research", False))
     report = {}
     def emit(stage, message, **kwargs):
         if progress:
@@ -487,6 +508,19 @@ def refresh_live_sources(service, *, season, week, slate, params, progress=None,
         return report["salary_pool"]["status"] == "completed" and not identity.get("salary_rows_quarantined", 0)
     update_config(cache_mode=CacheMode.OFF, verbose=False)
     attempt("market", lambda: capture_source(request.model_copy(update={"action": "markets"}), games))
+    if report["market"]["status"] != "completed":
+        report["projection"] = {"status": "blocked", "reason":
+            "Current sportsbook spreads/totals could not be refreshed: " + report["market"]["reason"]}
+        return {"projection_run_id": None, "data_cutoff_at": datetime.now(UTC),
+                "ownership_run_id": None, "report": report}
+    from .historical_prerequisites import refresh_history
+    attempt("historical_participation", lambda: refresh_history(service.engine,
+        season=season, week=week, slate=slate, lock=lock))
+    if report["historical_participation"]["status"] != "completed":
+        report["projection"] = {"status": "blocked", "reason":
+            "Prior-week stats/snaps could not be completed: " + report["historical_participation"]["reason"]}
+        return {"projection_run_id": None, "data_cutoff_at": datetime.now(UTC),
+                "ownership_run_id": None, "report": report}
     # Refresh roster identities first; new provider IDs must be available to the
     # same resolver used by import before status joins or dependent builds run.
     resolved = _refresh_player_sources(service, season=season, week=week, slate=slate, games=games, lock=lock, attempt=attempt,
@@ -505,7 +539,7 @@ def refresh_live_sources(service, *, season, week, slate, params, progress=None,
         if progress:
             progress(stage, current, total, message, **kwargs)
     context = SimpleNamespace(checkpoint=checkpoint, run_id=None, progress=build_progress)
-    if report["official_player_status"]["status"] == "blocked":
+    if report["official_player_status"]["status"] == "blocked" and not request.preliminary_research:
         report["projection"] = {"status":"blocked", "reason":report["official_player_status"]["reason"]}
     else:
         attempt("projection", lambda: execute_preparation(context, request.model_dump(mode="json"),

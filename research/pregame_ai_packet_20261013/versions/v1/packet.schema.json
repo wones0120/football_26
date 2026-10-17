@@ -1,0 +1,286 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:wones:football-analyst:v1",
+  "title": "Wones Football Analyst offline packet v1",
+  "type": "object",
+  "required": [
+    "contract_id",
+    "analyst_name",
+    "packet_id",
+    "decision_at",
+    "frozen_at",
+    "baseline_mutation",
+    "user_preferences",
+    "games",
+    "sources",
+    "players",
+    "baseline_facts",
+    "hypotheses",
+    "coverage_gaps"
+  ],
+  "properties": {
+    "contract_id": {
+      "const": "wones_football_analyst_v1"
+    },
+    "analyst_name": {
+      "const": "Wones Football Analyst"
+    },
+    "packet_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "decision_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "frozen_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "baseline_mutation": {
+      "const": false
+    },
+    "user_preferences": {
+      "type": "array",
+      "maxItems": 0
+    },
+    "games": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "game_id",
+          "teams",
+          "kickoff_at",
+          "format_membership"
+        ],
+        "properties": {
+          "game_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "teams": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "kickoff_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "format_membership": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "source_id",
+          "uri",
+          "coverage",
+          "observed_at",
+          "available_at",
+          "capture_sha256"
+        ],
+        "properties": {
+          "source_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uri": {
+            "type": "string",
+            "minLength": 1
+          },
+          "coverage": {
+            "enum": [
+              "verified",
+              "unavailable"
+            ]
+          },
+          "observed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "available_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "published_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "capture_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        }
+      }
+    },
+    "players": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "player_master_id",
+          "team",
+          "game_id",
+          "source_native_key",
+          "identity_source_ids",
+          "workload_evidence"
+        ],
+        "properties": {
+          "player_master_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "source_native_key": {
+            "type": "string",
+            "minLength": 1
+          },
+          "identity_source_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1
+          },
+          "workload_evidence": {
+            "type": "object",
+            "required": [
+              "contract_id",
+              "player_id",
+              "historical",
+              "derived_proxies",
+              "explicit_pregame"
+            ],
+            "properties": {
+              "contract_id": {
+                "const": "workload_evidence_v1"
+              }
+            }
+          }
+        }
+      }
+    },
+    "baseline_facts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "fact_id",
+          "kind",
+          "text",
+          "source_ids"
+        ],
+        "properties": {
+          "kind": {
+            "const": "observed_fact"
+          },
+          "source_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1
+          }
+        }
+      }
+    },
+    "hypotheses": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "hypothesis_id",
+          "game_id",
+          "formats",
+          "player_master_ids",
+          "status",
+          "action",
+          "hypothesis",
+          "supporting_evidence",
+          "contrary_evidence",
+          "conditional_assumptions",
+          "testable_implication",
+          "unknowns",
+          "source_ids",
+          "uncertainty",
+          "numeric_effect_proposal",
+          "expires_at",
+          "recheck_triggers"
+        ],
+        "properties": {
+          "status": {
+            "enum": [
+              "actionable_monitor",
+              "research_only",
+              "abstain"
+            ]
+          },
+          "action": {
+            "enum": [
+              "refresh_evidence_only",
+              "none"
+            ]
+          },
+          "formats": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "CLASSIC",
+                "SHOWDOWN"
+              ]
+            }
+          },
+          "player_master_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1
+          },
+          "source_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1
+          },
+          "numeric_effect_proposal": {
+            "type": "null"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      }
+    },
+    "coverage_gaps": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  }
+}

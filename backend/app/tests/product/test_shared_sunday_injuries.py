@@ -4,7 +4,7 @@ from backend.app.injury_scope import injury_slate_sql, injury_subset_membership_
 
 
 @pytest.mark.parametrize('slate,expected', [('SUNDAY_EARLY',['early','unresolved']), ('sunday_late',['late']),
-                                           ('SUNDAY_NIGHT',[])])
+                                           ('SUNDAY_NIGHT',[]), ('SUNDAY_MORNING',[])])
 def test_main_injuries_are_selected_by_canonical_identity_team_and_cutoff(slate, expected):
     engine = create_engine('sqlite://')
     with engine.begin() as c:
@@ -28,7 +28,7 @@ def test_main_injuries_are_selected_by_canonical_identity_team_and_cutoff(slate,
 def test_injury_inheritance_is_one_way_and_not_shared_with_captain():
     assert injury_source_slates('sunday_early') == ('SUNDAY_EARLY','SUNDAY_MAIN')
     assert injury_source_slates('SUNDAY_LATE') == ('SUNDAY_LATE','SUNDAY_MAIN')
-    for slate in ('SUNDAY_MAIN','SUNDAY_NIGHT','MONDAY_NIGHT','THURSDAY_NIGHT'):
+    for slate in ('SUNDAY_MAIN','SUNDAY_MORNING','SUNDAY_NIGHT','MONDAY_NIGHT','THURSDAY_NIGHT'):
         assert injury_source_slates(slate) == (slate,)
 
 
@@ -72,3 +72,41 @@ def test_subsets_reuse_original_main_role_facts_without_refreshing_clocks(monkey
     assert stale['evidence_json']['canonical_role'] is None
     for other in ['SUNDAY_MAIN', 'SUNDAY_NIGHT']:
         assert module.shared_sunday_source_facts(None, season=2026, week=5, slate=other, cutoff=now, salaries=[salary]) == []
+
+
+@pytest.mark.parametrize('replacement_clock', ['current', 'future_observed', 'future_received', 'conflict'])
+def test_new_team_starter_supersedes_retained_main_starter(replacement_clock):
+    from datetime import datetime, UTC, timedelta
+    from backend.app.product_services.showdown_player_context import compose_player_contexts
+    now = datetime(2026, 10, 11, 16, tzinfo=UTC)
+    old = (now - timedelta(hours=8)).isoformat()
+    recent = (now - timedelta(hours=1)).isoformat()
+    future = (now + timedelta(hours=1)).isoformat()
+    salaries = [dict(player_id=pid, team='CHI', position='QB') for pid in ['old-qb', 'new-qb']]
+    original = dict(player_id='old-qb', team='CHI', position='QB', kind='starting_qb',
+        role='expected_starter', source='retained-main', source_ids=['original'],
+        observed_at=old, received_at=old)
+    replacement = dict(original, player_id='new-qb', source='fresh-subset', source_ids=['replacement'],
+        observed_at=future if replacement_clock == 'future_observed' else old if replacement_clock == 'conflict' else recent,
+        received_at=future if replacement_clock == 'future_received' else recent)
+    facts = [original, replacement]
+    contexts = compose_player_contexts(salaries, facts, cutoff=now, max_age_hours=24)
+    first, second = [r['evidence_json'] for r in contexts]
+    if replacement_clock == 'conflict':
+        assert first['canonical_role'] is second['canonical_role'] is None
+        assert all('player_role_conflict' in r['evidence_json']['canonical_context_reason_codes'] for r in contexts)
+    elif replacement_clock.startswith('future'):
+        assert first['canonical_role'] == 'expected_starter'
+        assert second['canonical_role'] == 'expected_backup'
+        assert second['role_observed_at'] == old
+    else:
+        assert first['canonical_role'] == 'expected_backup'
+        assert second['canonical_role'] == 'expected_starter'
+        assert first['role_source_ids'] == ['replacement']
+        assert first['role_observed_at'] == recent
+        assert original in first['source_facts']
+        # Reusing persisted facts does not resurrect the old starter.
+        retained = [f for r in contexts for f in r['evidence_json']['source_facts']]
+        rebuilt = compose_player_contexts(salaries, retained, cutoff=now, max_age_hours=24)
+        assert [r['evidence_json']['canonical_role'] for r in rebuilt] == ['expected_backup', 'expected_starter']
+    assert facts == [original, replacement]

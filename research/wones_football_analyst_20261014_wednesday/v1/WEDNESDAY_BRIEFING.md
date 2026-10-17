@@ -1,0 +1,67 @@
+# Wones Football Analyst — Wednesday, October 14, 2026
+
+Actual decision/freeze: **2026-10-14T12:47:42.989625+00:00**. Scheduled wakeup: 10:06 UTC; evidence was captured later and is not backdated.
+
+My preliminary Sunday priorities remain **ARI–LAR passing**, **Walker/Henry/Taylor rushing control**, and **Stevenson only under the confirmed-absence/healthy-lead-back branch**. The useful overlooked question is which inexpensive support preserves the strongest core; buying a cheap player without a credible role does not answer it. These are qualitative research preferences. The [packet](packet.json) preserves canonical identities, source clocks, model assessments and contrary cases.
+
+Fresh read-only database captures confirm **513 Sunday Main salary rows, 20 teams, ten games**, plus a separate SEA–DEN Thursday salary slate. Sunday Night DAL–GB and Monday WAS–SF are schedule-confirmed; their salaries and current canonical role reviews are missing here. There is **one Monday game**, not a doubleheader. HOU–JAX London is outside the imported Sunday Main. Primary schedules: [Denver](https://www.denverbroncos.com/schedule/), [Green Bay preview](https://www.packers.com/news/packers-host-the-cowboys-in-primetime-week-6-2026), [San Francisco](https://www.49ers.com/schedule/).
+
+This is an early Wednesday review before later practice reports. All ten Sunday games have substantive preliminary opinions; complete injury, market, protection and opponent coverage evidence remains unavailable. Fresh DB capture clocks and source hashes are in the [manifest](manifest.json). Earlier history is reused from the immutable [Sunday review](/Users/wones/git/football_26/research/sunday_main_analyst_20261013/v3/WONES_SUNDAY_MAIN_REVIEW.md) and [semantic screen](/Users/wones/git/football_26/research/sunday_main_analyst_20261013/discovery_semantic_v1/v4_final/SEMANTIC_HANDOFF.md); its dated team news is not a Week 6 final designation.
+
+## What changed
+
+**ARI–LAR conviction softened:** Jackson suspended; appeal pending. Protection risk now merits a specific recheck. The game remains first in passing exploration. [NFL report](https://www.nfl.com/news/rams-lt-alaric-jackson-suspended-two-games-for-striking-bradley-chubb-following-monday-night-s-game).
+
+**New England remains conditional:** the current league report still expects Henderson to miss multiple weeks. It does not establish Stevenson's Sunday clearance. A user rule excluding questionable players supplies neither fact. Kiner could receive extra work; no measured new split or monopoly is established. [League update](https://www.nfl.com/news/nfl-news-roundup-latest-league-updates-from-tuesday-oct-13).
+
+**Thursday premises survive Tuesday, with estimated reports:** JSN remains limited; Denver's Surtain/Hufanga remain nonparticipants and Moss limited. Actual game status is pending. Charbonnet remains PUP, with the coach describing a return as unlikely and subject to change. This reinforces the receiving-branch research priority without confirming a workload restriction or a Denver coverage advantage. [Seattle report](https://www.seahawks.com/news/week-6-injury-report-seahawks-at-broncos), [Denver Tuesday report](https://www.denverbroncos.com/news/injury-report-cb-riley-moss-remains-limited-practice-participant-ahead-of-week-6-game-vs-seahawks).
+
+**Baseline wording corrected:** an existing completed Sunday preliminary projection run now exists: `28f764f0-6fe9-4463-b55e-c6c93804848c`, 288 rows, cutoff October 14 **02:53:33 UTC** (October 13 10:53:33 p.m. EDT). We bind the exact prior snapshot `1d4bd679…daabe`; `entry_ready=false`. No Week 6 curated injury rows were found. The old v3 sentence saying no Sunday projection run is superseded; no new run was created for this briefing.
+
+## All ten Sunday Main games
+
+The ordering below follows game coverage; priority is editorial, not probability or ownership. Historical usage and current salaries are carried with row/native identity lineage in the packet and prior captures.
+
+| Game | Preliminary judgment and plausible response | Contrary case / next evidence | Model already includes |
+|---|---|---|---|
+| **ARI@LAR** | Stafford with Nacua or Adams, McBride/Wilson response remains the most coherent two-sided passing core. Arizona concentration makes choosing the correct response more valuable than chasing an arbitrary bargain WR. | Protection/appeal risk lowers conviction. Arizona must sustain productive drives; a Rams rushing finish can break the full stack. | Wilson/McBride target concentration and receiving history; no second concentration bonus. |
+| **BAL@CLE** | Henry is the cleaner control hypothesis. Judkins' carries plus receiving deserve a separate one-off review. | Baltimore QB identity changes rush/scoring allocation. Cleveland's backup transaction does not quantify Judkins work or prove easy rushing. Verify both current roles. | Henry carry profile and Judkins opportunity context; Jackson preference exclusion remains distinct from availability. |
+| **BUF@LV** | Allen with one receiver and Bowers response is preferable to automatically paying for two Bills receivers. Cook is a credible control alternative. | Raiders QB, health and protection must support keep-pace. Allen can score through rushing while receivers fail; Monday overtime is not Sunday's pace. | Allen rush/points distribution and diffuse receiver targets; one-WR construction is an opportunity-cost test. |
+| **CAR@PHI** | Young–McMillan deserves comparison with Hurts/replacement receivers. Lemon is an inexpensive support candidate worth checking before paying for another star. | Young against pressure, Eagles protection and actual replacement routes can defeat mutual scoring. Smith exclusion does not vacate targets by itself. | McMillan concentration and existing replacement snap/opportunity trends; new route/protection interactions still need research. |
+| **CHI@ATL** | Bijan with a selectively chosen Chicago response is a steadier research branch than premature two-QB shootout assumptions. | Current QB health/identity and Brian Robinson's continued role matter. Bijan continuity is not an unrestricted workload forecast. | Bijan carries/targets and Brian Robinson competition; no repeat trend lift. |
+| **LAC@KC** | Walker control remains first; a KC DST pairing is a conditional construction idea. Preserve Mahomes–Kelce/Worthy passing if Herbert sustains drives. | Chargers protection is central to keep-pace. Receiver absences do not establish which Chief receives extra targets; avoid invented sacks or target transfers. | Walker opportunity/control signals and existing receiver history; recipient-specific new allocation unproven. |
+| **NO@NYG** | Winston–Nabers with Olave is my best alternate full passing exploration outside the lead group, if QB/receiver availability is confirmed. Juwan Johnson is the cheaper support to examine. | Saints protection, Giants QB confirmation and Nabers/Shough health can stop the exchange. Olave cost competes with reliable RB opportunity. | Receiving concentration and Juwan/Vele usage proxies; new joint-drive evidence, not raw target history, would change the thesis. |
+| **NYJ@NE** | Stevenson standalone, optional Wilson response, is the strongest availability-driven conditional watch. It need not require Maye passing ceiling. | Require actual Henderson absence, Stevenson available with normal role, and Kiner allocation. Jets pressure can end drives. No demonstrated NE blocking edge. | Preserved split still has Henderson historical carry proxy; no observed opportunity redistribution. This is a plausible interaction gap, not a calibrated forecast. |
+| **PIT@TB** | Warren carries plus receiving and Irving control remain ahead of an expensive vintage-QB stack. Daniels–Tez is a separate passing alternative. | QB confirmation, Tampa protection and RB split matter. A long Tez play or rising snaps alone cannot justify forced cheap exposure. | Daniels role, Tez snap rise and opportunity context already appear; new route/teammate allocation evidence required. |
+| **TEN@IND** | Taylor control first; Jones–Tyler Warren is the contrasting passing branch. Wan'Dale is an affordable Titans response to investigate. | Tennessee must sustain drives; trailing volume can be inefficient. Colts red-zone struggles do not guarantee TD restitution. | Taylor carries, Warren/Wan'Dale targets and game environment; no extra history-based boost. |
+
+## Selective cross-slate Gut Feel
+
+**Passing exploration:** ARI–LAR remains first, BUF–LV second, CAR–PHI third, NO–NYG fourth. The fresh Rams risk reduces conviction rather than automatically promoting every alternative. The other games remain useful conditional branches. No verified fresh total/spread or ownership source supports a numerical environment rank.
+
+**Core versus support:** Henry, Walker and Taylor offer control alternatives to paying for multiple expensive passing cores. Allen's rushing ceiling argues for testing one receiving partner. Two expensive Arizona responses are not automatically better than one supported response plus an inexpensive player with credible use. Full-stack upside requires the opponent to keep pace; paying for its star does not make that premise true.
+
+These support candidates combine verified salary with preserved baseline opportunity evidence; baseline targets are derived proxies, not fresh measured route forecasts. They are research comparisons, not promoted values.
+
+| Support candidate | Salary | Preserved baseline points / target proxy | Why inspect / what prevents promotion |
+|---|---:|---:|---|
+| Juwan Johnson, NO | $4,500 | 10.17 / 4.83 | Cheapest listed support for the NO passing alternative; protection and current role still need confirmation. |
+| Wan'Dale Robinson, TEN | $4,500 | 10.40 / 5.78 | Relatively affordable response to IND control/passing; Titans drive success remains questionable. |
+| Makai Lemon, PHI | $4,100 | 6.22 / 3.18 | Replacement-role research could preserve a stronger core; incomplete routes and Smith status forbid assumed redistribution. |
+| Tez Johnson, TB | $3,200 | 3.17 / 1.42 | Salary savings are large, current proxy use is modest. Snap rise is already represented; no supported breakout claim. |
+
+Lemon outranks Cooper as an initial affordability question, not as a confirmed superior role. Wicks costs $5,100; calling all Philadelphia replacements cheap would obscure the tradeoff. Shakir at $5,300 is an Allen partner hypothesis, not an automatic bargain. Canonical UUIDs for every listed Sunday player appear in the packet; current salaries were rechecked by canonical ID against the fresh database capture.
+
+## Separate prime-time previews
+
+**Thursday SEA@DEN — October 15, 8:15 p.m. EDT / 6:15 p.m. MDT.** Keep JSN Captain / Darnold FLEX first in a conditional receiving-led comparison; Darnold Captain with receiving FLEX is the alternative if scores spread. A Denver QB/receiver response requires its own current role evidence. Tuesday estimated secondary reports support monitoring; JSN clearance and replacement coverage quality remain decisive. Do not elevate Wilson/Holani to Captain merely from Charbonnet's uncertain return. The existing preview identities are retained: JSN `1838dd60-35e8-4018-b307-39cde90e1f03`; Darnold `480d4188-7bf6-4684-b2b5-1d47f93d542a`. No fresh Captain salary/legality comparison was run.
+
+**Sunday Night DAL@GB — October 18, 8:20 p.m. EDT / 6:20 p.m. MDT.** Begin research with two-team passing alternatives. The Packers' primary preview records the prior 40–40 tie and Love's past Dallas success; those are historical facts, not a current total or automatic ceiling. Current receiver roles, protection, health and inexpensive support are missing. This is a game-level preliminary lean; salary and player directive scope are unresolved. [Packers preview](https://www.packers.com/news/packers-host-the-cowboys-in-primetime-week-6-2026).
+
+**Monday Night WAS@SF — October 19, 8:15 p.m. EDT / 6:15 p.m. MDT.** San Francisco offensive continuity is my first research branch; compare sustained Washington response with a 49ers control finish. The team's current report describes Evans' Week 5 production while playing with rib injury. It does not establish a Monday restriction. Washington QB/health and protection must be refreshed before a two-sided passing core earns conviction. Salaries and canonical current role review remain missing. [49ers Tuesday report](https://www.49ers.com/news/morning-reports/morning-report-locker-room-reactions-brock-purdy-50-career-starts), [schedule](https://www.49ers.com/schedule/).
+
+## Recheck and delivery boundaries
+
+Thursday branch expires **today at noon MDT**, requiring game statuses and activation review. Sunday judgments expire Friday noon MDT and should be refreshed at Saturday designation review and final inactives. Record changed minds and invalidate affected conditions. The inherited historical snapshots remain unchanged.
+
+The current packet emits qualitative assessments and an explicit conditional Showdown role comparison. It carries **no numeric scenario effects, weights or probabilities**. Prior experimental numerical scenarios remain identified in their original packet, not silently republished as Wednesday forecasts. No database imports, projection changes, defaults, selections, candidate runs, entries or submissions occurred. Known prior outcomes inform this research; it is not fresh blind validation.

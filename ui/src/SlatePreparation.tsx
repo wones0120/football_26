@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPregameContext, fetchPreparation, queuePreparation, type PreparationScope, type PreparationStatus } from "./api";
+import { nextPreparationStatus } from "./preparationStatus";
 import { startSingleFlightPolling } from "./singleFlightPolling";
 
 export type PreparationCheckState = { scope: PreparationScope; loading: boolean; error: string | null };
@@ -45,7 +46,7 @@ export function SlatePreparation(props: Props) {
       props.onCheckState?.({ scope, loading: true, error: null });
       return fetchPreparation(scope);
     },
-      onValue: r => { setStatus(r); setError(null); props.onStatus?.(r);
+      onValue: r => { setStatus(current => nextPreparationStatus(current, r, scope)); setError(null); props.onStatus?.(r);
         props.onCheckState?.({ scope, loading: false, error: null }); },
       onError: e => { setError(String(e)); props.onCheckState?.({ scope, loading: false, error: String(e) }); },
     });
@@ -84,7 +85,7 @@ export function SlatePreparation(props: Props) {
     { key: "injuries", label: "Injury CSV", next: "Import supported designation data. CSV import does not establish final game clearance or feed canonical pregame context." },
     { key: "availability", label: "Sourced availability / practice / workload", next: "Load supported pregame evidence below using canonical IDs and original source time; final inactive clearance remains unverified." },
     { key: "starters", label: "Starting QBs", next: "Review Load Starting QBs and resolve candidates with sourced starter evidence; roster membership is not game clearance." },
-    { key: "markets", label: "nflverse schedule market observations", next: "Capture nflverse markets; upstream quote publication time remains unknown. Unchanged values do not prove staleness or current quotes." },
+    { key: "markets", label: "Required spreads and game totals", next: "Every game must have sourced spreads/totals within the configured freshness limit (default 6 hours), with consistent team implied totals. Preparation fetches DraftKings lines from ESPN. The displayed time is our retrieval time; the sportsbook’s update time is not provided." },
   ];
   return <div className="slate-preparation" data-testid="slate-preparation">
     <h3>Prepare slate inputs</h3>
@@ -98,7 +99,7 @@ export function SlatePreparation(props: Props) {
       <label>Injury CSV source<select value={injurySource} onChange={e => setInjurySource(e.target.value as typeof injurySource)}><option value="fanduel">FanDuel</option><option value="draftkings">DraftKings</option></select></label>
       <button disabled={disabled || !props.injuryPath} onClick={() => run("injuries")}>Import injury CSV evidence</button>
       <button disabled={disabled} onClick={props.onStartingQbs}>Review starting-QB evidence</button>
-      <button disabled={disabled} onClick={() => run("markets")}>Capture nflverse markets</button>
+      <button disabled={disabled} onClick={() => run("markets")}>Refresh sportsbook lines</button>
       <button disabled={disabled} onClick={() => run("weather")}>Capture current weather</button>
       <button disabled={disabled} onClick={() => run("rebuild")}>Rebuild slate features and projections</button>
       <button disabled={working} onClick={() => load().then(() => setMessage("Validated preparation status; no new source evidence fetched.")).catch(e => setError(String(e)))}>Reload preparation status</button>

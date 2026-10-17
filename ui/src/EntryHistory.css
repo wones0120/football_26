@@ -1,0 +1,27 @@
+.entry-history-panel input[type="text"] {
+  color: #e4ebef;
+  caret-color: #e4ebef;
+  background: #111923;
+  -webkit-text-fill-color: #e4ebef;
+  color-scheme: dark;
+}
+.entry-history-panel input[type="text"]:focus {
+  color: #f5f8fa;
+  caret-color: #f5f8fa;
+  -webkit-text-fill-color: #f5f8fa;
+}
+.entry-history-panel input[type="text"]::selection {
+  color: #ffffff;
+  background: #315a91;
+}
+.entry-history-panel input[type="text"]:autofill {
+  -webkit-text-fill-color: #e4ebef;
+  box-shadow: 0 0 0 1000px #111923 inset;
+}
+.entry-history-files {
+  overflow-wrap: anywhere;
+}
+.entry-history-files > div {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--shell-line-strong, #394552);
+}

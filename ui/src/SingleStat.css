@@ -1,0 +1,22 @@
+.single-stat { display:grid; gap:1.25rem; max-width:1500px; margin:auto; padding:1.5rem; }
+.single-stat-grid { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+.single-stat .panel { padding:1.2rem; border:1px solid var(--border-color, #334155); border-radius:12px; background:var(--surface, #111b2b); }
+.single-stat label { display:block; margin:1rem 0; }
+.single-stat textarea { width:100%; box-sizing:border-box; font-family:monospace; }
+.single-stat small { display:block; opacity:.75; overflow-wrap:anywhere; }
+.single-stat button { margin:.25rem; }
+.single-stat pre { overflow:auto; max-height:400px; white-space:pre-wrap; overflow-wrap:anywhere; }
+.single-stat-table { overflow-x:auto; }
+.single-stat table { width:100%; border-collapse:collapse; }
+.single-stat th, .single-stat td { text-align:left; padding:.8rem; border-bottom:1px solid #334155; vertical-align:top; }
+.single-stat [role=alert] { color:#fca5a5; }
+@media(max-width:850px) { .single-stat-grid { grid-template-columns:1fr; } .single-stat { padding:.75rem; } }
+.single-stat .panel { display:block; min-height:0; }
+.single-stat h2, .single-stat h3 { margin:.2rem 0 .8rem; }
+.single-stat p { line-height:1.5; }
+.single-stat button { flex:none; min-height:0; padding:.65rem .85rem; white-space:normal; font-size:.9rem; }
+.single-stat textarea { background:#0b1320; color:#e2e8f0; border:1px solid #475569; border-radius:6px; padding:.6rem; }
+.single-stat input[type=checkbox] { width:auto; margin-right:.5rem; }
+.single-stat ul { padding-left:1.2rem; }
+
+.single-stat button.native-csv-download { background:#123846; color:#fff; border:1px solid #5cc6c2; box-shadow:none; }

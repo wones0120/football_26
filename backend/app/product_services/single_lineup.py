@@ -356,6 +356,17 @@ def select_single_lineup(candidates, *, strategy, competition_supported=False, c
     unique = {signature(lineup): lineup for lineup in candidates if lineup}
     evaluated = [(lineup_diagnostics(lineup, competition_supported=competition_supported), key, lineup)
                  for key, lineup in unique.items()]
+    from .showdown_captain_shortlist import POLICY_ID as captain_policy
+    p90_captain_policy = bool(evaluated) and all(
+        lineup[0].get("solver_scoring_policy") == captain_policy for _, _, lineup in evaluated
+    )
+    if p90_captain_policy:
+        for diagnostic, _, lineup in evaluated:
+            diagnostic["objective_contributions"] = {
+                "captain_p90": sum(float(row["objective_score"]) for row in lineup if row["roster_position"] == "CPT"),
+                "flex_mean": sum(float(row["objective_score"]) for row in lineup if row["roster_position"] == "FLEX"),
+            }
+            diagnostic["selection_score"] = sum(diagnostic["objective_contributions"].values())
     evaluated.sort(key=lambda item: (-item[0]["selection_score"], -item[0]["expected_points"], item[1]))
     controls = {k: v for k, v in (controls or {}).items() if k in LINEUP_CONTROL_FIELDS and v is not None}
     normalize_single_lineup_params(controls, contest_format=SINGLE_LINEUP_STRATEGIES[strategy])
@@ -402,6 +413,17 @@ def select_single_lineup(candidates, *, strategy, competition_supported=False, c
                   "Generic objective: no contest-specific cash cutoff is inferred, even when payout facts are verified.",
                   "Requested exposure limits use whole appearances; underfilled outputs can have higher realized percentages. No user limits are relaxed.",
                   "Best among generated candidates; candidate generation does not certify the global proxy optimum."]}
+    if p90_captain_policy:
+        report.update({
+            "contract_id": captain_policy, "method": "captain_p90_flex_mean",
+            "objective_weights": {"captain_p90": 1.5, "flex_mean": 1.0},
+            "why_preferred": "Highest 1.5× pregame captain P90 plus FLEX means compatible with requested count and hard user limits.",
+            "limitations": ["Sum of role-specific projections, not a calibrated lineup percentile or payout estimate.",
+                            "Best among generated candidates under existing roster and user constraints."],
+        })
+        for row in rows:
+            if not row["selected"] and row["candidate_id"] not in constraint_report.get("blocked_candidates", {}):
+                row["rejection_reason"] = f"Lower captain P90 plus FLEX mean objective by {best['selection_score'] - row['selection_score']:.3f} points."
     selected = [deepcopy(evaluated[i][2]) for i in selected_indices]
     for output_index, (lineup, candidate_index) in enumerate(zip(selected, selected_indices), 1):
         lineup[0]["cash_lineup_selection"] = {"output_index": output_index,

@@ -1,0 +1,9 @@
+export type TeammateChoice = { source_optimizer_run_id: string; pair_id: string; branch: "cheaper" };
+export type TeammateBranch = { solver_status: string; salary: number; base_mean: number; conditional_mean: number; conditional_score: number; roster: {player_master_id: string; name: string; position: string; team: string; salary: number; base_mean: number; conditional_mean: number}[] };
+export type TeammatePair = { pair_id: string; game_id: string; team: string; primary_name: string; backup_name: string; primary_salary: number; backup_salary: number; salary_saved: number; status: string; reason: string; base_mean_delta?: number; conditional_mean_delta?: number; conditional_score_delta?: number; secondary_points_break_even?: number; possible_portfolio_replacement_slots?: number[]; conditional_point_checks?: {secondary_points:number;delta_vs_primary:number}[]; branches?: {primary: TeammateBranch; cheaper: TeammateBranch} };
+export type TeammateOpportunity = { contract_id: string; status: string; scanned_games: unknown[]; solver_calls: number; pairs: TeammatePair[]; applied_choice?: {pair_id:string;source_optimizer_run_id:string;replaced_allocation_slot:number;constraints_relaxed:boolean;conditional_assumption:string;negative_conditional_cost_accepted_by_explicit_choice:boolean} };
+export function canStageCheaperPair(pair: TeammatePair): boolean { return pair.status === "paired_evaluated" && pair.branches?.cheaper?.solver_status === "Optimal" && Boolean(pair.possible_portfolio_replacement_slots?.length); }
+export function cheaperPairChoice(sourceRunId: string, pair: TeammatePair): TeammateChoice {
+  if (!sourceRunId || !canStageCheaperPair(pair)) throw new Error("This paired branch cannot replace a portfolio slot under the saved controls.");
+  return {source_optimizer_run_id:sourceRunId,pair_id:pair.pair_id,branch:"cheaper"};
+}

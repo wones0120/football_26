@@ -8,6 +8,7 @@ from collections import Counter
 import pulp
 
 from .showdown_scenario_value import POLICY_ID, scenario_credits
+from .showdown_captain_shortlist import POLICY_ID as CAPTAIN_SHORTLIST_POLICY_ID
 
 
 def signature(lineup: list[dict]) -> tuple[str, tuple[str, ...]]:
@@ -18,7 +19,10 @@ def signature(lineup: list[dict]) -> tuple[str, tuple[str, ...]]:
 def candidate_metrics(lineup: list[dict]) -> dict:
     captain = next(row for row in lineup if row["roster_position"] == "CPT")
     captain_objective_score = float(captain.get("objective_score") or 0)
-    captain_prior_multiplier = float(captain.get("captain_objective_multiplier") or 1)
+    captain_prior_multiplier = (
+        1.0 if lineup[0].get("solver_scoring_policy") == CAPTAIN_SHORTLIST_POLICY_ID
+        else float(captain.get("captain_objective_multiplier") or 1)
+    )
     ownership = [row.get("ownership") for row in lineup]
     ownership_complete = all(
         value is not None and math.isfinite(float(value)) and float(value) > 0

@@ -1129,3 +1129,14 @@
 @media (prefers-reduced-motion: reduce) {
   .digital-twin * { animation: none !important; transition: none !important; }
 }
+
+.thought-memory-context { display:flex; flex-wrap:wrap; gap:16px; margin:20px 0; padding:18px; border:1px solid var(--border, #303b4b); border-radius:12px; min-width:0; }
+.thought-memory-context p { flex-basis:100%; margin:0; }
+.thought-memory-context label { display:flex; flex-direction:column; gap:6px; min-width:130px; flex:1; }
+.thought-memory-context input, .thought-memory-context select { width:100%; min-width:0; box-sizing:border-box; padding:8px; }
+.belief-analyst-context { padding:12px 0; display:grid; gap:10px; border-top:1px solid var(--border, #303b4b); }
+.belief-analyst-context label { display:grid; gap:6px; }
+.belief-analyst-context textarea { width:100%; min-height:80px; box-sizing:border-box; resize:vertical; }
+.belief-analyst-context input { max-width:100px; }
+.belief-analyst-context input, .belief-analyst-context textarea { background:#0c151b; color:#dce7e8; border:1px solid #303b4b; border-radius:8px; padding:10px; font:inherit; }
+.belief-analyst-context button:disabled { opacity:.5; cursor:not-allowed; }

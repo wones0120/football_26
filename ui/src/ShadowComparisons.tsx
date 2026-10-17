@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
+import { ALL_LEARNING_SLATES } from './learningContext';
+import { normalizeSlateId } from './workspaceContext';
 import { fetchShadowComparisons, refreshShadowComparisons, type ShadowComparison } from './api';
 
-export function ShadowComparisons({season, week}: {season: number; week: number}) {
+export function ShadowComparisons({season, week, slate = ALL_LEARNING_SLATES}: {season: number; week: number; slate?: string}) {
   const [items, setItems] = useState<ShadowComparison[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -18,13 +20,14 @@ export function ShadowComparisons({season, week}: {season: number; week: number}
     try { setItems((await refreshShadowComparisons(season, week)).experiments); }
     catch(e) { setError(String(e)); } finally { setBusy(false); }
   };
+  const visibleItems = items.filter(item => slate === ALL_LEARNING_SLATES || normalizeSlateId(item.slate) === slate);
   return <section className="panel" aria-label="GPP shadow comparisons">
     <h2>GPP shadow comparisons</h2>
     <p>Frozen live and research choices are compared automatically when contest standings or entry history are imported. Live selections stay unchanged.</p>
     <button disabled={busy} onClick={() => void retry()}>{busy ? 'Evaluating…' : 'Retry comparison'}</button>
     {error && <p role="alert">{error}</p>}
-    {!items.length && !error && <p>No registered experiments for this week.</p>}
-    {items.map(item => <article key={item.experiment_id}>
+    {!visibleItems.length && !error && <p>No registered experiments for this review scope.</p>}
+    {visibleItems.map(item => <article key={item.experiment_id}>
       <h3>{item.label} · {item.slate}</h3>
       <p>Status: {item.report_json?.status.replaceAll('_', ' ') ?? 'Awaiting evaluation'}</p>
       {item.report_json?.arms.map(arm => <div key={arm.label}>

@@ -83,3 +83,11 @@ def test_run_enforces_home_leader_and_blocks_excluded_leader(monkeypatch,strateg
     assert job.params['strategy_runtime']['team_leader_preference']['required_player_ids']==['p3']
     with pytest.raises(ValueError,match='Required season-average team leader is unavailable'):
         optimizer.run_job(season=2026,week=4,slate='THURSDAY_NIGHT',contest_format='showdown',objective=objective,strategy=strategy,params={**params,'exclude_player_ids':['p3']})
+
+
+def test_incomplete_history_names_the_actual_showdown_control(monkeypatch):
+    def missing(*args,**kwargs):
+        raise ValueError('Season-average rank limits need complete stats and snap coverage for Week 5')
+    monkeypatch.setattr('backend.app.product_services.showdown_team_leader_preferences.load_rankings',missing)
+    with pytest.raises(ValueError,match='turn off Require at least one season-average non-QB team leader'):
+        leader_preference(pool(),{'require_team_leader':True})

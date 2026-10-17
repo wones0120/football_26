@@ -102,4 +102,19 @@ test("ChatGPT export preserves captain weighting, evidence gaps, and full report
   assert.match(compactMarkdown, /\/api\/learning\/reports\/slate-1\/optimizer-runs\/run-1\/candidates/);
   assert.match(compactMarkdown, /150\.00 \| 130\.00 \| 122\.53/);
   assert.match(compactMarkdown, /1 entry-linked or requested diagnostic runs included; 9 unrelated completed runs excluded/);
+  compact.slate_reports[0].entries[0].submission_evidence = {
+    intended: { status: "unavailable" }, observed: { source_file_id: "file-1" },
+    exported: [{ kind: "export", artifact_id: "direct-ledger", export_row_number: 3,
+      created_at: "2026-09-20T10:00:00Z", linkage: "canonical_roster" }],
+    matching_status: "ambiguous_runs", saved_lineup_matches: [
+      { lineup_id: "saved-1", optimizer_run_id: "run-1" },
+      { lineup_id: "saved-2", optimizer_run_id: "run-2" },
+    ],
+  };
+  const evidenceMarkdown = weeklyLearningReportMarkdown(compact);
+  assert.match(evidenceMarkdown, /Intended \/ Exported \/ Observed · contest c1 · entry e1/);
+  assert.match(evidenceMarkdown, /Direct download direct-ledger.*export row 3/);
+  assert.match(evidenceMarkdown, /Ambiguous saved-lineup matches/);
+  assert.match(evidenceMarkdown, /Roster equality only; no entry-specific link/);
+  assert.match(evidenceMarkdown, /score differences alone are not execution errors/);
 });

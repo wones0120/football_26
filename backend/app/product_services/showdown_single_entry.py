@@ -136,6 +136,7 @@ def select_single_entry_lineups(
             "assignments": [],
             "method": "heuristic_v1",
         }
+    from .showdown_captain_shortlist import POLICY_ID as captain_policy
     from .optimizer import classify_showdown_game_script, _safe_float
     from .optimizer import add_showdown_lineup_chalk_metrics
 
@@ -164,7 +165,14 @@ def select_single_entry_lineups(
             "correlation_and_format": correlation_points,
         }
         solver_components["other_or_unattributed"] = solver_total - sum(solver_components.values())
+        p90_captain_policy = lineup[0].get("solver_scoring_policy") == captain_policy
+        if p90_captain_policy:
+            solver_components = {
+                "captain_p90": sum(_safe_float(row.get("objective_score")) for row in lineup if row["roster_position"] == "CPT"),
+                "flex_mean": sum(_safe_float(row.get("objective_score")) for row in lineup if row["roster_position"] == "FLEX"),
+            }
         records.append({
+            "scoring_policy": captain_policy if p90_captain_policy else None,
             "signature": _signature(lineup),
             "captain_id": str(captain["player_id"]),
             "captain": str(captain.get("player_name") or captain.get("name") or captain["player_id"]),
@@ -203,11 +211,15 @@ def select_single_entry_lineups(
             "script": 0.0,
             "other_penalties": 0.0,
         }
+        if row["scoring_policy"] == captain_policy:
+            row["objective_contributions"] = dict(row["solver_objective_components"])
         row["single_entry_score"] = sum(row["objective_contributions"].values())
     records.sort(key=lambda row: (-row["single_entry_score"], -row["mean"], row["signature"]))
     best_mean = max(records, key=lambda row: row["mean"])
     best_p90 = max(records, key=lambda row: row["p90"])
-    best_quality = max(records, key=lambda row: row["objective_contributions"]["mean"] + row["objective_contributions"]["p90"])
+    best_quality = max(records, key=lambda row: row["single_entry_score"]
+        if row["scoring_policy"] == captain_policy else
+        row["objective_contributions"]["mean"] + row["objective_contributions"]["p90"])
     best = records[0]
     best_player_ids = {player_id for player_id, _ in best["signature"]}
     for rank, row in enumerate(records, 1):
@@ -224,7 +236,7 @@ def select_single_entry_lineups(
             "mean_loss_vs_best_mean": best_mean["mean"] - row["mean"],
             "p90_loss_vs_best_p90": best_p90["p90"] - row["p90"],
             "chalk_improvement_vs_best_quality": chalk_improvement,
-            "chalk_objective_gain_vs_best_quality": row["objective_contributions"]["chalk_penalty"] - best_quality["objective_contributions"]["chalk_penalty"],
+            "chalk_objective_gain_vs_best_quality": row["objective_contributions"].get("chalk_penalty", 0.0) - best_quality["objective_contributions"].get("chalk_penalty", 0.0),
             "large_ceiling_sacrifice_for_uniqueness": (
                 best_p90["p90"] - row["p90"] >= 5.0
                 and chalk_improvement is not None and chalk_improvement >= 20.0
@@ -400,13 +412,14 @@ def select_single_entry_lineups(
     for lineup, assignment in zip(output, assignments):
         captain = next(row for row in lineup if row["roster_position"] == "CPT")
         captain["solver_objective_value"] = lineup[0].get("solver_objective_value")
+        captain["solver_scoring_policy"] = lineup[0].get("solver_scoring_policy")
         captain["lineup_duplication_risk"] = lineup[0].get("lineup_duplication_risk")
         captain["single_entry_assignment"] = assignment
     report = {
         "method": "heuristic_v1",
         "material_player_change_minimum": MATERIAL_PLAYER_CHANGE_MINIMUM,
         "first_alternate_benefit_weight": FIRST_ALTERNATE_BENEFIT_WEIGHT,
-        "objective_weights": configured,
+        "objective_weights": {"captain_p90": 1.5, "flex_mean": 1.0} if all(row["scoring_policy"] == captain_policy for row in records) else configured,
         "payout_metrics_status": "unavailable_without_field_and_payout_simulation",
         "primary_future_metric": "P(total payouts > total entry fees)",
         "contest_metadata": contest_metadata or [],

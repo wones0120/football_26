@@ -16,3 +16,9 @@ LOADED = {"pid": os.getpid(), "loaded_at": datetime.now(UTC).isoformat(),
                                 classic_large_gpp_readiness, showdown_portfolio_selection,
                                 showdown_candidate_comparison, showdown_game_scenarios, showdown_scenario_value,
                                 slate_preparation, showdown_readiness)}}
+
+# Captured at import in each serving process, not inferred from a separate shell.
+from . import dst_deployment, dst_feature_pipeline, dst_rank_policy, predictions, model_artifacts
+LOADED["modules"].update({Path(module.__file__).name: sha256(Path(module.__file__).read_bytes()).hexdigest()
+                          for module in (dst_deployment, dst_feature_pipeline, dst_rank_policy, predictions, model_artifacts)})
+LOADED["dst_deployment"] = dst_deployment.runtime_status()

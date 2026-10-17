@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import nullcontext
 import re
 import uuid
 from typing import Any, Mapping
@@ -260,6 +261,9 @@ class BeliefImpactService:
         if belief["status"] != "active" or belief.get("is_expired"):
             raise ValueError("Only a current active belief can create an impact preview")
 
+        if payload.get("usage") == "analyst_context":
+            return self._create_context_preview(belief, payload)
+
         season = int(payload.get("season") or belief.get("season") or 0)
         week = int(payload.get("week") or belief.get("week") or 0)
         if not season or not week:
@@ -358,7 +362,10 @@ class BeliefImpactService:
             "lineage_json": json.dumps(lineage, sort_keys=True),
             "notices_json": json.dumps(impact["notices"]),
         }
-        with self.engine.begin() as connection:
+        return self._store_preview(params)
+
+    def _store_preview(self, params, connection=None):
+        with (nullcontext(connection) if connection is not None else self.engine.begin()) as connection:
             row = connection.execute(
                 text(
                     """
@@ -383,6 +390,49 @@ class BeliefImpactService:
             ).mappings().one()
         return self._row_payload(row)
 
+    def _create_context_preview(self, belief, payload):
+        """Approve evidence review only; prose never creates projection coefficients."""
+        from .market_snapshots import canonical_team
+        team = canonical_team(str(payload.get("target_team") or ""))
+        if not team:
+            raise ValueError("Analyst context requires an explicit canonical target_team")
+        declared_team = (belief.get("metadata") or {}).get("resolved_team")
+        if declared_team and canonical_team(str(declared_team)) != team:
+            raise ValueError("Analyst context target_team differs from the belief canonical team")
+        scope = {key: payload.get(key) for key in ("season", "week", "slate", "contest_format", "objective")}
+        if scope["slate"]:
+            scope["slate"] = str(scope["slate"]).strip().upper()
+        for key, value in scope.items():
+            expected = belief.get(key)
+            if expected is not None and str(expected).upper() != str(value).upper():
+                raise ValueError("Analyst context preview is outside belief " + key)
+        if not scope['season'] or not scope['week'] or not scope['slate'] or not scope['contest_format']:
+            raise ValueError("Analyst context requires season, week, slate and contest_format")
+        mechanism = str(payload.get("conditional_mechanism") or "").strip()
+        if not mechanism:
+            raise ValueError("Describe the conditional mechanism separately from the original thought")
+        modifier = dict(conditional_mechanism=mechanism, modifier_type="analyst_context_review", policy_id="analyst_personal_context_v1",
+                        team=team, action="review_conditional_mechanism", numerical_effect=None,
+                        construction_effect="none", baseline_mutation=False)
+        params = dict(preview_id=f"belief-preview-{uuid.uuid4()}", belief_version_id=belief['belief_version_id'],
+            belief_id=belief['belief_id'], policy_id=modifier['policy_id'], **scope,
+            target_player_id="team:" + team, target_label=team + " conditional evidence review", adjustment_pct=0.0,
+            baseline_json=json.dumps(dict(model_truth="unchanged")),
+            proposed_json=json.dumps(dict(usage="Analyst considers the hypothesis against scoped research; no construction or numerical change is authorized.")),
+            delta_json='{}', modifier_json=json.dumps(modifier),
+            lineage_json=json.dumps(dict(belief_version_id=belief['belief_version_id'], source=belief['source'], thought_text=belief['thought_text'], expires_at=str(belief.get('expires_at') or ''), resolved_team=team)),
+            notices_json=json.dumps(["Approval permits qualitative Analyst evidence review in this exact scope.",
+                "No player, ownership, historical result or baseline projection is changed.",
+                "A separately reviewed typed scenario is required before this thought changes lineup construction; prose supplies no numerical effect."]))
+        # Serialize matching captures; a double-click/retry cannot create two previews.
+        identity=json.dumps(dict(version=belief['belief_version_id'],scope=scope,modifier=modifier),sort_keys=True)
+        with self.engine.begin() as connection:
+            connection.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:identity, 0))"),dict(identity=identity))
+            for existing in self.list(belief_id=belief['belief_id'], limit=500, _connection=connection):
+                if existing['belief_version_id'] == belief['belief_version_id'] and existing['modifier'] == modifier and all(str(existing.get(k)).upper() == str(v).upper() for k,v in scope.items()):
+                    return existing
+            return self._store_preview(params,connection=connection)
+
     def list(
         self,
         *,
@@ -392,8 +442,10 @@ class BeliefImpactService:
         week: int | None = None,
         slate: str | None = None,
         limit: int = 200,
+        _connection=None,
     ) -> list[dict[str, Any]]:
-        self._ensure_schema()
+        if _connection is None:
+            self._ensure_schema()
         conditions: list[str] = []
         params: dict[str, Any] = {"limit": max(1, min(int(limit), 500))}
         if preview_id:
@@ -412,7 +464,7 @@ class BeliefImpactService:
             conditions.append("UPPER(COALESCE(p.slate, '')) = UPPER(:slate)")
             params["slate"] = slate
         where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
-        with self.engine.begin() as connection:
+        with (nullcontext(_connection) if _connection is not None else self.engine.begin()) as connection:
             rows = connection.execute(
                 text(
                     f"""

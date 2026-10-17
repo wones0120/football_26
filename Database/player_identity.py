@@ -23,6 +23,9 @@ _POSITION_ALIASES = {
     "FL": "WR",
     "SE": "WR",
 }
+# Exact nickname equivalence supplies name evidence only. The shared resolver
+# still requires scoped team/position evidence and corroborates alias conflicts.
+_NAME_ALIASES = {"hollywood brown": "marquise brown"}
 
 
 @dataclass(frozen=True)
@@ -81,6 +84,10 @@ def _name_keys(values: Iterable[object]) -> set[str]:
         if normalized:
             keys.add(normalized)
             keys.add(normalized.replace(" ", ""))
+            canonical = _NAME_ALIASES.get(normalized)
+            if canonical:
+                keys.add(canonical)
+                keys.add(canonical.replace(" ", ""))
     return keys
 
 

@@ -4,6 +4,31 @@ import test from "node:test";
 import type { OptimizerResponse } from "../src/api.ts";
 import { buildOptimizerReportHtml } from "../src/optimizerReport.ts";
 
+for (const contest_format of ["classic", "showdown"] as const) {
+  test(`${contest_format} report separates shared historical workload, proxies and unavailable forecasts at every salary`, () => {
+    const packet = {contract_id: "workload_evidence_v1", status: "supported_history",
+      historical: {snap_share_mean_3: {value: 0.497, status: "observed"}, targets_mean_3: {value: 0, status: "observed"},
+        carries_mean_3: {value: null, status: "unavailable"}},
+      derived_proxies: {projected_targets: {value: 5.165, status: "present"}},
+      explicit_pregame: {pregame_expected_targets: {value: null, status: "unavailable"}},
+      historical_coverage: {opportunity_history_window: null},
+      lineage: {pregame_context_run_id: "source-run", pregame_context_observed_at: "2026-10-10T11:00:00Z"}};
+    const optimizer = {job_id: "evidence", status: "completed", contest_format, objective: "cash", enforce_single_te: false, results: [],
+      player_pool: {rows: [{player_id: "cheap", player_name: "Cheap <player>", salary: 1600, workload_evidence: packet},
+        {player_id: "expensive", player_name: "Expensive player", salary: 9000, workload_evidence: packet}]}} as unknown as OptimizerResponse;
+    const html = buildOptimizerReportHtml(optimizer, {season: 2026, week: 5, slate: "MAIN"});
+    assert.match(html, /Shared workload evidence \(2 players\)/);
+    assert.match(html, /Cheap &lt;player&gt;/);
+    assert.match(html, /Expensive player/);
+    assert.match(html, /0 \(observed\)/);
+    assert.match(html, /5\.165 \(present\)/);
+    assert.match(html, /Unavailable \(unavailable\)/);
+    assert.match(html, /source-run/);
+    assert.match(html, /2026-10-10T11:00:00Z/);
+    assert.match(html, /Availability and depth alone do not establish workload/);
+  });
+}
+
 test("Showdown exported report uses saved Captain position and effective QB policy", () => {
   const optimizer = {
     job_id: "captain-position", status: "completed", strategy: "showdown_cash_baseline_v1",
@@ -17,6 +42,21 @@ test("Showdown exported report uses saved Captain position and effective QB poli
   assert.match(html, /Captain positions: WR only/);
   assert.match(html, /QB Captain allowed: No/);
   assert.match(html, /Effective QB-Captain lineup limit: 0/);
+});
+
+test("Showdown exported report discloses named Captain exceptions under a position restriction", () => {
+  const optimizer = {
+    job_id: "named-qb", status: "completed", strategy: "showdown_gpp_portfolio_v3", enforce_single_te: false,
+    contest_format: "showdown", objective: "gpp", results: [[{
+      name: "Named QB", player_id: "qb", position: "QB", salary: 15000, is_captain: true,
+      showdown_qb_preferences: {allow_qb_captain: false, named_captain_position_exception_ids: ["qb"]},
+      showdown_captain_preferences: {allowed_positions: ["WR", "RB"], named_position_exception_ids: ["qb"]},
+    }]],
+  } as unknown as OptimizerResponse;
+  const html = buildOptimizerReportHtml(optimizer, {season: 2026, week: 6, slate: "SUNDAY_MORNING"});
+  assert.match(html, /QB Captain allowed: Named exceptions may qualify/);
+  assert.match(html, /Effective QB-Captain lineup limit: 1 if a named QB is eligible/);
+  assert.match(html, /WR, RB only; 1 named position exception/);
 });
 
 test("Classic failure report leads with gate diagnostics and suppresses production lineups", () => {
@@ -994,4 +1034,59 @@ test("GPP report records one provisional recommendation without inventing return
   assert.match(html, /&lt;not paid probability&gt;/);
   assert.doesNotMatch(buildOptimizerReportHtml({...optimizer, status:'failed'},
     {season:2026,week:5,slate:'SUNDAY_MAIN'}), /Recommended lineup #2/);
+});
+
+test("Showdown report renders P90 shortlist and separates user exclusions", () => {
+  const optimizer = {
+    job_id: "shortlist", status: "completed", strategy: "captain_single_lineup_v1",
+    contest_format: "showdown", objective: "cash", enforce_single_te: false,
+    results: [[{player_id: "id-a", name: "Receiver", position: "WR", roster_position: "CPT",
+      showdown_captain_shortlist: {
+        shortlist: [{player_id: "id-a", name: "<Receiver>", team: "AAA", pregame_p90: 30,
+          eligible_p90_rank: 1, exclusions: []}],
+        exclusions: [{player_id: "id-b", name: "Flex", team: "BBB", pregame_p90: 20,
+          eligible_p90_rank: 5, exclusions: [{reason_code: "outside_top_four_p90", category: "optimizer_policy"}]},
+          {player_id: "id-q", name: "QB", team: "BBB", pregame_p90: 40, eligible_p90_rank: null,
+            exclusions: [{reason_code: "user_no_qb_captain", category: "user_preference"}]}],
+      },
+    }]],
+  } as unknown as OptimizerResponse;
+  const html = buildOptimizerReportHtml(optimizer, {season: 2026, week: 4, slate: "THURSDAY_NIGHT"});
+  assert.match(html, /Top-four P90 captain shortlist/);
+  assert.match(html, /Captain score = 1.5 × P90; FLEX score = mean/);
+  assert.match(html, /Captain salary = 1.5 × base salary/);
+  assert.match(html, /optimizer_policy: outside_top_four_p90/);
+  assert.match(html, /user_preference: user_no_qb_captain/);
+  assert.match(html, /&lt;Receiver&gt; \/ id-a/);
+  assert.match(html, /does not restrict FLEX eligibility/);
+});
+
+test("Captain coverage report shows gaps, warnings and hard underfill even without lineups", () => {
+  const optimizer = {
+    job_id: "coverage", status: "failed", strategy: "showdown_gpp_portfolio_v3", enforce_single_te: false,
+    contest_format: "showdown", objective: "gpp", results: [],
+    showdown_captain_coverage: {underfill: 1, missing_eligible_captains: 0, captains: [
+      {name: "Quarterback", status: "selected", projection_gap: {projection: 8, p90: 20},
+        quality_floor_warnings: [{metric: "p90", gap: 10, value: 80, floor: 90}]},
+      {name: "Receiver", status: "infeasible", reason: "salary_cap: exceeds $50000 <required>"},
+    ]},
+  } as unknown as OptimizerResponse;
+  const html = buildOptimizerReportHtml(optimizer, {season: 2026, week: 4, slate: "MONDAY_NIGHT"});
+  assert.match(html, /Four-captain coverage/);
+  assert.match(html, /Underfill: 1/);
+  assert.match(html, /<td>8.00<\/td><td>20.00<\/td>/);
+  assert.match(html, /p90 below floor by 10.00/);
+  assert.match(html, /salary_cap: exceeds \$50000 &lt;required&gt;/);
+});
+
+test("explicit preliminary reports retain real rosters while preserving blocked normal readiness", () => {
+  const optimizer = {job_id:"preliminary",status:"completed",strategy:"classic_large_gpp_v1",contest_format:"classic",objective:"gpp",enforce_single_te:true,
+    data_readiness:{status:"ERROR",reason_codes:["official_player_status_refresh_failed"]},entry_readiness:{entry_ready:false,status:"PRELIMINARY_NOT_ENTRY_CLEARED"},
+    preliminary_report:{classification:"PRELIMINARY_RESEARCH",entry_ready:false,snapshot_sha256:"snapshot",assumption_manifest_sha256:"assumptions"},
+    results:[[{player_id:"real-player",name:"Research Roster Player",position:"QB",salary:6400,projection:20,p90:25}]]} as unknown as OptimizerResponse;
+  const html=buildOptimizerReportHtml(optimizer,{season:2026,week:6,slate:"SUNDAY_MAIN"});
+  assert.match(html,/Preliminary research · not entry cleared/);
+  assert.match(html,/Research Roster Player/);
+  assert.match(html,/official_player_status_refresh_failed/);
+  assert.match(html,/contest CSV export is blocked/);
 });

@@ -1,6 +1,6 @@
 import { singleLineupReportHtml } from "./singleLineupReport.ts";
 import { SCENARIO_ACCOUNTING_HEADERS, scenarioAccountingDescription, scenarioAccountingRows, scenarioCreditExplanations } from "./scenarioPortfolioAccounting.ts";
-import { captainFamilies, conditionedTotal, lineupConditionedTotal, teamLimitDescription, exposureWarning, qbLineupLimit, qbCaptainAllowed, captainPositionsDescription } from "./showdownReporting.ts";
+import { captainFamilies, conditionedTotal, lineupConditionedTotal, teamLimitDescription, exposureWarning, qbLineupLimit, qbCaptainDescription, qbCaptainLimitDescription, captainPositionsDescription } from "./showdownReporting.ts";
 import { CONSTRUCTION_COLUMNS, constructionValue } from "./classicConstruction.ts";
 import { portfolioSettingsRows } from "./classicPortfolioReport.ts";
 import { largeGppReadinessHtml, gameAppearancesHtml } from "./classicReadinessReport.ts";
@@ -81,6 +81,12 @@ const playersLabel = (rows: unknown): string => Array.isArray(rows) && rows.leng
     }).join(", ")
   : "None";
 
+export function personalThoughtReportHtml(optimizer: OptimizerResponse): string {
+  const context = (optimizer.analyst_handoff_applied?.personal_context ?? optimizer.football_analyst?.prepared_research?.personal_context) as import("./PersonalThoughtSummary").PersonalContext | undefined;
+  if (!context) return "";
+  return `<section class="lineup"><h2>Personal thoughts considered by Analyst</h2><p>${context.considered.length} read · ${context.rejected.length} excluded · Construction: ${context.affected_construction ? "affected" : "unchanged"} · Selected rosters: ${context.changed_selected_rosters ? "change measured" : "no change attributed"}.</p>${context.considered.map(item => `<p><strong>${escapeHtml(item.thought_text)}</strong> · ${escapeHtml(item.belief_version_id)} · Approval: ${escapeHtml(item.decision_id)} · Team: ${escapeHtml(item.resolved_scope?.team)} · Related scenarios: ${escapeHtml(item.related_scenario_ids.join(", ") || "none")}</p><p>${escapeHtml(item.conditional_mechanism)}</p><p>${escapeHtml(item.not_applied_reason)}</p><p>${escapeHtml(item.evidence_limitation)}</p>`).join("")}${context.rejected.map(item => `<p>${escapeHtml(item.belief_version_id)}: ${escapeHtml(item.reasons.join(", "))}</p>`).join("")}<p>Checked research: ${escapeHtml(context.packet_sha256)}</p></section>`;
+}
+
 function controlComparisonHtml(comparison: unknown): string {
   if (!comparison || typeof comparison !== "object") {
     return '<p class="muted">Control comparison unavailable for this saved run.</p>';
@@ -118,12 +124,14 @@ function lineupHtml(lineup: ReportPlayer[], index: number): string {
   const totalMean = lineup.reduce((sum, player) => sum + projection(player), 0);
   const ceilingSummary = individualCeilingSummary(lineup);
   const first = lineup[0] ?? {};
+  const joint = first.analyst_joint_opportunity_summary as ReportPlayer | undefined;
+  const jointHtml = joint ? `<details open><summary>How this full lineup can succeed · shared opportunity sensitivity</summary><p>${escapeHtml(joint.how_lineup_succeeds)}</p><p>Conditional mean ${number(joint.conditional_mean_sum)} + ${number(joint.credit_weight)} × supported upside credit ${number(joint.supported_tail_credit)} = ${number(joint.score)} research objective. Not a joint P90 or win probability. No teammate ban or game-total cutoff. Captain multiplies scoring, not touches.</p><ul>${((joint.key_dependencies ?? []) as string[]).map(d => `<li>${escapeHtml(d)}</li>`).join("")}</ul><pre>${escapeHtml(JSON.stringify(joint.budget_balances, null, 2))}</pre></details>` : "";
   const context = Number((first.lineup_context_summary as ReportPlayer | undefined)?.total_adjustment
     ?? lineup.reduce((sum, player) => sum + (Number(player.optimizer_context_adjustment) || 0), 0));
   const correlation = (first.lineup_correlation_summary ?? {}) as ReportPlayer;
   const objectiveComponents = first.lineup_objective_components as ReportPlayer | undefined;
   const correlationAdjustment = Number(objectiveComponents?.correlation ?? correlation.total_adjustment ?? 0);
-  const objectiveHtml = objectiveComponents ? `<details open><summary>Actual solver objective components</summary><table><thead><tr><th>Component</th><th>Weighted contribution</th></tr></thead><tbody>${["projection", "ceiling", "leverage", "context", "correlation", "total", "solver_objective", "reconciliation_delta"].map(key => `<tr><td>${escapeHtml(key)}</td><td>${number(objectiveComponents[key], 6)}</td></tr>`).join("")}</tbody></table><p>Correlation includes pair, format and extra-stack terms. Normalization uses the complete frozen solver pool. Weights: ${escapeHtml(JSON.stringify(objectiveComponents.weights))}.</p></details>` : "";
+  const objectiveHtml = jointHtml + (objectiveComponents ? `<details open><summary>Actual solver objective components</summary><table><thead><tr><th>Component</th><th>Weighted contribution</th></tr></thead><tbody>${["projection", "ceiling", "leverage", "context", "correlation", "total", "solver_objective", "reconciliation_delta"].map(key => `<tr><td>${escapeHtml(key)}</td><td>${number(objectiveComponents[key], 6)}</td></tr>`).join("")}</tbody></table><p>Correlation includes pair, format and extra-stack terms. Normalization uses the complete frozen solver pool. Weights: ${escapeHtml(JSON.stringify(objectiveComponents.weights))}.</p></details>` : "");
   const correlationRules = Array.isArray(correlation.triggered_rules)
     ? correlation.triggered_rules as ReportPlayer[]
     : [];
@@ -654,13 +662,27 @@ export function buildOptimizerReportHtml(
     <p>Paid-finish probability: unavailable. Expected return: unavailable. One lineup for this slate's GPPs.</p>
     <table><thead><tr><th>Rank</th><th>Lineup</th><th>Projected points</th><th>Sum of player P90s</th></tr></thead><tbody>${recommendation.candidates.map(c => `<tr><td>${c.rank}</td><td>${c.lineup_number}</td><td>${number(c.projected_points)}</td><td>${number(c.marginal_upside_sum)}</td></tr>`).join("")}</tbody></table>
     <ul>${recommendation.limitations.map(text => `<li>${escapeHtml(text)}</li>`).join("")}</ul></section>` : "";
-  const generationBlocked = optimizer.strategy === "classic_large_gpp_v1" &&
+  const preliminaryHtml = optimizer.preliminary_report ? `<section class="lineup"><h2>Preliminary research · not entry cleared</h2><p>The saved lineups below are research outputs under explicit injury assumptions. Normal source readiness failures remain unchanged; contest CSV export is blocked.</p><p>Frozen snapshot: ${escapeHtml(optimizer.preliminary_report.snapshot_sha256)} · Assumptions: ${escapeHtml(optimizer.preliminary_report.assumption_manifest_sha256)}</p><details><summary>Injury assumptions and unresolved normal evidence</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere">${escapeHtml(JSON.stringify(optimizer.preliminary_report, null, 2))}</pre></details></section>` : "";
+  const generationBlocked = !optimizer.preliminary_report && optimizer.strategy === "classic_large_gpp_v1" &&
     ["NOT_READY", "ERROR"].includes(String(optimizer.data_readiness?.status));
   const lineups = !generationBlocked && Array.isArray(optimizer.results)
     ? optimizer.results.filter(Array.isArray) as ReportPlayer[][]
     : [];
   const pool = optimizer.player_pool;
-  const isShowdown = Boolean(lineups[0]?.[0]?.single_entry_report) || String(optimizer.strategy ?? "").startsWith("showdown_");
+  const workloadRows = (pool?.rows ?? []).filter((row) => row.workload_evidence);
+  const workloadHtml = workloadRows.length ? `<details><summary>Shared workload evidence (${workloadRows.length} players)</summary><p>Historical observations, allocated count proxies and explicit pregame forecasts remain separate. Measurement flags distinguish observed zero from missing or zero-filled history. Availability and depth alone do not establish workload. Skill targets and RB carries are incomplete team-volume proxies. Role scoring continues to use explicit pregame inputs; this evidence does not change selection.</p><div style="overflow-x:auto"><table><thead><tr><th>Player / evidence status</th><th>Historical snaps / targets / carries</th><th>Allocated targets / carries proxy</th><th>Explicit expected snaps / routes / targets / carries</th><th>Coverage / source clocks</th></tr></thead><tbody>${workloadRows.map((row) => {
+    const packet = row.workload_evidence as Record<string, unknown>;
+    const group = (name: string) => (packet[name] ?? {}) as Record<string, unknown>;
+    const metric = (name: string, key: string) => {
+      const value = (group(name)[key] ?? {}) as Record<string, unknown>;
+      return `${value.value == null ? "Unavailable" : String(value.value)} (${String(value.status ?? "unavailable")})`;
+    };
+    const coverage = group("historical_coverage");
+    const lineage = group("lineage");
+    const coverageText = `Observed games: ${coverage.opportunity_history_observed_games ?? "Unavailable"}. Context observed: ${lineage.pregame_context_observed_at ?? "Unavailable"}.`;
+    return `<tr><td>${escapeHtml(row.player_name)} / ${escapeHtml(packet.status)}</td><td>${["snap_share_mean_3", "targets_mean_3", "carries_mean_3"].map((key) => escapeHtml(metric("historical", key))).join(" / ")}</td><td>${["projected_targets", "projected_carries"].map((key) => escapeHtml(metric("derived_proxies", key))).join(" / ")}</td><td>${["pregame_expected_snaps", "pregame_expected_routes", "pregame_expected_targets", "pregame_expected_carries"].map((key) => escapeHtml(metric("explicit_pregame", key))).join(" / ")}</td><td>${escapeHtml(coverageText)}<details><summary>Source lineage</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere">${escapeHtml(JSON.stringify({coverage: packet.historical_coverage, lineage: packet.lineage, explicit_pregame_lineage: packet.explicit_pregame_lineage}, null, 2))}</pre></details></td></tr>`;
+  }).join("")}</tbody></table></div><p>Missing historical row IDs and source observation clocks remain unavailable; a cutoff alone does not prove chronology. Older saved runs are not backfilled.</p></details>` : "";
+  const isShowdown = optimizer.contest_format === "showdown" || Boolean(lineups[0]?.[0]?.single_entry_report) || String(optimizer.strategy ?? "").startsWith("showdown_");
   if (isShowdown && typeof optimizer.enforce_single_te !== "boolean") {
     throw new Error("Showdown configuration error: enforce_single_te is missing from the saved optimizer request.");
   }
@@ -744,15 +766,27 @@ export function buildOptimizerReportHtml(
   const marketAudit = (lineups[0]?.[0]?.projection_market_audit ?? {}) as ReportPlayer;
   const qbPolicy = lineups[0]?.[0]?.showdown_qb_preferences as ReportPlayer | undefined;
   const teamPolicy = (lineups[0]?.[0]?.showdown_team_constraints ?? {}) as ReportPlayer;
-  const constructionPolicyHtml = isShowdown ? `<section class="lineup"><h2>QB CONSTRUCTION POLICY</h2><p>QB Captain allowed: ${qbPolicy ? qbCaptainAllowed(qbPolicy) ? "Yes" : "No" : "Unavailable"} · Maximum starting QBs per lineup: ${qbPolicy ? qbLineupLimit(qbPolicy) : "Unavailable"} · Requested lineup count: ${number(qbPolicy?.requested_portfolio_size, 0)} · Effective QB-Captain lineup limit: ${qbPolicy ? qbCaptainAllowed(qbPolicy) ? 1 : 0 : "Unavailable"} · Effective starting-QB lineup limit: ${qbPolicy ? qbLineupLimit(qbPolicy) : "Unavailable"}.</p><p>${escapeHtml(captainPositionsDescription((lineups[0]?.[0]?.showdown_captain_preferences ?? {}) as ReportPlayer))}.</p><p>${escapeHtml(teamLimitDescription(teamPolicy))}. Captain and FLEX count together. User constraints preserve model assessments.</p></section>` : "";
+  const coverage = (optimizer.showdown_captain_coverage ?? lineups[0]?.[0]?.showdown_captain_coverage) as ReportPlayer | undefined;
+  const coverageHtml = isShowdown && coverage ? `<section class="lineup"><h2>Four-captain coverage</h2><p>One lineup per eligible top-four P90 captain. Underfill: ${number(coverage.underfill, 0)}. Missing eligible captains: ${number(coverage.missing_eligible_captains, 0)}. Quality floors are diagnostic warnings only. Projection gaps are reference minus lineup (negative means above reference); the reference is the best role-objective lineup before fixing a captain or consuming portfolio exposure.</p><table><thead><tr><th>Captain</th><th>Status</th><th>Mean gap</th><th>P90 gap</th><th>Warnings / hard-constraint conflict</th></tr></thead><tbody>${((coverage.captains ?? []) as ReportPlayer[]).map(row => {
+    const gap = row.projection_gap as ReportPlayer | undefined;
+    const warnings = ((row.quality_floor_warnings ?? []) as ReportPlayer[]).map(w => `${escapeHtml(w.metric)} below floor by ${number(w.gap, 2)} (${number(w.value, 2)} vs ${number(w.floor, 2)})`).join("; ");
+    return `<tr><td>${escapeHtml(row.name ?? row.player_id)}</td><td>${escapeHtml(row.status)}</td><td>${gap ? number(gap.projection, 2) : "—"}</td><td>${gap ? number(gap.p90, 2) : "—"}</td><td>${escapeHtml(row.reason ?? "")}${warnings || (row.reason ? "" : "None")}</td></tr>`;
+  }).join("")}</tbody></table></section>` : "";
+  const captainShortlist = lineups[0]?.[0]?.showdown_captain_shortlist as ReportPlayer | undefined;
+  const captainShortlistRows = [
+    ...((captainShortlist?.shortlist ?? []) as ReportPlayer[]),
+    ...((captainShortlist?.exclusions ?? []) as ReportPlayer[]),
+  ];
+  const captainShortlistHtml = isShowdown && captainShortlist ? `<section class="lineup"><h2>Top-four P90 captain shortlist</h2><p>Eligible players across both teams ranked by unmultiplied pregame P90; canonical player ID breaks ties. Captain score = 1.5 × P90; FLEX score = mean. Captain salary = 1.5 × base salary. The shortlist does not restrict FLEX eligibility. User preferences leave projections unchanged.</p><table><thead><tr><th>Eligible rank</th><th>Player / canonical ID</th><th>Team</th><th>Pregame P90</th><th>Captain eligibility / exclusions</th></tr></thead><tbody>${captainShortlistRows.map(row => `<tr><td>${escapeHtml(row.eligible_p90_rank ?? "—")}</td><td>${escapeHtml(row.name)} / ${escapeHtml(row.player_id)}</td><td>${escapeHtml(row.team)}</td><td>${row.pregame_p90 == null ? "Unavailable" : number(row.pregame_p90, 2)}</td><td>${(row.exclusions as ReportPlayer[]).length ? (row.exclusions as ReportPlayer[]).map(reason => `${escapeHtml(reason.category)}: ${escapeHtml(reason.reason_code)}`).join("; ") : "Shortlisted"}</td></tr>`).join("")}</tbody></table></section>` : "";
+  const constructionPolicyHtml = isShowdown ? `<section class="lineup"><h2>QB CONSTRUCTION POLICY</h2><p>QB Captain allowed: ${qbPolicy ? qbCaptainDescription(qbPolicy) : "Unavailable"} · Maximum starting QBs per lineup: ${qbPolicy ? qbLineupLimit(qbPolicy) : "Unavailable"} · Requested lineup count: ${number(qbPolicy?.requested_portfolio_size, 0)} · Effective QB-Captain lineup limit: ${qbPolicy ? qbCaptainLimitDescription(qbPolicy) : "Unavailable"} · Effective starting-QB lineup limit: ${qbPolicy ? qbLineupLimit(qbPolicy) : "Unavailable"}.</p><p>${escapeHtml(captainPositionsDescription((lineups[0]?.[0]?.showdown_captain_preferences ?? {}) as ReportPlayer))}.</p><p>${escapeHtml(teamLimitDescription(teamPolicy))}. Captain and FLEX count together. User constraints preserve model assessments.</p></section>` : "";
   const marketResponses = Array.isArray(marketAudit.model_response) ? marketAudit.model_response as ReportPlayer[] : [];
   const marketAuditHtml = marketResponses.length ? `<section class="lineup"><h2>Starter and market sanity check</h2><p>Status: ${escapeHtml(marketAudit.status ?? "Unavailable")}. The model's direct response is compared with a prior-only team-market calibration. The final adjustment adds only the difference, so the model's existing response is counted once. This is an aggregate offense adjustment; pass efficiency, explosive plays, touchdowns, and play volume are not estimated separately.</p><table><thead><tr><th>Team</th><th>Implied total change</th><th>Direct model change</th><th>Final offensive change</th><th>Response</th></tr></thead><tbody>${marketResponses.map((row) => `<tr><td>${escapeHtml(row.team)}</td><td>${number(row.implied_total_delta)}</td><td>${number(row.model_offensive_projection_delta ?? row.offensive_projection_delta)}</td><td>${row.final_offensive_projection_delta == null ? "Unavailable" : number(row.final_offensive_projection_delta)}</td><td>${row.direction_mismatch_before_reconciliation || row.direction_mismatch ? "Direct model: opposite direction" : "Direct model: same direction"}</td></tr>`).join("")}</tbody></table></section>` : "";
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>${escapeHtml(title)}</title><style>
   :root{font-family:Inter,system-ui,sans-serif;color:#e8edf4;background:#0b1017}body{max-width:1200px;margin:0 auto;padding:32px}h1,h2{color:#fff}.meta,.muted{color:#9aa8b8}.lineup{border:1px solid #273241;border-radius:12px;padding:20px;margin:24px 0;background:#101720}.metrics{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}.metric{margin-right:14px}table{border-collapse:collapse;width:100%;margin:14px 0}th,td{text-align:left;padding:9px;border-bottom:1px solid #273241;vertical-align:top}th{color:#9aa8b8;background:#121b27}summary{cursor:pointer;font-weight:650;margin:12px 0}li{margin:6px 0}@media print{:root{color:#111;background:#fff}body{padding:0}h1,h2{color:#111}.lineup{break-inside:avoid;background:#fff;border-color:#bbb}th{color:#333;background:#eee}th,td{border-color:#ccc}}
-  </style></head><body><h1>${escapeHtml(title)}</h1>${gppRecommendationHtml}${singleLineupReportHtml(optimizer)}${constructionPolicyHtml}${readinessHtml}${roleAuditHtml}
+  </style></head><body><h1>${escapeHtml(title)}</h1>${personalThoughtReportHtml(optimizer)}${preliminaryHtml}${gppRecommendationHtml}${singleLineupReportHtml(optimizer)}${constructionPolicyHtml}${captainShortlistHtml}${coverageHtml}${readinessHtml}${roleAuditHtml}
   <div class="meta"><p>Job ${escapeHtml(optimizer.job_id)} · ${escapeHtml(optimizer.contest_format)} ${escapeHtml(optimizer.objective)} · ${escapeHtml(optimizer.strategy)}</p>
-  <p>${escapeHtml(optimizer.message ?? optimizer.status)}</p><p>Enforce single TE (no double-TE lineups): ${singleTeMetadata}</p><p>Hard exclude players facing: ${escapeHtml(optimizer.exclude_opponent_teams?.join(", ") || "None")}</p><p>${escapeHtml(poolSummary)}</p><p>${escapeHtml(removalSummary)}</p>${manualDecisionDetails}${userExclusionDetails}${removedPlayerDetails}${opportunityDetails}</div>
+  <p>${escapeHtml(optimizer.message ?? optimizer.status)}</p><p>Enforce single TE (no double-TE lineups): ${singleTeMetadata}</p><p>Hard exclude players facing: ${escapeHtml(optimizer.exclude_opponent_teams?.join(", ") || "None")}</p><p>${escapeHtml(poolSummary)}</p><p>${escapeHtml(removalSummary)}</p>${manualDecisionDetails}${userExclusionDetails}${removedPlayerDetails}${opportunityDetails}${workloadHtml}</div>
   ${classicGameConcentrationHtml(optimizer)}${classicConstructionHtml(optimizer)}${marketAuditHtml}${historicalCaptainHtml(lineups)}${longShotHtml}${classicSmallFieldHtml(lineups)}${singleEntryReportHtml(lineups, optimizer.enforce_single_te === true)}${threeMaxReportHtml(lineups)}${showdownScenarioHtml(lineups)}${portfolioDiagnosticsHtml(lineups)}${lineups.map(lineupHtml).join("")}<footer class="meta">Generated ${escapeHtml(new Date().toLocaleString())}</footer></body></html>`;
 }
 
