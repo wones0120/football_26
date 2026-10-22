@@ -1,4 +1,5 @@
-import { canOpenSavedOptimizerReport, sameOptimizerRunScope } from "./optimizerHistory";
+import { SHARED_WORLD_POLICY } from "./sharedWorldPolicy";
+import { canOpenSavedOptimizerReport, sameOptimizerRunScope, optimizerHistoryPollDelay } from "./optimizerHistory";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { checkSavedUploadReadiness, type SavedUploadClearance, downloadOptimizerLineups, downloadAiShowdownPacket, fetchAiShowdownChecklist, fetchOptimizerRuns, retryOptimizerJob, type OptimizerRunSummary } from "./api";
 import { ShowdownPrelockChecklist } from "./ShowdownPrelockChecklist";
@@ -75,20 +76,20 @@ export function RecentOptimizerRuns({ season, week, slate, contestFormat, object
     reviewRequest.current += 1;
     setRuns([]); setError(null); setLoading(true); setExportFeedback(null); setChecklist(null); setReviewing(null); setSelectionReviewRunId(null);
     const refresh = async () => {
-      let delay = 15_000;
+      let delay: number | null = null;
       try {
         const response = await fetchOptimizerRuns({ season, week, slate, contest_format: contestFormat });
         if (!cancelled) { setRuns(response.runs); setError(null); }
-        if (response.runs.some((run) => ["queued", "running"].includes(run.status))) delay = 3000;
+        delay = optimizerHistoryPollDelay(response.runs);
       } catch (reason) {
         if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason));
       } finally {
-        if (!cancelled) { setLoading(false); timer = window.setTimeout(refresh, delay); }
+        if (!cancelled) { setLoading(false); if (delay !== null) timer = window.setTimeout(refresh, delay); }
       }
     };
     void refresh();
     return () => { cancelled = true; reviewRequest.current += 1; if (timer !== undefined) window.clearTimeout(timer); };
-  }, [season, week, slate, contestFormat, objective, refreshKey, selectedRunId, loadedRunId]);
+  }, [season, week, slate, contestFormat, objective, refreshKey, selectedRunId]);
 
   const open = useCallback(async (run: OptimizerRunSummary, scrollToResults = true) => {
     setOpening(run.optimizer_run_id); setError(null);
@@ -130,7 +131,7 @@ export function RecentOptimizerRuns({ season, week, slate, contestFormat, object
   return <div className="status-card">
     <h3>Recent optimizer runs</h3>
     <p>{season} Week {week} · {slate.replaceAll("_", " ")} · {contestFormat === "classic" ? "Classic" : "Captain / Showdown"}. Includes historical strategies. Reopen saved results without running the optimizer again. Download Recommended uses this run’s frozen GPP recommendation; Download All includes its saved lineups. DraftKings files require export validation. Showdown upload checks can pass provisionally before final official inactives; they do not confirm game dressing or contest entry.</p>
-    <button type="button" onClick={() => setRefreshKey((key) => key + 1)}>Refresh recent runs</button>
+    <button type="button" disabled={loading} onClick={() => setRefreshKey((key) => key + 1)}>Refresh recent runs</button>
     {contestFormat === "showdown" && runs.some(run => run.strategy === "showdown_gpp_portfolio_v3") && <details><summary>Historical AI portfolio review settings</summary><label>AI requested entries
       <select value={aiRequestedEntries} onChange={(event) => setAiRequestedEntries(Number(event.target.value))}>
         {[2, 3, 4, 5].map((count) => <option key={count} value={count}>{count}</option>)}
@@ -150,7 +151,7 @@ export function RecentOptimizerRuns({ season, week, slate, contestFormat, object
         const recommendedBlocker = savedDownloadBlocker(downloadRun, downloadScope, "recommended");
         return <tr key={run.optimizer_run_id}>
           <td>{timestamp(run.created_at)}<br /><small title={run.optimizer_run_id}>{run.optimizer_run_id.slice(0, 8)}</small></td>
-          <td>{run.strategy.replaceAll("_", " ")}{run.classic_selection_objective === "baseline_mean" || run.message?.includes("Highest baseline projection") ? <><br /><strong>Highest baseline projection · optional stacks</strong></> : run.optimization_intent && <><br /><strong>{run.optimization_intent === "EXPECTED_GAME" ? "Expected Game" : run.optimization_intent === "CONTRARIAN" ? "Contrarian" : "Mixed research"}</strong></>}{run.expanded_discovery && <><br /><small>Expanded discovery</small></>}</td>
+          <td>{run.strategy.replaceAll("_", " ")}{run.analyst_selection_policy === SHARED_WORLD_POLICY && <><br /><strong>Expected anchor + shared conditional coverage</strong></>}{run.classic_selection_objective === "baseline_mean" || run.message?.includes("Highest baseline projection") ? <><br /><strong>Highest baseline projection · optional stacks</strong></> : run.optimization_intent && <><br /><strong>{run.optimization_intent === "EXPECTED_GAME" ? "Expected Game" : run.optimization_intent === "CONTRARIAN" ? "Contrarian" : "Mixed research"}</strong></>}{run.expanded_discovery && <><br /><small>Expanded discovery</small></>}</td>
           <td>{run.status}<br /><small>{canOpenSavedOptimizerReport(run) ? `${run.lineup_count} saved ${run.lineup_count === 1 ? "lineup" : "lineups"}` : `${run.requested_lineups ?? "Unknown"} requested`}</small>
             {run.status === "failed" ? <details><summary>Error details</summary><p>{run.message}</p></details>
               : run.status !== "completed" && <><br /><small>{run.message}</small></>}</td>
@@ -159,7 +160,7 @@ export function RecentOptimizerRuns({ season, week, slate, contestFormat, object
             : ["queued", "running"].includes(run.status) ? <button type="button" onClick={() => void open(run)} disabled={selectedRunId === run.optimizer_run_id}>{selectedRunId === run.optimizer_run_id ? "Watching run" : "Watch run"}</button>
               : null}
             {(run.saved_report_available || run.lineup_count > 0) && <>
-              {contestFormat === "showdown" && run.status === "completed" && !run.preliminary_export_blocked && <button type="button"
+              {run.status === "completed" && <button type="button"
                 disabled={Boolean(checkingUpload) || Boolean(downloading)} onClick={() => void checkUpload(run)}>
                 {checkingUpload === run.optimizer_run_id ? "Checking upload readiness…" : "Check upload readiness"}</button>}
               <button type="button" title={recommendedBlocker ?? "Download this run’s saved recommended lineup for DraftKings"}

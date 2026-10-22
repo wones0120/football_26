@@ -168,7 +168,7 @@
             ],
             "properties": {
               "contract_id": {
-                "const": "workload_evidence_v1"
+                "enum": ["workload_evidence_v1", "workload_evidence_v2"]
               }
             }
           }

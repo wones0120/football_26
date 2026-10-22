@@ -46,6 +46,6 @@ test("provisional upload check is scoped and expires without claiming final clea
   const provisional = {...saved, entry_ready: false, upload_ready: true, upload_valid_until: new Date(Date.now()+60_000).toISOString()};
   assert.equal(savedDownloadBlocker(provisional, scope, "all"), null);
   assert.ok(savedDownloadBlocker({...provisional, upload_valid_until: new Date(Date.now()-1).toISOString()}, scope, "all"));
-  assert.ok(savedDownloadBlocker({...provisional, preliminary_export_blocked: true}, scope, "all"));
+  assert.equal(savedDownloadBlocker({...provisional, preliminary_export_blocked: true, contest_format: "classic"}, {...scope, contest_format: "classic"}, "all"), null);
   assert.ok(savedDownloadBlocker({...provisional, slate:"OTHER"}, scope, "all"));
 });

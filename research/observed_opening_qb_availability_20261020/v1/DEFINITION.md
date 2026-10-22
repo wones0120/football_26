@@ -1,0 +1,7 @@
+# Measured opening QB presence (G18-M01)
+
+A historical measured-game reported starting GSIS QB is observed present only when the same native game has a proven complete quiet GAME_START, no earlier possible physical offense, a unique first physical offensive snap with eleven aligned known native positions and exactly one QB, corroborated by the same-game schedule starter ID. Numeric play IDs are not temporal ordering. Every scheduled side remains in the universe; missing or conflicting evidence yields unknown, never unavailable=False.
+
+The approved first-snap component supplies beginning/order proof independently of center success. An exact matching approved position-cache row independently binds first-play key, native period, offense team and all eleven positions. Participation phase REG or absent is allowed only with same-key reviewed REG PBP/schedule first-snap proof. Sole QB requires source role evidence, not roster names or reported starter alone. Global all-edge frozen native-to-UUID conflicts withhold canonical status; native proof remains separate.
+
+This is observed opening participation in 2023–25 revised postseason source evidence. It does not establish original pregame confirmation, health, dressing before kickoff, current 2026 availability or an upcoming starting role. No missing weekly row is interpreted as DNP. No predictive model, forecast or optimizer integration is changed.

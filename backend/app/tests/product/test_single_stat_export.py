@@ -134,3 +134,22 @@ def test_automatic_rejects_ambiguous_original_native_columns(tmp_path):
     imported['native_csv_sha256']=hashlib.sha256(imported['source']['native_csv'].encode()).hexdigest();imported=stat._save(imported,tmp_path)
     report=stat.optimize(stat.Optimize(pool_sha256=imported['sha256']),directory=tmp_path,now=NOW)
     with pytest.raises(ValueError,match='columns are missing or ambiguous'):export.build_download(report['sha256'],directory=tmp_path,now=NOW)
+
+
+def test_export_rechecks_saved_questionable_preference(tmp_path,monkeypatch):
+    from copy import deepcopy
+    imported,report,_,_=setup(tmp_path)
+    changed_pool=deepcopy(imported);changed_report=deepcopy(report)
+    pid=report['players'][0]['player_master_id']
+    next(p for p in changed_pool['players'] if p['player_master_id']==pid)['native_status']='Q'
+    changed_report['user_preferences']={'exclude_questionable':True}
+    original_load=stat.load
+    def load(key,directory=None):
+        if key==imported['sha256']:return changed_pool
+        if key==report['sha256']:return changed_report
+        return original_load(key,directory)
+    monkeypatch.setattr(stat,'load',load)
+    ready=export.export_readiness(report['sha256'],directory=tmp_path,now=NOW)
+    assert not ready['enabled'] and 'user_preference_exclude_questionable' in ready['reason_codes']
+    changed_report['user_preferences']={'exclude_questionable':False}
+    assert export.export_readiness(report['sha256'],directory=tmp_path,now=NOW)['enabled']

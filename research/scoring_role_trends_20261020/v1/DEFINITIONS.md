@@ -1,0 +1,13 @@
+# Observed scoring-zone opportunity-role trend v1 — G22-M06
+
+The exact definition is latest observed same-team game opportunity share minus a pooled share over exactly three preceding observed team logs, separately for official rushing, passing and target opportunities in the disjoint preplay 6–20 yard and 0–5 yard zones. Six channels preserve physical units. This is not simply a TD-rate trend, end-zone target proxy, expected scoring probability or future role claim. Passing and receiver targets may describe the same physical play and are never added into a composite.
+
+Actor numerators and full-source team denominators refer to identical games, channel and field-position boundaries. Three reference game counts are pooled before dividing, not averaged as unweighted per-game shares. Unknown native attribution, eligibility and field position masks inherited source counts. Missing actor/channel participation stays unknown rather than zero or last-positive-game fallback. Known zeros remain zeros; a zero team-zone exposure makes a share undefined. Actor counts cannot exceed the full-team budget. Histories never cross season/team and native/canonical contradictions reject rather than choosing an identity.
+
+Source is the immutable High-reviewed G11 scoring-zone component. The runner verifies its exact bytes and producer binding, the indexed raw snapshot/manifest, source/event pairing, and compressed event-parent hash. It does not inflate the 147 MB logical parent or derive new per-play chronological facts. Native game periods determine inter-game windows; numeric play-ID order is irrelevant to these commutative opportunity counts. Original source/evidence clocks and actual current read/derive/publication remain distinct. All outputs are revised postlock descriptive and not pregame serving; game completeness and original historical publication remain unknown.
+
+No new capture, DB mutation, identity repair, role transfer, model fit, scenario or optimizer use occurs. Existing identity requests and provenance are retained. This is one proposed catalog definition, not six extra IDs. It is an internal feature artifact with no UI/configuration change or global release claim.
+
+## Actual coverage
+
+Verified compact composition produced 459 native actor/team profiles, 35 selected SF/WAS profiles. Known share changes by disjoint source metric: G11-M02/M03 rushing 60/48, M05/M06 targets 50/46, M08/M09 passing 23/11. Other windows remain unknown or undefined; reference length is never shortened to manufacture coverage. Actual composition took 0.12 seconds, with zero parent inflations, captures, DB mutations or models.

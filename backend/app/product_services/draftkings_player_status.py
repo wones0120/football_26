@@ -25,7 +25,7 @@ def game_key(name, kickoff):
     return (normalize_team(teams[0]), normalize_team(teams[1]), aware(kickoff))
 
 
-def parse_native_statuses(payload, salaries, games):
+def parse_native_statuses(payload, salaries, games, *, contest_format="classic"):
     """Verify the full game set and imported native IDs before using any statuses."""
     expected = {(normalize_team(g['away_team']), normalize_team(g['home_team']), aware(g['kickoff_at'])) for g in games}
     rows = payload.get('draftables') or []
@@ -56,7 +56,7 @@ def parse_native_statuses(payload, salaries, games):
                 reason='native_team_or_position_changed', imported_team=salary['team'], current_team=row['teamAbbreviation']))
             continue
         status = normalize_salary_status(row.get('status'))
-        if status not in UNAVAILABLE:
+        if status not in UNAVAILABLE and not (contest_format == 'showdown' and status in {'Q', 'QUESTIONABLE'}):
             continue
         facts.append(dict(player_id=str(salary['player_id']), team=salary['team'], position=salary['position'],
             source_position=row['position'], kind='game_status', status=status,
@@ -65,12 +65,15 @@ def parse_native_statuses(payload, salaries, games):
     return facts, discrepancies
 
 
-def refresh_native_statuses(engine, *, salaries, games, season, week, slate, lock):
-    """Discover Classic by schedule, then require exact native ID membership.
+def refresh_native_statuses(engine, *, salaries, games, season, week, slate, lock, contest_format="classic"):
+    """Discover the requested format by schedule, then require exact native IDs.
 
     Preserve the complete public responses and HTTP/cache clocks. This refresh
     neither replaces the imported salaries nor interprets missing/blank status.
     """
+    if contest_format not in {"classic", "showdown"}:
+        raise ValueError("Unsupported native status contest format")
+    game_type = 96 if contest_format == "showdown" else 1
     captures = []
     def capture(client, uri, dataset):
         response = client.get(uri)
@@ -97,16 +100,16 @@ def refresh_native_statuses(engine, *, salaries, games, season, week, slate, loc
     with httpx.Client(timeout=30, follow_redirects=True, headers={'Cache-Control': 'no-cache'}) as client:
         lobby, _, _, lobby_id = capture(client, LOBBY_URI, 'native_status_lobby')
         candidates = {int(g['DraftGroupId']) for g in lobby.get('DraftGroups', [])
-            if g.get('Sport') == 'NFL' and g.get('GameTypeId') == 1 and g.get('GameCount') == len(games)
+            if g.get('Sport') == 'NFL' and g.get('GameTypeId') == game_type and g.get('GameCount') == len(games)
             and aware(g['StartDate']) == lock}
         if not candidates or len(candidates) > 8:
-            raise ValueError('No bounded set of matching native Classic slates in the current lobby')
+            raise ValueError(f'No bounded set of matching native {contest_format} slates in the current lobby')
         matches, rejected = [], []
         for group in sorted(candidates):
             uri = f'https://api.draftkings.com/draftgroups/v1/draftgroups/{group}/draftables'
             payload, observed, received, snapshot_id = capture(client, uri, 'native_slate_status')
             try:
-                facts, discrepancies = parse_native_statuses(payload, salaries, games)
+                facts, discrepancies = parse_native_statuses(payload, salaries, games, contest_format=contest_format)
             except (ValueError, KeyError, TypeError) as exc:
                 rejected.append(str(exc))
                 continue

@@ -1103,6 +1103,161 @@ def get_classic_environment_research() -> dict:
     return get_research_notes()
 
 
+@router.post("/learning/research/lineup-ablations/{parent_replay_id}")
+def build_lineup_ablation_replay(parent_replay_id: str, session: Session = Depends(get_db_session)) -> dict:
+    from ..product_services.lineup_ablation_replay import build
+    try:
+        return build(session, parent_replay_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/learning/research/lineup-ablations")
+def list_lineup_ablation_replays() -> dict:
+    from ..product_services.lineup_ablation_replay import list_replays
+    return list_replays()
+
+
+@router.get("/learning/research/lineup-ablations/saved/{replay_id}")
+def read_lineup_ablation_replay(replay_id: str) -> dict:
+    from ..product_services.lineup_ablation_replay import read
+    try:
+        return read(replay_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/learning/research/joint-coverage/{parent_replay_id}")
+def build_joint_portfolio_replay(parent_replay_id: str, session: Session = Depends(get_db_session)) -> dict:
+    from ..product_services.joint_portfolio_replay import build
+    try:
+        return build(session, parent_replay_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/learning/research/joint-coverage")
+def list_joint_portfolio_replays() -> dict:
+    from ..product_services.joint_portfolio_replay import list_replays
+    return list_replays()
+
+
+@router.get("/learning/research/joint-coverage/saved/{replay_id}")
+def read_joint_portfolio_replay(replay_id: str) -> dict:
+    from ..product_services.joint_portfolio_replay import read
+    try:
+        return read(replay_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/learning/research/player-opportunity/{optimizer_run_id}")
+def build_player_opportunity_replay(optimizer_run_id: str, source_prepared_input_job_id: str,
+        model_result_sha256: str = Query(pattern=r"^[0-9a-f]{64}$"),
+        matrix_sha256: str = Query(pattern=r"^[0-9a-f]{64}$"),
+        packet_sha256: str | None = Query(default=None, pattern=r"^[0-9a-f]{64}$"),
+        session: Session = Depends(get_db_session)) -> dict:
+    from ..product_services.player_opportunity_replay import build
+    try:
+        value=build(session,optimizer_run_id,source_prepared_input_job_id=source_prepared_input_job_id,
+            model_result_sha256=model_result_sha256,matrix_sha256=matrix_sha256,packet_sha256=packet_sha256)
+        return {k:value[k] for k in ("replay_id","status","requested","achieved","entry_ready","pregame_serving_eligible","selected","actual_created_at")}
+    except LookupError as exc:
+        raise HTTPException(status_code=404,detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422,detail=str(exc)) from exc
+
+
+@router.get("/learning/research/player-opportunity/saved/{replay_id}")
+def read_player_opportunity_replay(replay_id: str) -> dict:
+    from ..product_services.player_opportunity_replay import read
+    try:
+        value=read(replay_id)
+        return {k:value[k] for k in ("replay_id","status","requested","achieved","entry_ready","pregame_serving_eligible","selected","actual_created_at")}
+    except LookupError as exc:
+        raise HTTPException(status_code=404,detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422,detail=str(exc)) from exc
+
+
+@router.get("/learning/research/player-opportunity/saved/{replay_id}/report")
+def player_opportunity_replay_report(replay_id: str) -> Response:
+    from ..product_services.player_opportunity_replay import read,html_report
+    try:
+        return Response(html_report(read(replay_id)),media_type="text/html")
+    except LookupError as exc:
+        raise HTTPException(status_code=404,detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422,detail=str(exc)) from exc
+
+
+@router.post("/learning/research/full-game-breadth/{optimizer_run_id}")
+def build_full_game_breadth_replay(optimizer_run_id: str, corrected_workload: bool = False, session: Session = Depends(get_db_session)) -> dict:
+    if corrected_workload:
+        from ..product_services.workload_semantics_replay import build
+    else:
+        from ..product_services.full_game_breadth_replay import build
+    try:
+        return build(session, optimizer_run_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/learning/research/full-game-breadth")
+def list_full_game_breadth_replays() -> dict:
+    from ..product_services.full_game_breadth_replay import list_replays
+    return list_replays()
+
+
+@router.get("/learning/research/full-game-breadth/saved/{replay_id}")
+def read_full_game_breadth_replay(replay_id: str) -> dict:
+    from ..product_services.full_game_breadth_replay import read
+    try:
+        return read(replay_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/learning/research/scenario-breadth/{optimizer_run_id}")
+def build_scenario_breadth_replay(optimizer_run_id: str, session: Session = Depends(get_db_session)) -> dict:
+    from ..product_services.scenario_breadth_replay import build_replay
+    try:
+        return build_replay(session, optimizer_run_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/learning/research/scenario-breadth")
+def list_scenario_breadth_replays() -> dict:
+    from ..product_services.scenario_breadth_replay import list_replays
+    return list_replays()
+
+
+@router.get("/learning/research/scenario-breadth/saved/{replay_id}")
+def read_scenario_breadth_replay(replay_id: str) -> dict:
+    from ..product_services.scenario_breadth_replay import read_replay
+    try:
+        return read_replay(replay_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 @router.get("/learning/research/showdown")
 def get_showdown_research_notes() -> dict:
     """Read-only observations, isolated from optimizer configuration and scoring."""
@@ -1140,6 +1295,22 @@ def generate_slate_learning_report(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return SlateLearningReportResponse(**result)
+
+
+@router.get("/learning/typed-results")
+def list_typed_contest_results():
+    from ..product_services.special_contest_results import catalog
+    return {"records": catalog()}
+
+
+@router.get("/learning/typed-results/{record_id}")
+def reopen_typed_contest_results(record_id: str, entry_user: str = ""):
+    from ..product_services.special_contest_results import load, entries
+    try:
+        record = load(record_id)
+        return {"record": record, "entries": entries(record, entry_user) if entry_user else []}
+    except (ValueError, OSError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.post("/learning/reports/weekly", response_model=WeeklyLearningReportResponse)
@@ -2457,6 +2628,7 @@ def run_optimizer(
         primary_game_constraint=job.params.get("primary_game_constraint"),
         football_analyst=job.params.get("strategy_runtime", {}).get("football_analyst"),
         highest_projection={key: value for key, value in job.params.get("strategy_runtime", {}).get("highest_projection", {}).items() if key != "input_snapshot"} or None,
+        scenario_mode={key:value for key,value in job.params.get("strategy_runtime",{}).get("scenario_mode",{}).items() if key!='baseline_input_snapshot'} or None,
         analyst_handoff_applied=job.params.get("analyst_handoff_applied"),
         portfolio_controls_report=job.params.get("portfolio_controls_report"),
         portfolio_submission_trace=saved_portfolio_submission_trace(job.params),
@@ -2568,7 +2740,9 @@ def replay_classic_cash_stack_policies(
 def get_optimizer_results(
     job_id: str,
     service: OptimizerService = Depends(get_optimizer_service),
+    compact: bool = False,
 ) -> OptimizerStatusResponse:
+    from ..product_services.browser_payloads import readiness_summary
     from ..product_services.classic_portfolio_controls import saved_portfolio_submission_trace
     from ..product_services.classic_game_environment import review_job
     from ..product_services.classic_large_gpp_readiness import game_appearance_summary
@@ -2584,8 +2758,10 @@ def get_optimizer_results(
         objective=job.objective,
         construction_summary=construction_summary(job.results or [], job.params.get("effective_strategy_contract")) if job.contest_format == "classic" else None,
         preliminary_report=job.params.get("preliminary_report"),
-        entry_readiness=job.params.get("entry_readiness"),
-        data_readiness=job.params.get("data_readiness"),
+        entry_readiness=(readiness_summary(
+            job.params.get("entry_readiness"),omit=('preparation_evidence',)) if compact else job.params.get("entry_readiness")),
+        data_readiness=(readiness_summary(
+            job.params.get("data_readiness"),omit=('refresh',)) if compact else job.params.get("data_readiness")),
         single_lineup_selection=(job.params.get("strategy_runtime") or {}).get("single_lineup") if not job.results else None,
         gpp_recommendation=job.params.get("gpp_recommendation") if job.status == "completed" else None,
         classic_game_environment_review=review_job(job),
@@ -2606,6 +2782,7 @@ def get_optimizer_results(
         primary_game_constraint=job.params.get("primary_game_constraint"),
         football_analyst=job.params.get("strategy_runtime", {}).get("football_analyst"),
         highest_projection={key: value for key, value in job.params.get("strategy_runtime", {}).get("highest_projection", {}).items() if key != "input_snapshot"} or None,
+        scenario_mode={key:value for key,value in job.params.get("strategy_runtime",{}).get("scenario_mode",{}).items() if key!='baseline_input_snapshot'} or None,
         analyst_handoff_applied=job.params.get("analyst_handoff_applied"),
         portfolio_controls_report=job.params.get("portfolio_controls_report"),
         portfolio_submission_trace=saved_portfolio_submission_trace(job.params),
@@ -2700,8 +2877,8 @@ def check_saved_upload_readiness(job_id: str, service: OptimizerService = Depend
     job = service.get_job(job_id)
     if not job or job.job_id != job_id:
         raise HTTPException(status_code=404, detail="Saved optimizer run not found")
-    if job.status != "completed" or job.contest_format != "showdown":
-        raise HTTPException(status_code=409, detail="Upload checks require a completed saved Showdown run")
+    if job.status != "completed" or job.contest_format not in {"classic", "showdown"}:
+        raise HTTPException(status_code=409, detail="Upload checks require a completed saved run")
     try:
         from ..product_services.saved_upload_readiness import issue_clearance
         return issue_clearance(service.engine, job)
@@ -2719,14 +2896,12 @@ def download_optimizer_lineups(
     if not job:
         raise HTTPException(status_code=404, detail="Optimizer run not found")
     params = getattr(job, "params", None) or {}
-    if params.get("preliminary_report"):
-        raise HTTPException(status_code=409, detail="Preliminary research lineups are not entry cleared; contest CSV export is blocked")
+    if params.get("preliminary_report") and getattr(job, "contest_format", None) != "classic":
+        raise HTTPException(status_code=409, detail="Preliminary research lineups require a supported saved upload readiness check")
     if job.status != "completed":
         raise HTTPException(status_code=409, detail="Export requires a completed optimizer run")
     upload_clearance_record_id = None
-    if (params.get("entry_readiness") or {}).get("entry_ready") is False:
-        if job.contest_format != "showdown":
-            raise HTTPException(status_code=409, detail="This saved run is not entry cleared (entry_ready=false).")
+    if params.get("preliminary_report") or (params.get("entry_readiness") or {}).get("entry_ready") is False:
         try:
             from ..product_services.saved_upload_readiness import require_clearance
             upload_clearance_record_id = require_clearance(getattr(service, "engine", None), job)
@@ -3028,6 +3203,16 @@ def create_pregame_context_run(
     return PregameContextRunResponse(**result)
 
 
+@router.post('/pregame-context/official-final-report', status_code=201)
+def capture_official_final_report(season: int, week: int, slate: str, team: str, source_uri: str):
+    """Verify/capture one supplied official final report; does not change preferences."""
+    from ..product_services.final_injury_report import capture_final_report
+    try:
+        return capture_final_report(engine,season=season,week=week,slate=slate,team=team,source_uri=source_uri)
+    except (ValueError,KeyError) as exc:
+        raise HTTPException(status_code=422,detail=str(exc)) from exc
+
+
 @router.get(
     "/pregame-context/current",
     response_model=PregameContextCurrentResponse,
@@ -3097,6 +3282,40 @@ def save_evaluation_recommendation(job_id: str, payload: dict,
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return {"record_id": record_id}
+
+
+from ..product_services.opportunity_source_publication import SourcePublicationRequest
+
+
+@router.post("/opportunity-sources/publications")
+def publish_opportunity_source(request: SourcePublicationRequest,
+                               session: Session = Depends(get_db_session)) -> dict:
+    """Publish only indexed source + existing server-managed derived identities."""
+    from ..product_services.opportunity_source_publication import publish
+    from ..services.source_capture import SnapshotIntegrityError
+    try:
+        result = publish(session, request)
+        session.commit()
+        return result
+    except (ValueError, OSError, KeyError, SnapshotIntegrityError) as exc:
+        session.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+from ..product_services.team_opportunity_serving import TeamModelPublicationRequest
+
+
+@router.post("/opportunity-models/publications")
+def publish_opportunity_models(request: TeamModelPublicationRequest,
+                               session: Session = Depends(get_db_session)) -> dict:
+    from ..product_services.team_opportunity_serving import publish_team_models
+    try:
+        result=publish_team_models(session,**request.model_dump())
+        session.commit()
+        return result
+    except (ValueError,OSError,KeyError) as exc:
+        session.rollback()
+        raise HTTPException(status_code=422,detail=str(exc)) from exc
 
 
 @router.get("/evaluation-records/{record_id}")

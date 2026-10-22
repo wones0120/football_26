@@ -1,0 +1,28 @@
+{
+  "contract_id": "nfl_tiers_research_v1",
+  "kind": "template",
+  "season": 2026,
+  "week": 6,
+  "slate": "SUNDAY_MAIN_TIERS",
+  "native_draft_group_id": "154973",
+  "tier_labels": [
+    "T1",
+    "T2",
+    "T3",
+    "T4",
+    "T5",
+    "T6"
+  ],
+  "created_at": "2026-10-16T13:48:43.746432+00:00",
+  "pool_sha256": "ca044f190018484a3885d6d15766880360faa82627474d4c10a6b0ce2c295bb6",
+  "source": {
+    "pool_sha256": "ca044f190018484a3885d6d15766880360faa82627474d4c10a6b0ce2c295bb6",
+    "source_name": "draftkings_tiers_template.csv",
+    "source_reference": "/Users/wones/NFL/draftkings_tiers_template.csv",
+    "template_csv": "T1,T2,T3,T4,T5,T6,,Instructions\n,,,,,,,1. Locate the player you want to select in the list below \n,,,,,,,2. Copy the ID of your player (you can use the Name + ID column or the ID column) \n,,,,,,,3. Paste the ID into the roster position desired \n,,,,,,,4. You must include an ID for each player; you cannot use just the player's name \n,,,,,,,5. You can create up to 500 lineups per file \n \n,,,,,,,Position,Name + ID,Name,ID,Roster Position,Game Info,TeamAbbrev,AvgPointsPerGame\n,,,,,,,QB,Drake Maye (44498893),Drake Maye,44498893,T1,NYJ@NE 10/18/2026 01:00PM ET,NE,19.84\n,,,,,,,QB,Matthew Stafford (44498895),Matthew Stafford,44498895,T1,ARI@LAR 10/18/2026 04:05PM ET,LAR,21.40\n,,,,,,,QB,Patrick Mahomes (44498894),Patrick Mahomes,44498894,T1,LAC@KC 10/18/2026 04:25PM ET,KC,22.14\n,,,,,,,QB,Josh Allen (44498892),Josh Allen,44498892,T1,BUF@LV 10/18/2026 04:25PM ET,BUF,30.79\n,,,,,,,RB,Bijan Robinson (44498896),Bijan Robinson,44498896,T2,CHI@ATL 10/18/2026 01:00PM ET,ATL,25.44\n,,,,,,,RB,Derrick Henry (44498898),Derrick Henry,44498898,T2,BAL@CLE 10/18/2026 01:00PM ET,BAL,23.56\n,,,,,,,RB,Jonathan Taylor (44498899),Jonathan Taylor,44498899,T2,TEN@IND 10/18/2026 01:00PM ET,IND,19.68\n,,,,,,,RB,Kenneth Walker III (44498897),Kenneth Walker III,44498897,T2,LAC@KC 10/18/2026 04:25PM ET,KC,29.78\n,,,,,,,WR,Chris Olave (44498901),Chris Olave,44498901,T3,NO@NYG 10/18/2026 01:00PM ET,NO,21.54\n,,,,,,,WR,Tetairoa McMillan (44498902),Tetairoa McMillan,44498902,T3,CAR@PHI 10/18/2026 01:00PM ET,CAR,20.38\n,,,,,,,WR,Puka Nacua (44498900),Puka Nacua,44498900,T3,ARI@LAR 10/18/2026 04:05PM ET,LAR,27.93\n,,,,,,,TE,Brock Bowers (44498903),Brock Bowers,44498903,T3,BUF@LV 10/18/2026 04:25PM ET,LV,26.07\n,,,,,,,WR,Drake London (44498909),Drake London,44498909,T4,CHI@ATL 10/18/2026 01:00PM ET,ATL,16.44\n,,,,,,,WR,Zay Flowers (44498908),Zay Flowers,44498908,T4,BAL@CLE 10/18/2026 01:00PM ET,BAL,21.95\n,,,,,,,WR,Malik Nabers (44498910),Malik Nabers,44498910,T4,NO@NYG 10/18/2026 01:00PM ET,NYG,15.98\n,,,,,,,RB,Chuba Hubbard (44498907),Chuba Hubbard,44498907,T4,CAR@PHI 10/18/2026 01:00PM ET,CAR,20.5\n,,,,,,,RB,Jaylen Warren (44498905),Jaylen Warren,44498905,T4,PIT@TB 10/18/2026 01:00PM ET,PIT,20\n,,,,,,,RB,Kyren Williams (44498906),Kyren Williams,44498906,T4,ARI@LAR 10/18/2026 04:05PM ET,LAR,22.06\n,,,,,,,TE,Trey McBride (44498911),Trey McBride,44498911,T4,ARI@LAR 10/18/2026 04:05PM ET,ARI,18.16\n,,,,,,,RB,James Cook III (44498904),James Cook III,44498904,T4,BUF@LV 10/18/2026 04:25PM ET,BUF,20.06\n,,,,,,,QB,Daniel Jones (44498918),Daniel Jones,44498918,T5,TEN@IND 10/18/2026 01:00PM ET,IND,10.87\n,,,,,,,QB,Tyler Shough (44498915),Tyler Shough,44498915,T5,NO@NYG 10/18/2026 01:00PM ET,NO,19.23\n,,,,,,,QB,Jameis Winston (44498919),Jameis Winston,44498919,T5,NO@NYG 10/18/2026 01:00PM ET,NYG,14.85\n,,,,,,,QB,Jalen Hurts (44498912),Jalen Hurts,44498912,T5,CAR@PHI 10/18/2026 01:00PM ET,PHI,16.60\n,,,,,,,QB,Bryce Young (44498914),Bryce Young,44498914,T5,CAR@PHI 10/18/2026 01:00PM ET,CAR,24.66\n,,,,,,,QB,Aaron Rodgers (44498916),Aaron Rodgers,44498916,T5,PIT@TB 10/18/2026 01:00PM ET,PIT,17.63\n,,,,,,,QB,Jacoby Brissett (44498913),Jacoby Brissett,44498913,T5,ARI@LAR 10/18/2026 04:05PM ET,ARI,17.86\n,,,,,,,QB,Kirk Cousins (44498917),Kirk Cousins,44498917,T5,BUF@LV 10/18/2026 04:25PM ET,LV,19.91\n,,,,,,,RB,D'Andre Swift (44498920),D'Andre Swift,44498920,T6,CHI@ATL 10/18/2026 01:00PM ET,CHI,17.16\n,,,,,,,WR,Denzel Boston (44498928),Denzel Boston,44498928,T6,BAL@CLE 10/18/2026 01:00PM ET,CLE,13.8\n,,,,,,,TE,Tyler Warren (44498930),Tyler Warren,44498930,T6,TEN@IND 10/18/2026 01:00PM ET,IND,13.98\n,,,,,,,RB,Rhamondre Stevenson (44498923),Rhamondre Stevenson,44498923,T6,NYJ@NE 10/18/2026 01:00PM ET,NE,12.36\n,,,,,,,WR,Garrett Wilson (44498925),Garrett Wilson,44498925,T6,NYJ@NE 10/18/2026 01:00PM ET,NYJ,18.48\n,,,,,,,RB,Cam Skattebo (44498924),Cam Skattebo,44498924,T6,NO@NYG 10/18/2026 01:00PM ET,NYG,10.46\n,,,,,,,TE,Isaiah Likely (44498931),Isaiah Likely,44498931,T6,NO@NYG 10/18/2026 01:00PM ET,NYG,17.08\n,,,,,,,RB,Bucky Irving (44498922),Bucky Irving,44498922,T6,PIT@TB 10/18/2026 01:00PM ET,TB,16.54\n,,,,,,,WR,Michael Wilson (44498926),Michael Wilson,44498926,T6,ARI@LAR 10/18/2026 04:05PM ET,ARI,12.82\n,,,,,,,WR,Davante Adams (44498927),Davante Adams,44498927,T6,ARI@LAR 10/18/2026 04:05PM ET,LAR,20.22\n,,,,,,,TE,Travis Kelce (44498929),Travis Kelce,44498929,T6,LAC@KC 10/18/2026 04:25PM ET,KC,13.9\n,,,,,,,RB,Ashton Jeanty (44498921),Ashton Jeanty,44498921,T6,BUF@LV 10/18/2026 04:25PM ET,LV,17.52\n"
+  },
+  "template_source_sha256": "734dae6474ad6c81bc27371517af988eb7f2d1d9bc4d020f0bc60a3a78a2fad9",
+  "classification": "VERIFIED_NATIVE_TIERS_TEMPLATE",
+  "entry_ready": false,
+  "sha256": "c2b45f7b3b1cfcd9585a6b6530255e4d1bff0bf477d34d5d679155ee09576cc3"
+}

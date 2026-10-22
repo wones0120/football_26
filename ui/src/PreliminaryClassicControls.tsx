@@ -40,7 +40,7 @@ export function PreliminaryClassicControls({ scope, preparation, enabled, busy, 
   const compatible = !compatibleSnapshotHash || snapshot?.snapshot_sha256 === compatibleSnapshotHash;
   return <details className="operations-disclosure" open={enabled}>
     <summary>Preliminary Classic research generation</summary>
-    <p><strong>Experimental research; not entry cleared.</strong> This separate path uses a verified frozen salary/projection/ownership snapshot while retaining missing official injury/practice errors. It cannot export contest CSVs.</p>
+    <p><strong>Experimental research; not entry cleared.</strong> This separate path uses a verified frozen salary/projection/ownership snapshot while retaining missing official injury/practice errors. Saved lineups can be checked for CSV upload separately; final inactives remain pending.</p>
     <p>Preliminary preparation refreshes markets and builds new research projections. Missing or stale injury/role evidence stays unknown; affected players are excluded from this research pool. Normal entry readiness is never cleared.</p>
     {onPrepare && <button type="button" disabled={!enabled || busy || loading} onClick={() => void prepare()}>Prepare preliminary research inputs</button>}
     {!enabled && <p>Select Classic, GPP and Classic Large GPP to use this workflow.</p>}

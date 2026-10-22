@@ -167,6 +167,15 @@ def test_full_optimizer_saves_captain_assessments_and_flex_changes():
     packet,snapshot=captain_fixture()
     rows=pd.DataFrame(snapshot['players']);rows['showdown_qb_eligible']=rows['position'].eq('QB');rows['is_starting_qb']=rows['position'].eq('QB');rows['official_availability_status']='available';rows['pregame_role_uncertain']=False
     captain=next(p['player_id'] for p in snapshot['players'] if p['team']=='AAA' and p['position']=='WR')
+    # Explicit SYNTHETIC measured role evidence is required by the existing
+    # Captain gate; an Analyst proxy cannot qualify this fixture's locked WR.
+    supported = rows.player_id.eq(captain)
+    for key,value in dict(workload_feature_cutoff_at='2099-09-01T10:00:00Z',
+        role_observed_at='2099-09-01T10:00:00Z',snap_share_last=.75,
+        snap_share_mean_3_available=True,targets_mean_3_available=True,
+        target_share_mean_3_available=True,pregame_base_targets_mean_3=7,
+        pregame_base_target_share_mean_3=.22,target_share_last=.20).items():
+        rows.loc[supported,key]=value
     service=InMemoryService(rows)
     with patch('backend.app.product_services.analyst_packets.load_packet',return_value=packet),patch('backend.app.product_services.analyst_scenarios.datetime') as clock:
         clock.now.return_value=NOW

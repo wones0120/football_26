@@ -1,0 +1,14 @@
+# Observed defensive event distributions
+
+Candidate IDs X06-M06/M07. These are empirical observed-game count distributions conditional on same-game measured opponent exposures, explicitly not next-game probabilities or calibrated forecasts.
+
+- X06-M06 pairs native sack count with the official-inclusive physical dropback union: official pass attempt (including spike), sack, or official rush with scramble. Each play contributes at most once. A source reported dropback flag alone never creates a second exposure.
+- X06-M07 pairs native interception count with official pass attempts including spikes; sacks are excluded from this denominator. Known interception on a known nonpass is rejected.
+
+The native game pair determines defense and offense; a conflicting supplied defensive team is rejected. Every observed source game has both team sides. A side with no offensive event rows has unknown exposure/count, rather than an absent-side zero. An observed side containing only known nonpass/non-dropback plays may have known zero exposure and zero event count, with its per-exposure rate undefined. Source-excluded no-play and two-point attempts do not count. Unknown eligibility/outcome flags remain explicit lower bounds with null exact pairs. Native actor identity need not resolve for a valid full-team exposure to be retained; no names are joined.
+
+Each defense/season stores observed logs, matched integer (exposure, event count) histograms, event-count mean/population variance and per-exposure empirical count frequencies. Known-sample summaries remain available when other source games are unknown. Exact summaries and conditional membership frequencies remain null when an unknown game could affect them. No grouping merges different seasons or defensive teams; integer exposure tables are descriptive and never a separately fit model per small cell.
+
+`derive_retrospective_defensive_events` verifies the frozen parent through the existing indexed SourceSnapshot/raw/artifact reader at its original evidence boundary. It retains actual postlock read/derive/publication clocks separately and explicitly disallows current/pregame serving. The original boundary is not presented as the derivation time. Logs are not certified complete games; historical original publication availability is unknown. Native IDs and all source artifacts remain immutable. Counts/summaries are commutative; numeric play-ID sorting does not imply chronology and no play-order-dependent transition is inferred.
+
+The actual receipt lists full/selected refs, source parent/byte hashes, exact/unknown pair coverage and measured event/exposure lower bounds. The one planned parent inflation is necessary because existing compact team blocks lack the matched official pass/interception pairs. No fetch, fit, DB mutation or serving integration occurs. Model/optimizer consumers remain separately pending.

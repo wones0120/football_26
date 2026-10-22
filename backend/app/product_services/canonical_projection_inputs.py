@@ -77,7 +77,7 @@ PREGAME_LINEAGE_COLUMNS = [
     "pregame_role_label",
     "pregame_injury_status",
     "practice_participation", "practice_trend", "practice_observed_at",
-    "expected_workload_status", "expected_workload_observed_at",
+    "expected_workload_status", "expected_workload_observed_at", "expected_workload_source_ids",
     "pregame_expected_snaps",
     "pregame_expected_routes",
     "pregame_expected_carries",
@@ -155,8 +155,9 @@ def _questionable_snapshot_overrides(target, pregame_context, injury_statuses) -
     """Automatic assumptions apply only after scoring-pool eligibility filters."""
     if injury_statuses is None or injury_statuses.empty:
         return []
-    context_statuses = {
-        str(row["player_master_id"]): normalize_salary_status(row.get("injury_status"))
+    from .factual_designation import effective_designation, QUESTIONABLE
+    context_rows = {
+        str(row["player_master_id"]): row
         for row in (pregame_context.to_dict("records") if pregame_context is not None else [])
     }
     scoring_ids = set(target["player_id"].astype(str))
@@ -165,8 +166,8 @@ def _questionable_snapshot_overrides(target, pregame_context, injury_statuses) -
          "official_availability_status": normalize_salary_status(row.injury_status)}
         for row in injury_statuses.itertuples(index=False)
         if str(row.player_id) in scoring_ids
-        and (context_statuses.get(str(row.player_id)) or normalize_salary_status(row.injury_status))
-        in {"Q", "QUESTIONABLE"}
+        and effective_designation({**row._asdict(), **{k:v for k,v in context_rows.get(str(row.player_id), {}).items()
+            if v is not None}}) in QUESTIONABLE
     ]
 
 
@@ -182,18 +183,18 @@ def apply_player_availability_overrides(
     context = pregame_context.copy() if pregame_context is not None else pd.DataFrame()
     requested = [row for row in (overrides or []) if row.get("availability") != "default"]
     if assume_questionable_out:
-        context_statuses = {}
+        from .factual_designation import effective_designation, QUESTIONABLE
+        context_rows = {}
         if not context.empty:
             context_id = "player_master_id" if "player_master_id" in context else "player_id"
-            context_statuses = {
-                str(row[context_id]): normalize_salary_status(row.get("injury_status"))
+            context_rows = {
+                str(row[context_id]): row
                 for row in context.to_dict("records")
             }
         requested = [*requested, *[
             {"player_id": str(row.player_id), "availability": "assume_out"}
             for row in target.itertuples(index=False)
-            if normalize_salary_status(getattr(row, "player_status", None)) in {"Q", "QUESTIONABLE"}
-            or context_statuses.get(str(row.player_id)) in {"Q", "QUESTIONABLE"}
+            if effective_designation({**row._asdict(), **context_rows.get(str(row.player_id), {})}) in QUESTIONABLE
         ]]
     if not requested:
         return context, []

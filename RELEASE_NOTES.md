@@ -1,4 +1,357 @@
+## Single Stat status-source clarity
+
+Saved Single Stat views now show timestamped provider no-injury-designation observations separately from older uploaded CSV flags. Original source data, eligibility preferences and forecasts are preserved. The corrected Thursday rerun saves Swift/Burden/Brown at175.694 yards with three remaining forecast gaps explicitly labeled; prior results/settings are retained.
+
+## Sparse-history nonparticipation preservation
+
+Fixed learned player-count inference erasing source-established zero production when sparse-history support was absent. Historical unknowns and availability conditions remain intact; active/Q actors still abstain without evidence. A frozen replay resolves 19 of Thursday Single Stat’s 22 missing yard forecasts under recorded nonparticipation conditions, with all 21 previously supported skill-player forecasts unchanged. Prior receipts, saved lineups, projections and settings are preserved; no live lineup rerun.
+
+# Single Stat learned-yard comparison
+
+Added an opt-in completed-preparation binding for one-game Total Yards: canonical/native scope and chronological receipt checks, equally weighted rushing/receiving yards, preserved historical comparison and visible missing coverage. Existing baseline defaults, Captain results and settings remain unchanged.
+
+## 2026-10-22 — Additional Captain comparisons and receipt storage
+
+- Saved/reopened Burden-Captain comparison `62d8ada7…` at$50,000 on the same prepared inputs. Only Burden locked; exact-LP no-Caleb/no-QB feasibility proof confirms no mandatory pairing. Two-kicker frequency remains uncalibrated. [Burden receipt](artifacts/thursday_burden_captain_20261022/RESULTS.md).
+
+- Saved/reopened `83522ccf…`: Loveland CPT; Maye, Swift, Burden, Douglas, Borregales ($49,800). Original controls/lineups preserved; downloads skipped.
+- Fixed an oversized research request by storing repeated provenance once with verified full readback.4MiB file bound and existing8MiB read envelope retained; legacy artifacts unchanged.41 targeted tests pass; no football model or selection-policy change. [Receipt and comparison](artifacts/thursday_loveland_captain_20261022/RESULTS.md).
+
+## 2026-10-22 — Sunday Night scenario transfer diagnostic
+
+- Recovered the transient PBP download failure with one public Prepare; verified a fresh Sunday snapshot and the same registered count-model artifacts. Saved/reopened `86a91a47…` at$49,400 under KC–SEA42.5/SEA−3; source/20-case accounting/solver checks pass.
+- Found a remaining starting-fullback exemption in the backup-only involvement preference. Saved result is diagnostic, with football acceptance withheld; no policy/serving/default change. Ten Thursday results/settings preserved; downloads skipped. [Evidence](artifacts/sunday_night_scenario_recovery_20261022/RESULTS.md).
+
+## 2026-10-22 — Saved receiving comparison
+
+- Sunday Night KC–SEA salary import succeeds; its single preparation attempt is source-blocked by a PBP download connection reset. No cross-scenario validation or Sunday lineup is claimed.
+
+- Saved user-requested Douglas-CPT/Maye/Swift/Burden/Loveland/Borregales comparison through public Prepare → Optimize → reopen ($49,900). Temporary constraints restored; nine prior results and model counts preserved. Download tests skipped.
+- Constrained case coverage is explicitly distinguished from unrestricted comparison evidence. [Receipt](artifacts/thursday_receiving_comparison_20261022/RESULTS.md).
+
+## 2026-10-22 — Bounded scoring calibration diagnostic
+
+- Added research-only prior-period FG-frequency and exact conditional TD-concentration checks. Both candidates fail the frozen validation criteria; no serving/selector change or Thursday rerun.
+- Reconstructed2026 evaluation verifies original predecision input availability; older quote chronology and all retrospective-outcome limits remain explicit. Four tests and offline replay pass; nine prior saved results/configurations preserved, downloads skipped.
+- Reviewed the two-QB/one-WR roster against feasible fixed receiving alternatives, including a same-salary Burden/Loveland construction. [Findings and next calibration work](artifacts/scenario_scoring_calibration_20261022/RESULTS.md).
+
+## 2026-10-22 — Joint source kicking evidence
+
+- Scenario-first Captain v6 preserves one donor game’s FG makes, distances and misses; validates attempts/distance bins and removes the independent marginal-distance draw. Four-FG outcomes remain available when sourced.
+- Unknown current kickers retain FG/PAT points in the explicit unknown ledger. Saved review exposes case-level kicking provenance and the all-success PAT assumption. Current role evidence, learned anchors, user preferences and previous results remain unchanged.
+- One public v6 run saved `df235acc…`: Douglas CPT; Caleb, Maye, Swift, Borregales, Johnson ($49,900,3–3). Saved reopen and17 backend/31 UI tests/build pass; eight prior comparisons and77 controls preserved. Borregales FG dependence remains uncalibrated; downloads skipped. [Results and limitations](artifacts/scenario_kicking_repair_20261022/RESULTS.md).
+
+## 2026-10-22 — Remove unsupported scenario opportunity-count tails
+
+- Scenario-first Captain v5 rounds conditional joint-profile target/carry shares within conserved team budgets. The extra uncalibrated multinomial count draw is removed for every actor; learned anchors, source-backed expansion and unknown work remain intact.
+- Frozen Thursday audit changes Roschon’s primary target allocations from3/3/0/9 to2/4/0/4; no player-specific cap or preference change. Prior prepared versions require fresh v5 preparation; saved results remain readable. Case probabilities and tournament improvement remain unproven.
+- One public v5 rerun saved `afe722a8…`: Douglas CPT; Maye, Swift, Stevenson, Loveland, Santos ($49,500,3–3). Saved reopen,16 backend/31 UI checks/build and original77 controls pass. Seven prior results/comparisons remain intact; downloads skipped. [Saved result and football limitations](artifacts/scenario_role_allocation_repair_20261022/RESULTS.md).
+
+## 2026-10-22 — Verify lighter interface and review saved QB correction
+
+- Reopened the preserved Thursday result with compact responses, checked short-session Chrome rendering and restored all77 original controls. No new lineup generation, settings changes or download tests.
+- Saved passing/source/accounting checks pass. Johnson Captain remains provisional: expanded receiving work and two-TD dependence need support; the Swift alternative is nearly tied. [Review and follow-up](artifacts/thursday_light_ui_qb_review_20261022/RESULTS.md).
+
+## 2026-10-22 — Lightweight status and saved-lineup responses
+
+- Browser job history/completion waits exclude result bodies and avoid loading request/result JSON from the database. Prepare no longer retrieves its full audit on completion. Shared three-second waits pause while hidden and stop on completion/failure; result-bearing actions fetch their artifact once afterward.
+- Saved-result and preparation summaries omit repeated readiness/research audit bodies while retaining decisions, warnings, compatibility/source IDs, forecasts and lineups. Full default APIs and immutable evidence are preserved.
+- Measured job list 95.9 MB → 7.2 KB; preparation 12.1 MB → 315 KB; saved result 19.1 MB → 1.17 MB. Seven prior results/settings preserved. No new lineup generation or download tests. [Evidence, checks and limitations](artifacts/chrome_payload_repair_20261022/RESULTS.md).
+
+## 2026-10-22 — Repair scenario QB passing allocation
+
+- Independent learned team/player pass forecast differences no longer create an unknown passer. Conditional passing follows the source profile's complete actual passer shares, linked to current starter evidence; single-passer profiles credit all shared passing production to that passer.
+- Actual relief/trick-play and unsupported passer shares retain canonical/native source lineage. Receiving/rushing residuals and raw learned forecasts stay unchanged. Saved reports distinguish forecast disagreement from source-backed passing ownership.
+- Market-primary selection, existing Captain/3–3/involvement policies and previous results remain intact. [Bounded rerun and validation](artifacts/scenario_qb_passing_repair_20261022/RESULTS.md). Operational downloads skipped.
+
+## 2026-10-22 — Market determines the primary Captain scenario
+
+- Spread and total derive home/away implied scores; only four market-centered cases drive primary selection, legal benchmarks, coverage and tie-breaks. Sixteen alternative-script scores remain diagnostic only.
+- Saved review exposes market targets and the primary-only denominator. Prior v1/v2 results retain their original interpretation; preparation requires a new v3 receipt. Existing Captain/3–3/involvement settings remain separate and unchanged.
+- One public Thursday run saved `01bc440c…`: Swift Captain with Stevenson, Burden, Douglas, Henry and Santos ($48,700). Reopened and verified; five prior runs and all 77 controls preserved.
+- Verified market direction and alternative-score isolation; bounded Thursday public rerun and preservation evidence are recorded in [results](artifacts/scenario_market_primary_20261022/RESULTS.md). Operational downloads skipped.
+
+## 2026-10-22 — Correct Captain role floors and full-roster selection
+
+- Added an explicit user preference: backup WR/TE3 targets; backup RB6 carries+targets. Supported availability/role forecasts apply first; exclusions preserve model truth and never redistribute work.
+- Source-compatible historical profiles vary team volumes/roles, include observed zero work, and link QB passing yards directly to sampled receiver completions. Actual nearby scoring combinations include sourced zero-FG outcomes.
+- Complete-roster competitive case coverage replaces worst-case protection, with an explicit90% initial target and mean relative capture tie-break. Saved reports retain matched different-Captain and reference-Captain FLEX reoptimizations plus the exact user reference with any eligibility conflicts. Unknown likelihood remains explicit.
+- Public saved run `778db4eb…` uses Stevenson Captain ($48,700). Swift Captain ties primary coverage at 6/20; the secondary difference is not a demonstrated football advantage. Burden Captain reoptimization covers 4/20. Selected high-scoring-script and Henry/Douglas Captain comparisons remain open.
+- Preserved existing modes/settings/results and v1 interpretation. Routine download tests omitted. [Method and validation](docs/product/scenario_first_captain.md).
+
+## 2026-10-22 — Opt-in scenario-first Captain comparison
+
+- Corrected first test saved `1a4d7ca2…`: Swift CPT; Caleb, Santos, Maye, Stevenson and Kiner ($49,900;3–3). Public reopen/native UI/API CSV and preservation pass. Unsupported low-score FG extrapolation was fixed; one failed threaded proof attempt is retained, followed by serial recovery with identical corrected inputs. Conditional role/calibration limits and final inactives remain open. [Result and alternatives](artifacts/scenario_first_captain_20261022/RESULTS.md).
+
+- Added market-first shared scoring-event cases, prior-only player/kicker role evidence, conserved shared passing/receiving production and explicit unknown allocations.
+- One complete 3–3 roster maximizes worst relative score capture across twenty conditional cases under current user constraints. Individual means, incumbent points/P90 and count/yard normalization do not select it; no hidden fallback or relaxation.
+- Preparation and saved results expose policy, assumptions, role evidence and full-roster case comparisons. This is a bounded conditional first version with unknown likelihood, not calibrated tournament probability or full possession simulation. Existing modes/results/settings remain preserved. [Workflow and validation](docs/product/scenario_first_captain.md).
+
+## 2026-10-22 — Thursday projected-yard operational run
+
+- Saved `a5bbabfa…`: Swift CPT; Caleb, Maye, Burden, Johnson, Kiner FLEX ($49,900; yard 42.10511). One public Prepare/optimizer job, Optimal solve, saved reopen, native UI/API CSV, LP/hash/accounting checks pass.
+- Same learned counts/publications as the saved count comparison; three preserved rosters evaluated under common yard/count forecasts and morning new-model point heads. No tournament-superiority claim.
+- Prior results, old optimizer comparison and all77 controls preserved. Kiner remains a sourced backup/salary punt; final inactives and evening clearance remain open. [Comparison and verified CSV](artifacts/thursday_yards_run_20261022/RESULTS.md).
+
+## 2026-10-22 — Role-aware efficiency and projected-yard comparison
+
+- Added a separate opt-in Showdown yard arm using latest learned counts, prior same-team player efficiency and a shrunk position/usage-role reference. Unsupported forecasts remain unknown.
+- Explicit selection weights: passing 0.04, rushing 0.10, receiving 0.10; partial DK yard scoring, without receptions, TDs, bonuses or positional count normalizers. No full-points/P90 selection gates; fixed weights and code/data lineage freeze in Prepare.
+- Passing/receiving team yards reconcile with explicit unallocated actors. Prepare exposes per-player efficiency, residuals and six-period retrospective conditional diagnostics. Mixed errors do not prove improvement.
+- Original Thursday saved runs, incumbent/new-point projections, old optimizer comparison and settings remain preserved; no new operational lineup generated. [Validation and bounded scope](artifacts/opportunity_yards_20261022/RESULTS.md).
+
+## 2026-10-22 — Learned-opportunity Showdown comparison
+
+- Added **Learned opportunities · no points selection gates** to Optimizer comparison. Prepare consumes latest registered team/player count heads and stops before point scoring; fixed prior count divisors and model IDs remain visible.
+- Count utility drives Captain/FLEX selection and native-export recommendation without FP/P90 gates. Points-leader preferences are explicitly inactive in this request, with stored controls preserved; factual availability and remaining roster constraints stay binding.
+- Saved solver model, normalized persistence checksum, constraints, coverage and model lineage support verification. Original saved points lineup/old comparison are preserved. Classic and tournament calibration remain deferred.
+- [Operational result, diagnostic attempt, CSV and limits](artifacts/thursday_learned_opportunities_20261022/RESULTS.md).
+
+## 2026-10-22 — Reduce idle polling and preparation payloads
+
+- Preparation/job polling pauses in hidden tabs, refreshes on return and uses 30-second idle / three-second active-job intervals with single-flight requests and error backoff. Manual preparation-status reload remains immediate.
+- Preparation status omits repeated nested availability/model audits while retaining identities, clocks, designations, score summaries and missing-evidence warnings. Original receipts/full job audits and optimizer validation remain intact.
+- Live Thursday response shrank from 2,445,637 to 270,682 bytes (88.93%). Saved Thursday roster, projection pool, comparison, source selection and all 77 original controls verified unchanged. No model or optimizer run performed. Chrome freeze causality remains unproven.
+
+## 2026-10-22 — Thursday game-day morning refresh
+
+- Refreshed official report and public preparation sources; saved `dcf218b6…` retains the Johnson-CPT offensive roster, $50,000 / 76.37671, with new models driving selection.
+- Saved reopen, two Optimal solves, native DraftKings UI/API CSV equality, accounting and preservation checks pass. Prior original results/control and 77 initial UI controls are preserved.
+- Final inactives remain unpublished at the morning check; provisional clearance expires at 6:38 a.m. Eastern. No entry submitted or model/global-policy change.
+- [Receipts, CSV, football limits and remaining evening action](artifacts/week7_gameday_refresh_20261022/RESULTS.md).
+
+## 2026-10-21 — Brown return evidence, sparse receiver heads and final Thursday rerun
+
+- Linked official Weeks 2–5 IR proof to two observed New England games; sparse returns require complete absence/current-role evidence and supported model heads.
+- Published one scoped sparse-WR tree/neural candidate: Brown 7.19 targets / 12.28 points. Historical target errors improve; rushing is mixed. Original heads/RB repair remain preserved, with no manual target floor or incumbent fallback.
+- Added strict dated grouped final-report parsing; Brown's official no designation clears stale Q without changing raw salary flags or Q preferences.
+- Saved `23d494b4…` through Prepare→Optimize→reopen→CSV. Brown is verified in the actual solver; Johnson-CPT offensive roster remains $50,000 / 76.37671. Legal Swift-CPT alternative is 75.91420, evaluated without another solve.
+- 223 tests pass; 225 prior artifacts, 318 research files, three prior saved results/old comparison and all 82 original controls preserved. Initial failed fit/Prepare and Q-excluded diagnostic run remain separate. Final inactives and joint calibration remain open.
+- [Evidence, bounds, tradeoffs and final CSV](artifacts/week7_brown_captain_review_20261021/RESULTS.md).
+
+## 2026-10-21 — Thursday offensive construction comparison
+
+- Saved `17e3d27c…`: Johnson CPT; Swift, Caleb, Maye, Loveland and Henry FLEX, $50,000 / 76.37671 new-model points. Explicit run-specific Analyst K/DST exclusions change eligibility, not any of the 54 forecasts.
+- Public Prepare→Optimize→saved reopen→CSV checks pass; all 82 original UI controls, unrestricted two-kicker run and old control preserved. No application code or global policy changed.
+- Touchdown-led game is an authored assessment, not a calibrated joint prediction. Johnson Captain upside, Brown's unknown primary workload score, kicker calibration and final inactives remain open before entry.
+- [Assessment, roster and verification](artifacts/week7_touchdown_scenario_20261021/RESULTS.md).
+
+## 2026-10-21 — Latest-model Thursday saved rerun
+
+- Saved `fa81b28c…` from the latest RB-repaired primary forecasts: $49,900 Swift-CPT roster, 78.91947 new-model points. Both bounded solves Optimal; old control unchanged.
+- Public saved reopen, objective/snapshot checks and native DraftKings CSV pass. Prior results and user settings preserved; upload status remains pending final inactives.
+- User's two-kicker concern is tracked as a P1 calibration/opportunity review. No arbitrary cap, score adjustment, additional fit or lineup search.
+- [Saved roster, CSV and validation](artifacts/week7_latest_primary_rerun_20261021/RESULTS.md).
+
+## 2026-10-21 — Scoped Sunday accounting and source repairs
+
+- Official injury ingestion retains/report positions outside the native salary domain without blocking Classic on an unoffered kicker; offered-player identity gates remain strict.
+- Corrected current Sunday Ogletree salary/profile mappings to the pinned NFL identity, preserving historical components and failed correction/Prepare evidence.
+- Computed Sunday checkpoint passes 60 budget/residual checks for 20 teams and all 513 native players. Final readiness remains blocked on two practice-evidence gaps; nine current-roster reference gaps and 152 unknown scores remain explicit.
+- 144 affected cases pass; isolated the public-preparation test fixture from application DB/research writes. Thursday's ready build, all 82 UI controls, saved lineup and old comparison are unchanged. No new lineup or count-model publication.
+- [Evidence and remaining TODO boundaries](artifacts/sunday_main_preparation_20261021/RESULTS.md).
+
+## 2026-10-21 — Scoped RB carry-model repair
+
+- Diagnosed Gibbs/Hubbard disagreement on frozen complete carry windows; no new input/unit defect. A versioned RB-only raw-count head pair replaces the unstable transformed carry response in opt-in primary Prepare. Other raw heads/positions are preserved.
+- High-workload RB error and overall bias/RMSE improve; overall retrospective RB MAE is slightly worse. Global WR/TE scope was rejected. No calibrated probability or lineup-superiority claim.
+- Paired managed-artifact checks, residual accounting and legacy version compatibility pass. Prior models/results, old optimizer comparison, settings and selected DST remain preserved. Low-volume reviews and 431 event-channel gaps stay open.
+- [Evidence, exact estimates and public acceptance](artifacts/gibbs_hubbard_review_20261021/RESULTS.md).
+
+## 2026-10-21 — All-player audit and administrative-row repair
+
+- Audited every imported Thursday/Sunday Main player plus retained roster actors across all 28 scheduled Week 7 teams (776 canonical actors). Other native slate pools and unprepared forecasts remain explicit.
+- Corrected exact clock-replay administrative rows that censored player event evidence. Same weights/inputs lift Love's raw carries from 7.70 to 11.76; Thursday raw forecasts are unchanged.
+- Primary Prepare now audits identities, chronology, required counts and full-team accounting; missing event attribution/review flags remain visible without score or eligibility penalties. Factual zero, selected DST and learned-head evidence are distinct; unknown DST scores fail visibly without a conversion error.
+- 307 targeted tests pass. No count-model refit, new lineup, default/settings change or old-result overwrite. Gibbs/Hubbard model disagreement, source limitations and per-slate operational checks remain tracked.
+
+## 2026-10-21 — Caleb count-input repair and saved lineup rerun
+
+- Versioned player event windows now use observed same-team player games consistently in training and inference. Missing measurements remain unknown; old models/results are preserved.
+- Current primary inference links retained prior-season PBP with derived/raw checksum, clock, season and canonical-ID checks. No manual workload floor or incumbent FP fallback.
+- Caleb rises from 13.48 to 27.21 forecast passes and is selected in the $48,900 Stevenson-Captain saved public rerun. Old optimizer remains the comparison; settings/DST unchanged. 172 targeted tests, exact solver replay, preservation and native CSV pass. Historical calibration results are mixed; game-day clearance remains provisional.
+
+## 2026-10-21 — Caleb inactive-gap evidence and Week 7 rerun
+
+Corrected NFL game-center nickname URLs and propagated authenticated inactive-game records into primary count reconstruction. Caleb's observed Weeks 1, 2 and 6 now connect through official Weeks 3–5 inactivity without invented zero counts. Public saved rerun `9d31dc74-cb19-41a8-ae09-7838b1db5939` includes Caleb as eligible and retains the old control; the $49,300 roster is unchanged. 119 targeted tests, native CSV verification, exact saved solver replay and prior preservation pass. His learned 13.48-pass forecast remains an explicit calibration concern; no manual boost or live-default change. See [evidence and results](artifacts/week7_caleb_workload_repair_20261021/RESULTS.md).
+
+## 2026-10-21 — New-model primary scoring and Week 7 DST roll-forward
+
+The opt-in primary mode consumes published team/player tree-neural opportunity forecasts and independent complete DK score heads, without an incumbent offensive/kicker FP remainder. Captain selection uses those scores without the old P90 shortlist. Saved results retain the old Captain-P90/FLEX-mean control and disclose coverage differences, source/model lineage and unproven calibration. A separately versioned Week 7 DST component adds 28 verified Week 6 team outcomes, preserving the accepted fitted policy and rollback evidence. Public Prepare→Optimize→reopen→upload check→native CSV passed for saved run `dbe98bb2-3809-47c6-8c4f-21fbd3009970`; exact CBC objective replay and all 318 research preservation hashes pass. Scenario exports now authenticate the frozen model/score/native-role contract. Caleb Williams remains an explicit primary coverage exclusion, and final inactives remain pending. See [Thursday first use](docs/product/week7_thursday_first_use.md).
+
+## 2026-10-21 — Thursday first-use preparation and Showdown scenario support
+
+Extended the opt-in comparison to Captain/FLEX with matched hard preferences and explicit role scoring. Repaired missing completed schedule scores before historical label rebuild and reused official club roster evidence for unresolved Showdown players. Receipts/UI now identify incumbent-anchored sensitivity and actual model consumption; standalone new-model primary scoring remains open. Thursday Prepare is currently blocked by the selected DST component's Week 6 expiry. See [actual status and TODO](docs/product/week7_thursday_first_use.md).
+
+## 2026-10-21 — Opt-in scenario mode in the optimizer workflow
+
+Classic Prepare → Optimize → saved results now supports one authored team-volume sensitivity and a matched baseline lineup. Prepare freezes the assumptions, component changes and evidence gaps; editing them requires preparation again. Missing components retain baseline values, touchdown/bonus contributions remain fixed, and likelihood stays unknown. The original optimizer remains the default, stored model projections stay separate, and the two comparison solves each have a ten-second cap. See [usage and limitations](docs/product/optimizer_scenario_mode.md).
+
+## 2026-10-21 — Shared-event opportunity assignment mechanics
+
+Added eight research-only fixture cases linking player opportunity credits to shared physical events, retaining unresolved actors and unknown eligibility. Checks cover pass/target identity, sack/spike/scramble/kneel accounting, excluded count scope and preference isolation. No actor-event probabilities or forecasts were estimated. One 0.235s audit and 196 targeted tests passed; all 675 preservation hashes match and live projections/settings remain unchanged. See [results](research/game_progression_pilot_20261020/shared_event_assignment/RESULTS.md).
+
+## 2026-10-21 — Conditional vacancy accounting on retained references
+
+Added six research-only vacancy sensitivity and abstention cases using saved full-team workload/role evidence and the unchanged existing allocator. Unknown donor/recipient counts remain null, unsupported recipients and questionable donors abstain, and unassigned work remains residual. One authored half-vacancy case tests arithmetic rather than an empirical replacement estimate. A 0.350s audit and 136 targeted tests passed; all 664 preservation hashes match and live projections/settings remain unchanged. See [results](research/game_progression_pilot_20261020/conditional_vacancy_accounting/RESULTS.md).
+
+## 2026-10-21 — Prior-only workload reference and official full-team denominators
+
+Added a separate SF/WAS Weeks 4–5 observed workload reference from two retained weekly snapshots and four official gamebooks. All 12 full-game team/channel totals reconcile; missing actor rows and unassigned mass stay explicit. This is a retrospective two-game reference, with no fitted replacement shares or live integration. One 0.466s audit and 109 targeted tests passed; prior results and live projections/settings remain unchanged. See [results](research/game_progression_pilot_20261020/prior_workload_reference/RESULTS.md).
+
+## 2026-10-21 — Retained full-team role and dated availability evidence
+
+Added a research-only SF–WAS source-evidence inventory retaining 168 canonical provider actors, 123 fresh depth ranks, 22 official report row links and 66 dated practice observations. Later alias persistence keeps this retrospective; full-team completeness and replacement workload remain unproven. Factual game designations stay separate from optimizer availability preferences. One 0.302s cached audit and 97 targeted tests passed; prior results and live projections/settings remain unchanged. See [results](research/game_progression_pilot_20261020/player_role_evidence/RESULTS.md).
+
+## 2026-10-21 — Bounded player-opportunity accounting foundation
+
+Deferred unresolved timing/continuation evidence work and added a separate research-only conditional count allocator with six synthetic cases and 89 targeted passing tests. Retains unknown budgets, full-team residuals and canonical UUIDs without share renormalization or inferred injury replacement. Prior artifacts and live projections/settings are preserved; no predictive improvement or promotion is claimed. See [results](research/game_progression_pilot_20261020/player_opportunity_accounting/RESULTS.md).
+
+## Feature-only source completion
+
+- X04-M10 has High-approved observed native personnel-package and pass/rush decision comparisons around a documented calling-duty transition. Team count tuples remain distinct from unknown canonical member assignments; no causal play-caller effect is claimed.
+
+- G20-M06 has High-approved source-native NWS maximum-gust forecasts for an authenticated kickoff-containing interval, with original point/grid receipts and units. This is distinct from sustained wind, observed stadium wind and unknown averaging/height.
+
+- G22-M08 has High-approved explicit offensive play-calling duty transition evidence from two official Bills documents and a corroborated measured first-calling game. Coordinator titles do not prove duties; exact handoff time and current/future applicability remain unknown.
+
+- G17-M09 has High-approved source-scoped unavailable teammate opportunity ledgers. Every ordinary inactive fact remains, fixed prior scheduled-game means retain missing counts and unresolved identity, and incomplete team sums stay unknown. Known partial volume is not redistributed to teammates.
+
+- G22-M07 has High-approved source-documented offensive-coordinator transition evidence from two official Saints announcements. Announcement gaps remain separate from unknown employment/vacancy times; game applicability and play-calling duties are not inferred.
+
+- G09-M02 has High-approved receiver catch excess over provider completion probability on identical eligible targets. Missing probabilities and unattributed targets mask exact rates; known samples remain separate. This is not independent charted catchability or an isolated receiver-skill estimate.
+
+- G18-M01 has High-approved historical measured-game opening QB presence, corroborating the reported native starter with a proven first physical snap and exact source roles. Conflicts stay unknown; this does not confirm pregame health or a future starter.
+
+- G24-M04 has High-approved observed physical pass/rush TD allocation by original drive, field-position band and native actor. One physical score receives one classification; uncertain drive outcomes and inherited identity gaps remain explicit. This does not activate a roster model or optimizer.
+
+- G17-M05 has High-approved source-listed depth position/slot/order at the provider document. Effective-week and target-game applicability remain unknown; rank one does not imply confirmed starting role, dressing or workload.
+
+- G20-M05 has High-approved source-native NWS prevailing/sustained hourly wind for the authenticated kickoff cohort. Explicit10mph converts to4.4704m/s; height and averaging duration stay unknown. The retained source lacks gusts, so G20-M06 remains open.
+
+- G22-M10 now has High-approved source-wide fumble anchoring, including special/return source rows. Earlier uncertain anchors mask first-anchor claims; special-only actors retain undefined official usage. The old149-anchor variant and original measurement lineage remain intact; no punishment or future-role inference is introduced.
+
+- X06-M04 has High-approved observed failed-third range × clock × score response cells and contrasts. The full opportunity denominator retains competing outcomes and unknowns; nominal pre-anchor range does not assert actual kick distance or future decision probability.
+
+- G16-M03 now has High-approved historical same-play TE/personnel × MAN/ZONE target and completion/EPA responses. Unresolved recipients are excluded from known-sample denominators; exact unknown masks and frozen identity conflicts remain. Models and optimizer integration remain paused.
+
+- Observed personnel-package continuity now compares exact canonical participant/source-role sets against the immediately prior scheduled game, weighted by comparable physical snaps. Missing participation, eligibility and identity masks remain explicit; native variants and known samples are separate. This does not infer assignments, health or expected current personnel.
+
+- Source-scoped forecast-input age diagnostics now retain generated, updated, observed, captured, snapshot-effective and forecast-valid clocks separately. Signed future-validity ages remain negative; unavailable provider issue time stays unknown. This does not assess model input eligibility or forecast skill.
+
+- Added a reviewed original NWS kickoff-hour precipitation probability for one exact native game/venue-grid cohort. Explicit percent units, source issuance/capture clocks and hourly boundaries are retained; later revised venue/schedule attribution is separate from original weather receipt availability.
+
+- Declared venue displacement now links each measured game to the immediately prior scheduled same-team/season venue through native IDs and reviewed neutral-site overrides. Great-circle distance and both geographic timezone offsets at the same kickoff instant preserve unknowns; this is not an actual itinerary or fatigue estimate.
+
+- Archived favorite/underdog/pickem context now has reviewed late-Q4 preplay-score response counts and first-entry-frozen original-drive scoring paths. Play/drive denominators, overlapping subtypes and unknown context stay separate; no causal motivation or forward sensitivity claim.
+
+- Observed late-half possessions include physical offense and live FG/punt entries, with entry-half continuity, independent terminal proof for negative paths and explicit censored uncertainty.
+
+- Historical workload trends now compare the latest scheduled game against exactly eight preceding games and recent three against season-to-date counts/shares. Missing scheduled rows remain unknown; current eight-game shortages are explicit.
+
+- Historical same-QB scramble fractions now use direct provider pressure on the same source-proven QB dropback, with native role, attribution and missingness masks. This provider condition remains distinct from the reconciled PFR HHS pressure-rate family.
+
+- Observed failed-third-down opportunities now retain next fourth-down choices, competing clock/possession/new-series outcomes and censored unknowns. Full-anchor and conditional-choice frequencies are separate; no coach-intent or future-decision inference.
+
+- Reviewed defensive before/after-contact totals now require complete native-actor carry and credited-yard partition reconciliation; uncertain cohorts and existing identity cases remain visible. Model consumption stays pending.
+
+- Added reviewed nominal35-yard terminal-decision-site counts with original-drive native boundaries, recognized half/live terminal proofs and explicit TD/giveaway/end-clock exclusions. Unknown endpoints/cohorts remain unknown; the field-position context is not a kick-attempt expectation.
+- Added reviewed observed nonspike sack-eligible dropback exposure counts, with source spike flags and unknown eligibility retained; these are not sack outcome expectations or interception-worthy opportunities.
+- Added ordinary official Not Active evidence with native roster identity proof and separate DNP/emergency-QB states. First/second/third observed ACTIVE-game opportunity comparisons retain every scheduled slot and unknown chronology; the verified cohort is one historical player sequence, without health or future-workload inference.
+
+- Added reviewed descriptive depth-change and revision diagnostics, prior same-team backup-QB experience, native-order scoring-drive transitions, source-longitudinal end-zone targets, matched inside-five/end-zone target allocation, red-zone disruption rates and weighted observed-active-game support diagnostics. Immutable source lineage, uncertainty, unresolved identity incidents and actual postlock derivation clocks remain explicit.
+- Added explicit-unit official gamebook temperature with native game/date/venue binding, preserved original PDF/capture clocks and visual verification. The verified weather cohort is one historical game; unlabeled schedule temperature units remain unresolved.
+- Added reviewed historical receiver/backfield target opportunities by reported current-game QB continuity versus the immediately preceding scheduled game. Per-game source roles, full raw-source target budgets and missing-participant uncertainty remain explicit; this does not predict an upcoming QB role.
+- Added a reviewed missingness/imputation ancestry diagnostic for every frozen weekly feature-stage input and metric transformation, retaining quarantined raw actors. Provider and legacy ingest preprocessing remain unknown; model preprocessing is unassessed.
+- Added reviewed empirical target/carry quantiles under a predeclared strictly prior snap-participation condition, preserving unknown eligibility and missing responses. The current historical window has at most two response games; no future tail, calibration or health guarantee is claimed.
+- Added a separate [feature-only completion register](research/feature_platform_implementation_20261019/v1/FEATURE_ONLY_REGISTER.csv); source/code approval does not imply model, optimizer or entry-ready activation.
+
+## Numeric opportunity models and conditional player response
+
+- Added managed tree/neural team pass/rush models on one 57-input own/opponent/market contract, train-only preprocessing and explicit revised-history validation limits. Their declared same-target average retains components and disagreement; no calibrated probability or superiority claim.
+- Added server-owned source/model publication and fresh Prepare inference, conserved player counts, typed factual injury vacancies and authored conditional recipient fractions. User exclusions retain their football assessments and do not redistribute work.
+- Shared-world scoring can consume matched linear scoring differences from reference to new counts. Base FP and undecomposed active-player scoring remain separately labeled; QB/receiver budgets, unknown residuals, actual-versus-linear deltas and source/model lineage persist in the app/report. New public-run acceptance is separate from earlier saved artifacts and remains required before claiming readiness.
+
+## Single Stat scoped availability preferences
+
+- Verified MondaySingleStat196787359 app import→Generate→reopen and3FLEX/native-ID CSV for CMC/Kittle/McLaurin; descriptive yards baseline remains labeled, final availability separate.
+- Added explicit questionable-player exclusion with immutable report/export preference checks, preserved raw statuses and baseline estimates. Sourced development/practice/reserve statuses cannot masquerade as active historical value.
+
+## Authored Analyst research closure
+
+- Added per-game semantic refresh requests, sourced authored/no-change publication checks, exact fresh Prepare closure and saved full-roster research lineage. Equivalent canonical-context/count recapture preserves semantics while original provenance remains available.
+- Neutral packets remain reference-only; source compatibility does not claim new football research. Actual worker dispatch and public-workflow acceptance require separate receipts. No projection or selection default changed.
+- Prepared/saved Analyst views and readable reports now display authored/no-change assessments, actual material-input consumption, counterevidence, unknowns and closure alongside construction status. Non-Analyst reports do not show unrelated missing-research notices.
+- Verified the actual Monday authored publication→fresh Prepare closure→saved Optimize/reopen/native CSV workflow. The sourced no-change result preserves uncertainty and does not claim a numerical model or selector improvement; final inactives and expiring upload clearance remain separate.
+
+## Complete-lineup shared-world selection
+
+- Added Captain GPP's named expected-anchor/incremental-conditional-coverage policy with a common candidate/world score matrix and exact requested-size completion under explicit controls. Mandatory strategy stacks/starting-QB predicates are omitted only for this policy; old modes retain their behavior.
+- Conditional means, Captain once, unknown tails and unknown world likelihood remain explicit. Counts, ownership and marginal P90 are not additional score contributions; bounded pool failure is not global infeasibility.
+- Saved app/report evidence includes targeted authored mechanisms, captured role/source inference, actual shared actors, marginal gains and complete alternative salary/player/point tradeoffs. Recommendation/export retains frozen anchor-first order. Monday public workflow/reopen/native CSV acceptance passed with four lineups and unchanged explicit controls; all incremental gains were zero, prominently disclosed as no additional scenario coverage.
+
+## Offensive workload forecasts and opt-in optimizer
+
+- Added shared `opportunity_history_evidence_v1` to newly prepared count receipts: original observations, role-window/inactive-gap provenance and full-source missing/unmapped coverage remain separate from proxies and forecasts. Existing count estimates/defaults are preserved; original historical publication/capture gaps remain explicit.
+- Added a descriptive pass/rush/target event and disjoint-zone adapter with separate goal-to-go, eligibility coverage and native/canonical residuals. Count receipts explicitly report unavailable event capture until operational immutable-PBP intake is wired; no new zone/TD forecast or default change is claimed.
+- Captured and verified an immutable operational PBP source, including native-to-canonical identity, prior-REG scope and explicit administrative-row accounting. Real-source derivation is verified; compact Prepare/Analyst consumption is still being integrated, and no complete-game coverage or zone/count forecast is inferred from it.
+- Added bounded immutable scalar publication/serving with full-parent verification at publication and raw/parent byte checks at intake, avoiding full-event decompression on each Prepare. Selected actors retain full-team denominators, residuals and unknowns; source consumer activation remains separately tracked.
+- Added opt-in explicit team/pass/rush/target forecasts with canonical source lineage, missingness, full-universe conservation and immutable Prepare receipts; historical observations and allocated proxies remain separate.
+- Captain comparison uses declared normalized count utility, salary legality, unchanged user restrictions and bounded solves. Standard remains default. K/DST/unknown workloads are explicitly outside the offensive domain; a matched offensive-domain FP control is separate.
+- Verified historical gamebook inactive gaps can support current-team returner forecasts without zero filling; saved count/control upload checks validate their own authenticated frozen inputs rather than an unused Analyst snapshot.
+- Verified Monday public workflow and six native CSV responses across standard/count/matched-FP arms. Fixed count-specific upload authentication, saved recommendation buttons and false invalidation from resolver recomputation clocks; no contest entry or default change.
+- Saved forecasts and selection basis are visible; mixed chronological count validation is experimental evidence, not proof of stronger tournament lineups. Classic operational selection remains outside this first slice.
+
+## Shared factual game designations
+
+- Classic/Showdown now carry a versioned, source-clocked game designation into Q preferences, explicit Assume Q Out and saved upload/readiness checks; raw flags remain preserved.
+- Added bounded official final-report capture with canonical scope/identity and complete final-practice-table checks. Generic blanks and roster ACT cannot clear Q; later conflicting facts remain explicit. Existing archived untyped records retain legacy handling.
+- No projection/selector default or user setting changes; Tiers/Single Stat native pool contracts remain separate.
+
+## Original workload observations and allocated proxies
+
+- Added `workload_evidence_v2`: original pre-allocation counts/shares retain coverage and provenance; transformed counts stay allocated proxies. Missing originals remain unknown.
+- Analyst measurement consumers trace evidence kind/source and cannot use a v2 proxy alone to certify observed usage. Attributed explicit pregame inputs retain precedence.
+- Existing v1 packets remain readable without reinterpretation or backfill; Learning reports preserve their actual saved version. FP projections, Captain qualification, user preferences and source allocator defaults are unchanged.
+
+## Controlled lineup selection and workload research
+
+- Added immutable public Analyst Reports comparisons for retrained salary/stacking feature ablations on the same frozen corrected candidate pool; all full portfolios, constraints and original controls remain visible.
+- Bounded the research joint selector with exact finite-threshold coverage solves and explicit inconclusive statuses rather than accepting an unproven result. Normal optimizer defaults are unchanged.
+- Corrected research-only lost-fumble scoring to DraftKings −1 and preserved superseded artifacts with an erratum; production scoring/projections were already correct.
+- Completed chronological role-relative opportunity transport and workload-proxy calibration diagnostics. Mixed/negative findings remain research-only; no live model promotion or user-setting change.
+
+## 2026-10-18 — Complete-lineup top-decile research prototype
+
+- Added bounded full-game candidate research replay in Analyst Reports, with paired historical role outcomes, explicit residual opportunity, frozen top-decile/mean controls and a labeled legacy sequential-policy adaptation. Research only; no live/default promotion.
+
+- Added contest-local tie-aware top-decile labels and canonical Captain-aware complete-roster features, with strict missing-projection handling.
+- Trained bounded interpretable Classic/Showdown research models on stored pregame inputs with whole-week chronological comparisons; retained source/coverage limitations.
+- Compared frozen model utilities under unchanged original portfolio controls, preserving player truth and old/highest-mean controls. No live default or entered-lineup change.
+
+## 2026-10-18 — Frozen scenario candidate breadth comparison
+
+- Added an explicit public research replay for saved Classic scenario-first inputs, including locked historical slates without operational lineup generation or exports.
+- Attempts two legal full alternatives per supported idea, preserves candidate variants and canonical distinct counts, and compares ordinal conditional coverage with highest baseline mean under existing hard controls.
+- Original optimizer runs, model projections, user preferences and live defaults remain unchanged; shared game/core risks and chronology limits are disclosed.
+
 # Release Notes
+
+Learning now recovers saved Analyst Classic/Showdown candidates and ambiguous entered-roster correspondences without inventing source IDs, ranks, objectives or submission origin. Frozen baseline means/P90 sums remain separate from conditional scenario scores; missing original source/code chronology stays unverified. Rebuilt reports use a new version and preserve older records.
+
+Learning Scan contest folder now imports Tiers and Single Stat results with explicit variant/scope review, immutable raw/correction records, saved-result reopen and typed weekly groups. Names, unsupported scoring components and forecast origin stay unverified where evidence is missing; financial Entry History is preserved.
+
+Showdown preparation now refreshes explicit native DraftKings questionable/unavailable designations using exact slate and native player IDs, preserving source clocks and unresolved roles. Blank statuses never establish health; Classic status behavior is unchanged.
+
+Saved Showdown QB-permission reports now recognize named Captain position exceptions using canonical slate QB identities. A named TE does not grant all QBs permission; explicit No QB Captain/No QBs and supported workload remain binding. Existing named exceptions are persisted through the UI without widening the global WR/RB default.
+
+Repaired merged Showdown Captain eligibility: broad search now shares an auditable workload gate using preserved pre-allocation observed counts/shares, current role clocks and recent participation. Established receiving roles survive one quiet game; secondary roles need recent corroboration. Unknown workload and unsupported expansion cannot pass on salary, marginal P90 or Analyst prose. Projections and FLEX eligibility remain unchanged; the legacy top-four policy remains a separate comparison. Underfilled portfolios also bind Captain exposure to their achieved size instead of spending the requested portfolio's allowance.
+
+Fixed cross-slate Operations errors and import receipts appearing under another slate. Showdown preparation now uses the current base FLEX salary minimum for role/status blocking, retains excluded players' unknown facts and model assessments in the audit, and requires preparation again before lowering that bound minimum. Raw identity checks and selectable-player evidence remain mandatory.
+
+Fixed an API-cached in-progress optimizer snapshot hiding the worker's completed saved lineups when reopening results. Nonterminal persisted runs now refresh from storage; completed and local-only runs retain normal caching.
+
+Saved-run history stops polling when all runs are finished; refresh it manually after activity elsewhere. History reads scope and limit before expanding report metadata. **Check upload readiness** now supports saved preliminary Classic lineups as well as Showdown: it verifies frozen identities, exclusions, current availability/roles, native IDs and roster legality, then enables a time-limited CSV download. Original preliminary reports and final-inactive status remain unchanged.
 
 Verified the accepted ensemble in an actual 285-player Sunday projection, including all 20 DST means/quantiles/Gold inputs and 265 unaffected non-DST means. Saved five preliminary lineups; a matched defense-only generation comparison changes 4/5 rosters. Normal availability guards remain unresolved and no entry/submission occurs. See `artifacts/dst_deployments/20261016/v1/FINAL_REPORT.md`.
 
@@ -2280,3 +2633,32 @@ Automatic native-pool lineup downloads: Single Stat now renders positional FLEX,
 Single Stat and Tiers: **Download lineup CSV** is available as soon as native identity, roster, format and lock checks pass, without a download acknowledgment checkbox. Coverage limitations remain visible; downloads do not submit entries.
 
 CSV download errors now appear in the workspace instead of saving an API JSON error as a file. Successful responses are checked for CSV content and the correct roster headers before a `.csv` download is started.
+
+### Reconstructed model-input gates — no activation
+
+- Preserved fixed baseline inputs and added explicit 67-team/261-player layouts with compatible HHS pressure contexts over three immediate prior scheduled games. Both model families share train-only preparation and exact known-label cohorts; source-vintage exclusions and unsupported2026 pressure remain unknown. No fits, settings or lineup changes in this package.
+
+- Added a separate prior-three-scheduled-game native MAN/ZONE context gate for both count consumers (78/272 ordered layouts). Retained classified versus unclassified/unknown denominators; no extra fits or activation are implied.
+
+- Added a116-team/339-player prefit workload/efficiency batch with exact prior scheduled windows and versioned all-native source-observed team labels. Preserved old labels/cohorts, per-head unknown exclusions and separate source/scored/excluded/unresolved accounting. No fitting or activation in this batch.
+
+- Completed four serial fixed offline tree/neural fits on116-team/339-player research inputs, with a separate train-only affine raw-count player recipe. Saved prior-key comparisons, role/zero strata, clipping and unresolved budget diagnostics remain explicit; mixed retrospective results do not authorize activation or changes to settings/lineups.
+
+- Added an offline joint-rush conditional-mean prefit contract with fixed prior-three all-role candidates, known outside rest, train-only preprocessing, exact historical group tensors, and explicit partial saved-baseline coverage. No model fit or live forecast changes.
+- Added a separately gated source-observed target/team-pass joint-mean prefit package on 279 fixed groups, excluding 28 unresolved target-event groups. Shared prior-only model core, separate remainder types and exact saved-baseline coverage are recorded; no actual fit or activation.
+
+- 2026-10-21 research: repaired source TD/try terminal, spike/upheld-replay and scoped native FTN throwaway proofs; added an event-boundary renewal experiment with explicit clock censoring/channel masks. Two state paths completed; capped/unknown paths prevent accuracy or live-promotion claims. See research/game_progression_pilot_20261020/v3/RESULTS.md.
+
+- 2026-10-21 SCENARIO-02 research: added native single-fumble and accepted-try transition proofs, retaining source barriers/provenance and unknown channels. Static audits clear terminal source barriers for 56 historical stops; 140 source stops and 72 censored stops remain unresolved. Added explicit failure details and [required continuation observations](research/game_progression_pilot_20261020/scenario_02/RECIPE.md); no new smoke, accuracy evaluation or live change.
+
+- 2026-10-21 SCENARIO-03 research: matched retained official gamebook final team/TAR totals to native game/date/period and certified regulation scope, providing ten of ten fixed-smoke side labels for pass attempts, carries, targets and physical plays. Kept original PBP replay/recipient masks and all prior artifacts; added 33 tests and a separately identified count-evidence receipt. No simulation, fit or live change.
+
+- 2026-10-21 SCENARIO-04 research: completed one separately identified 106-path targeted changed smoke under a 30s cap, preserving the original 270 finished records and 50 cap/failure placeholders plus 214 explicit skips. Added durable dispatch/result journals, source-prefix and cap/failure accounting tests. Nine complete states, 65 unknown source states and 32 censored successors still yield no supported joint-law paths or complete channel forecasts; live settings/projections unchanged.
+- 2026-10-21 source-state followup: native recovery and special-formation repairs certify recorded terminal source transitions for 21 of 36 previously unfinished-slot stops (31 of all 65 source stops), preserving uncertain yardage as unknown. One 10.474s all-TRAIN audit and 297 focused tests; 15 selected cases still need replay/possession/penalty evidence. Prior simulation results and live settings remain unchanged. See [remaining evidence requirements](research/game_progression_pilot_20261020/source_state_followup/RESULTS.md).
+- 2026-10-21 continuation research: marked those 15 source cases as deferred known limitations and added a read-only joint-mark/followup evidence diagnostic. One 1.623s cached audit found 29/32 newer censored draws crossing clock strata and 16 kneels; documented the clock/timeout/action-policy observation contract as the next step. 44 tests pass; unknown mass, prior results, simulation behavior and live settings remain unchanged. See [continuation findings](research/game_progression_pilot_20261020/continuation_followup/RESULTS.md).
+- 2026-10-21 observation contract: added a separate source-bound clock/timeout/action-policy research ledger preserving all 49,665 cached rows and linking 43,852 frozen TRAIN cycles. Validates source pre-event clocks, timeout budgets and score orientation while keeping terminal/enforcement/generated-policy evidence unknown. One 4.120s build under a 30s cap; 75 tests pass. No simulation, fit or live change. See [coverage and evidence gaps](research/game_progression_pilot_20261020/observation_contract/RESULTS.md).
+- 2026-10-21 timeout/control linkage: added separate native-event evidence for 2,132 reported timeouts, 2,089 corroborated budget debits and 1,949 frozen certified timeout clock links. Corrected the interpretation of timeout-bearing budget snapshots to include the current debit, preserving the old ledger. A 2.060s capped extraction and 98 tests pass; remaining game-clock/enforcement/policy gaps stay unknown. No fit, simulation or live change. See [evidence and timing amendment](research/game_progression_pilot_20261020/control_linkage/RESULTS.md).
+- 2026-10-21 remaining clock investigation: a 0.755s cached inventory found three runoff mentions and one reset instruction, retaining them as unadjudicated candidates without filling game-clock/enforcement state. Recorded a one-game raw-source feasibility gate and separately amended an older misleading timestamp interpretation. 114 tests pass; all prior results and live settings/projections unchanged. See [findings and next source gate](research/game_progression_pilot_20261020/clock_gap_investigation/RESULTS.md).
+- 2026-10-21 one-game raw feasibility: preserved one hash-verified RDS asset and decoded nested source tables using a temporary isolated reader. All 183 processed native IDs match 198 raw rows; 15 additional typed timeout/clock-stop observations include two reported two-minute warnings. Partial source-observation gate passes; play-end clock and restart/enforcement support remain unresolved. 123 tests pass; no model, simulation, source repair or live change. See [findings and inspection accounting](research/game_progression_pilot_20261020/raw_source_feasibility/RESULTS.md).
+- 2026-10-21 clock-stop amendment: saved the 15 qualified raw-only controls in a separate observation ledger, preserving source/native identity, raw ordinals and exact base-ledger anchor links. Two reported warning causes and 13 unknown causes; unsupported timeout debit, terminal and restart/policy fields remain unknown. One 0.913s build, 142 tests pass; original ledger/results and live behavior unchanged. See [amendment and validation](research/game_progression_pilot_20261020/clock_stop_amendment/RESULTS.md).
+- 2026-10-21 alternative timing sources: assessed one game's ESPN data and official gamebook plus public GSIS/SportsDataIO documentation. No new supported play-end clock or restart/enforcement records; documented clock-stream archive/synchronization requirements and provider-schema limits. Captures 1.366s, cached assessment 0.578s, 149 tests pass. Prior results/amendment and live settings/projections unchanged; no paid access, outreach, fit or simulation. See [bounded source comparison](research/game_progression_pilot_20261020/alternative_clock_sources/RESULTS.md).

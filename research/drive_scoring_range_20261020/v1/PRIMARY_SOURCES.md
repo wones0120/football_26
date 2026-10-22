@@ -1,0 +1,5 @@
+# Primary field definitions
+
+[nflfastR fast_scraper dictionary](https://nflfastr.com/reference/fast_scraper.html), inspected2026-10-20: order_sequence is NFL's provided ordering coordinate; drive_start/end_yard_line are team-half/yard-number field strings; drive_start/end_transition identify possession acquisition/loss; drive_play_id_started/ended identify source first/last plays. The generic dictionary does not settle whether a terminal field string represents a predecision LOS or a post-return landing for this revision. Actual indexed byte inspection and matched native terminal plays provide that additional evidence; primary definition and measured representation remain separate.
+
+The indexed source remains snapshot79230705-26c3-5cbd-af43-b26c9bb4e1bb at nflreadpy://pbp/2026. Original source byte/manifest/URI/capture contracts and separately completed-score original JSON status evidence are retained in the dependency receipts and new artifact provenance. No source is treated as original pregame availability simply because it was captured later.

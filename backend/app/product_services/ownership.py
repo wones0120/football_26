@@ -1169,6 +1169,9 @@ class OwnershipService:
         slate: str,
         roster_positions: pd.Series | None,
     ) -> str:
+        positions = set(roster_positions.dropna().astype(str).str.upper()) if roster_positions is not None else set()
+        if any(re.fullmatch(r'T[1-9][0-9]*',p) for p in positions) or positions == {'FLEX'}:
+            raise ValueError('Tiers/Single Stat standings require the typed Learning folder workflow; do not import as Classic ownership')
         if contest_format:
             normalized = str(contest_format).strip().lower()
             if normalized not in {"classic", "showdown"}:

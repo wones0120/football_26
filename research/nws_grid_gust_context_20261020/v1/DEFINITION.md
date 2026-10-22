@@ -1,0 +1,7 @@
+# G20-M06 — native NWS maximum forecast gust
+
+One preselected upcoming native game2026_07_NE_CHI, Soldier Field. Select the earliest supported upcoming CONUS native venue before querying any weather; no favorable-weather cohort search. Original /points provides forecastGridData link; original raw gridData geometry contains the authenticated native venue point. Unique source-valid interval start<=kickoff<end selects maximum windGust, not a preceding-hour measurement.
+
+Native value11.112 wmoUnit:km_h-1 converts by /3.6 to3.086666666666667m/s. Native interval2026-10-23T00:00Z/PT2H contains kickoff00:15Z. This is one grid observation/two team contexts. Scalar/range/null raw semantics retained: unsupported non-scalar value is unknown, no midpoint. Explicit update, observation and capture precede kickoff; point/grid link and full product validity verified. Original issuance, measurement height and averaging duration remain unknown. Native source product windowP7DT17H is retained;14day parser bound is a resource/schema guard, not a claim of a14day forecast.
+
+Official product definition: https://github.com/weather-gov/api/blob/master/gridpoints.md explicitly describes windGust as maximum wind gust. API discovery: https://www.weather.gov/documentation/services-web-api. No transfer from hourly windSpeed, observed gusts or a generic NDFD sampling definition. Approved registry/native schedule attribution remains separate from original weather receipt; no model/optimizer/serving activation or interior stadium condition claim.

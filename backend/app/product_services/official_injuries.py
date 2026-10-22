@@ -197,13 +197,29 @@ def refresh_official_injuries(engine, *, season, week, slate, games, slate_lock_
             WHERE s.season=:season AND s.week=:week AND LOWER(s.slate)=LOWER(:slate) AND s.source_system='draftkings'
         """), dict(season=season,week=week,slate=slate)).mappings()]
         aliases = [dict(r) for r in connection.execute(text("""
-            SELECT player_master_id,source_system,source_key,alias_name FROM public.player_alias
+            SELECT player_master_id,source_system,source_key,alias_name,team,position FROM public.player_alias
             WHERE player_master_id=ANY(:ids) OR source_system='nfl_official'
         """), {"ids":[s["player_id"] for s in salaries]}).mappings()]
-    players, unresolved = [], []
+    if not salaries:
+        raise ValueError('Official injury refresh requires a nonempty native salary pool')
+    players, unresolved, outside_position_domain = [], [], []
+    native_positions = {normalize_position(s['position']) for s in salaries}
     with engine.begin() as connection:
         for row in rows:
             if row["position"] not in {"QB","RB","WR","TE","K"}:
+                continue
+            if row['position'] not in native_positions:
+                # Classic has no kicker slot. Retain the raw official row and
+                # report its scope; it is not an unresolved native-slate actor.
+                linked = {str(a['player_master_id']) for a in aliases
+                          if a['source_system']==SOURCE and a['source_key']==row['source_key']
+                          and normalize_team(a.get('team'))==row['team']
+                          and normalize_position(a.get('position'))==row['position']}
+                if len(linked)==1:
+                    _record_identity(connection,row,next(iter(linked)),
+                        'source_native_id_outside_native_position_domain',season=season,week=week,slate=slate)
+                outside_position_domain.append(dict(source_key=row['source_key'],team=row['team'],
+                    position=row['position'],reason='Position absent from native salary pool; not a slate player context'))
                 continue
             player_id, reason = resolve_official_player(row, salaries, aliases)
             recorded = _record_identity(connection, row, player_id, reason, season=season,week=week,slate=slate)
@@ -223,4 +239,5 @@ def refresh_official_injuries(engine, *, season, week, slate, games, slate_lock_
                 game_status_rows=sum(bool(p["injury_status"]) for p in players),
                 practice_status_rows=sum(bool(p["evidence"]["practice_report"]["practice_status"]) for p in players),
                 blank_status_rows=sum(r["game_status"] is None for r in rows),identity_unresolved=[],
+                outside_native_position_domain=outside_position_domain,
                 missing_slate_teams=missing_teams, complete_team_coverage=not missing_teams)

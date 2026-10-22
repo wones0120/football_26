@@ -1,0 +1,5540 @@
+[
+  {
+    "table_schema": "public",
+    "table_name": "curated_player_game_participation",
+    "column_name": "curated_player_game_participation_id",
+    "data_type": "bigint"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "curated_player_game_participation",
+    "column_name": "season",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "curated_player_game_participation",
+    "column_name": "week",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "curated_player_game_participation",
+    "column_name": "game_id",
+    "data_type": "character varying"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "curated_player_game_participation",
+    "column_name": "game_type",
+    "data_type": "character varying"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "curated_player_game_participation",
+    "column_name": "player_master_id",
+    "data_type": "character varying"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "curated_player_game_participation",
+    "column_name": "player_name",
+    "data_type": "character varying"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "curated_player_game_participation",
+    "column_name": "team",
+    "data_type": "character varying"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "curated_player_game_participation",
+    "column_name": "opponent",
+    "data_type": "character varying"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "curated_player_game_participation",
+    "column_name": "position",
+    "data_type": "character varying"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "curated_player_game_participation",
+    "column_name": "roster_status",
+    "data_type": "character varying"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "curated_player_game_participation",
+    "column_name": "participation_status",
+    "data_type": "character varying"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "curated_player_game_participation",
+    "column_name": "participation_reason",
+    "data_type": "character varying"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "curated_player_game_participation",
+    "column_name": "offense_snaps",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "curated_player_game_participation",
+    "column_name": "offense_snap_share",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "curated_player_game_participation",
+    "column_name": "defense_snaps",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "curated_player_game_participation",
+    "column_name": "defense_snap_share",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "curated_player_game_participation",
+    "column_name": "st_snaps",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "curated_player_game_participation",
+    "column_name": "st_snap_share",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "curated_player_game_participation",
+    "column_name": "box_score_activity",
+    "data_type": "boolean"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "curated_player_game_participation",
+    "column_name": "roster_ingest_run_id",
+    "data_type": "character varying"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "curated_player_game_participation",
+    "column_name": "snap_ingest_run_id",
+    "data_type": "character varying"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "curated_player_game_participation",
+    "column_name": "created_at",
+    "data_type": "timestamp without time zone"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "raw_nfl_weekly_stat",
+    "column_name": "raw_nfl_weekly_stat_id",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "raw_nfl_weekly_stat",
+    "column_name": "ingest_run_id",
+    "data_type": "character varying"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "raw_nfl_weekly_stat",
+    "column_name": "source_system",
+    "data_type": "character varying"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "raw_nfl_weekly_stat",
+    "column_name": "season",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "raw_nfl_weekly_stat",
+    "column_name": "week",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "raw_nfl_weekly_stat",
+    "column_name": "player_id",
+    "data_type": "character varying"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "raw_nfl_weekly_stat",
+    "column_name": "player_name",
+    "data_type": "character varying"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "raw_nfl_weekly_stat",
+    "column_name": "team",
+    "data_type": "character varying"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "raw_nfl_weekly_stat",
+    "column_name": "opponent",
+    "data_type": "character varying"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "raw_nfl_weekly_stat",
+    "column_name": "position",
+    "data_type": "character varying"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "raw_nfl_weekly_stat",
+    "column_name": "game_id",
+    "data_type": "character varying"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "raw_nfl_weekly_stat",
+    "column_name": "raw_row_json",
+    "data_type": "json"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "raw_nfl_weekly_stat",
+    "column_name": "created_at",
+    "data_type": "timestamp without time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "active_projection_run",
+    "column_name": "season",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "active_projection_run",
+    "column_name": "week",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "active_projection_run",
+    "column_name": "slate_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "active_projection_run",
+    "column_name": "projection_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "active_projection_run",
+    "column_name": "selection_reason",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "active_projection_run",
+    "column_name": "selected_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "agent_question",
+    "column_name": "question_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "agent_question",
+    "column_name": "policy_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "agent_question",
+    "column_name": "variant_set_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "agent_question",
+    "column_name": "season",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "agent_question",
+    "column_name": "week",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "agent_question",
+    "column_name": "slate",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "agent_question",
+    "column_name": "trigger_type",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "agent_question",
+    "column_name": "priority",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "agent_question",
+    "column_name": "value_of_information_score",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "agent_question",
+    "column_name": "subject_player_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "agent_question",
+    "column_name": "subject_label",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "agent_question",
+    "column_name": "question_text",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "agent_question",
+    "column_name": "context_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "agent_question",
+    "column_name": "evidence_hash",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "agent_question",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "agent_question_answer",
+    "column_name": "answer_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "agent_question_answer",
+    "column_name": "question_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "agent_question_answer",
+    "column_name": "answer",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "agent_question_answer",
+    "column_name": "answer_text",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "agent_question_answer",
+    "column_name": "resulting_modifier_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "agent_question_answer",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "belief_impact_decision",
+    "column_name": "decision_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "belief_impact_decision",
+    "column_name": "preview_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "belief_impact_decision",
+    "column_name": "decision",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "belief_impact_decision",
+    "column_name": "note_text",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "belief_impact_decision",
+    "column_name": "approved_modifier_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "belief_impact_decision",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "belief_impact_preview",
+    "column_name": "preview_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "belief_impact_preview",
+    "column_name": "belief_version_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "belief_impact_preview",
+    "column_name": "belief_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "belief_impact_preview",
+    "column_name": "policy_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "belief_impact_preview",
+    "column_name": "season",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "belief_impact_preview",
+    "column_name": "week",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "belief_impact_preview",
+    "column_name": "slate",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "belief_impact_preview",
+    "column_name": "contest_format",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "belief_impact_preview",
+    "column_name": "objective",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "belief_impact_preview",
+    "column_name": "target_player_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "belief_impact_preview",
+    "column_name": "target_label",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "belief_impact_preview",
+    "column_name": "adjustment_pct",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "belief_impact_preview",
+    "column_name": "baseline_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "belief_impact_preview",
+    "column_name": "proposed_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "belief_impact_preview",
+    "column_name": "delta_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "belief_impact_preview",
+    "column_name": "modifier_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "belief_impact_preview",
+    "column_name": "lineage_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "belief_impact_preview",
+    "column_name": "notices_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "belief_impact_preview",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "classic_dynamic_thesis_shadow",
+    "column_name": "optimizer_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "classic_dynamic_thesis_shadow",
+    "column_name": "source_solver_sha256",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "classic_dynamic_thesis_shadow",
+    "column_name": "candidate_universe_sha256",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "classic_dynamic_thesis_shadow",
+    "column_name": "shadow_sha256",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "classic_dynamic_thesis_shadow",
+    "column_name": "shadow_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "classic_dynamic_thesis_shadow",
+    "column_name": "decision_cutoff_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "classic_dynamic_thesis_shadow",
+    "column_name": "first_kickoff_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "classic_dynamic_thesis_shadow",
+    "column_name": "frozen_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "classic_dynamic_thesis_shadow_v2",
+    "column_name": "optimizer_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "classic_dynamic_thesis_shadow_v2",
+    "column_name": "supersedes_shadow_sha256",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "classic_dynamic_thesis_shadow_v2",
+    "column_name": "source_solver_sha256",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "classic_dynamic_thesis_shadow_v2",
+    "column_name": "candidate_universe_sha256",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "classic_dynamic_thesis_shadow_v2",
+    "column_name": "shadow_sha256",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "classic_dynamic_thesis_shadow_v2",
+    "column_name": "shadow_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "classic_dynamic_thesis_shadow_v2",
+    "column_name": "decision_cutoff_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "classic_dynamic_thesis_shadow_v2",
+    "column_name": "first_kickoff_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "classic_dynamic_thesis_shadow_v2",
+    "column_name": "frozen_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "classic_dynamic_thesis_shadow_v3",
+    "column_name": "optimizer_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "classic_dynamic_thesis_shadow_v3",
+    "column_name": "supersedes_shadow_sha256",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "classic_dynamic_thesis_shadow_v3",
+    "column_name": "source_solver_sha256",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "classic_dynamic_thesis_shadow_v3",
+    "column_name": "candidate_universe_sha256",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "classic_dynamic_thesis_shadow_v3",
+    "column_name": "shadow_sha256",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "classic_dynamic_thesis_shadow_v3",
+    "column_name": "shadow_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "classic_dynamic_thesis_shadow_v3",
+    "column_name": "decision_cutoff_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "classic_dynamic_thesis_shadow_v3",
+    "column_name": "first_kickoff_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "classic_dynamic_thesis_shadow_v3",
+    "column_name": "frozen_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "classic_prospective_experiment",
+    "column_name": "optimizer_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "classic_prospective_experiment",
+    "column_name": "solver_snapshot_sha256",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "classic_prospective_experiment",
+    "column_name": "solver_snapshot_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "classic_prospective_experiment",
+    "column_name": "experiment_sha256",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "classic_prospective_experiment",
+    "column_name": "prelock_experiment_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "classic_prospective_experiment",
+    "column_name": "frozen_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "classic_prospective_experiment",
+    "column_name": "postgame_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "classic_prospective_experiment",
+    "column_name": "postgame_updated_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "contest_entry_assignment",
+    "column_name": "assignment_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "contest_entry_assignment",
+    "column_name": "portfolio_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "contest_entry_assignment",
+    "column_name": "template_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "contest_entry_assignment",
+    "column_name": "template_row_number",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "contest_entry_assignment",
+    "column_name": "entry_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "contest_entry_assignment",
+    "column_name": "contest_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "contest_entry_assignment",
+    "column_name": "lineup_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "contest_entry_assignment",
+    "column_name": "status",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "contest_entry_assignment",
+    "column_name": "assigned_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "contest_ownership_observation",
+    "column_name": "observation_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "contest_ownership_observation",
+    "column_name": "contest_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "contest_ownership_observation",
+    "column_name": "source_file_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "contest_ownership_observation",
+    "column_name": "season",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "contest_ownership_observation",
+    "column_name": "week",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "contest_ownership_observation",
+    "column_name": "slate",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "contest_ownership_observation",
+    "column_name": "player_display_name",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "contest_ownership_observation",
+    "column_name": "roster_position",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "contest_ownership_observation",
+    "column_name": "player_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "contest_ownership_observation",
+    "column_name": "resolution_status",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "contest_ownership_observation",
+    "column_name": "actual_ownership",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "contest_ownership_observation",
+    "column_name": "actual_points",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "contest_ownership_observation",
+    "column_name": "evidence_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "contest_ownership_observation",
+    "column_name": "recorded_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "data_quality_check",
+    "column_name": "quality_check_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "data_quality_check",
+    "column_name": "quality_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "data_quality_check",
+    "column_name": "check_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "data_quality_check",
+    "column_name": "category",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "data_quality_check",
+    "column_name": "status",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "data_quality_check",
+    "column_name": "severity",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "data_quality_check",
+    "column_name": "table_name",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "data_quality_check",
+    "column_name": "check_name",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "data_quality_check",
+    "column_name": "message",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "data_quality_check",
+    "column_name": "value_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "data_quality_check",
+    "column_name": "threshold",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "data_quality_check",
+    "column_name": "affected_scope_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "data_quality_check",
+    "column_name": "details_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "data_quality_check",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "data_quality_run",
+    "column_name": "quality_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "data_quality_run",
+    "column_name": "report_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "data_quality_run",
+    "column_name": "contract_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "data_quality_run",
+    "column_name": "trigger",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "data_quality_run",
+    "column_name": "season",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "data_quality_run",
+    "column_name": "week",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "data_quality_run",
+    "column_name": "slate",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "data_quality_run",
+    "column_name": "status",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "data_quality_run",
+    "column_name": "score",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "data_quality_run",
+    "column_name": "summary_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "data_quality_run",
+    "column_name": "source_context_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "data_quality_run",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dfs_contest",
+    "column_name": "contest_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dfs_contest",
+    "column_name": "source_file_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dfs_contest",
+    "column_name": "site",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dfs_contest",
+    "column_name": "slate_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dfs_contest",
+    "column_name": "season",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dfs_contest",
+    "column_name": "week",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dfs_contest",
+    "column_name": "contest_name",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dfs_contest",
+    "column_name": "contest_format",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dfs_contest",
+    "column_name": "entry_fee",
+    "data_type": "numeric"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dfs_contest",
+    "column_name": "field_size",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dfs_contest",
+    "column_name": "max_entries_per_user",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dfs_contest",
+    "column_name": "prize_pool",
+    "data_type": "numeric"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dfs_contest",
+    "column_name": "metadata_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dfs_contest",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dfs_contest",
+    "column_name": "updated_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dfs_contest",
+    "column_name": "contest_type",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dfs_contest_entry_result",
+    "column_name": "contest_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dfs_contest_entry_result",
+    "column_name": "entry_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dfs_contest_entry_result",
+    "column_name": "source_file_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dfs_contest_entry_result",
+    "column_name": "entry_name",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dfs_contest_entry_result",
+    "column_name": "rank",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dfs_contest_entry_result",
+    "column_name": "entry_points",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dfs_contest_entry_result",
+    "column_name": "lineup_text",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dfs_contest_entry_result",
+    "column_name": "ingested_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dfs_contest_entry_result",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dfs_contest_payout_tier",
+    "column_name": "contest_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dfs_contest_payout_tier",
+    "column_name": "min_rank",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dfs_contest_payout_tier",
+    "column_name": "max_rank",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dfs_contest_payout_tier",
+    "column_name": "payout",
+    "data_type": "numeric"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dfs_contest_payout_tier",
+    "column_name": "prize_description",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dfs_contest_payout_tier",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "digital_twin_variant",
+    "column_name": "variant_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "digital_twin_variant",
+    "column_name": "variant_set_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "digital_twin_variant",
+    "column_name": "variant_type",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "digital_twin_variant",
+    "column_name": "artifact_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "digital_twin_variant",
+    "column_name": "artifact_hash",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "digital_twin_variant",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "digital_twin_variant_set",
+    "column_name": "variant_set_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "digital_twin_variant_set",
+    "column_name": "policy_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "digital_twin_variant_set",
+    "column_name": "season",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "digital_twin_variant_set",
+    "column_name": "week",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "digital_twin_variant_set",
+    "column_name": "slate",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "digital_twin_variant_set",
+    "column_name": "contest_format",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "digital_twin_variant_set",
+    "column_name": "objective",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "digital_twin_variant_set",
+    "column_name": "projection_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "digital_twin_variant_set",
+    "column_name": "projection_data_cutoff_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "digital_twin_variant_set",
+    "column_name": "decision_cutoff_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "digital_twin_variant_set",
+    "column_name": "status",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "digital_twin_variant_set",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dim_game",
+    "column_name": "game_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dim_game",
+    "column_name": "season",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dim_game",
+    "column_name": "week",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dim_game",
+    "column_name": "game_date",
+    "data_type": "date"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dim_game",
+    "column_name": "kickoff_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dim_game",
+    "column_name": "home_team_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dim_game",
+    "column_name": "away_team_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dim_game",
+    "column_name": "roof",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dim_game",
+    "column_name": "surface",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dim_game",
+    "column_name": "neutral_site",
+    "data_type": "boolean"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dim_player",
+    "column_name": "player_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dim_player",
+    "column_name": "full_name",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dim_player",
+    "column_name": "first_name",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dim_player",
+    "column_name": "last_name",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dim_player",
+    "column_name": "birth_date",
+    "data_type": "date"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dim_player",
+    "column_name": "primary_position",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dim_player",
+    "column_name": "normalized_name",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dim_player",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dim_player",
+    "column_name": "updated_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dim_team",
+    "column_name": "team_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dim_team",
+    "column_name": "season",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dim_team",
+    "column_name": "team_abbr",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dim_team",
+    "column_name": "team_name",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dim_team",
+    "column_name": "conference",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dim_team",
+    "column_name": "division",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_contest_staged_file",
+    "column_name": "source_file_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_contest_staged_file",
+    "column_name": "contest_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_contest_staged_file",
+    "column_name": "file_name",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_contest_staged_file",
+    "column_name": "raw_file",
+    "data_type": "bytea"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_contest_staged_file",
+    "column_name": "first_staged_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_contest_staged_file",
+    "column_name": "resolved_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_contest_staged_file",
+    "column_name": "resolved_season",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_contest_staged_file",
+    "column_name": "resolved_week",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_contest_staged_file",
+    "column_name": "resolved_slate",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_entry_history_snapshot",
+    "column_name": "content_sha256",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_entry_history_snapshot",
+    "column_name": "original_path",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_entry_history_snapshot",
+    "column_name": "raw_content",
+    "data_type": "bytea"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_entry_history_snapshot",
+    "column_name": "entries_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_entry_history_snapshot",
+    "column_name": "imported_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_entry_template_file",
+    "column_name": "template_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_entry_template_file",
+    "column_name": "source_file_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_entry_template_file",
+    "column_name": "season",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_entry_template_file",
+    "column_name": "week",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_entry_template_file",
+    "column_name": "slate_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_entry_template_file",
+    "column_name": "columns_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_entry_template_file",
+    "column_name": "row_count",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_entry_template_file",
+    "column_name": "imported_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_entry_template_row",
+    "column_name": "template_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_entry_template_row",
+    "column_name": "row_number",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_entry_template_row",
+    "column_name": "entry_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_entry_template_row",
+    "column_name": "contest_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_entry_template_row",
+    "column_name": "contest_name",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_entry_template_row",
+    "column_name": "entry_fee",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_entry_template_row",
+    "column_name": "row_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_export_validation",
+    "column_name": "validation_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_export_validation",
+    "column_name": "portfolio_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_export_validation",
+    "column_name": "status",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_export_validation",
+    "column_name": "checks_run",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_export_validation",
+    "column_name": "errors_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_export_validation",
+    "column_name": "warnings_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_export_validation",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_upload_export",
+    "column_name": "export_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_upload_export",
+    "column_name": "portfolio_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_upload_export",
+    "column_name": "contest_format",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_upload_export",
+    "column_name": "file_name",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_upload_export",
+    "column_name": "row_count",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_upload_export",
+    "column_name": "content_sha256",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_upload_export",
+    "column_name": "columns_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_upload_export",
+    "column_name": "csv_content",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_upload_export",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "dk_upload_export",
+    "column_name": "validation_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "evaluation_record",
+    "column_name": "record_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "evaluation_record",
+    "column_name": "kind",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "evaluation_record",
+    "column_name": "optimizer_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "evaluation_record",
+    "column_name": "evidence_sha256",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "evaluation_record",
+    "column_name": "record_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "evaluation_record",
+    "column_name": "recorded_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "external_projection_benchmark",
+    "column_name": "benchmark_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "external_projection_benchmark",
+    "column_name": "source_name",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "external_projection_benchmark",
+    "column_name": "source_url",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "external_projection_benchmark",
+    "column_name": "season",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "external_projection_benchmark",
+    "column_name": "week",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "external_projection_benchmark",
+    "column_name": "slate_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "external_projection_benchmark",
+    "column_name": "captured_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "external_projection_benchmark",
+    "column_name": "raw_snapshot_uri",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "external_projection_benchmark",
+    "column_name": "raw_snapshot_sha256",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "external_projection_benchmark",
+    "column_name": "status",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "external_projection_benchmark",
+    "column_name": "unavailable_reason",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "external_projection_benchmark",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "external_projection_value",
+    "column_name": "benchmark_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "external_projection_value",
+    "column_name": "player_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "external_projection_value",
+    "column_name": "source_player_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "external_projection_value",
+    "column_name": "projection",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "external_projection_value",
+    "column_name": "value",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "external_projection_value",
+    "column_name": "classification",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_dst_game_actual",
+    "column_name": "season",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_dst_game_actual",
+    "column_name": "week",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_dst_game_actual",
+    "column_name": "game_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_dst_game_actual",
+    "column_name": "player_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_dst_game_actual",
+    "column_name": "team_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_dst_game_actual",
+    "column_name": "opponent_team_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_dst_game_actual",
+    "column_name": "is_home",
+    "data_type": "boolean"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_dst_game_actual",
+    "column_name": "sacks",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_dst_game_actual",
+    "column_name": "interceptions",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_dst_game_actual",
+    "column_name": "fumble_recoveries",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_dst_game_actual",
+    "column_name": "safeties",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_dst_game_actual",
+    "column_name": "interception_return_tds",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_dst_game_actual",
+    "column_name": "fumble_return_tds",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_dst_game_actual",
+    "column_name": "special_teams_tds",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_dst_game_actual",
+    "column_name": "blocked_kicks",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_dst_game_actual",
+    "column_name": "opponent_score",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_dst_game_actual",
+    "column_name": "charged_points_allowed",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_dst_game_actual",
+    "column_name": "points_allowed_score",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_dst_game_actual",
+    "column_name": "total_line",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_dst_game_actual",
+    "column_name": "spread_line",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_dst_game_actual",
+    "column_name": "opponent_implied_points",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_dst_game_actual",
+    "column_name": "reconstructed_dk_points",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_dst_game_actual",
+    "column_name": "observed_dk_points",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_dst_game_actual",
+    "column_name": "dk_points",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_dst_game_actual",
+    "column_name": "scoring_source",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_dst_game_actual",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_player_game_actual",
+    "column_name": "season",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_player_game_actual",
+    "column_name": "week",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_player_game_actual",
+    "column_name": "game_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_player_game_actual",
+    "column_name": "player_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_player_game_actual",
+    "column_name": "team_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_player_game_actual",
+    "column_name": "opponent_team_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_player_game_actual",
+    "column_name": "position",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_player_game_actual",
+    "column_name": "dk_points",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_player_game_actual",
+    "column_name": "fd_points",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_player_game_actual",
+    "column_name": "snaps",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_player_game_actual",
+    "column_name": "snap_share",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_player_game_actual",
+    "column_name": "routes",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_player_game_actual",
+    "column_name": "targets",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_player_game_actual",
+    "column_name": "carries",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_player_game_actual",
+    "column_name": "receptions",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_player_game_actual",
+    "column_name": "receiving_yards",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_player_game_actual",
+    "column_name": "rushing_yards",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_player_game_actual",
+    "column_name": "passing_yards",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_player_game_actual",
+    "column_name": "tds",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_player_game_actual",
+    "column_name": "turnovers",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "fact_player_game_actual",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "feature_generation_run",
+    "column_name": "feature_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "feature_generation_run",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "feature_generation_run",
+    "column_name": "training_cutoff",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "feature_generation_run",
+    "column_name": "source_versions_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "feature_generation_run",
+    "column_name": "feature_set_hash",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "feature_generation_run",
+    "column_name": "status",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "feature_player_game",
+    "column_name": "feature_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "feature_player_game",
+    "column_name": "season",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "feature_player_game",
+    "column_name": "week",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "feature_player_game",
+    "column_name": "game_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "feature_player_game",
+    "column_name": "player_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "feature_player_game",
+    "column_name": "feature_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "feature_player_game",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "gpp_shadow_experiment",
+    "column_name": "experiment_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "gpp_shadow_experiment",
+    "column_name": "season",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "gpp_shadow_experiment",
+    "column_name": "week",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "gpp_shadow_experiment",
+    "column_name": "slate",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "gpp_shadow_experiment",
+    "column_name": "contest_format",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "gpp_shadow_experiment",
+    "column_name": "snapshot_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "gpp_shadow_experiment",
+    "column_name": "registered_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "gpp_shadow_report",
+    "column_name": "report_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "gpp_shadow_report",
+    "column_name": "experiment_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "gpp_shadow_report",
+    "column_name": "status",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "gpp_shadow_report",
+    "column_name": "report_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "gpp_shadow_report",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "human_belief",
+    "column_name": "belief_version_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "human_belief",
+    "column_name": "belief_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "human_belief",
+    "column_name": "belief_version",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "human_belief",
+    "column_name": "supersedes_version_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "human_belief",
+    "column_name": "operation",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "human_belief",
+    "column_name": "status",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "human_belief",
+    "column_name": "scope_type",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "human_belief",
+    "column_name": "subject_label",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "human_belief",
+    "column_name": "subject_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "human_belief",
+    "column_name": "season",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "human_belief",
+    "column_name": "week",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "human_belief",
+    "column_name": "slate",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "human_belief",
+    "column_name": "contest_format",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "human_belief",
+    "column_name": "objective",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "human_belief",
+    "column_name": "direction",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "human_belief",
+    "column_name": "strength",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "human_belief",
+    "column_name": "confidence",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "human_belief",
+    "column_name": "thought_text",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "human_belief",
+    "column_name": "evidence_text",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "human_belief",
+    "column_name": "expires_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "human_belief",
+    "column_name": "is_retrospective",
+    "data_type": "boolean"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "human_belief",
+    "column_name": "impact_status",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "human_belief",
+    "column_name": "source",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "human_belief",
+    "column_name": "metadata_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "human_belief",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "identity_quarantine",
+    "column_name": "identity_quarantine_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "identity_quarantine",
+    "column_name": "entity_type",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "identity_quarantine",
+    "column_name": "source_schema",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "identity_quarantine",
+    "column_name": "source_table",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "identity_quarantine",
+    "column_name": "source_record_key",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "identity_quarantine",
+    "column_name": "source_system",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "identity_quarantine",
+    "column_name": "season",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "identity_quarantine",
+    "column_name": "week",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "identity_quarantine",
+    "column_name": "slate",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "identity_quarantine",
+    "column_name": "source_player_key",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "identity_quarantine",
+    "column_name": "display_name",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "identity_quarantine",
+    "column_name": "team_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "identity_quarantine",
+    "column_name": "position",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "identity_quarantine",
+    "column_name": "reason_code",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "identity_quarantine",
+    "column_name": "candidate_player_ids",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "identity_quarantine",
+    "column_name": "status",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "identity_quarantine",
+    "column_name": "resolved_player_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "identity_quarantine",
+    "column_name": "resolution_reason",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "identity_quarantine",
+    "column_name": "first_seen_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "identity_quarantine",
+    "column_name": "updated_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "identity_quarantine",
+    "column_name": "resolved_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "import_batch",
+    "column_name": "batch_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "import_batch",
+    "column_name": "directory",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "import_batch",
+    "column_name": "dry_run",
+    "data_type": "boolean"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "import_batch",
+    "column_name": "started_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "import_batch",
+    "column_name": "completed_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "import_batch",
+    "column_name": "discovered",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "import_batch",
+    "column_name": "imported",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "import_batch",
+    "column_name": "deduplicated",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "import_batch",
+    "column_name": "skipped",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "import_batch",
+    "column_name": "failed",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "import_batch",
+    "column_name": "staged",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "import_batch_file",
+    "column_name": "batch_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "import_batch_file",
+    "column_name": "file_number",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "import_batch_file",
+    "column_name": "source_file_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "import_batch_file",
+    "column_name": "path",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "import_batch_file",
+    "column_name": "file_type",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "import_batch_file",
+    "column_name": "status",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "import_batch_file",
+    "column_name": "season",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "import_batch_file",
+    "column_name": "week",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "import_batch_file",
+    "column_name": "slate_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "import_batch_file",
+    "column_name": "contest_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "import_batch_file",
+    "column_name": "template_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "import_batch_file",
+    "column_name": "rows_written",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "import_batch_file",
+    "column_name": "message",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "import_batch_file",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "learning_run",
+    "column_name": "learning_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "learning_run",
+    "column_name": "projection_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "learning_run",
+    "column_name": "rule_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "learning_run",
+    "column_name": "season",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "learning_run",
+    "column_name": "week",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "learning_run",
+    "column_name": "status",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "learning_run",
+    "column_name": "projections_evaluated",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "learning_run",
+    "column_name": "rules_evaluated",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "learning_run",
+    "column_name": "metrics_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "learning_run",
+    "column_name": "recommendations_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "learning_run",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "lineup",
+    "column_name": "lineup_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "lineup",
+    "column_name": "optimizer_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "lineup",
+    "column_name": "lineup_number",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "lineup",
+    "column_name": "salary_used",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "lineup",
+    "column_name": "projected_mean",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "lineup",
+    "column_name": "projected_p90",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "lineup",
+    "column_name": "ownership_sum",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "lineup",
+    "column_name": "leverage_score",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "lineup",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "lineup",
+    "column_name": "projected_median",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "lineup",
+    "column_name": "projected_floor",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "lineup",
+    "column_name": "objective_score",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "lineup",
+    "column_name": "average_role_certainty",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "lineup",
+    "column_name": "fragility_penalty",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "lineup_constraint_explanation",
+    "column_name": "explanation_id",
+    "data_type": "bigint"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "lineup_constraint_explanation",
+    "column_name": "lineup_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "lineup_constraint_explanation",
+    "column_name": "constraint_name",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "lineup_constraint_explanation",
+    "column_name": "constraint_status",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "lineup_constraint_explanation",
+    "column_name": "explanation_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "lineup_constraint_explanation",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "lineup_player",
+    "column_name": "lineup_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "lineup_player",
+    "column_name": "slot_index",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "lineup_player",
+    "column_name": "player_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "lineup_player",
+    "column_name": "roster_position",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "lineup_player",
+    "column_name": "salary",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "lineup_player",
+    "column_name": "projection",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "lineup_player",
+    "column_name": "projected_p90",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "lineup_player",
+    "column_name": "ownership_projection",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "lineup_player",
+    "column_name": "player_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "lineup_portfolio",
+    "column_name": "portfolio_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "lineup_portfolio",
+    "column_name": "portfolio_name",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "lineup_portfolio",
+    "column_name": "optimizer_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "lineup_portfolio",
+    "column_name": "template_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "lineup_portfolio",
+    "column_name": "season",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "lineup_portfolio",
+    "column_name": "week",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "lineup_portfolio",
+    "column_name": "slate_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "lineup_portfolio",
+    "column_name": "contest_format",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "lineup_portfolio",
+    "column_name": "objective",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "lineup_portfolio",
+    "column_name": "status",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "lineup_portfolio",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "lineup_portfolio",
+    "column_name": "updated_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "market_snapshot",
+    "column_name": "market_snapshot_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "market_snapshot",
+    "column_name": "source_snapshot_id",
+    "data_type": "character varying"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "market_snapshot",
+    "column_name": "ingest_run_id",
+    "data_type": "character varying"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "market_snapshot",
+    "column_name": "season",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "market_snapshot",
+    "column_name": "week",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "market_snapshot",
+    "column_name": "game_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "market_snapshot",
+    "column_name": "home_team",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "market_snapshot",
+    "column_name": "away_team",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "market_snapshot",
+    "column_name": "kickoff_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "market_snapshot",
+    "column_name": "game_total",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "market_snapshot",
+    "column_name": "home_spread",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "market_snapshot",
+    "column_name": "source",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "market_snapshot",
+    "column_name": "source_game_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "market_snapshot",
+    "column_name": "observed_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "market_snapshot",
+    "column_name": "ingested_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "market_snapshot",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_artifact",
+    "column_name": "model_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_artifact",
+    "column_name": "artifact_uri",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_artifact",
+    "column_name": "artifact_sha256",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_artifact",
+    "column_name": "artifact_bytes",
+    "data_type": "bytea"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_artifact",
+    "column_name": "model_version",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_artifact",
+    "column_name": "feature_schema_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_artifact",
+    "column_name": "training_cutoff",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_artifact",
+    "column_name": "training_dataset_sha256",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_artifact",
+    "column_name": "code_hash",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_artifact",
+    "column_name": "git_revision",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_artifact",
+    "column_name": "calibration_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_artifact",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_challenger_evaluation",
+    "column_name": "evaluation_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_challenger_evaluation",
+    "column_name": "season",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_challenger_evaluation",
+    "column_name": "week",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_challenger_evaluation",
+    "column_name": "slate_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_challenger_evaluation",
+    "column_name": "champion_projection_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_challenger_evaluation",
+    "column_name": "challenger_projection_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_challenger_evaluation",
+    "column_name": "data_window_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_challenger_evaluation",
+    "column_name": "champion_feature_set_hash",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_challenger_evaluation",
+    "column_name": "challenger_feature_set_hash",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_challenger_evaluation",
+    "column_name": "champion_code_hash",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_challenger_evaluation",
+    "column_name": "challenger_code_hash",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_challenger_evaluation",
+    "column_name": "gate_policy_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_challenger_evaluation",
+    "column_name": "gate_results_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_challenger_evaluation",
+    "column_name": "status",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_challenger_evaluation",
+    "column_name": "evaluation_hash",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_challenger_evaluation",
+    "column_name": "evaluated_by",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_challenger_evaluation",
+    "column_name": "evidence_uri",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_challenger_evaluation",
+    "column_name": "notes",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_challenger_evaluation",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_promotion_decision",
+    "column_name": "decision_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_promotion_decision",
+    "column_name": "evaluation_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_promotion_decision",
+    "column_name": "action",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_promotion_decision",
+    "column_name": "approved_by",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_promotion_decision",
+    "column_name": "approval_reason",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_promotion_decision",
+    "column_name": "previous_projection_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_promotion_decision",
+    "column_name": "selected_projection_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_promotion_decision",
+    "column_name": "rollback_of_decision_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_promotion_decision",
+    "column_name": "decision_hash",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_promotion_decision",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_registry",
+    "column_name": "model_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_registry",
+    "column_name": "model_name",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_registry",
+    "column_name": "model_version",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_registry",
+    "column_name": "trained_on_start",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_registry",
+    "column_name": "trained_on_end",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_registry",
+    "column_name": "feature_set_hash",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_registry",
+    "column_name": "metrics_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_registry",
+    "column_name": "artifact_uri",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_registry",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_run",
+    "column_name": "model_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_run",
+    "column_name": "model_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_run",
+    "column_name": "feature_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_run",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_run",
+    "column_name": "data_cutoff_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_run",
+    "column_name": "params_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "model_run",
+    "column_name": "status",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "optimizer_run",
+    "column_name": "optimizer_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "optimizer_run",
+    "column_name": "projection_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "optimizer_run",
+    "column_name": "rule_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "optimizer_run",
+    "column_name": "slate_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "optimizer_run",
+    "column_name": "season",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "optimizer_run",
+    "column_name": "week",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "optimizer_run",
+    "column_name": "contest_format",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "optimizer_run",
+    "column_name": "objective",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "optimizer_run",
+    "column_name": "strategy",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "optimizer_run",
+    "column_name": "objective_config_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "optimizer_run",
+    "column_name": "constraint_config_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "optimizer_run",
+    "column_name": "data_cutoff_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "optimizer_run",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "optimizer_run",
+    "column_name": "updated_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "optimizer_run",
+    "column_name": "status",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "optimizer_run",
+    "column_name": "message",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "ownership_model_run",
+    "column_name": "ownership_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "ownership_model_run",
+    "column_name": "model_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "ownership_model_run",
+    "column_name": "season",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "ownership_model_run",
+    "column_name": "week",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "ownership_model_run",
+    "column_name": "slate_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "ownership_model_run",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "ownership_model_run",
+    "column_name": "data_cutoff_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "ownership_model_run",
+    "column_name": "training_rows",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "ownership_model_run",
+    "column_name": "params_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "ownership_model_run",
+    "column_name": "metrics_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "ownership_model_run",
+    "column_name": "status",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "ownership_projection",
+    "column_name": "ownership_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "ownership_projection",
+    "column_name": "season",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "ownership_projection",
+    "column_name": "week",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "ownership_projection",
+    "column_name": "slate_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "ownership_projection",
+    "column_name": "player_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "ownership_projection",
+    "column_name": "roster_position",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "ownership_projection",
+    "column_name": "projected_ownership",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "ownership_projection",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "ownership_projection",
+    "column_name": "data_cutoff_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "ownership_projection",
+    "column_name": "feature_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_alias",
+    "column_name": "alias_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_alias",
+    "column_name": "player_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_alias",
+    "column_name": "source",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_alias",
+    "column_name": "source_player_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_alias",
+    "column_name": "source_player_name",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_alias",
+    "column_name": "normalized_name",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_alias",
+    "column_name": "confidence",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_alias",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_outcome_event",
+    "column_name": "event_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_outcome_event",
+    "column_name": "season",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_outcome_event",
+    "column_name": "week",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_outcome_event",
+    "column_name": "slate",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_outcome_event",
+    "column_name": "player_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_outcome_event",
+    "column_name": "tag",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_outcome_event",
+    "column_name": "evidence",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_outcome_event",
+    "column_name": "source_url",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_outcome_event",
+    "column_name": "observed_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_outcome_event",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_projection",
+    "column_name": "projection_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_projection",
+    "column_name": "model_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_projection",
+    "column_name": "season",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_projection",
+    "column_name": "week",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_projection",
+    "column_name": "game_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_projection",
+    "column_name": "slate_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_projection",
+    "column_name": "player_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_projection",
+    "column_name": "mean",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_projection",
+    "column_name": "median",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_projection",
+    "column_name": "p10",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_projection",
+    "column_name": "p25",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_projection",
+    "column_name": "p75",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_projection",
+    "column_name": "p90",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_projection",
+    "column_name": "stddev",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_projection",
+    "column_name": "ceiling_prob",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_projection",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_projection",
+    "column_name": "data_cutoff_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_projection",
+    "column_name": "calibration_method",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_projection",
+    "column_name": "calibration_position",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_projection",
+    "column_name": "calibration_role",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_projection",
+    "column_name": "calibration_sample_size",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_simulation",
+    "column_name": "simulation_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_simulation",
+    "column_name": "player_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_simulation",
+    "column_name": "player_display_name",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_simulation",
+    "column_name": "position",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_simulation",
+    "column_name": "salary",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_simulation",
+    "column_name": "projection_mean",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_simulation",
+    "column_name": "optimal_lineup_count",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_simulation",
+    "column_name": "optimal_lineup_probability",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_simulation",
+    "column_name": "field_ownership",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_simulation",
+    "column_name": "leverage_score",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "player_simulation",
+    "column_name": "result_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "portfolio_lineup",
+    "column_name": "portfolio_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "portfolio_lineup",
+    "column_name": "lineup_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "portfolio_lineup",
+    "column_name": "portfolio_lineup_number",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "portfolio_lineup",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "projection_evaluation",
+    "column_name": "evaluation_id",
+    "data_type": "bigint"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "projection_evaluation",
+    "column_name": "learning_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "projection_evaluation",
+    "column_name": "projection_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "projection_evaluation",
+    "column_name": "season",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "projection_evaluation",
+    "column_name": "week",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "projection_evaluation",
+    "column_name": "game_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "projection_evaluation",
+    "column_name": "player_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "projection_evaluation",
+    "column_name": "projected_mean",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "projection_evaluation",
+    "column_name": "projected_p90",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "projection_evaluation",
+    "column_name": "actual_points",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "projection_evaluation",
+    "column_name": "absolute_error",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "projection_evaluation",
+    "column_name": "squared_error",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "projection_evaluation",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "projection_run",
+    "column_name": "projection_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "projection_run",
+    "column_name": "model_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "projection_run",
+    "column_name": "season",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "projection_run",
+    "column_name": "week",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "projection_run",
+    "column_name": "slate_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "projection_run",
+    "column_name": "row_count",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "projection_run",
+    "column_name": "data_cutoff_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "projection_run",
+    "column_name": "status",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "projection_run",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "raw_thought_candidate",
+    "column_name": "candidate_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "raw_thought_candidate",
+    "column_name": "capture_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "raw_thought_candidate",
+    "column_name": "ordinal",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "raw_thought_candidate",
+    "column_name": "scope_type",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "raw_thought_candidate",
+    "column_name": "subject_label",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "raw_thought_candidate",
+    "column_name": "subject_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "raw_thought_candidate",
+    "column_name": "season",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "raw_thought_candidate",
+    "column_name": "week",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "raw_thought_candidate",
+    "column_name": "slate",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "raw_thought_candidate",
+    "column_name": "contest_format",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "raw_thought_candidate",
+    "column_name": "objective",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "raw_thought_candidate",
+    "column_name": "direction",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "raw_thought_candidate",
+    "column_name": "strength",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "raw_thought_candidate",
+    "column_name": "confidence",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "raw_thought_candidate",
+    "column_name": "thought_text",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "raw_thought_candidate",
+    "column_name": "extraction_reason",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "raw_thought_candidate",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "raw_thought_candidate_decision",
+    "column_name": "decision_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "raw_thought_candidate_decision",
+    "column_name": "candidate_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "raw_thought_candidate_decision",
+    "column_name": "decision",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "raw_thought_candidate_decision",
+    "column_name": "belief_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "raw_thought_candidate_decision",
+    "column_name": "belief_version_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "raw_thought_candidate_decision",
+    "column_name": "reviewed_payload_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "raw_thought_candidate_decision",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "raw_thought_capture",
+    "column_name": "capture_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "raw_thought_capture",
+    "column_name": "context_type",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "raw_thought_capture",
+    "column_name": "raw_text",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "raw_thought_capture",
+    "column_name": "subject_label",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "raw_thought_capture",
+    "column_name": "subject_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "raw_thought_capture",
+    "column_name": "season",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "raw_thought_capture",
+    "column_name": "week",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "raw_thought_capture",
+    "column_name": "slate",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "raw_thought_capture",
+    "column_name": "contest_format",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "raw_thought_capture",
+    "column_name": "objective",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "raw_thought_capture",
+    "column_name": "extraction_policy_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "raw_thought_capture",
+    "column_name": "notices_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "raw_thought_capture",
+    "column_name": "source",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "raw_thought_capture",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "rule_evaluation",
+    "column_name": "evaluation_id",
+    "data_type": "bigint"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "rule_evaluation",
+    "column_name": "learning_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "rule_evaluation",
+    "column_name": "rule_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "rule_evaluation",
+    "column_name": "rule_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "rule_evaluation",
+    "column_name": "rule_version",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "rule_evaluation",
+    "column_name": "season",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "rule_evaluation",
+    "column_name": "week",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "rule_evaluation",
+    "column_name": "game_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "rule_evaluation",
+    "column_name": "player_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "rule_evaluation",
+    "column_name": "mean_before",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "rule_evaluation",
+    "column_name": "mean_after",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "rule_evaluation",
+    "column_name": "actual_points",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "rule_evaluation",
+    "column_name": "mae_before",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "rule_evaluation",
+    "column_name": "mae_after",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "rule_evaluation",
+    "column_name": "improved",
+    "data_type": "boolean"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "rule_evaluation",
+    "column_name": "delta_mae",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "rule_evaluation",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "saved_dk_contest",
+    "column_name": "contest_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "saved_dk_contest",
+    "column_name": "url",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "saved_dk_contest",
+    "column_name": "season",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "saved_dk_contest",
+    "column_name": "week",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "saved_dk_contest",
+    "column_name": "slate",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "saved_dk_contest",
+    "column_name": "contest_format",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "saved_dk_contest",
+    "column_name": "contest_type",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "saved_dk_contest",
+    "column_name": "name",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "saved_dk_contest",
+    "column_name": "draft_group_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "saved_dk_contest",
+    "column_name": "active",
+    "data_type": "boolean"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "saved_dk_contest",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "saved_dk_contest",
+    "column_name": "updated_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "saved_dk_contest_observation",
+    "column_name": "observation_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "saved_dk_contest_observation",
+    "column_name": "contest_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "saved_dk_contest_observation",
+    "column_name": "observed_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "saved_dk_contest_observation",
+    "column_name": "observation_reason",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "saved_dk_contest_observation",
+    "column_name": "source",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "saved_dk_contest_observation",
+    "column_name": "source_sha256",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "saved_dk_contest_observation",
+    "column_name": "source_payload_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "saved_dk_contest_observation",
+    "column_name": "contest_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "saved_dk_contest_observation",
+    "column_name": "error",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "saved_dk_contest_observation",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "showdown_selection_decision",
+    "column_name": "decision_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "showdown_selection_decision",
+    "column_name": "optimizer_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "showdown_selection_decision",
+    "column_name": "review_hash",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "showdown_selection_decision",
+    "column_name": "revision",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "showdown_selection_decision",
+    "column_name": "previous_decision_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "showdown_selection_decision",
+    "column_name": "idempotency_key",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "showdown_selection_decision",
+    "column_name": "request_hash",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "showdown_selection_decision",
+    "column_name": "status",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "showdown_selection_decision",
+    "column_name": "decided_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "showdown_selection_decision",
+    "column_name": "kickoff_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "showdown_selection_decision",
+    "column_name": "record_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "showdown_selection_outcome",
+    "column_name": "outcome_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "showdown_selection_outcome",
+    "column_name": "decision_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "showdown_selection_outcome",
+    "column_name": "learning_report_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "showdown_selection_outcome",
+    "column_name": "evaluated_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "showdown_selection_outcome",
+    "column_name": "outcome_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "showdown_selection_review",
+    "column_name": "review_hash",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "showdown_selection_review",
+    "column_name": "optimizer_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "showdown_selection_review",
+    "column_name": "review_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "showdown_selection_review",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "simulation_run",
+    "column_name": "simulation_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "simulation_run",
+    "column_name": "simulation_model_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "simulation_run",
+    "column_name": "projection_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "simulation_run",
+    "column_name": "ownership_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "simulation_run",
+    "column_name": "season",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "simulation_run",
+    "column_name": "week",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "simulation_run",
+    "column_name": "slate_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "simulation_run",
+    "column_name": "contest_format",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "simulation_run",
+    "column_name": "num_simulations",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "simulation_run",
+    "column_name": "successful_simulations",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "simulation_run",
+    "column_name": "seed",
+    "data_type": "bigint"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "simulation_run",
+    "column_name": "salary_cap",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "simulation_run",
+    "column_name": "roster_size",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "simulation_run",
+    "column_name": "params_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "simulation_run",
+    "column_name": "data_cutoff_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "simulation_run",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "simulation_run",
+    "column_name": "status",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "simulation_run",
+    "column_name": "message",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "skill_exposure_decision",
+    "column_name": "decision_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "skill_exposure_decision",
+    "column_name": "optimizer_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "skill_exposure_decision",
+    "column_name": "player_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "skill_exposure_decision",
+    "column_name": "selected_exposure",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "skill_exposure_decision",
+    "column_name": "decision",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "skill_exposure_decision",
+    "column_name": "requested_cap",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "skill_exposure_decision",
+    "column_name": "resulting_optimizer_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "skill_exposure_decision",
+    "column_name": "reason",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "skill_exposure_decision",
+    "column_name": "decided_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "skill_exposure_decision",
+    "column_name": "first_kickoff_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "slate_learning_report",
+    "column_name": "report_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "slate_learning_report",
+    "column_name": "contract_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "slate_learning_report",
+    "column_name": "season",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "slate_learning_report",
+    "column_name": "week",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "slate_learning_report",
+    "column_name": "slate",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "slate_learning_report",
+    "column_name": "entry_user",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "slate_learning_report",
+    "column_name": "evidence_hash",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "slate_learning_report",
+    "column_name": "status",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "slate_learning_report",
+    "column_name": "source_file_ids_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "slate_learning_report",
+    "column_name": "run_ids_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "slate_learning_report",
+    "column_name": "report_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "slate_learning_report",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "slate_learning_run_detail",
+    "column_name": "detail_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "slate_learning_run_detail",
+    "column_name": "optimizer_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "slate_learning_run_detail",
+    "column_name": "evidence_hash",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "slate_learning_run_detail",
+    "column_name": "candidate_count",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "slate_learning_run_detail",
+    "column_name": "detail_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "slate_learning_run_detail",
+    "column_name": "correlation_samples_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "slate_learning_run_detail",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "snapshot_injury_status",
+    "column_name": "snapshot_injury_id",
+    "data_type": "bigint"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "snapshot_injury_status",
+    "column_name": "season",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "snapshot_injury_status",
+    "column_name": "week",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "snapshot_injury_status",
+    "column_name": "slate",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "snapshot_injury_status",
+    "column_name": "game_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "snapshot_injury_status",
+    "column_name": "player_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "snapshot_injury_status",
+    "column_name": "team_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "snapshot_injury_status",
+    "column_name": "position",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "snapshot_injury_status",
+    "column_name": "injury_status",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "snapshot_injury_status",
+    "column_name": "injury_details",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "snapshot_injury_status",
+    "column_name": "as_of",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "snapshot_injury_status",
+    "column_name": "source",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "snapshot_salary",
+    "column_name": "snapshot_salary_id",
+    "data_type": "bigint"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "snapshot_salary",
+    "column_name": "slate_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "snapshot_salary",
+    "column_name": "season",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "snapshot_salary",
+    "column_name": "week",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "snapshot_salary",
+    "column_name": "slate",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "snapshot_salary",
+    "column_name": "player_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "snapshot_salary",
+    "column_name": "site",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "snapshot_salary",
+    "column_name": "site_player_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "snapshot_salary",
+    "column_name": "salary",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "snapshot_salary",
+    "column_name": "roster_position",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "snapshot_salary",
+    "column_name": "team_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "snapshot_salary",
+    "column_name": "opponent_team_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "snapshot_salary",
+    "column_name": "game_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "snapshot_salary",
+    "column_name": "as_of",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "snapshot_salary",
+    "column_name": "source",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "snapshot_salary",
+    "column_name": "player_status",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "source_file_import",
+    "column_name": "source_file_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "source_file_import",
+    "column_name": "source_type",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "source_file_import",
+    "column_name": "content_sha256",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "source_file_import",
+    "column_name": "original_path",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "source_file_import",
+    "column_name": "file_name",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "source_file_import",
+    "column_name": "file_size_bytes",
+    "data_type": "bigint"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "source_file_import",
+    "column_name": "first_ingested_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "source_file_import",
+    "column_name": "last_ingested_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "source_file_import",
+    "column_name": "metadata_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_adjusted_projection",
+    "column_name": "rule_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_adjusted_projection",
+    "column_name": "projection_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_adjusted_projection",
+    "column_name": "season",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_adjusted_projection",
+    "column_name": "week",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_adjusted_projection",
+    "column_name": "game_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_adjusted_projection",
+    "column_name": "slate_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_adjusted_projection",
+    "column_name": "player_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_adjusted_projection",
+    "column_name": "base_mean",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_adjusted_projection",
+    "column_name": "adjusted_mean",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_adjusted_projection",
+    "column_name": "base_p90",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_adjusted_projection",
+    "column_name": "adjusted_p90",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_adjusted_projection",
+    "column_name": "reason_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_adjusted_projection",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_rule",
+    "column_name": "rule_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_rule",
+    "column_name": "rule_name",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_rule",
+    "column_name": "rule_type",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_rule",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_rule_application",
+    "column_name": "rule_application_id",
+    "data_type": "bigint"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_rule_application",
+    "column_name": "rule_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_rule_application",
+    "column_name": "rule_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_rule_application",
+    "column_name": "rule_version",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_rule_application",
+    "column_name": "projection_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_rule_application",
+    "column_name": "player_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_rule_application",
+    "column_name": "condition_context_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_rule_application",
+    "column_name": "mean_before",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_rule_application",
+    "column_name": "mean_after",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_rule_application",
+    "column_name": "p90_before",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_rule_application",
+    "column_name": "p90_after",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_rule_application",
+    "column_name": "delta_mean",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_rule_application",
+    "column_name": "delta_p90",
+    "data_type": "double precision"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_rule_application",
+    "column_name": "reason",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_rule_application",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_rule_run",
+    "column_name": "rule_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_rule_run",
+    "column_name": "projection_run_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_rule_run",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_rule_run",
+    "column_name": "rules_loaded",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_rule_run",
+    "column_name": "rules_applied",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_rule_run",
+    "column_name": "status",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_rule_version",
+    "column_name": "rule_id",
+    "data_type": "text"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_rule_version",
+    "column_name": "rule_version",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_rule_version",
+    "column_name": "enabled",
+    "data_type": "boolean"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_rule_version",
+    "column_name": "priority",
+    "data_type": "integer"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_rule_version",
+    "column_name": "condition_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_rule_version",
+    "column_name": "action_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_rule_version",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_schema": "target",
+    "table_name": "symbolic_rule_version",
+    "column_name": "retired_at",
+    "data_type": "timestamp with time zone"
+  }
+]

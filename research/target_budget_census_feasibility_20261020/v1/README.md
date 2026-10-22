@@ -1,0 +1,9 @@
+# Fixed-candidate target-label census feasibility
+
+The approved target compatibility output already distinguishes stronger source-log evidence: **88/102/89** canonical groups in 2023/2024/2025 have explicit `unknown_recipient_or_eligibility_membership_retained=False`; **12/7/9** otherwise compatible groups still retain unknowns. This is 279 defensible source-log complete-label groups and 28 explicit blockers, not 307 complete groups. 2026 has none. No candidate, role, or prior-three scheduled window changed.
+
+In the 279 groups, every possible target event in the retained reviewed G16 basis has a known eligibility, offense and initial-recipient credit; otherwise target_scope would retain unknown_all or unknown_native. The fixed candidate labels are known/canonically qualified, their sum plus disjoint numeric rest equals the source weekly budget, and the known native credits equal that same budget. With no unknown target events, exact outside rest follows by subtraction; it is not inferred from budget equality alone. Each qualified group has zero unassessed candidate event-credit values.
+
+The 28 remaining groups cannot be admitted by this argument: unknown event membership persists even when known-credit totals numerically match the weekly budget. Independent complete NFL game/active-roster census and original information availability remain unknown for all groups. This is a revised retained-source research population with source-completeness selection, not future deployment evidence.
+
+`AUDIT.json` freezes exact qualified and excluded keys, proof chain, scope and the smallest proposed separate High target admission. A retains shared implementation ownership. Only one authenticated existing 21MB proof output was decoded; no raw sources, matrices, models, fits or runtime edits.

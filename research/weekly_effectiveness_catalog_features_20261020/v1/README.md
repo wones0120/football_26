@@ -1,0 +1,15 @@
+# Official weekly effectiveness catalog features
+
+Feature-only package: G04-M01/M03/M05/M08/M10, G07-M01, G09-M01/M03/M04. Each ratio uses numerator and denominator from the same original native weekly row. Definitions and native field aliases are stored once in the artifact; signed yards are preserved, official attempts include their source-defined spike/kneel accounting. QB metrics require explicit indexed/native QB evidence; positive passing statistics never establish position.
+
+Actual source is a newly immutable, field-projected snapshot of the revised `raw_nfl_weekly_stat` database, with exact source/ingest IDs and original import clocks retained. Legacy ingestion can replace raw database rows, so this extract does not claim to be the original HTTP response or an originally available pregame snapshot. No salary, outcome-positive, or user-preference cohort filter is applied. Native GSIS aliases attach only when unique. Missing/malformed native IDs and canonical collisions retain review evidence; no name joins or alias mutations occur.
+
+Actual coverage: 60,890 extracted rows; 60,830 measured rows; 60,501 canonical attachments; 2,200 native-QB rows; 357 selected SF/WAS 2026 rows. Per-metric known/undefined/unknown counts and yearly coverage are in `actual_derivation_receipt.json`. Unknown and zero exposures never become zero ratios. Invalid counts, incompatible numerators, conflicting native teams and alias collisions retain explicit quality evidence. Unknown team attachment does not invent a team or erase otherwise valid native-player statistics.
+
+The 389 identity incidents have 389 durable UI quarantine keys, all read back successfully. Existing resolved requests are never reopened. Missing/malformed native IDs use immutable source SHA plus native row index; unresolved GSIS persons use stable person keys; canonical alias collisions have separate evidence keys. Original full/selected artifacts remain immutable, including superseded producer revisions.
+
+All outputs are postlock retrospective descriptive evidence. They cannot be registered as current/pregame serving inputs. Models, Analyst, optimizer and app consumers remain pending under the current features-only scope. No new fits or source downloads were performed.
+
+Validation: 24 targeted tests cover same-row denominators, signed yards, official count aliases, native role/period/time contradictions, unknown/zero exposures, canonical collisions, recapture invariance, nonserving use, immutable queue lineage and resolved-request idempotence. Review pins are in `receipt.json`; this is a proposed nine-ID exact definition closure pending High verdict.
+
+High review corrections: alias creation/key/UUID/ID proofs are cutoff-bounded and frozen in the corrected extract, linked to the prior immutable extract. Native keys implicated in any same-period canonical collision are withheld across the whole batch. This preserves all native measurements and never repairs aliases automatically. See alias_evidence_receipt.json for the actual later enrichment clock.

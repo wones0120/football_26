@@ -15,13 +15,15 @@ def validate_showdown_qb_preferences(params: dict, *, showdown: bool) -> None:
             raise ValueError(f"{label} requires Showdown format")
 
 
-def showdown_qb_preference_report(params: dict) -> dict:
+def showdown_qb_preference_report(params: dict, *, qb_player_ids: set[str] | None = None) -> dict:
     no_qbs = params.get("no_qbs", False)
     maximum = 0 if no_qbs else 1 if params.get("no_two_qbs", False) else 2
-    captain_allowed = not (no_qbs or params.get("no_qb_captain", False) or params.get("captain_positions"))
+    named_qbs = sorted(set(params.get('captain_position_exception_ids', [])) & (qb_player_ids or set()))
+    captain_allowed = not (no_qbs or params.get("no_qb_captain", False)) and (not params.get("captain_positions") or bool(named_qbs))
     return {
         **{key: params.get(key, False) for key in QB_PREFERENCE_LABELS},
         "allow_qb_captain": captain_allowed,
+        "named_qb_captain_position_exception_ids": named_qbs,
         "named_captain_position_exception_ids": params.get("captain_position_exception_ids", []),
         "max_starting_qbs_per_lineup": maximum,
         "requested_portfolio_size": int(params.get("num_lineups", 1)),

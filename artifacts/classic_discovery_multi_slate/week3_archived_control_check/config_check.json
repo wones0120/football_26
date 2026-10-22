@@ -1,0 +1,72 @@
+{
+  "canonical_config_match": true,
+  "resolved_config": {
+    "stack_rules": {
+      "min_pass_catchers": 1,
+      "min_bring_backs": 0,
+      "max_from_team": 4,
+      "max_from_game": 5,
+      "pass_catcher_positions": [
+        "WR",
+        "TE"
+      ],
+      "bring_back_positions": [
+        "RB",
+        "WR",
+        "TE"
+      ]
+    },
+    "tag_thresholds": {
+      "chalk_proj": 15.0,
+      "chalk_own": 15.0,
+      "leverage_proj": 10.0,
+      "leverage_own": 12.0,
+      "leverage_min": 0.0,
+      "punt_salary": 3500
+    },
+    "objective_weights": {
+      "projection": 0.35,
+      "ceiling": 0.48,
+      "leverage": 0.0,
+      "correlation": 0.17
+    },
+    "tag_caps": {
+      "max_chalk": 535,
+      "min_leverage": 0,
+      "max_punts": 2,
+      "max_total_ownership": null
+    },
+    "salary_cap": 50000,
+    "roster_size": 9,
+    "portfolio_targets": {
+      "max_avg_ownership": null,
+      "min_leverage_count": 0,
+      "max_chalk_count": 9,
+      "player_exposure_caps": {},
+      "player_exposure_mins": {}
+    },
+    "correlation_bonus": 1.0,
+    "uniqueness_overlap": 7,
+    "normalize_objective": true,
+    "stack_templates": [
+      [
+        1,
+        0
+      ],
+      [
+        1,
+        1
+      ],
+      [
+        2,
+        0
+      ],
+      [
+        2,
+        1
+      ]
+    ]
+  },
+  "method": "Original configuration builder with zero requested lineups; no generation or portfolio solve; normalize JSON arrays for comparison",
+  "no_outcomes": true
+}

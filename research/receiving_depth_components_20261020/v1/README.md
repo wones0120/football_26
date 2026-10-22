@@ -1,0 +1,11 @@
+# G10 measured target-depth shares
+
+This isolated feature package owns G10-M07 (short), G10-M08 (intermediate) and G10-M09 (deep), using native signed `air_yards` on official attributed targets. Short means 0<=air_yards<10; intermediate10<=air_yards<20; deep>=20. Behind-LOS targets are a separate negative-air-yards partition. These thresholds are declared definitions, not route, alignment, screen, first-read, contested or catchable-target measurements.
+
+Grain is native game/team/receiver with authenticated parent canonical UUID attachment. All official player targets form the denominator, including behind-LOS and unknown-depth targets. `known_depth_attributed_sample_share` is separately labeled and cannot replace the exact all-target share. Unknown source depth masks exact bucket totals and shares; unknown target eligibility or missing receiver attribution conservatively masks exact actor denominator. Known native actors without canonical UUID remain in full-team counts and identity requests. User eligibility and salary filters do not change measurements.
+
+The five known-count partitions (behind, short, intermediate, deep, unknown depth) reconcile to known official targets. Full-team denominators retain unmapped actors, unknown eligibility and unknown-depth residuals. No target is inferred from a sack or spike, and excluded no-play/two-point rows add no official count.
+
+Source intake must verify immutable source and event parent bytes; pure builder validation alone is not authentication. Actual source schema coverage for `air_yards` is documented in the preceding effectiveness package's verified2023–26 field-coverage receipt. All feature events are strictly before the target period. Source completeness and original game-time availability remain unproven rather than assumed.
+
+The separate retrospective reader verifies the frozen parent at the original evidence boundary and preserves actual postlock read, derive and publication timestamps. Managed artifacts are expressly nonserving, and current-use guards reject them. The9-test gate covers exact boundaries, negative/missing air yards, full denominator and sample distinction, unknown native/eligibility, canonical attachment, excluded rows, chronology and retrospective rejection. No model, forecast, optimizer or app consumer is implemented under the features-only priority.

@@ -1,0 +1,186 @@
+{
+  "version": "reviewed_official_gamebook_count_tables_v1",
+  "source_type": "RETAINED_OFFICIAL_GAMEBOOKS_RETROSPECTIVE",
+  "games": [
+    {
+      "game_id": "2026_01_DEN_KC",
+      "season": 2026,
+      "week": 1,
+      "game_date": "2026-09-14",
+      "away_team": "DEN",
+      "home_team": "KC",
+      "team_page": 3,
+      "individual_page": 2,
+      "teams": {
+        "DEN": {
+          "official_pass_attempts": 28,
+          "official_carries": 15,
+          "official_targets": 27,
+          "physical_plays": 47,
+          "sacks": 4,
+          "completions": 17,
+          "final_score": 10,
+          "receiving_target_rows": [
+            5,
+            6,
+            4,
+            5,
+            3,
+            3,
+            1
+          ]
+        },
+        "KC": {
+          "official_pass_attempts": 27,
+          "official_carries": 38,
+          "official_targets": 25,
+          "physical_plays": 67,
+          "sacks": 2,
+          "completions": 15,
+          "final_score": 31,
+          "receiving_target_rows": [
+            5,
+            6,
+            6,
+            2,
+            2,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      "pdf_path": "/Users/wones/git/football_26/research/dst_scoring_repair_20261015/v1/gamebooks/2026_01_DEN_KC/gamebook.pdf",
+      "pdf_sha256": "a3e19937256b973d60e4e7f5712bb7ebb01f2c58b6d2a83688537068ab66392c",
+      "pdf_source_uri": "https://static.www.nfl.com/image/upload/v1789470925/gamecenter/a9a890ed-4feb-11f1-abca-2c54536568a9.pdf",
+      "capture_receipt_path": "/Users/wones/git/football_26/research/dst_scoring_repair_20261015/v1/gamebooks/2026_01_DEN_KC/capture.json",
+      "pdf_observed_at": "2026-10-15T19:43:32.917286+00:00",
+      "page_source_uri": "https://www.nfl.com/games/broncos-at-chiefs-2026-reg-1?tab=recap",
+      "reviewed_final_tables": true,
+      "review_method": "Extracted complete final-statistics pages and visually inspected rendered TAR/ATT/CMP/SK/YD tables; use published team Total, no name joins",
+      "extracted_pages_path": "/Users/wones/git/football_26/research/game_progression_pilot_20261020/scenario_03/2026_01_DEN_KC_pages.json"
+    },
+    {
+      "game_id": "2026_02_MIN_CHI",
+      "season": 2026,
+      "week": 2,
+      "game_date": "2026-09-20",
+      "away_team": "MIN",
+      "home_team": "CHI",
+      "team_page": 3,
+      "individual_page": 2,
+      "teams": {
+        "MIN": {
+          "official_pass_attempts": 20,
+          "official_carries": 28,
+          "official_targets": 19,
+          "physical_plays": 51,
+          "sacks": 3,
+          "completions": 11,
+          "final_score": 9,
+          "receiving_target_rows": [
+            6,
+            4,
+            5,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        "CHI": {
+          "official_pass_attempts": 35,
+          "official_carries": 31,
+          "official_targets": 30,
+          "physical_plays": 70,
+          "sacks": 4,
+          "completions": 20,
+          "final_score": 3,
+          "receiving_target_rows": [
+            5,
+            5,
+            4,
+            7,
+            2,
+            3,
+            3,
+            1
+          ]
+        }
+      },
+      "pdf_path": "/Users/wones/git/football_26/research/dst_scoring_repair_20261015/v1/gamebooks/2026_02_MIN_CHI/gamebook.pdf",
+      "pdf_sha256": "5acd250bee7df5f6a239d20b1b5002e7beb029db9a08beb233112cde3687bf07",
+      "pdf_source_uri": "https://static.www.nfl.com/image/upload/v1789989328/gamecenter/a9a89edd-4feb-11f1-abca-2c54536568a9.pdf",
+      "capture_receipt_path": "/Users/wones/git/football_26/research/dst_scoring_repair_20261015/v1/gamebooks/2026_02_MIN_CHI/capture.json",
+      "pdf_observed_at": "2026-10-15T19:43:36.787011+00:00",
+      "page_source_uri": "https://www.nfl.com/games/vikings-at-bears-2026-reg-2?tab=recap",
+      "reviewed_final_tables": true,
+      "review_method": "Extracted complete final-statistics pages and visually inspected rendered TAR/ATT/CMP/SK/YD tables; use published team Total, no name joins",
+      "extracted_pages_path": "/Users/wones/git/football_26/research/game_progression_pilot_20261020/scenario_03/2026_02_MIN_CHI_pages.json"
+    },
+    {
+      "game_id": "2026_03_SEA_WAS",
+      "season": 2026,
+      "week": 3,
+      "game_date": "2026-09-27",
+      "away_team": "SEA",
+      "home_team": "WAS",
+      "team_page": 5,
+      "individual_page": 3,
+      "teams": {
+        "SEA": {
+          "official_pass_attempts": 46,
+          "official_carries": 18,
+          "official_targets": 45,
+          "physical_plays": 64,
+          "sacks": 0,
+          "completions": 32,
+          "final_score": 31,
+          "receiving_target_rows": [
+            14,
+            9,
+            5,
+            5,
+            3,
+            3,
+            1,
+            2,
+            3
+          ]
+        },
+        "WAS": {
+          "official_pass_attempts": 31,
+          "official_carries": 32,
+          "official_targets": 30,
+          "physical_plays": 65,
+          "sacks": 2,
+          "completions": 19,
+          "final_score": 33,
+          "receiving_target_rows": [
+            9,
+            7,
+            4,
+            2,
+            1,
+            1,
+            1,
+            1,
+            2,
+            1,
+            1
+          ]
+        }
+      },
+      "pdf_path": "/Users/wones/git/football_26/research/dst_scoring_repair_20261015/v1/gamebooks/2026_03_SEA_WAS/gamebook.pdf",
+      "pdf_sha256": "b09d5a377d099f0f817155e0a9de8e19a0f23cce28a4ad02a8e485a843e2db37",
+      "pdf_source_uri": "https://static.www.nfl.com/image/upload/v1790594137/gamecenter/aa29c0fa-4feb-11f1-abca-2c54536568a9.pdf",
+      "capture_receipt_path": "/Users/wones/git/football_26/research/dst_scoring_repair_20261015/v1/gamebooks/2026_03_SEA_WAS/capture.json",
+      "pdf_observed_at": "2026-10-15T19:43:40.747694+00:00",
+      "page_source_uri": "https://www.nfl.com/games/seahawks-at-commanders-2026-reg-3?tab=recap",
+      "reviewed_final_tables": true,
+      "review_method": "Extracted complete final-statistics pages and visually inspected rendered TAR/ATT/CMP/SK/YD tables; use published team Total, no name joins",
+      "extracted_pages_path": "/Users/wones/git/football_26/research/game_progression_pilot_20261020/scenario_03/2026_03_SEA_WAS_pages.json"
+    }
+  ]
+}

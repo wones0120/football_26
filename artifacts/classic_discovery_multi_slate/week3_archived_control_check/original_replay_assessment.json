@@ -1,0 +1,3805 @@
+{
+  "actual_score_values_loaded": false,
+  "assessed_at": "2026-10-01T02:19:12.481062+00:00",
+  "canonical_config_match": true,
+  "config_comparison_encoding_note": "The original replay summary compares Python tuples with saved JSON arrays. That false boolean is superseded only for configuration equality by the independently JSON-normalized archived builder check; roster mismatch remains real.",
+  "contract": "classic_archived_original_replay_assessment_v1",
+  "exact_certified": false,
+  "identical_rosters": 117,
+  "matching_order_positions": 113,
+  "observed_exact_dst_tie": true,
+  "old_replay_file_sha256": "820a3ea33989fa73dad6b90926596304794eaea6b468d35c47377bfa1ec22818",
+  "original_run_id": "a6d7f5e7-db0f-44ae-87c4-60a826973408",
+  "qualification": "provisional_input_reconstruction; exact_original_control_replay_failed",
+  "replay_additional_rosters": [
+    {
+      "base_solver": 5.1567942775649085,
+      "cheap_skill_opportunity": [
+        {
+          "carries_mean_3": 0.0,
+          "depth_chart_position": null,
+          "evidence_class": "inferred_opportunity",
+          "explicit_role_signal": null,
+          "fallback_threshold_met": null,
+          "name": "Cade Otton",
+          "player_status": null,
+          "position": "TE",
+          "pregame_availability_probability": 1.0,
+          "pregame_carry_share": null,
+          "pregame_expected_carries": null,
+          "pregame_expected_routes": null,
+          "pregame_expected_snaps": null,
+          "pregame_expected_targets": null,
+          "pregame_goal_line_share": null,
+          "pregame_injury_created_opportunity": null,
+          "pregame_red_zone_share": null,
+          "pregame_role_label": null,
+          "pregame_start_probability": 1.0,
+          "pregame_target_share": null,
+          "receiving_yards_mean_3": null,
+          "receptions_mean_3": null,
+          "retention_reason": "not evaluated",
+          "roster_status": null,
+          "salary": 3100,
+          "snap_share_mean_3": 0.9700000000000001,
+          "target_share_mean_3": 0.18786773720873717,
+          "targets_mean_3": 5.135051483705483,
+          "team_targets_mean_3": 27.333333333333332
+        },
+        {
+          "carries_mean_3": 0.0,
+          "depth_chart_position": null,
+          "evidence_class": "inferred_opportunity",
+          "explicit_role_signal": null,
+          "fallback_threshold_met": null,
+          "name": "Denzel Boston",
+          "player_status": null,
+          "position": "WR",
+          "pregame_availability_probability": 1.0,
+          "pregame_carry_share": null,
+          "pregame_expected_carries": null,
+          "pregame_expected_routes": null,
+          "pregame_expected_snaps": null,
+          "pregame_expected_targets": null,
+          "pregame_goal_line_share": null,
+          "pregame_injury_created_opportunity": null,
+          "pregame_red_zone_share": null,
+          "pregame_role_label": null,
+          "pregame_start_probability": 1.0,
+          "pregame_target_share": null,
+          "receiving_yards_mean_3": null,
+          "receptions_mean_3": null,
+          "retention_reason": "not evaluated",
+          "roster_status": null,
+          "salary": 4500,
+          "snap_share_mean_3": 0.92,
+          "target_share_mean_3": 0.11632182597331481,
+          "targets_mean_3": 2.83049776535066,
+          "team_targets_mean_3": 24.333333333333332
+        }
+      ],
+      "components": {
+        "bring_back": 0.0,
+        "context": 0.10768659513209218,
+        "correlation": 0.0662013392857143,
+        "duplication": 0.0,
+        "game_environment": 0.0,
+        "leverage": 0.0,
+        "mean": 1.869252569608709,
+        "other_residual": 0.0,
+        "ownership_chalk": 0.0,
+        "p90": 3.1798551128241077,
+        "penalties": 0.0,
+        "qb_stack": 0.16295714285714288
+      },
+      "correlation_negative": 0.0,
+      "correlation_positive": 0.22915848214285717,
+      "correlation_rules": [
+        {
+          "configured_weight": 0.8,
+          "description": "Reward a quarterback paired with a same-team wide receiver or tight end in proportion to the cutoff-safe stack environment.",
+          "effective_weight": 0.4792857142857143,
+          "evidence": {
+            "captain_dst_game_script": {
+              "available": false
+            },
+            "captain_stack_environment": {
+              "available": false
+            },
+            "rb_dst_game_script": {
+              "available": false
+            },
+            "stack_environment": {
+              "available": true,
+              "blowout_risk": 0.0,
+              "competitive_game": 0.5357142857142857,
+              "game_total": 48.5,
+              "opponent_implied_total": 21.0,
+              "opponent_push": 0.35714285714285715,
+              "point_in_time_safe": true,
+              "stack_environment": 0.5991071428571428,
+              "team_implied_total": 27.5,
+              "team_quality": 0.6785714285714286,
+              "team_spread": -6.5,
+              "total_quality": 0.625
+            }
+          },
+          "magnitude": 0.5991071428571428,
+          "objective_contribution": 0.08147857142857144,
+          "players": [
+            {
+              "player_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+              "player_name": "Amon-Ra St. Brown",
+              "position": "WR",
+              "team": "DET"
+            },
+            {
+              "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+              "player_name": "Jared Goff",
+              "position": "QB",
+              "team": "DET"
+            }
+          ],
+          "reason_code": "qb_same_team_pass_catcher",
+          "rule_id": "correlation.qb_pass_catcher_v2",
+          "rule_type": "soft_boost",
+          "score_contribution": 0.4792857142857143,
+          "term_kind": "pair"
+        },
+        {
+          "configured_weight": 0.8,
+          "description": "Reward a quarterback paired with a same-team wide receiver or tight end in proportion to the cutoff-safe stack environment.",
+          "effective_weight": 0.4792857142857143,
+          "evidence": {
+            "captain_dst_game_script": {
+              "available": false
+            },
+            "captain_stack_environment": {
+              "available": false
+            },
+            "rb_dst_game_script": {
+              "available": false
+            },
+            "stack_environment": {
+              "available": true,
+              "blowout_risk": 0.0,
+              "competitive_game": 0.5357142857142857,
+              "game_total": 48.5,
+              "opponent_implied_total": 21.0,
+              "opponent_push": 0.35714285714285715,
+              "point_in_time_safe": true,
+              "stack_environment": 0.5991071428571428,
+              "team_implied_total": 27.5,
+              "team_quality": 0.6785714285714286,
+              "team_spread": -6.5,
+              "total_quality": 0.625
+            }
+          },
+          "magnitude": 0.5991071428571428,
+          "objective_contribution": 0.08147857142857144,
+          "players": [
+            {
+              "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+              "player_name": "Jared Goff",
+              "position": "QB",
+              "team": "DET"
+            },
+            {
+              "player_id": "900f1061-eb3e-4945-bed6-3a8186cd16aa",
+              "player_name": "Jameson Williams",
+              "position": "WR",
+              "team": "DET"
+            }
+          ],
+          "reason_code": "qb_same_team_pass_catcher",
+          "rule_id": "correlation.qb_pass_catcher_v2",
+          "rule_type": "soft_boost",
+          "score_contribution": 0.4792857142857143,
+          "term_kind": "pair"
+        },
+        {
+          "configured_weight": 0.65,
+          "construction_kind": "classic_qb_double_stack",
+          "description": "Reward a GPP quarterback with at least two same-team pass catchers in proportion to the cutoff-safe stack environment.",
+          "effective_weight": 0.38941964285714287,
+          "evidence": {
+            "quarterback_team": "DET",
+            "stack_environment": {
+              "available": true,
+              "blowout_risk": 0.0,
+              "competitive_game": 0.5357142857142857,
+              "game_total": 48.5,
+              "opponent_implied_total": 21.0,
+              "opponent_push": 0.35714285714285715,
+              "point_in_time_safe": true,
+              "stack_environment": 0.5991071428571428,
+              "team_implied_total": 27.5,
+              "team_quality": 0.6785714285714286,
+              "team_spread": -6.5,
+              "total_quality": 0.625
+            }
+          },
+          "magnitude": 0.5991071428571428,
+          "objective_contribution": 0.0662013392857143,
+          "players": [
+            {
+              "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+              "player_name": "Jared Goff",
+              "position": "QB",
+              "team": "DET"
+            },
+            {
+              "player_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+              "player_name": "Amon-Ra St. Brown",
+              "position": "WR",
+              "team": "DET"
+            },
+            {
+              "player_id": "900f1061-eb3e-4945-bed6-3a8186cd16aa",
+              "player_name": "Jameson Williams",
+              "position": "WR",
+              "team": "DET"
+            }
+          ],
+          "reason_code": "quarterback_double_stack",
+          "rule_id": "construction.classic_qb_double_stack_v2",
+          "rule_type": "soft_boost",
+          "score_contribution": 0.38941964285714287,
+          "term_kind": "format_specific"
+        }
+      ],
+      "dst_ownership": null,
+      "game_environment": {
+        "game_total": 48.5,
+        "label": "favored offense",
+        "market_safe": true,
+        "raw_rule_score": 0,
+        "reason": "No standalone primary-game bonus in the current Classic objective; no game-related pair rule fired",
+        "selector_contribution": 0.0,
+        "team_spread": -6.5,
+        "team_total": 27.5
+      },
+      "games_represented": [
+        "BAL@DAL 09/27/2026 04:25PM ET",
+        "CAR@CLE 09/27/2026 01:00PM ET",
+        "CIN@PIT 09/27/2026 01:00PM ET",
+        "LAC@BUF 09/27/2026 01:00PM ET",
+        "MIN@TB 09/27/2026 04:05PM ET",
+        "NYJ@DET 09/27/2026 01:00PM ET"
+      ],
+      "high_owned_count": null,
+      "leverage_available": false,
+      "leverage_sum": null,
+      "log_ownership": null,
+      "low_owned_count": null,
+      "mean": 134.04845618701293,
+      "objective_score": 5.385952759707766,
+      "ownership_product": null,
+      "ownership_sum": null,
+      "p90": 237.28008557376214,
+      "pass_catchers": {
+        "flex_position": "WR",
+        "high_owned_count": null,
+        "low_owned_count": null,
+        "one_offs": [
+          "Cade Otton",
+          "Jalen Coker",
+          "Denzel Boston"
+        ],
+        "salary": 26400,
+        "te_in_qb_stack": false
+      },
+      "player_ids": [
+        "1f90d290-afb4-48ae-8052-fa99040b8ddb",
+        "220c527d-9daf-4348-8f38-c244c8c512b3",
+        "2fa43876-8b80-4de0-a467-82bfa150f042",
+        "48932b42-a60a-4070-82a7-50475f27bbf2",
+        "49ac835d-70f6-4fbd-ae80-242eea54c172",
+        "87afab41-5db5-42d1-85b2-736edfcd712f",
+        "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+        "900f1061-eb3e-4945-bed6-3a8186cd16aa",
+        "e56bf4fb-4de6-4974-9143-26a843800acd"
+      ],
+      "primary_game": "DET\u2013NYJ",
+      "qb": {
+        "basis": "expected or recent carries",
+        "carries": 1.6666666666666667,
+        "label": "pocket-oriented QB",
+        "name": "Jared Goff",
+        "ownership": null,
+        "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+        "rushing_role_strength": 0.0,
+        "team": "DET"
+      },
+      "rb_construction": {
+        "high_owned_pair": null,
+        "same_game_pair": false
+      },
+      "rbs": [
+        {
+          "in_qb_game": false,
+          "name": "Derrick Henry",
+          "opportunity": {
+            "carries_mean_3": 19.930616842244753,
+            "depth_chart_position": null,
+            "evidence_class": "inferred_opportunity",
+            "explicit_role_signal": null,
+            "fallback_threshold_met": null,
+            "player_status": null,
+            "pregame_availability_probability": 1.0,
+            "pregame_carry_share": null,
+            "pregame_expected_carries": null,
+            "pregame_expected_routes": null,
+            "pregame_expected_snaps": null,
+            "pregame_expected_targets": null,
+            "pregame_goal_line_share": null,
+            "pregame_injury_created_opportunity": null,
+            "pregame_red_zone_share": null,
+            "pregame_role_label": null,
+            "pregame_start_probability": 1.0,
+            "pregame_target_share": null,
+            "receiving_yards_mean_3": null,
+            "receptions_mean_3": null,
+            "retention_reason": "not evaluated",
+            "roster_status": null,
+            "snap_share_mean_3": 0.6266666666666666,
+            "target_share_mean_3": 0.05495909546959672,
+            "targets_mean_3": 1.2640591958007246,
+            "team_targets_mean_3": 23.0
+          },
+          "opposing_dst": false,
+          "ownership": null,
+          "p90": 34.54860949122313,
+          "projection": 21.535263439011068,
+          "receiving_role_diagnostic": {
+            "expected_routes": null,
+            "expected_targets": null,
+            "receiving_fantasy_points": null,
+            "receiving_fantasy_points_reason": "Unavailable: no receiving-point decomposition in the projection snapshot",
+            "receiving_yards_mean_3": null,
+            "recent_target_share_mean_3": 0.05495909546959672,
+            "recent_targets_mean_3": 1.2640591958007246,
+            "receptions_mean_3": null,
+            "source": "lagged_three_game",
+            "strength": 0.19628248381998828,
+            "target_share": 0.05495909546959672
+          },
+          "receiving_role_strength": 0.19628248381998828,
+          "salary": 7700,
+          "same_team_dst": false,
+          "spread": -3.0,
+          "team": "BAL",
+          "team_total": 27.75
+        },
+        {
+          "in_qb_game": false,
+          "name": "James Cook III",
+          "opportunity": {
+            "carries_mean_3": 13.635197909427701,
+            "depth_chart_position": null,
+            "evidence_class": "inferred_opportunity",
+            "explicit_role_signal": null,
+            "fallback_threshold_met": null,
+            "player_status": null,
+            "pregame_availability_probability": 1.0,
+            "pregame_carry_share": null,
+            "pregame_expected_carries": null,
+            "pregame_expected_routes": null,
+            "pregame_expected_snaps": null,
+            "pregame_expected_targets": null,
+            "pregame_goal_line_share": null,
+            "pregame_injury_created_opportunity": null,
+            "pregame_red_zone_share": null,
+            "pregame_role_label": null,
+            "pregame_start_probability": 1.0,
+            "pregame_target_share": null,
+            "receiving_yards_mean_3": null,
+            "receptions_mean_3": null,
+            "retention_reason": "not evaluated",
+            "roster_status": null,
+            "snap_share_mean_3": 0.49666666666666665,
+            "target_share_mean_3": 0.07992390558933817,
+            "targets_mean_3": 2.530923676995709,
+            "team_targets_mean_3": 31.666666666666668
+          },
+          "opposing_dst": false,
+          "ownership": null,
+          "p90": 28.422691645597833,
+          "projection": 15.409345593385765,
+          "receiving_role_diagnostic": {
+            "expected_routes": null,
+            "expected_targets": null,
+            "receiving_fantasy_points": null,
+            "receiving_fantasy_points_reason": "Unavailable: no receiving-point decomposition in the projection snapshot",
+            "receiving_yards_mean_3": null,
+            "recent_target_share_mean_3": 0.07992390558933817,
+            "recent_targets_mean_3": 2.530923676995709,
+            "receptions_mean_3": null,
+            "source": "lagged_three_game",
+            "strength": 0.3163654596244636,
+            "target_share": 0.07992390558933817
+          },
+          "receiving_role_strength": 0.3163654596244636,
+          "salary": 6900,
+          "same_team_dst": false,
+          "spread": -7.0,
+          "team": "BUF",
+          "team_total": 28.75
+        }
+      ],
+      "relative_chalk": null,
+      "roster": [
+        {
+          "name": "Cade Otton",
+          "ownership": null,
+          "player_id": "1f90d290-afb4-48ae-8052-fa99040b8ddb",
+          "position": "TE",
+          "salary": 3100,
+          "team": "TB"
+        },
+        {
+          "name": "Amon-Ra St. Brown",
+          "ownership": null,
+          "player_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+          "position": "WR",
+          "salary": 7900,
+          "team": "DET"
+        },
+        {
+          "name": "Jalen Coker",
+          "ownership": null,
+          "player_id": "2fa43876-8b80-4de0-a467-82bfa150f042",
+          "position": "WR",
+          "salary": 5500,
+          "team": "CAR"
+        },
+        {
+          "name": "Derrick Henry",
+          "ownership": null,
+          "player_id": "48932b42-a60a-4070-82a7-50475f27bbf2",
+          "position": "RB",
+          "salary": 7700,
+          "team": "BAL"
+        },
+        {
+          "name": "Denzel Boston",
+          "ownership": null,
+          "player_id": "49ac835d-70f6-4fbd-ae80-242eea54c172",
+          "position": "WR",
+          "salary": 4500,
+          "team": "CLE"
+        },
+        {
+          "name": "James Cook III",
+          "ownership": null,
+          "player_id": "87afab41-5db5-42d1-85b2-736edfcd712f",
+          "position": "RB",
+          "salary": 6900,
+          "team": "BUF"
+        },
+        {
+          "name": "Jared Goff",
+          "ownership": null,
+          "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+          "position": "QB",
+          "salary": 6300,
+          "team": "DET"
+        },
+        {
+          "name": "Jameson Williams",
+          "ownership": null,
+          "player_id": "900f1061-eb3e-4945-bed6-3a8186cd16aa",
+          "position": "WR",
+          "salary": 5400,
+          "team": "DET"
+        },
+        {
+          "name": "Steelers",
+          "ownership": null,
+          "player_id": "e56bf4fb-4de6-4974-9143-26a843800acd",
+          "position": "DST",
+          "salary": 2700,
+          "team": "PIT"
+        }
+      ],
+      "salary": 50000,
+      "stack": {
+        "bring_back_correlation_contribution": 0.0,
+        "bring_back_count": 0,
+        "bring_back_evaluations": [],
+        "bring_backs": [],
+        "game_stack_log_ownership": null,
+        "game_stack_ownership": null,
+        "game_stack_salary": 19600,
+        "game_stack_size": 3,
+        "partner_count": 2,
+        "partners": [
+          {
+            "name": "Amon-Ra St. Brown",
+            "ownership": null,
+            "position": "WR"
+          },
+          {
+            "name": "Jameson Williams",
+            "ownership": null,
+            "position": "WR"
+          }
+        ],
+        "type": "QB+2"
+      }
+    },
+    {
+      "base_solver": 5.14295133821085,
+      "cheap_skill_opportunity": [
+        {
+          "carries_mean_3": 0.0,
+          "depth_chart_position": null,
+          "evidence_class": "inferred_opportunity",
+          "explicit_role_signal": null,
+          "fallback_threshold_met": null,
+          "name": "Cade Otton",
+          "player_status": null,
+          "position": "TE",
+          "pregame_availability_probability": 1.0,
+          "pregame_carry_share": null,
+          "pregame_expected_carries": null,
+          "pregame_expected_routes": null,
+          "pregame_expected_snaps": null,
+          "pregame_expected_targets": null,
+          "pregame_goal_line_share": null,
+          "pregame_injury_created_opportunity": null,
+          "pregame_red_zone_share": null,
+          "pregame_role_label": null,
+          "pregame_start_probability": 1.0,
+          "pregame_target_share": null,
+          "receiving_yards_mean_3": null,
+          "receptions_mean_3": null,
+          "retention_reason": "not evaluated",
+          "roster_status": null,
+          "salary": 3100,
+          "snap_share_mean_3": 0.9700000000000001,
+          "target_share_mean_3": 0.18786773720873717,
+          "targets_mean_3": 5.135051483705483,
+          "team_targets_mean_3": 27.333333333333332
+        },
+        {
+          "carries_mean_3": 0.0,
+          "depth_chart_position": null,
+          "evidence_class": "inferred_opportunity",
+          "explicit_role_signal": null,
+          "fallback_threshold_met": null,
+          "name": "Denzel Boston",
+          "player_status": null,
+          "position": "WR",
+          "pregame_availability_probability": 1.0,
+          "pregame_carry_share": null,
+          "pregame_expected_carries": null,
+          "pregame_expected_routes": null,
+          "pregame_expected_snaps": null,
+          "pregame_expected_targets": null,
+          "pregame_goal_line_share": null,
+          "pregame_injury_created_opportunity": null,
+          "pregame_red_zone_share": null,
+          "pregame_role_label": null,
+          "pregame_start_probability": 1.0,
+          "pregame_target_share": null,
+          "receiving_yards_mean_3": null,
+          "receptions_mean_3": null,
+          "retention_reason": "not evaluated",
+          "roster_status": null,
+          "salary": 4500,
+          "snap_share_mean_3": 0.92,
+          "target_share_mean_3": 0.11632182597331481,
+          "targets_mean_3": 2.83049776535066,
+          "team_targets_mean_3": 24.333333333333332
+        }
+      ],
+      "components": {
+        "bring_back": 0.0,
+        "context": 0.08164819373120347,
+        "correlation": 0.0662013392857143,
+        "duplication": 0.0,
+        "game_environment": 0.0,
+        "leverage": 0.0,
+        "mean": 1.8930962779993308,
+        "other_residual": 0.0,
+        "ownership_chalk": 0.0,
+        "p90": 3.168206866480315,
+        "penalties": 0.0,
+        "qb_stack": 0.16295714285714288
+      },
+      "correlation_negative": 0.0,
+      "correlation_positive": 0.22915848214285717,
+      "correlation_rules": [
+        {
+          "configured_weight": 0.8,
+          "description": "Reward a quarterback paired with a same-team wide receiver or tight end in proportion to the cutoff-safe stack environment.",
+          "effective_weight": 0.4792857142857143,
+          "evidence": {
+            "captain_dst_game_script": {
+              "available": false
+            },
+            "captain_stack_environment": {
+              "available": false
+            },
+            "rb_dst_game_script": {
+              "available": false
+            },
+            "stack_environment": {
+              "available": true,
+              "blowout_risk": 0.0,
+              "competitive_game": 0.5357142857142857,
+              "game_total": 48.5,
+              "opponent_implied_total": 21.0,
+              "opponent_push": 0.35714285714285715,
+              "point_in_time_safe": true,
+              "stack_environment": 0.5991071428571428,
+              "team_implied_total": 27.5,
+              "team_quality": 0.6785714285714286,
+              "team_spread": -6.5,
+              "total_quality": 0.625
+            }
+          },
+          "magnitude": 0.5991071428571428,
+          "objective_contribution": 0.08147857142857144,
+          "players": [
+            {
+              "player_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+              "player_name": "Amon-Ra St. Brown",
+              "position": "WR",
+              "team": "DET"
+            },
+            {
+              "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+              "player_name": "Jared Goff",
+              "position": "QB",
+              "team": "DET"
+            }
+          ],
+          "reason_code": "qb_same_team_pass_catcher",
+          "rule_id": "correlation.qb_pass_catcher_v2",
+          "rule_type": "soft_boost",
+          "score_contribution": 0.4792857142857143,
+          "term_kind": "pair"
+        },
+        {
+          "configured_weight": 0.8,
+          "description": "Reward a quarterback paired with a same-team wide receiver or tight end in proportion to the cutoff-safe stack environment.",
+          "effective_weight": 0.4792857142857143,
+          "evidence": {
+            "captain_dst_game_script": {
+              "available": false
+            },
+            "captain_stack_environment": {
+              "available": false
+            },
+            "rb_dst_game_script": {
+              "available": false
+            },
+            "stack_environment": {
+              "available": true,
+              "blowout_risk": 0.0,
+              "competitive_game": 0.5357142857142857,
+              "game_total": 48.5,
+              "opponent_implied_total": 21.0,
+              "opponent_push": 0.35714285714285715,
+              "point_in_time_safe": true,
+              "stack_environment": 0.5991071428571428,
+              "team_implied_total": 27.5,
+              "team_quality": 0.6785714285714286,
+              "team_spread": -6.5,
+              "total_quality": 0.625
+            }
+          },
+          "magnitude": 0.5991071428571428,
+          "objective_contribution": 0.08147857142857144,
+          "players": [
+            {
+              "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+              "player_name": "Jared Goff",
+              "position": "QB",
+              "team": "DET"
+            },
+            {
+              "player_id": "900f1061-eb3e-4945-bed6-3a8186cd16aa",
+              "player_name": "Jameson Williams",
+              "position": "WR",
+              "team": "DET"
+            }
+          ],
+          "reason_code": "qb_same_team_pass_catcher",
+          "rule_id": "correlation.qb_pass_catcher_v2",
+          "rule_type": "soft_boost",
+          "score_contribution": 0.4792857142857143,
+          "term_kind": "pair"
+        },
+        {
+          "configured_weight": 0.65,
+          "construction_kind": "classic_qb_double_stack",
+          "description": "Reward a GPP quarterback with at least two same-team pass catchers in proportion to the cutoff-safe stack environment.",
+          "effective_weight": 0.38941964285714287,
+          "evidence": {
+            "quarterback_team": "DET",
+            "stack_environment": {
+              "available": true,
+              "blowout_risk": 0.0,
+              "competitive_game": 0.5357142857142857,
+              "game_total": 48.5,
+              "opponent_implied_total": 21.0,
+              "opponent_push": 0.35714285714285715,
+              "point_in_time_safe": true,
+              "stack_environment": 0.5991071428571428,
+              "team_implied_total": 27.5,
+              "team_quality": 0.6785714285714286,
+              "team_spread": -6.5,
+              "total_quality": 0.625
+            }
+          },
+          "magnitude": 0.5991071428571428,
+          "objective_contribution": 0.0662013392857143,
+          "players": [
+            {
+              "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+              "player_name": "Jared Goff",
+              "position": "QB",
+              "team": "DET"
+            },
+            {
+              "player_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+              "player_name": "Amon-Ra St. Brown",
+              "position": "WR",
+              "team": "DET"
+            },
+            {
+              "player_id": "900f1061-eb3e-4945-bed6-3a8186cd16aa",
+              "player_name": "Jameson Williams",
+              "position": "WR",
+              "team": "DET"
+            }
+          ],
+          "reason_code": "quarterback_double_stack",
+          "rule_id": "construction.classic_qb_double_stack_v2",
+          "rule_type": "soft_boost",
+          "score_contribution": 0.38941964285714287,
+          "term_kind": "format_specific"
+        }
+      ],
+      "dst_ownership": null,
+      "game_environment": {
+        "game_total": 48.5,
+        "label": "favored offense",
+        "market_safe": true,
+        "raw_rule_score": 0,
+        "reason": "No standalone primary-game bonus in the current Classic objective; no game-related pair rule fired",
+        "selector_contribution": 0.0,
+        "team_spread": -6.5,
+        "team_total": 27.5
+      },
+      "games_represented": [
+        "BAL@DAL 09/27/2026 04:25PM ET",
+        "CAR@CLE 09/27/2026 01:00PM ET",
+        "CIN@PIT 09/27/2026 01:00PM ET",
+        "MIN@TB 09/27/2026 04:05PM ET",
+        "NYJ@DET 09/27/2026 01:00PM ET"
+      ],
+      "high_owned_count": null,
+      "leverage_available": false,
+      "leverage_sum": null,
+      "log_ownership": null,
+      "low_owned_count": null,
+      "mean": 135.7583440595786,
+      "objective_score": 5.372109820353707,
+      "ownership_product": null,
+      "ownership_sum": null,
+      "p90": 236.41089600657313,
+      "pass_catchers": {
+        "flex_position": "WR",
+        "high_owned_count": null,
+        "low_owned_count": null,
+        "one_offs": [
+          "Cade Otton",
+          "Jalen Coker",
+          "Denzel Boston"
+        ],
+        "salary": 26400,
+        "te_in_qb_stack": false
+      },
+      "player_ids": [
+        "0a6edce6-ea10-4fea-bdd0-3411df21bc7f",
+        "0be06444-4cd6-41a4-98a5-877a9a5c42b2",
+        "1f90d290-afb4-48ae-8052-fa99040b8ddb",
+        "220c527d-9daf-4348-8f38-c244c8c512b3",
+        "2fa43876-8b80-4de0-a467-82bfa150f042",
+        "48932b42-a60a-4070-82a7-50475f27bbf2",
+        "49ac835d-70f6-4fbd-ae80-242eea54c172",
+        "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+        "900f1061-eb3e-4945-bed6-3a8186cd16aa"
+      ],
+      "primary_game": "DET\u2013NYJ",
+      "qb": {
+        "basis": "expected or recent carries",
+        "carries": 1.6666666666666667,
+        "label": "pocket-oriented QB",
+        "name": "Jared Goff",
+        "ownership": null,
+        "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+        "rushing_role_strength": 0.0,
+        "team": "DET"
+      },
+      "rb_construction": {
+        "high_owned_pair": null,
+        "same_game_pair": false
+      },
+      "rbs": [
+        {
+          "in_qb_game": false,
+          "name": "Chase Brown",
+          "opportunity": {
+            "carries_mean_3": 11.47527037777964,
+            "depth_chart_position": null,
+            "evidence_class": "inferred_opportunity",
+            "explicit_role_signal": null,
+            "fallback_threshold_met": null,
+            "player_status": null,
+            "pregame_availability_probability": 1.0,
+            "pregame_carry_share": null,
+            "pregame_expected_carries": null,
+            "pregame_expected_routes": null,
+            "pregame_expected_snaps": null,
+            "pregame_expected_targets": null,
+            "pregame_goal_line_share": null,
+            "pregame_injury_created_opportunity": null,
+            "pregame_red_zone_share": null,
+            "pregame_role_label": null,
+            "pregame_start_probability": 1.0,
+            "pregame_target_share": null,
+            "receiving_yards_mean_3": null,
+            "receptions_mean_3": null,
+            "retention_reason": "not evaluated",
+            "roster_status": null,
+            "snap_share_mean_3": 0.63,
+            "target_share_mean_3": 0.12240480042333911,
+            "targets_mean_3": 4.202564814534643,
+            "team_targets_mean_3": 34.333333333333336
+          },
+          "opposing_dst": false,
+          "ownership": null,
+          "p90": 27.553502078408833,
+          "projection": 17.119233465951446,
+          "receiving_role_diagnostic": {
+            "expected_routes": null,
+            "expected_targets": null,
+            "receiving_fantasy_points": null,
+            "receiving_fantasy_points_reason": "Unavailable: no receiving-point decomposition in the projection snapshot",
+            "receiving_yards_mean_3": null,
+            "recent_target_share_mean_3": 0.12240480042333911,
+            "recent_targets_mean_3": 4.202564814534643,
+            "receptions_mean_3": null,
+            "source": "lagged_three_game",
+            "strength": 0.5253206018168304,
+            "target_share": 0.12240480042333911
+          },
+          "receiving_role_strength": 0.5253206018168304,
+          "salary": 6600,
+          "same_team_dst": false,
+          "spread": -3.5,
+          "team": "CIN",
+          "team_total": 23.0
+        },
+        {
+          "in_qb_game": false,
+          "name": "Derrick Henry",
+          "opportunity": {
+            "carries_mean_3": 19.930616842244753,
+            "depth_chart_position": null,
+            "evidence_class": "inferred_opportunity",
+            "explicit_role_signal": null,
+            "fallback_threshold_met": null,
+            "player_status": null,
+            "pregame_availability_probability": 1.0,
+            "pregame_carry_share": null,
+            "pregame_expected_carries": null,
+            "pregame_expected_routes": null,
+            "pregame_expected_snaps": null,
+            "pregame_expected_targets": null,
+            "pregame_goal_line_share": null,
+            "pregame_injury_created_opportunity": null,
+            "pregame_red_zone_share": null,
+            "pregame_role_label": null,
+            "pregame_start_probability": 1.0,
+            "pregame_target_share": null,
+            "receiving_yards_mean_3": null,
+            "receptions_mean_3": null,
+            "retention_reason": "not evaluated",
+            "roster_status": null,
+            "snap_share_mean_3": 0.6266666666666666,
+            "target_share_mean_3": 0.05495909546959672,
+            "targets_mean_3": 1.2640591958007246,
+            "team_targets_mean_3": 23.0
+          },
+          "opposing_dst": false,
+          "ownership": null,
+          "p90": 34.54860949122313,
+          "projection": 21.535263439011068,
+          "receiving_role_diagnostic": {
+            "expected_routes": null,
+            "expected_targets": null,
+            "receiving_fantasy_points": null,
+            "receiving_fantasy_points_reason": "Unavailable: no receiving-point decomposition in the projection snapshot",
+            "receiving_yards_mean_3": null,
+            "recent_target_share_mean_3": 0.05495909546959672,
+            "recent_targets_mean_3": 1.2640591958007246,
+            "receptions_mean_3": null,
+            "source": "lagged_three_game",
+            "strength": 0.19628248381998828,
+            "target_share": 0.05495909546959672
+          },
+          "receiving_role_strength": 0.19628248381998828,
+          "salary": 7700,
+          "same_team_dst": false,
+          "spread": -3.0,
+          "team": "BAL",
+          "team_total": 27.75
+        }
+      ],
+      "relative_chalk": null,
+      "roster": [
+        {
+          "name": "Buccaneers",
+          "ownership": null,
+          "player_id": "0a6edce6-ea10-4fea-bdd0-3411df21bc7f",
+          "position": "DST",
+          "salary": 2600,
+          "team": "TB"
+        },
+        {
+          "name": "Chase Brown",
+          "ownership": null,
+          "player_id": "0be06444-4cd6-41a4-98a5-877a9a5c42b2",
+          "position": "RB",
+          "salary": 6600,
+          "team": "CIN"
+        },
+        {
+          "name": "Cade Otton",
+          "ownership": null,
+          "player_id": "1f90d290-afb4-48ae-8052-fa99040b8ddb",
+          "position": "TE",
+          "salary": 3100,
+          "team": "TB"
+        },
+        {
+          "name": "Amon-Ra St. Brown",
+          "ownership": null,
+          "player_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+          "position": "WR",
+          "salary": 7900,
+          "team": "DET"
+        },
+        {
+          "name": "Jalen Coker",
+          "ownership": null,
+          "player_id": "2fa43876-8b80-4de0-a467-82bfa150f042",
+          "position": "WR",
+          "salary": 5500,
+          "team": "CAR"
+        },
+        {
+          "name": "Derrick Henry",
+          "ownership": null,
+          "player_id": "48932b42-a60a-4070-82a7-50475f27bbf2",
+          "position": "RB",
+          "salary": 7700,
+          "team": "BAL"
+        },
+        {
+          "name": "Denzel Boston",
+          "ownership": null,
+          "player_id": "49ac835d-70f6-4fbd-ae80-242eea54c172",
+          "position": "WR",
+          "salary": 4500,
+          "team": "CLE"
+        },
+        {
+          "name": "Jared Goff",
+          "ownership": null,
+          "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+          "position": "QB",
+          "salary": 6300,
+          "team": "DET"
+        },
+        {
+          "name": "Jameson Williams",
+          "ownership": null,
+          "player_id": "900f1061-eb3e-4945-bed6-3a8186cd16aa",
+          "position": "WR",
+          "salary": 5400,
+          "team": "DET"
+        }
+      ],
+      "salary": 49600,
+      "stack": {
+        "bring_back_correlation_contribution": 0.0,
+        "bring_back_count": 0,
+        "bring_back_evaluations": [],
+        "bring_backs": [],
+        "game_stack_log_ownership": null,
+        "game_stack_ownership": null,
+        "game_stack_salary": 19600,
+        "game_stack_size": 3,
+        "partner_count": 2,
+        "partners": [
+          {
+            "name": "Amon-Ra St. Brown",
+            "ownership": null,
+            "position": "WR"
+          },
+          {
+            "name": "Jameson Williams",
+            "ownership": null,
+            "position": "WR"
+          }
+        ],
+        "type": "QB+2"
+      }
+    },
+    {
+      "base_solver": 5.037489181907184,
+      "cheap_skill_opportunity": [
+        {
+          "carries_mean_3": 0.0,
+          "depth_chart_position": null,
+          "evidence_class": "inferred_opportunity",
+          "explicit_role_signal": null,
+          "fallback_threshold_met": null,
+          "name": "Sam LaPorta",
+          "player_status": null,
+          "position": "TE",
+          "pregame_availability_probability": 1.0,
+          "pregame_carry_share": null,
+          "pregame_expected_carries": null,
+          "pregame_expected_routes": null,
+          "pregame_expected_snaps": null,
+          "pregame_expected_targets": null,
+          "pregame_goal_line_share": null,
+          "pregame_injury_created_opportunity": null,
+          "pregame_red_zone_share": null,
+          "pregame_role_label": null,
+          "pregame_start_probability": 1.0,
+          "pregame_target_share": null,
+          "receiving_yards_mean_3": null,
+          "receptions_mean_3": null,
+          "retention_reason": "not evaluated",
+          "roster_status": null,
+          "salary": 4300,
+          "snap_share_mean_3": 0.85,
+          "target_share_mean_3": 0.14100304262812743,
+          "targets_mean_3": 5.3111146056594665,
+          "team_targets_mean_3": 37.666666666666664
+        },
+        {
+          "carries_mean_3": 3.2809256096098114,
+          "depth_chart_position": null,
+          "evidence_class": "inferred_opportunity",
+          "explicit_role_signal": null,
+          "fallback_threshold_met": null,
+          "name": "Ty Johnson",
+          "player_status": null,
+          "position": "RB",
+          "pregame_availability_probability": 1.0,
+          "pregame_carry_share": null,
+          "pregame_expected_carries": null,
+          "pregame_expected_routes": null,
+          "pregame_expected_snaps": null,
+          "pregame_expected_targets": null,
+          "pregame_goal_line_share": null,
+          "pregame_injury_created_opportunity": null,
+          "pregame_red_zone_share": null,
+          "pregame_role_label": null,
+          "pregame_start_probability": 1.0,
+          "pregame_target_share": null,
+          "receiving_yards_mean_3": null,
+          "receptions_mean_3": null,
+          "retention_reason": "not evaluated",
+          "roster_status": null,
+          "salary": 4000,
+          "snap_share_mean_3": 0.3433333333333333,
+          "target_share_mean_3": 0.04774222603633271,
+          "targets_mean_3": 1.5118371578172027,
+          "team_targets_mean_3": 31.666666666666668
+        }
+      ],
+      "components": {
+        "bring_back": 0.0,
+        "context": 0.15434427543311738,
+        "correlation": 0.0662013392857143,
+        "duplication": 0.0,
+        "game_environment": 0.0,
+        "leverage": 0.0,
+        "mean": 1.8250100694709626,
+        "other_residual": 0.0,
+        "ownership_chalk": 0.0,
+        "p90": 3.058134837003104,
+        "penalties": 0.0,
+        "qb_stack": 0.2444357142857143
+      },
+      "correlation_negative": 0.0,
+      "correlation_positive": 0.3106370535714286,
+      "correlation_rules": [
+        {
+          "configured_weight": 0.8,
+          "description": "Reward a quarterback paired with a same-team wide receiver or tight end in proportion to the cutoff-safe stack environment.",
+          "effective_weight": 0.4792857142857143,
+          "evidence": {
+            "captain_dst_game_script": {
+              "available": false
+            },
+            "captain_stack_environment": {
+              "available": false
+            },
+            "rb_dst_game_script": {
+              "available": false
+            },
+            "stack_environment": {
+              "available": true,
+              "blowout_risk": 0.0,
+              "competitive_game": 0.5357142857142857,
+              "game_total": 48.5,
+              "opponent_implied_total": 21.0,
+              "opponent_push": 0.35714285714285715,
+              "point_in_time_safe": true,
+              "stack_environment": 0.5991071428571428,
+              "team_implied_total": 27.5,
+              "team_quality": 0.6785714285714286,
+              "team_spread": -6.5,
+              "total_quality": 0.625
+            }
+          },
+          "magnitude": 0.5991071428571428,
+          "objective_contribution": 0.08147857142857144,
+          "players": [
+            {
+              "player_id": "1ffe9287-283b-4e47-bcce-fd45d98cf24d",
+              "player_name": "Sam LaPorta",
+              "position": "TE",
+              "team": "DET"
+            },
+            {
+              "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+              "player_name": "Jared Goff",
+              "position": "QB",
+              "team": "DET"
+            }
+          ],
+          "reason_code": "qb_same_team_pass_catcher",
+          "rule_id": "correlation.qb_pass_catcher_v2",
+          "rule_type": "soft_boost",
+          "score_contribution": 0.4792857142857143,
+          "term_kind": "pair"
+        },
+        {
+          "configured_weight": 0.8,
+          "description": "Reward a quarterback paired with a same-team wide receiver or tight end in proportion to the cutoff-safe stack environment.",
+          "effective_weight": 0.4792857142857143,
+          "evidence": {
+            "captain_dst_game_script": {
+              "available": false
+            },
+            "captain_stack_environment": {
+              "available": false
+            },
+            "rb_dst_game_script": {
+              "available": false
+            },
+            "stack_environment": {
+              "available": true,
+              "blowout_risk": 0.0,
+              "competitive_game": 0.5357142857142857,
+              "game_total": 48.5,
+              "opponent_implied_total": 21.0,
+              "opponent_push": 0.35714285714285715,
+              "point_in_time_safe": true,
+              "stack_environment": 0.5991071428571428,
+              "team_implied_total": 27.5,
+              "team_quality": 0.6785714285714286,
+              "team_spread": -6.5,
+              "total_quality": 0.625
+            }
+          },
+          "magnitude": 0.5991071428571428,
+          "objective_contribution": 0.08147857142857144,
+          "players": [
+            {
+              "player_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+              "player_name": "Amon-Ra St. Brown",
+              "position": "WR",
+              "team": "DET"
+            },
+            {
+              "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+              "player_name": "Jared Goff",
+              "position": "QB",
+              "team": "DET"
+            }
+          ],
+          "reason_code": "qb_same_team_pass_catcher",
+          "rule_id": "correlation.qb_pass_catcher_v2",
+          "rule_type": "soft_boost",
+          "score_contribution": 0.4792857142857143,
+          "term_kind": "pair"
+        },
+        {
+          "configured_weight": 0.8,
+          "description": "Reward a quarterback paired with a same-team wide receiver or tight end in proportion to the cutoff-safe stack environment.",
+          "effective_weight": 0.4792857142857143,
+          "evidence": {
+            "captain_dst_game_script": {
+              "available": false
+            },
+            "captain_stack_environment": {
+              "available": false
+            },
+            "rb_dst_game_script": {
+              "available": false
+            },
+            "stack_environment": {
+              "available": true,
+              "blowout_risk": 0.0,
+              "competitive_game": 0.5357142857142857,
+              "game_total": 48.5,
+              "opponent_implied_total": 21.0,
+              "opponent_push": 0.35714285714285715,
+              "point_in_time_safe": true,
+              "stack_environment": 0.5991071428571428,
+              "team_implied_total": 27.5,
+              "team_quality": 0.6785714285714286,
+              "team_spread": -6.5,
+              "total_quality": 0.625
+            }
+          },
+          "magnitude": 0.5991071428571428,
+          "objective_contribution": 0.08147857142857144,
+          "players": [
+            {
+              "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+              "player_name": "Jared Goff",
+              "position": "QB",
+              "team": "DET"
+            },
+            {
+              "player_id": "900f1061-eb3e-4945-bed6-3a8186cd16aa",
+              "player_name": "Jameson Williams",
+              "position": "WR",
+              "team": "DET"
+            }
+          ],
+          "reason_code": "qb_same_team_pass_catcher",
+          "rule_id": "correlation.qb_pass_catcher_v2",
+          "rule_type": "soft_boost",
+          "score_contribution": 0.4792857142857143,
+          "term_kind": "pair"
+        },
+        {
+          "configured_weight": 0.65,
+          "construction_kind": "classic_qb_double_stack",
+          "description": "Reward a GPP quarterback with at least two same-team pass catchers in proportion to the cutoff-safe stack environment.",
+          "effective_weight": 0.38941964285714287,
+          "evidence": {
+            "quarterback_team": "DET",
+            "stack_environment": {
+              "available": true,
+              "blowout_risk": 0.0,
+              "competitive_game": 0.5357142857142857,
+              "game_total": 48.5,
+              "opponent_implied_total": 21.0,
+              "opponent_push": 0.35714285714285715,
+              "point_in_time_safe": true,
+              "stack_environment": 0.5991071428571428,
+              "team_implied_total": 27.5,
+              "team_quality": 0.6785714285714286,
+              "team_spread": -6.5,
+              "total_quality": 0.625
+            }
+          },
+          "magnitude": 0.5991071428571428,
+          "objective_contribution": 0.0662013392857143,
+          "players": [
+            {
+              "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+              "player_name": "Jared Goff",
+              "position": "QB",
+              "team": "DET"
+            },
+            {
+              "player_id": "1ffe9287-283b-4e47-bcce-fd45d98cf24d",
+              "player_name": "Sam LaPorta",
+              "position": "TE",
+              "team": "DET"
+            },
+            {
+              "player_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+              "player_name": "Amon-Ra St. Brown",
+              "position": "WR",
+              "team": "DET"
+            },
+            {
+              "player_id": "900f1061-eb3e-4945-bed6-3a8186cd16aa",
+              "player_name": "Jameson Williams",
+              "position": "WR",
+              "team": "DET"
+            }
+          ],
+          "reason_code": "quarterback_double_stack",
+          "rule_id": "construction.classic_qb_double_stack_v2",
+          "rule_type": "soft_boost",
+          "score_contribution": 0.38941964285714287,
+          "term_kind": "format_specific"
+        }
+      ],
+      "dst_ownership": null,
+      "game_environment": {
+        "game_total": 48.5,
+        "label": "favored offense",
+        "market_safe": true,
+        "raw_rule_score": 0,
+        "reason": "No standalone primary-game bonus in the current Classic objective; no game-related pair rule fired",
+        "selector_contribution": 0.0,
+        "team_spread": -6.5,
+        "team_total": 27.5
+      },
+      "games_represented": [
+        "BAL@DAL 09/27/2026 04:25PM ET",
+        "CAR@CLE 09/27/2026 01:00PM ET",
+        "KC@MIA 09/27/2026 01:00PM ET",
+        "LAC@BUF 09/27/2026 01:00PM ET",
+        "NYJ@DET 09/27/2026 01:00PM ET"
+      ],
+      "high_owned_count": null,
+      "leverage_available": false,
+      "leverage_sum": null,
+      "log_ownership": null,
+      "low_owned_count": null,
+      "mean": 130.87572343931362,
+      "objective_score": 5.348126235478612,
+      "ownership_product": null,
+      "ownership_sum": null,
+      "p90": 228.19734549972807,
+      "pass_catchers": {
+        "flex_position": "WR",
+        "high_owned_count": null,
+        "low_owned_count": null,
+        "one_offs": [
+          "Jalen Coker",
+          "Zay Flowers"
+        ],
+        "salary": 30000,
+        "te_in_qb_stack": true
+      },
+      "player_ids": [
+        "1f3ab2b3-189f-420b-a120-d0acec6b43d1",
+        "1ffe9287-283b-4e47-bcce-fd45d98cf24d",
+        "220c527d-9daf-4348-8f38-c244c8c512b3",
+        "23400de1-b673-40d4-9353-73c5ba50c34c",
+        "2fa43876-8b80-4de0-a467-82bfa150f042",
+        "48932b42-a60a-4070-82a7-50475f27bbf2",
+        "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+        "900f1061-eb3e-4945-bed6-3a8186cd16aa",
+        "ecadd109-bcd3-46c5-b77e-60a6d3214d7f"
+      ],
+      "primary_game": "DET\u2013NYJ",
+      "qb": {
+        "basis": "expected or recent carries",
+        "carries": 1.6666666666666667,
+        "label": "pocket-oriented QB",
+        "name": "Jared Goff",
+        "ownership": null,
+        "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+        "rushing_role_strength": 0.0,
+        "team": "DET"
+      },
+      "rb_construction": {
+        "high_owned_pair": null,
+        "same_game_pair": false
+      },
+      "rbs": [
+        {
+          "in_qb_game": false,
+          "name": "Ty Johnson",
+          "opportunity": {
+            "carries_mean_3": 3.2809256096098114,
+            "depth_chart_position": null,
+            "evidence_class": "inferred_opportunity",
+            "explicit_role_signal": null,
+            "fallback_threshold_met": null,
+            "player_status": null,
+            "pregame_availability_probability": 1.0,
+            "pregame_carry_share": null,
+            "pregame_expected_carries": null,
+            "pregame_expected_routes": null,
+            "pregame_expected_snaps": null,
+            "pregame_expected_targets": null,
+            "pregame_goal_line_share": null,
+            "pregame_injury_created_opportunity": null,
+            "pregame_red_zone_share": null,
+            "pregame_role_label": null,
+            "pregame_start_probability": 1.0,
+            "pregame_target_share": null,
+            "receiving_yards_mean_3": null,
+            "receptions_mean_3": null,
+            "retention_reason": "not evaluated",
+            "roster_status": null,
+            "snap_share_mean_3": 0.3433333333333333,
+            "target_share_mean_3": 0.04774222603633271,
+            "targets_mean_3": 1.5118371578172027,
+            "team_targets_mean_3": 31.666666666666668
+          },
+          "opposing_dst": false,
+          "ownership": null,
+          "p90": 15.158135395763768,
+          "projection": 7.1368787904417506,
+          "receiving_role_diagnostic": {
+            "expected_routes": null,
+            "expected_targets": null,
+            "receiving_fantasy_points": null,
+            "receiving_fantasy_points_reason": "Unavailable: no receiving-point decomposition in the projection snapshot",
+            "receiving_yards_mean_3": null,
+            "recent_target_share_mean_3": 0.04774222603633271,
+            "recent_targets_mean_3": 1.5118371578172027,
+            "receptions_mean_3": null,
+            "source": "lagged_three_game",
+            "strength": 0.18897964472715034,
+            "target_share": 0.04774222603633271
+          },
+          "receiving_role_strength": 0.18897964472715034,
+          "salary": 4000,
+          "same_team_dst": false,
+          "spread": -7.0,
+          "team": "BUF",
+          "team_total": 28.75
+        },
+        {
+          "in_qb_game": false,
+          "name": "Derrick Henry",
+          "opportunity": {
+            "carries_mean_3": 19.930616842244753,
+            "depth_chart_position": null,
+            "evidence_class": "inferred_opportunity",
+            "explicit_role_signal": null,
+            "fallback_threshold_met": null,
+            "player_status": null,
+            "pregame_availability_probability": 1.0,
+            "pregame_carry_share": null,
+            "pregame_expected_carries": null,
+            "pregame_expected_routes": null,
+            "pregame_expected_snaps": null,
+            "pregame_expected_targets": null,
+            "pregame_goal_line_share": null,
+            "pregame_injury_created_opportunity": null,
+            "pregame_red_zone_share": null,
+            "pregame_role_label": null,
+            "pregame_start_probability": 1.0,
+            "pregame_target_share": null,
+            "receiving_yards_mean_3": null,
+            "receptions_mean_3": null,
+            "retention_reason": "not evaluated",
+            "roster_status": null,
+            "snap_share_mean_3": 0.6266666666666666,
+            "target_share_mean_3": 0.05495909546959672,
+            "targets_mean_3": 1.2640591958007246,
+            "team_targets_mean_3": 23.0
+          },
+          "opposing_dst": false,
+          "ownership": null,
+          "p90": 34.54860949122313,
+          "projection": 21.535263439011068,
+          "receiving_role_diagnostic": {
+            "expected_routes": null,
+            "expected_targets": null,
+            "receiving_fantasy_points": null,
+            "receiving_fantasy_points_reason": "Unavailable: no receiving-point decomposition in the projection snapshot",
+            "receiving_yards_mean_3": null,
+            "recent_target_share_mean_3": 0.05495909546959672,
+            "recent_targets_mean_3": 1.2640591958007246,
+            "receptions_mean_3": null,
+            "source": "lagged_three_game",
+            "strength": 0.19628248381998828,
+            "target_share": 0.05495909546959672
+          },
+          "receiving_role_strength": 0.19628248381998828,
+          "salary": 7700,
+          "same_team_dst": false,
+          "spread": -3.0,
+          "team": "BAL",
+          "team_total": 27.75
+        }
+      ],
+      "relative_chalk": null,
+      "roster": [
+        {
+          "name": "Dolphins",
+          "ownership": null,
+          "player_id": "1f3ab2b3-189f-420b-a120-d0acec6b43d1",
+          "position": "DST",
+          "salary": 2000,
+          "team": "MIA"
+        },
+        {
+          "name": "Sam LaPorta",
+          "ownership": null,
+          "player_id": "1ffe9287-283b-4e47-bcce-fd45d98cf24d",
+          "position": "TE",
+          "salary": 4300,
+          "team": "DET"
+        },
+        {
+          "name": "Amon-Ra St. Brown",
+          "ownership": null,
+          "player_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+          "position": "WR",
+          "salary": 7900,
+          "team": "DET"
+        },
+        {
+          "name": "Ty Johnson",
+          "ownership": null,
+          "player_id": "23400de1-b673-40d4-9353-73c5ba50c34c",
+          "position": "RB",
+          "salary": 4000,
+          "team": "BUF"
+        },
+        {
+          "name": "Jalen Coker",
+          "ownership": null,
+          "player_id": "2fa43876-8b80-4de0-a467-82bfa150f042",
+          "position": "WR",
+          "salary": 5500,
+          "team": "CAR"
+        },
+        {
+          "name": "Derrick Henry",
+          "ownership": null,
+          "player_id": "48932b42-a60a-4070-82a7-50475f27bbf2",
+          "position": "RB",
+          "salary": 7700,
+          "team": "BAL"
+        },
+        {
+          "name": "Jared Goff",
+          "ownership": null,
+          "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+          "position": "QB",
+          "salary": 6300,
+          "team": "DET"
+        },
+        {
+          "name": "Jameson Williams",
+          "ownership": null,
+          "player_id": "900f1061-eb3e-4945-bed6-3a8186cd16aa",
+          "position": "WR",
+          "salary": 5400,
+          "team": "DET"
+        },
+        {
+          "name": "Zay Flowers",
+          "ownership": null,
+          "player_id": "ecadd109-bcd3-46c5-b77e-60a6d3214d7f",
+          "position": "WR",
+          "salary": 6900,
+          "team": "BAL"
+        }
+      ],
+      "salary": 50000,
+      "stack": {
+        "bring_back_correlation_contribution": 0.0,
+        "bring_back_count": 0,
+        "bring_back_evaluations": [],
+        "bring_backs": [],
+        "game_stack_log_ownership": null,
+        "game_stack_ownership": null,
+        "game_stack_salary": 23900,
+        "game_stack_size": 4,
+        "partner_count": 3,
+        "partners": [
+          {
+            "name": "Sam LaPorta",
+            "ownership": null,
+            "position": "TE"
+          },
+          {
+            "name": "Amon-Ra St. Brown",
+            "ownership": null,
+            "position": "WR"
+          },
+          {
+            "name": "Jameson Williams",
+            "ownership": null,
+            "position": "WR"
+          }
+        ],
+        "type": "QB+3"
+      }
+    }
+  ],
+  "replay_generation_seconds": 1611.9779552499822,
+  "replayed_rosters": 120,
+  "saved_missing_rosters": [
+    {
+      "base_solver": 5.1567942775649085,
+      "chalk_improvement_vs_best_quality": null,
+      "cheap_skill_opportunity": [
+        {
+          "carries_mean_3": 0.0,
+          "depth_chart_position": null,
+          "evidence_class": "inferred_opportunity",
+          "explicit_role_signal": false,
+          "fallback_threshold_met": false,
+          "name": "Cade Otton",
+          "player_status": null,
+          "position": "TE",
+          "pregame_availability_probability": 1.0,
+          "pregame_carry_share": null,
+          "pregame_expected_carries": null,
+          "pregame_expected_routes": null,
+          "pregame_expected_snaps": null,
+          "pregame_expected_targets": null,
+          "pregame_goal_line_share": null,
+          "pregame_injury_created_opportunity": null,
+          "pregame_red_zone_share": null,
+          "pregame_role_label": null,
+          "pregame_start_probability": 1.0,
+          "pregame_target_share": null,
+          "receiving_yards_mean_3": null,
+          "receptions_mean_3": null,
+          "retention_reason": "outside_low_salary_gate",
+          "roster_status": null,
+          "salary": 3100,
+          "snap_share_mean_3": 0.9700000000000001,
+          "target_share_mean_3": 0.18786773720873717,
+          "targets_mean_3": 5.135051483705483,
+          "team_targets_mean_3": 27.333333333333332
+        },
+        {
+          "carries_mean_3": 0.0,
+          "depth_chart_position": null,
+          "evidence_class": "inferred_opportunity",
+          "explicit_role_signal": false,
+          "fallback_threshold_met": false,
+          "name": "Denzel Boston",
+          "player_status": null,
+          "position": "WR",
+          "pregame_availability_probability": 1.0,
+          "pregame_carry_share": null,
+          "pregame_expected_carries": null,
+          "pregame_expected_routes": null,
+          "pregame_expected_snaps": null,
+          "pregame_expected_targets": null,
+          "pregame_goal_line_share": null,
+          "pregame_injury_created_opportunity": null,
+          "pregame_red_zone_share": null,
+          "pregame_role_label": null,
+          "pregame_start_probability": 1.0,
+          "pregame_target_share": null,
+          "receiving_yards_mean_3": null,
+          "receptions_mean_3": null,
+          "retention_reason": "outside_low_salary_gate",
+          "roster_status": null,
+          "salary": 4500,
+          "snap_share_mean_3": 0.92,
+          "target_share_mean_3": 0.11632182597331481,
+          "targets_mean_3": 2.83049776535066,
+          "team_targets_mean_3": 24.333333333333332
+        }
+      ],
+      "components": {
+        "bring_back": 0.0,
+        "context": 0.10768659513209218,
+        "correlation": 0.0662013392857143,
+        "duplication": 0.0,
+        "game_environment": 0.0,
+        "leverage": 0.0,
+        "mean": 1.869252569608709,
+        "other_residual": 0.0,
+        "ownership_chalk": 0.0,
+        "p90": 3.1798551128241077,
+        "penalties": 0.0,
+        "qb_stack": 0.16295714285714288
+      },
+      "correlation_negative": 0.0,
+      "correlation_positive": 0.22915848214285717,
+      "correlation_rules": [
+        {
+          "configured_weight": 0.8,
+          "description": "Reward a quarterback paired with a same-team wide receiver or tight end in proportion to the cutoff-safe stack environment.",
+          "effective_weight": 0.4792857142857143,
+          "evidence": {
+            "captain_dst_game_script": {
+              "available": false
+            },
+            "captain_stack_environment": {
+              "available": false
+            },
+            "rb_dst_game_script": {
+              "available": false
+            },
+            "stack_environment": {
+              "available": true,
+              "blowout_risk": 0.0,
+              "competitive_game": 0.5357142857142857,
+              "game_total": 48.5,
+              "opponent_implied_total": 21.0,
+              "opponent_push": 0.35714285714285715,
+              "point_in_time_safe": true,
+              "stack_environment": 0.5991071428571428,
+              "team_implied_total": 27.5,
+              "team_quality": 0.6785714285714286,
+              "team_spread": -6.5,
+              "total_quality": 0.625
+            }
+          },
+          "magnitude": 0.5991071428571428,
+          "objective_contribution": 0.08147857142857144,
+          "players": [
+            {
+              "player_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+              "player_name": "Amon-Ra St. Brown",
+              "position": "WR",
+              "team": "DET"
+            },
+            {
+              "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+              "player_name": "Jared Goff",
+              "position": "QB",
+              "team": "DET"
+            }
+          ],
+          "reason_code": "qb_same_team_pass_catcher",
+          "rule_id": "correlation.qb_pass_catcher_v2",
+          "rule_type": "soft_boost",
+          "score_contribution": 0.4792857142857143,
+          "term_kind": "pair"
+        },
+        {
+          "configured_weight": 0.8,
+          "description": "Reward a quarterback paired with a same-team wide receiver or tight end in proportion to the cutoff-safe stack environment.",
+          "effective_weight": 0.4792857142857143,
+          "evidence": {
+            "captain_dst_game_script": {
+              "available": false
+            },
+            "captain_stack_environment": {
+              "available": false
+            },
+            "rb_dst_game_script": {
+              "available": false
+            },
+            "stack_environment": {
+              "available": true,
+              "blowout_risk": 0.0,
+              "competitive_game": 0.5357142857142857,
+              "game_total": 48.5,
+              "opponent_implied_total": 21.0,
+              "opponent_push": 0.35714285714285715,
+              "point_in_time_safe": true,
+              "stack_environment": 0.5991071428571428,
+              "team_implied_total": 27.5,
+              "team_quality": 0.6785714285714286,
+              "team_spread": -6.5,
+              "total_quality": 0.625
+            }
+          },
+          "magnitude": 0.5991071428571428,
+          "objective_contribution": 0.08147857142857144,
+          "players": [
+            {
+              "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+              "player_name": "Jared Goff",
+              "position": "QB",
+              "team": "DET"
+            },
+            {
+              "player_id": "900f1061-eb3e-4945-bed6-3a8186cd16aa",
+              "player_name": "Jameson Williams",
+              "position": "WR",
+              "team": "DET"
+            }
+          ],
+          "reason_code": "qb_same_team_pass_catcher",
+          "rule_id": "correlation.qb_pass_catcher_v2",
+          "rule_type": "soft_boost",
+          "score_contribution": 0.4792857142857143,
+          "term_kind": "pair"
+        },
+        {
+          "configured_weight": 0.65,
+          "construction_kind": "classic_qb_double_stack",
+          "description": "Reward a GPP quarterback with at least two same-team pass catchers in proportion to the cutoff-safe stack environment.",
+          "effective_weight": 0.38941964285714287,
+          "evidence": {
+            "quarterback_team": "DET",
+            "stack_environment": {
+              "available": true,
+              "blowout_risk": 0.0,
+              "competitive_game": 0.5357142857142857,
+              "game_total": 48.5,
+              "opponent_implied_total": 21.0,
+              "opponent_push": 0.35714285714285715,
+              "point_in_time_safe": true,
+              "stack_environment": 0.5991071428571428,
+              "team_implied_total": 27.5,
+              "team_quality": 0.6785714285714286,
+              "team_spread": -6.5,
+              "total_quality": 0.625
+            }
+          },
+          "magnitude": 0.5991071428571428,
+          "objective_contribution": 0.0662013392857143,
+          "players": [
+            {
+              "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+              "player_name": "Jared Goff",
+              "position": "QB",
+              "team": "DET"
+            },
+            {
+              "player_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+              "player_name": "Amon-Ra St. Brown",
+              "position": "WR",
+              "team": "DET"
+            },
+            {
+              "player_id": "900f1061-eb3e-4945-bed6-3a8186cd16aa",
+              "player_name": "Jameson Williams",
+              "position": "WR",
+              "team": "DET"
+            }
+          ],
+          "reason_code": "quarterback_double_stack",
+          "rule_id": "construction.classic_qb_double_stack_v2",
+          "rule_type": "soft_boost",
+          "score_contribution": 0.38941964285714287,
+          "term_kind": "format_specific"
+        }
+      ],
+      "dst_ownership": null,
+      "football_sanity": {
+        "cheap_players": [
+          {
+            "evidence_class": "inferred_opportunity",
+            "name": "Cade Otton",
+            "player_id": "1f90d290-afb4-48ae-8052-fa99040b8ddb",
+            "retention_reason": "outside_low_salary_gate",
+            "role_signals": {
+              "carries_mean_3": 0.0,
+              "pregame_expected_carries": null,
+              "pregame_expected_routes": null,
+              "pregame_expected_snaps": null,
+              "pregame_expected_targets": null,
+              "pregame_injury_created_opportunity": null,
+              "snap_share_mean_3": 0.9700000000000001,
+              "targets_mean_3": 5.135051483705483
+            },
+            "salary": 3100
+          },
+          {
+            "evidence_class": "inferred_opportunity",
+            "name": "Denzel Boston",
+            "player_id": "49ac835d-70f6-4fbd-ae80-242eea54c172",
+            "retention_reason": "outside_low_salary_gate",
+            "role_signals": {
+              "carries_mean_3": 0.0,
+              "pregame_expected_carries": null,
+              "pregame_expected_routes": null,
+              "pregame_expected_snaps": null,
+              "pregame_expected_targets": null,
+              "pregame_injury_created_opportunity": null,
+              "snap_share_mean_3": 0.92,
+              "targets_mean_3": 2.83049776535066
+            },
+            "salary": 4500
+          }
+        ],
+        "diagnostic_only": true,
+        "driving_players": [
+          {
+            "importance": 0.6521324786324787,
+            "name": "James Cook III",
+            "player_id": "87afab41-5db5-42d1-85b2-736edfcd712f",
+            "position": "RB",
+            "role_class": "offensive centerpiece",
+            "role_confidence": "high",
+            "team": "BUF"
+          },
+          {
+            "importance": 0.6116844980287635,
+            "name": "Derrick Henry",
+            "player_id": "48932b42-a60a-4070-82a7-50475f27bbf2",
+            "position": "RB",
+            "role_class": "offensive centerpiece",
+            "role_confidence": "high",
+            "team": "BAL"
+          },
+          {
+            "importance": 0.5127699055330635,
+            "name": "Amon-Ra St. Brown",
+            "player_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+            "position": "WR",
+            "role_class": "primary option",
+            "role_confidence": "high",
+            "team": "DET"
+          },
+          {
+            "importance": 0.43652356902356904,
+            "name": "Cade Otton",
+            "player_id": "1f90d290-afb4-48ae-8052-fa99040b8ddb",
+            "position": "TE",
+            "role_class": "primary option",
+            "role_confidence": "high",
+            "team": "TB"
+          },
+          {
+            "importance": 0.42423671833598303,
+            "name": "Jalen Coker",
+            "player_id": "2fa43876-8b80-4de0-a467-82bfa150f042",
+            "position": "WR",
+            "role_class": "primary option",
+            "role_confidence": "high",
+            "team": "CAR"
+          },
+          {
+            "importance": 0.38568181818181824,
+            "name": "Denzel Boston",
+            "player_id": "49ac835d-70f6-4fbd-ae80-242eea54c172",
+            "position": "WR",
+            "role_class": "major secondary option",
+            "role_confidence": "medium",
+            "team": "CLE"
+          },
+          {
+            "importance": 0.36956365272154745,
+            "name": "Jameson Williams",
+            "player_id": "900f1061-eb3e-4945-bed6-3a8186cd16aa",
+            "position": "WR",
+            "role_class": "major secondary option",
+            "role_confidence": "high",
+            "team": "DET"
+          }
+        ],
+        "flags": [],
+        "missing_role_evidence": [],
+        "omitted_central_players": [
+          {
+            "best_candidate_with_player_rank": 41,
+            "candidate_count": 3,
+            "candidate_total": 120,
+            "explanation": "Best generated candidate containing this player scored 0.027 below this lineup; this is a whole-lineup comparison, not a causal swap",
+            "importance": 0.5636328019836793,
+            "mean": 13.837438334093576,
+            "name": "Bucky Irving",
+            "ownership": 3.9756806708492105,
+            "ownership_reason": "Ownership unavailable; no ownership cause assigned",
+            "p90": 26.850784386305644,
+            "player_id": "a9f8d797-040e-4469-b9d5-bb39bf3792b2",
+            "projection_reason": "Mean 13.84; P90 26.85; team mean rank 1, P90 rank 1",
+            "role_class": "offensive centerpiece",
+            "salary": 6300,
+            "salary_value_reason": "Salary $6,300; mean per $1,000 2.20; position value rank 12/135",
+            "selected_count": 0,
+            "selected_total": 1,
+            "stack_correlation_reason": "Best containing candidate stack QB+2 versus selected QB+2",
+            "team": "TB",
+            "whole_lineup_objective_gap": 0.027354676855120275
+          },
+          {
+            "best_candidate_with_player_rank": null,
+            "candidate_count": 0,
+            "candidate_total": 120,
+            "explanation": "No generated candidate contained this player; a legal counterfactual solve is needed",
+            "importance": 0.5365472675472676,
+            "mean": 10.942718680014814,
+            "name": "Quinshon Judkins",
+            "ownership": 3.7953305740277887,
+            "ownership_reason": "Ownership unavailable; no ownership cause assigned",
+            "p90": 18.96397528533683,
+            "player_id": "376836fe-2a4f-42c0-99c4-dd1c9768034f",
+            "projection_reason": "Mean 10.94; P90 18.96; team mean rank 2, P90 rank 2",
+            "role_class": "primary option",
+            "salary": 5500,
+            "salary_value_reason": "Salary $5,500; mean per $1,000 1.99; position value rank 19/135",
+            "selected_count": 0,
+            "selected_total": 1,
+            "stack_correlation_reason": "No containing candidate for construction comparison",
+            "team": "CLE",
+            "whole_lineup_objective_gap": null
+          },
+          {
+            "best_candidate_with_player_rank": null,
+            "candidate_count": 0,
+            "candidate_total": 120,
+            "explanation": "No generated candidate contained this player; a legal counterfactual solve is needed",
+            "importance": 0.4561667747468831,
+            "mean": 13.099617515870948,
+            "name": "Chuba Hubbard",
+            "ownership": 3.8177449228255496,
+            "ownership_reason": "Ownership unavailable; no ownership cause assigned",
+            "p90": 21.120874121192966,
+            "player_id": "1cb58102-1426-459a-82cf-240882d90206",
+            "projection_reason": "Mean 13.10; P90 21.12; team mean rank 2, P90 rank 3",
+            "role_class": "primary option",
+            "salary": 6100,
+            "salary_value_reason": "Salary $6,100; mean per $1,000 2.15; position value rank 15/135",
+            "selected_count": 0,
+            "selected_total": 1,
+            "stack_correlation_reason": "No containing candidate for construction comparison",
+            "team": "CAR",
+            "whole_lineup_objective_gap": null
+          },
+          {
+            "best_candidate_with_player_rank": null,
+            "candidate_count": 0,
+            "candidate_total": 120,
+            "explanation": "No generated candidate contained this player; a legal counterfactual solve is needed",
+            "importance": 0.6648684360378991,
+            "mean": 18.48569181003571,
+            "name": "Jahmyr Gibbs",
+            "ownership": 21.513686314353798,
+            "ownership_reason": "Ownership unavailable; no ownership cause assigned",
+            "p90": 31.49903786224778,
+            "player_id": "693463af-73ba-41d5-889c-388c36703430",
+            "projection_reason": "Mean 18.49; P90 31.50; team mean rank 2, P90 rank 2",
+            "role_class": "offensive centerpiece",
+            "salary": 8800,
+            "salary_value_reason": "Salary $8,800; mean per $1,000 2.10; position value rank 17/135",
+            "selected_count": 0,
+            "selected_total": 1,
+            "stack_correlation_reason": "No containing candidate for construction comparison",
+            "team": "DET",
+            "whole_lineup_objective_gap": null
+          }
+        ],
+        "role_projection_disagreements": [],
+        "script": "DET passing through 2 QB stack partner(s) with 0 opposing skill-player bring-back(s) in favored offense game conditions",
+        "status": "available"
+      },
+      "game_environment": {
+        "game_total": 48.5,
+        "label": "favored offense",
+        "market_safe": true,
+        "raw_rule_score": 0,
+        "reason": "No standalone primary-game bonus in the current Classic objective; no game-related pair rule fired",
+        "selector_contribution": 0.0,
+        "team_spread": -6.5,
+        "team_total": 27.5
+      },
+      "games_represented": [
+        "BAL@DAL 09/27/2026 04:25PM ET",
+        "CAR@CLE 09/27/2026 01:00PM ET",
+        "LAC@BUF 09/27/2026 01:00PM ET",
+        "MIN@TB 09/27/2026 04:05PM ET",
+        "NYJ@DET 09/27/2026 01:00PM ET"
+      ],
+      "generation_template": [
+        1,
+        0
+      ],
+      "high_owned_count": null,
+      "large_ceiling_sacrifice_for_chalk": false,
+      "leverage_available": false,
+      "leverage_sum": null,
+      "log_ownership": null,
+      "low_owned_count": null,
+      "mean": 134.04845618701293,
+      "mean_loss_vs_best": 7.764713195636375,
+      "objective_score": 5.385952759707766,
+      "ownership_objective_gain_vs_best_quality": 0.0,
+      "ownership_product": null,
+      "ownership_sum": null,
+      "p90": 237.28008557376214,
+      "p90_loss_vs_best": 6.977045629991068,
+      "pass_catchers": {
+        "flex_position": "WR",
+        "high_owned_count": null,
+        "low_owned_count": null,
+        "one_offs": [
+          "Cade Otton",
+          "Jalen Coker",
+          "Denzel Boston"
+        ],
+        "salary": 26400,
+        "te_in_qb_stack": false
+      },
+      "player_ids": [
+        "0a6edce6-ea10-4fea-bdd0-3411df21bc7f",
+        "1f90d290-afb4-48ae-8052-fa99040b8ddb",
+        "220c527d-9daf-4348-8f38-c244c8c512b3",
+        "2fa43876-8b80-4de0-a467-82bfa150f042",
+        "48932b42-a60a-4070-82a7-50475f27bbf2",
+        "49ac835d-70f6-4fbd-ae80-242eea54c172",
+        "87afab41-5db5-42d1-85b2-736edfcd712f",
+        "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+        "900f1061-eb3e-4945-bed6-3a8186cd16aa"
+      ],
+      "primary_game": "DET\u2013NYJ",
+      "qb": {
+        "basis": "expected or recent carries",
+        "carries": 1.6666666666666667,
+        "label": "pocket-oriented QB",
+        "name": "Jared Goff",
+        "ownership": null,
+        "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+        "rushing_role_strength": 0.0,
+        "team": "DET"
+      },
+      "rank": 13,
+      "rb_construction": {
+        "high_owned_pair": null,
+        "same_game_pair": false
+      },
+      "rbs": [
+        {
+          "in_qb_game": false,
+          "name": "Derrick Henry",
+          "opportunity": {
+            "carries_mean_3": 19.930616842244753,
+            "depth_chart_position": null,
+            "evidence_class": "inferred_opportunity",
+            "explicit_role_signal": null,
+            "fallback_threshold_met": null,
+            "player_status": null,
+            "pregame_availability_probability": 1.0,
+            "pregame_carry_share": null,
+            "pregame_expected_carries": null,
+            "pregame_expected_routes": null,
+            "pregame_expected_snaps": null,
+            "pregame_expected_targets": null,
+            "pregame_goal_line_share": null,
+            "pregame_injury_created_opportunity": null,
+            "pregame_red_zone_share": null,
+            "pregame_role_label": null,
+            "pregame_start_probability": 1.0,
+            "pregame_target_share": null,
+            "receiving_yards_mean_3": null,
+            "receptions_mean_3": null,
+            "retention_reason": "not evaluated",
+            "roster_status": null,
+            "snap_share_mean_3": 0.6266666666666666,
+            "target_share_mean_3": 0.05495909546959672,
+            "targets_mean_3": 1.2640591958007246,
+            "team_targets_mean_3": 23.0
+          },
+          "opposing_dst": false,
+          "ownership": null,
+          "p90": 34.54860949122313,
+          "projection": 21.535263439011068,
+          "receiving_role_diagnostic": {
+            "expected_routes": null,
+            "expected_targets": null,
+            "receiving_fantasy_points": null,
+            "receiving_fantasy_points_reason": "Unavailable: no receiving-point decomposition in the projection snapshot",
+            "receiving_yards_mean_3": null,
+            "recent_target_share_mean_3": 0.05495909546959672,
+            "recent_targets_mean_3": 1.2640591958007246,
+            "receptions_mean_3": null,
+            "source": "lagged_three_game",
+            "strength": 0.19628248381998828,
+            "target_share": 0.05495909546959672
+          },
+          "receiving_role_strength": 0.19628248381998828,
+          "salary": 7700,
+          "same_team_dst": false,
+          "spread": -3.0,
+          "team": "BAL",
+          "team_total": 27.75
+        },
+        {
+          "in_qb_game": false,
+          "name": "James Cook III",
+          "opportunity": {
+            "carries_mean_3": 13.635197909427701,
+            "depth_chart_position": null,
+            "evidence_class": "inferred_opportunity",
+            "explicit_role_signal": null,
+            "fallback_threshold_met": null,
+            "player_status": null,
+            "pregame_availability_probability": 1.0,
+            "pregame_carry_share": null,
+            "pregame_expected_carries": null,
+            "pregame_expected_routes": null,
+            "pregame_expected_snaps": null,
+            "pregame_expected_targets": null,
+            "pregame_goal_line_share": null,
+            "pregame_injury_created_opportunity": null,
+            "pregame_red_zone_share": null,
+            "pregame_role_label": null,
+            "pregame_start_probability": 1.0,
+            "pregame_target_share": null,
+            "receiving_yards_mean_3": null,
+            "receptions_mean_3": null,
+            "retention_reason": "not evaluated",
+            "roster_status": null,
+            "snap_share_mean_3": 0.49666666666666665,
+            "target_share_mean_3": 0.07992390558933817,
+            "targets_mean_3": 2.530923676995709,
+            "team_targets_mean_3": 31.666666666666668
+          },
+          "opposing_dst": false,
+          "ownership": null,
+          "p90": 28.422691645597833,
+          "projection": 15.409345593385765,
+          "receiving_role_diagnostic": {
+            "expected_routes": null,
+            "expected_targets": null,
+            "receiving_fantasy_points": null,
+            "receiving_fantasy_points_reason": "Unavailable: no receiving-point decomposition in the projection snapshot",
+            "receiving_yards_mean_3": null,
+            "recent_target_share_mean_3": 0.07992390558933817,
+            "recent_targets_mean_3": 2.530923676995709,
+            "receptions_mean_3": null,
+            "source": "lagged_three_game",
+            "strength": 0.3163654596244636,
+            "target_share": 0.07992390558933817
+          },
+          "receiving_role_strength": 0.3163654596244636,
+          "salary": 6900,
+          "same_team_dst": false,
+          "spread": -7.0,
+          "team": "BUF",
+          "team_total": 28.75
+        }
+      ],
+      "relative_chalk": null,
+      "roster": [
+        {
+          "name": "Buccaneers",
+          "ownership": null,
+          "player_id": "0a6edce6-ea10-4fea-bdd0-3411df21bc7f",
+          "position": "DST",
+          "salary": 2600,
+          "team": "TB"
+        },
+        {
+          "name": "Cade Otton",
+          "ownership": null,
+          "player_id": "1f90d290-afb4-48ae-8052-fa99040b8ddb",
+          "position": "TE",
+          "salary": 3100,
+          "team": "TB"
+        },
+        {
+          "name": "Amon-Ra St. Brown",
+          "ownership": null,
+          "player_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+          "position": "WR",
+          "salary": 7900,
+          "team": "DET"
+        },
+        {
+          "name": "Jalen Coker",
+          "ownership": null,
+          "player_id": "2fa43876-8b80-4de0-a467-82bfa150f042",
+          "position": "WR",
+          "salary": 5500,
+          "team": "CAR"
+        },
+        {
+          "name": "Derrick Henry",
+          "ownership": null,
+          "player_id": "48932b42-a60a-4070-82a7-50475f27bbf2",
+          "position": "RB",
+          "salary": 7700,
+          "team": "BAL"
+        },
+        {
+          "name": "Denzel Boston",
+          "ownership": null,
+          "player_id": "49ac835d-70f6-4fbd-ae80-242eea54c172",
+          "position": "WR",
+          "salary": 4500,
+          "team": "CLE"
+        },
+        {
+          "name": "James Cook III",
+          "ownership": null,
+          "player_id": "87afab41-5db5-42d1-85b2-736edfcd712f",
+          "position": "RB",
+          "salary": 6900,
+          "team": "BUF"
+        },
+        {
+          "name": "Jared Goff",
+          "ownership": null,
+          "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+          "position": "QB",
+          "salary": 6300,
+          "team": "DET"
+        },
+        {
+          "name": "Jameson Williams",
+          "ownership": null,
+          "player_id": "900f1061-eb3e-4945-bed6-3a8186cd16aa",
+          "position": "WR",
+          "salary": 5400,
+          "team": "DET"
+        }
+      ],
+      "salary": 49900,
+      "stack": {
+        "bring_back_correlation_contribution": 0.0,
+        "bring_back_count": 0,
+        "bring_back_evaluations": [],
+        "bring_backs": [],
+        "game_stack_log_ownership": null,
+        "game_stack_ownership": null,
+        "game_stack_salary": 19600,
+        "game_stack_size": 3,
+        "partner_count": 2,
+        "partners": [
+          {
+            "name": "Amon-Ra St. Brown",
+            "ownership": null,
+            "position": "WR"
+          },
+          {
+            "name": "Jameson Williams",
+            "ownership": null,
+            "position": "WR"
+          }
+        ],
+        "type": "QB+2"
+      }
+    },
+    {
+      "base_solver": 5.139891300789056,
+      "chalk_improvement_vs_best_quality": null,
+      "cheap_skill_opportunity": [
+        {
+          "carries_mean_3": 0.0,
+          "depth_chart_position": null,
+          "evidence_class": "inferred_opportunity",
+          "explicit_role_signal": false,
+          "fallback_threshold_met": false,
+          "name": "Cade Otton",
+          "player_status": null,
+          "position": "TE",
+          "pregame_availability_probability": 1.0,
+          "pregame_carry_share": null,
+          "pregame_expected_carries": null,
+          "pregame_expected_routes": null,
+          "pregame_expected_snaps": null,
+          "pregame_expected_targets": null,
+          "pregame_goal_line_share": null,
+          "pregame_injury_created_opportunity": null,
+          "pregame_red_zone_share": null,
+          "pregame_role_label": null,
+          "pregame_start_probability": 1.0,
+          "pregame_target_share": null,
+          "receiving_yards_mean_3": null,
+          "receptions_mean_3": null,
+          "retention_reason": "outside_low_salary_gate",
+          "roster_status": null,
+          "salary": 3100,
+          "snap_share_mean_3": 0.9700000000000001,
+          "target_share_mean_3": 0.18786773720873717,
+          "targets_mean_3": 5.135051483705483,
+          "team_targets_mean_3": 27.333333333333332
+        },
+        {
+          "carries_mean_3": 0.0,
+          "depth_chart_position": null,
+          "evidence_class": "inferred_opportunity",
+          "explicit_role_signal": false,
+          "fallback_threshold_met": false,
+          "name": "Denzel Boston",
+          "player_status": null,
+          "position": "WR",
+          "pregame_availability_probability": 1.0,
+          "pregame_carry_share": null,
+          "pregame_expected_carries": null,
+          "pregame_expected_routes": null,
+          "pregame_expected_snaps": null,
+          "pregame_expected_targets": null,
+          "pregame_goal_line_share": null,
+          "pregame_injury_created_opportunity": null,
+          "pregame_red_zone_share": null,
+          "pregame_role_label": null,
+          "pregame_start_probability": 1.0,
+          "pregame_target_share": null,
+          "receiving_yards_mean_3": null,
+          "receptions_mean_3": null,
+          "retention_reason": "outside_low_salary_gate",
+          "roster_status": null,
+          "salary": 4500,
+          "snap_share_mean_3": 0.92,
+          "target_share_mean_3": 0.11632182597331481,
+          "targets_mean_3": 2.83049776535066,
+          "team_targets_mean_3": 24.333333333333332
+        }
+      ],
+      "components": {
+        "bring_back": 0.0,
+        "context": 0.08164819373120347,
+        "correlation": 0.0662013392857143,
+        "duplication": 0.0,
+        "game_environment": 0.0,
+        "leverage": 0.0,
+        "mean": 1.8915358595894791,
+        "other_residual": 0.0,
+        "ownership_chalk": 0.0,
+        "p90": 3.166707247468374,
+        "penalties": 0.0,
+        "qb_stack": 0.16295714285714288
+      },
+      "correlation_negative": 0.0,
+      "correlation_positive": 0.22915848214285717,
+      "correlation_rules": [
+        {
+          "configured_weight": 0.8,
+          "description": "Reward a quarterback paired with a same-team wide receiver or tight end in proportion to the cutoff-safe stack environment.",
+          "effective_weight": 0.4792857142857143,
+          "evidence": {
+            "captain_dst_game_script": {
+              "available": false
+            },
+            "captain_stack_environment": {
+              "available": false
+            },
+            "rb_dst_game_script": {
+              "available": false
+            },
+            "stack_environment": {
+              "available": true,
+              "blowout_risk": 0.0,
+              "competitive_game": 0.5357142857142857,
+              "game_total": 48.5,
+              "opponent_implied_total": 21.0,
+              "opponent_push": 0.35714285714285715,
+              "point_in_time_safe": true,
+              "stack_environment": 0.5991071428571428,
+              "team_implied_total": 27.5,
+              "team_quality": 0.6785714285714286,
+              "team_spread": -6.5,
+              "total_quality": 0.625
+            }
+          },
+          "magnitude": 0.5991071428571428,
+          "objective_contribution": 0.08147857142857144,
+          "players": [
+            {
+              "player_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+              "player_name": "Amon-Ra St. Brown",
+              "position": "WR",
+              "team": "DET"
+            },
+            {
+              "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+              "player_name": "Jared Goff",
+              "position": "QB",
+              "team": "DET"
+            }
+          ],
+          "reason_code": "qb_same_team_pass_catcher",
+          "rule_id": "correlation.qb_pass_catcher_v2",
+          "rule_type": "soft_boost",
+          "score_contribution": 0.4792857142857143,
+          "term_kind": "pair"
+        },
+        {
+          "configured_weight": 0.8,
+          "description": "Reward a quarterback paired with a same-team wide receiver or tight end in proportion to the cutoff-safe stack environment.",
+          "effective_weight": 0.4792857142857143,
+          "evidence": {
+            "captain_dst_game_script": {
+              "available": false
+            },
+            "captain_stack_environment": {
+              "available": false
+            },
+            "rb_dst_game_script": {
+              "available": false
+            },
+            "stack_environment": {
+              "available": true,
+              "blowout_risk": 0.0,
+              "competitive_game": 0.5357142857142857,
+              "game_total": 48.5,
+              "opponent_implied_total": 21.0,
+              "opponent_push": 0.35714285714285715,
+              "point_in_time_safe": true,
+              "stack_environment": 0.5991071428571428,
+              "team_implied_total": 27.5,
+              "team_quality": 0.6785714285714286,
+              "team_spread": -6.5,
+              "total_quality": 0.625
+            }
+          },
+          "magnitude": 0.5991071428571428,
+          "objective_contribution": 0.08147857142857144,
+          "players": [
+            {
+              "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+              "player_name": "Jared Goff",
+              "position": "QB",
+              "team": "DET"
+            },
+            {
+              "player_id": "900f1061-eb3e-4945-bed6-3a8186cd16aa",
+              "player_name": "Jameson Williams",
+              "position": "WR",
+              "team": "DET"
+            }
+          ],
+          "reason_code": "qb_same_team_pass_catcher",
+          "rule_id": "correlation.qb_pass_catcher_v2",
+          "rule_type": "soft_boost",
+          "score_contribution": 0.4792857142857143,
+          "term_kind": "pair"
+        },
+        {
+          "configured_weight": 0.65,
+          "construction_kind": "classic_qb_double_stack",
+          "description": "Reward a GPP quarterback with at least two same-team pass catchers in proportion to the cutoff-safe stack environment.",
+          "effective_weight": 0.38941964285714287,
+          "evidence": {
+            "quarterback_team": "DET",
+            "stack_environment": {
+              "available": true,
+              "blowout_risk": 0.0,
+              "competitive_game": 0.5357142857142857,
+              "game_total": 48.5,
+              "opponent_implied_total": 21.0,
+              "opponent_push": 0.35714285714285715,
+              "point_in_time_safe": true,
+              "stack_environment": 0.5991071428571428,
+              "team_implied_total": 27.5,
+              "team_quality": 0.6785714285714286,
+              "team_spread": -6.5,
+              "total_quality": 0.625
+            }
+          },
+          "magnitude": 0.5991071428571428,
+          "objective_contribution": 0.0662013392857143,
+          "players": [
+            {
+              "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+              "player_name": "Jared Goff",
+              "position": "QB",
+              "team": "DET"
+            },
+            {
+              "player_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+              "player_name": "Amon-Ra St. Brown",
+              "position": "WR",
+              "team": "DET"
+            },
+            {
+              "player_id": "900f1061-eb3e-4945-bed6-3a8186cd16aa",
+              "player_name": "Jameson Williams",
+              "position": "WR",
+              "team": "DET"
+            }
+          ],
+          "reason_code": "quarterback_double_stack",
+          "rule_id": "construction.classic_qb_double_stack_v2",
+          "rule_type": "soft_boost",
+          "score_contribution": 0.38941964285714287,
+          "term_kind": "format_specific"
+        }
+      ],
+      "dst_ownership": null,
+      "football_sanity": {
+        "cheap_players": [
+          {
+            "evidence_class": "inferred_opportunity",
+            "name": "Cade Otton",
+            "player_id": "1f90d290-afb4-48ae-8052-fa99040b8ddb",
+            "retention_reason": "outside_low_salary_gate",
+            "role_signals": {
+              "carries_mean_3": 0.0,
+              "pregame_expected_carries": null,
+              "pregame_expected_routes": null,
+              "pregame_expected_snaps": null,
+              "pregame_expected_targets": null,
+              "pregame_injury_created_opportunity": null,
+              "snap_share_mean_3": 0.9700000000000001,
+              "targets_mean_3": 5.135051483705483
+            },
+            "salary": 3100
+          },
+          {
+            "evidence_class": "inferred_opportunity",
+            "name": "Denzel Boston",
+            "player_id": "49ac835d-70f6-4fbd-ae80-242eea54c172",
+            "retention_reason": "outside_low_salary_gate",
+            "role_signals": {
+              "carries_mean_3": 0.0,
+              "pregame_expected_carries": null,
+              "pregame_expected_routes": null,
+              "pregame_expected_snaps": null,
+              "pregame_expected_targets": null,
+              "pregame_injury_created_opportunity": null,
+              "snap_share_mean_3": 0.92,
+              "targets_mean_3": 2.83049776535066
+            },
+            "salary": 4500
+          }
+        ],
+        "diagnostic_only": true,
+        "driving_players": [
+          {
+            "importance": 0.6116844980287635,
+            "name": "Derrick Henry",
+            "player_id": "48932b42-a60a-4070-82a7-50475f27bbf2",
+            "position": "RB",
+            "role_class": "offensive centerpiece",
+            "role_confidence": "high",
+            "team": "BAL"
+          },
+          {
+            "importance": 0.5871459071461069,
+            "name": "Chase Brown",
+            "player_id": "0be06444-4cd6-41a4-98a5-877a9a5c42b2",
+            "position": "RB",
+            "role_class": "offensive centerpiece",
+            "role_confidence": "high",
+            "team": "CIN"
+          },
+          {
+            "importance": 0.5127699055330635,
+            "name": "Amon-Ra St. Brown",
+            "player_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+            "position": "WR",
+            "role_class": "primary option",
+            "role_confidence": "high",
+            "team": "DET"
+          },
+          {
+            "importance": 0.43652356902356904,
+            "name": "Cade Otton",
+            "player_id": "1f90d290-afb4-48ae-8052-fa99040b8ddb",
+            "position": "TE",
+            "role_class": "primary option",
+            "role_confidence": "high",
+            "team": "TB"
+          },
+          {
+            "importance": 0.42423671833598303,
+            "name": "Jalen Coker",
+            "player_id": "2fa43876-8b80-4de0-a467-82bfa150f042",
+            "position": "WR",
+            "role_class": "primary option",
+            "role_confidence": "high",
+            "team": "CAR"
+          },
+          {
+            "importance": 0.38568181818181824,
+            "name": "Denzel Boston",
+            "player_id": "49ac835d-70f6-4fbd-ae80-242eea54c172",
+            "position": "WR",
+            "role_class": "major secondary option",
+            "role_confidence": "medium",
+            "team": "CLE"
+          },
+          {
+            "importance": 0.36956365272154745,
+            "name": "Jameson Williams",
+            "player_id": "900f1061-eb3e-4945-bed6-3a8186cd16aa",
+            "position": "WR",
+            "role_class": "major secondary option",
+            "role_confidence": "high",
+            "team": "DET"
+          }
+        ],
+        "flags": [],
+        "missing_role_evidence": [],
+        "omitted_central_players": [
+          {
+            "best_candidate_with_player_rank": 41,
+            "candidate_count": 3,
+            "candidate_total": 120,
+            "explanation": "Best generated candidate containing this player scored 0.010 below this lineup; this is a whole-lineup comparison, not a causal swap",
+            "importance": 0.5636328019836793,
+            "mean": 13.837438334093576,
+            "name": "Bucky Irving",
+            "ownership": 3.9756806708492105,
+            "ownership_reason": "Ownership unavailable; no ownership cause assigned",
+            "p90": 26.850784386305644,
+            "player_id": "a9f8d797-040e-4469-b9d5-bb39bf3792b2",
+            "projection_reason": "Mean 13.84; P90 26.85; team mean rank 1, P90 rank 1",
+            "role_class": "offensive centerpiece",
+            "salary": 6300,
+            "salary_value_reason": "Salary $6,300; mean per $1,000 2.20; position value rank 12/135",
+            "selected_count": 0,
+            "selected_total": 1,
+            "stack_correlation_reason": "Best containing candidate stack QB+2 versus selected QB+2",
+            "team": "TB",
+            "whole_lineup_objective_gap": 0.0104517000792681
+          },
+          {
+            "best_candidate_with_player_rank": null,
+            "candidate_count": 0,
+            "candidate_total": 120,
+            "explanation": "No generated candidate contained this player; a legal counterfactual solve is needed",
+            "importance": 0.5365472675472676,
+            "mean": 10.942718680014814,
+            "name": "Quinshon Judkins",
+            "ownership": 3.7953305740277887,
+            "ownership_reason": "Ownership unavailable; no ownership cause assigned",
+            "p90": 18.96397528533683,
+            "player_id": "376836fe-2a4f-42c0-99c4-dd1c9768034f",
+            "projection_reason": "Mean 10.94; P90 18.96; team mean rank 2, P90 rank 2",
+            "role_class": "primary option",
+            "salary": 5500,
+            "salary_value_reason": "Salary $5,500; mean per $1,000 1.99; position value rank 19/135",
+            "selected_count": 0,
+            "selected_total": 1,
+            "stack_correlation_reason": "No containing candidate for construction comparison",
+            "team": "CLE",
+            "whole_lineup_objective_gap": null
+          },
+          {
+            "best_candidate_with_player_rank": null,
+            "candidate_count": 0,
+            "candidate_total": 120,
+            "explanation": "No generated candidate contained this player; a legal counterfactual solve is needed",
+            "importance": 0.4561667747468831,
+            "mean": 13.099617515870948,
+            "name": "Chuba Hubbard",
+            "ownership": 3.8177449228255496,
+            "ownership_reason": "Ownership unavailable; no ownership cause assigned",
+            "p90": 21.120874121192966,
+            "player_id": "1cb58102-1426-459a-82cf-240882d90206",
+            "projection_reason": "Mean 13.10; P90 21.12; team mean rank 2, P90 rank 3",
+            "role_class": "primary option",
+            "salary": 6100,
+            "salary_value_reason": "Salary $6,100; mean per $1,000 2.15; position value rank 15/135",
+            "selected_count": 0,
+            "selected_total": 1,
+            "stack_correlation_reason": "No containing candidate for construction comparison",
+            "team": "CAR",
+            "whole_lineup_objective_gap": null
+          },
+          {
+            "best_candidate_with_player_rank": null,
+            "candidate_count": 0,
+            "candidate_total": 120,
+            "explanation": "No generated candidate contained this player; a legal counterfactual solve is needed",
+            "importance": 0.6648684360378991,
+            "mean": 18.48569181003571,
+            "name": "Jahmyr Gibbs",
+            "ownership": 21.513686314353798,
+            "ownership_reason": "Ownership unavailable; no ownership cause assigned",
+            "p90": 31.49903786224778,
+            "player_id": "693463af-73ba-41d5-889c-388c36703430",
+            "projection_reason": "Mean 18.49; P90 31.50; team mean rank 2, P90 rank 2",
+            "role_class": "offensive centerpiece",
+            "salary": 8800,
+            "salary_value_reason": "Salary $8,800; mean per $1,000 2.10; position value rank 17/135",
+            "selected_count": 0,
+            "selected_total": 1,
+            "stack_correlation_reason": "No containing candidate for construction comparison",
+            "team": "DET",
+            "whole_lineup_objective_gap": null
+          }
+        ],
+        "role_projection_disagreements": [],
+        "script": "DET passing through 2 QB stack partner(s) with 0 opposing skill-player bring-back(s) in favored offense game conditions",
+        "status": "available"
+      },
+      "game_environment": {
+        "game_total": 48.5,
+        "label": "favored offense",
+        "market_safe": true,
+        "raw_rule_score": 0,
+        "reason": "No standalone primary-game bonus in the current Classic objective; no game-related pair rule fired",
+        "selector_contribution": 0.0,
+        "team_spread": -6.5,
+        "team_total": 27.5
+      },
+      "games_represented": [
+        "BAL@DAL 09/27/2026 04:25PM ET",
+        "CAR@CLE 09/27/2026 01:00PM ET",
+        "CIN@PIT 09/27/2026 01:00PM ET",
+        "LV@NO 09/27/2026 04:25PM ET",
+        "MIN@TB 09/27/2026 04:05PM ET",
+        "NYJ@DET 09/27/2026 01:00PM ET"
+      ],
+      "generation_template": [
+        1,
+        0
+      ],
+      "high_owned_count": null,
+      "large_ceiling_sacrifice_for_chalk": false,
+      "leverage_available": false,
+      "leverage_sum": null,
+      "log_ownership": null,
+      "low_owned_count": null,
+      "mean": 135.64644282041635,
+      "mean_loss_vs_best": 6.166726562232952,
+      "objective_score": 5.3690497829319135,
+      "ownership_objective_gain_vs_best_quality": 0.0,
+      "ownership_product": null,
+      "ownership_sum": null,
+      "p90": 236.29899476741087,
+      "p90_loss_vs_best": 7.958136436342329,
+      "pass_catchers": {
+        "flex_position": "WR",
+        "high_owned_count": null,
+        "low_owned_count": null,
+        "one_offs": [
+          "Cade Otton",
+          "Jalen Coker",
+          "Denzel Boston"
+        ],
+        "salary": 26400,
+        "te_in_qb_stack": false
+      },
+      "player_ids": [
+        "0be06444-4cd6-41a4-98a5-877a9a5c42b2",
+        "1f90d290-afb4-48ae-8052-fa99040b8ddb",
+        "220c527d-9daf-4348-8f38-c244c8c512b3",
+        "2fa43876-8b80-4de0-a467-82bfa150f042",
+        "48932b42-a60a-4070-82a7-50475f27bbf2",
+        "49ac835d-70f6-4fbd-ae80-242eea54c172",
+        "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+        "900f1061-eb3e-4945-bed6-3a8186cd16aa",
+        "a94997b4-d78a-4d41-ba7d-dd954d36a02f"
+      ],
+      "primary_game": "DET\u2013NYJ",
+      "qb": {
+        "basis": "expected or recent carries",
+        "carries": 1.6666666666666667,
+        "label": "pocket-oriented QB",
+        "name": "Jared Goff",
+        "ownership": null,
+        "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+        "rushing_role_strength": 0.0,
+        "team": "DET"
+      },
+      "rank": 26,
+      "rb_construction": {
+        "high_owned_pair": null,
+        "same_game_pair": false
+      },
+      "rbs": [
+        {
+          "in_qb_game": false,
+          "name": "Chase Brown",
+          "opportunity": {
+            "carries_mean_3": 11.47527037777964,
+            "depth_chart_position": null,
+            "evidence_class": "inferred_opportunity",
+            "explicit_role_signal": null,
+            "fallback_threshold_met": null,
+            "player_status": null,
+            "pregame_availability_probability": 1.0,
+            "pregame_carry_share": null,
+            "pregame_expected_carries": null,
+            "pregame_expected_routes": null,
+            "pregame_expected_snaps": null,
+            "pregame_expected_targets": null,
+            "pregame_goal_line_share": null,
+            "pregame_injury_created_opportunity": null,
+            "pregame_red_zone_share": null,
+            "pregame_role_label": null,
+            "pregame_start_probability": 1.0,
+            "pregame_target_share": null,
+            "receiving_yards_mean_3": null,
+            "receptions_mean_3": null,
+            "retention_reason": "not evaluated",
+            "roster_status": null,
+            "snap_share_mean_3": 0.63,
+            "target_share_mean_3": 0.12240480042333911,
+            "targets_mean_3": 4.202564814534643,
+            "team_targets_mean_3": 34.333333333333336
+          },
+          "opposing_dst": false,
+          "ownership": null,
+          "p90": 27.553502078408833,
+          "projection": 17.119233465951446,
+          "receiving_role_diagnostic": {
+            "expected_routes": null,
+            "expected_targets": null,
+            "receiving_fantasy_points": null,
+            "receiving_fantasy_points_reason": "Unavailable: no receiving-point decomposition in the projection snapshot",
+            "receiving_yards_mean_3": null,
+            "recent_target_share_mean_3": 0.12240480042333911,
+            "recent_targets_mean_3": 4.202564814534643,
+            "receptions_mean_3": null,
+            "source": "lagged_three_game",
+            "strength": 0.5253206018168304,
+            "target_share": 0.12240480042333911
+          },
+          "receiving_role_strength": 0.5253206018168304,
+          "salary": 6600,
+          "same_team_dst": false,
+          "spread": -3.5,
+          "team": "CIN",
+          "team_total": 23.0
+        },
+        {
+          "in_qb_game": false,
+          "name": "Derrick Henry",
+          "opportunity": {
+            "carries_mean_3": 19.930616842244753,
+            "depth_chart_position": null,
+            "evidence_class": "inferred_opportunity",
+            "explicit_role_signal": null,
+            "fallback_threshold_met": null,
+            "player_status": null,
+            "pregame_availability_probability": 1.0,
+            "pregame_carry_share": null,
+            "pregame_expected_carries": null,
+            "pregame_expected_routes": null,
+            "pregame_expected_snaps": null,
+            "pregame_expected_targets": null,
+            "pregame_goal_line_share": null,
+            "pregame_injury_created_opportunity": null,
+            "pregame_red_zone_share": null,
+            "pregame_role_label": null,
+            "pregame_start_probability": 1.0,
+            "pregame_target_share": null,
+            "receiving_yards_mean_3": null,
+            "receptions_mean_3": null,
+            "retention_reason": "not evaluated",
+            "roster_status": null,
+            "snap_share_mean_3": 0.6266666666666666,
+            "target_share_mean_3": 0.05495909546959672,
+            "targets_mean_3": 1.2640591958007246,
+            "team_targets_mean_3": 23.0
+          },
+          "opposing_dst": false,
+          "ownership": null,
+          "p90": 34.54860949122313,
+          "projection": 21.535263439011068,
+          "receiving_role_diagnostic": {
+            "expected_routes": null,
+            "expected_targets": null,
+            "receiving_fantasy_points": null,
+            "receiving_fantasy_points_reason": "Unavailable: no receiving-point decomposition in the projection snapshot",
+            "receiving_yards_mean_3": null,
+            "recent_target_share_mean_3": 0.05495909546959672,
+            "recent_targets_mean_3": 1.2640591958007246,
+            "receptions_mean_3": null,
+            "source": "lagged_three_game",
+            "strength": 0.19628248381998828,
+            "target_share": 0.05495909546959672
+          },
+          "receiving_role_strength": 0.19628248381998828,
+          "salary": 7700,
+          "same_team_dst": false,
+          "spread": -3.0,
+          "team": "BAL",
+          "team_total": 27.75
+        }
+      ],
+      "relative_chalk": null,
+      "roster": [
+        {
+          "name": "Chase Brown",
+          "ownership": null,
+          "player_id": "0be06444-4cd6-41a4-98a5-877a9a5c42b2",
+          "position": "RB",
+          "salary": 6600,
+          "team": "CIN"
+        },
+        {
+          "name": "Cade Otton",
+          "ownership": null,
+          "player_id": "1f90d290-afb4-48ae-8052-fa99040b8ddb",
+          "position": "TE",
+          "salary": 3100,
+          "team": "TB"
+        },
+        {
+          "name": "Amon-Ra St. Brown",
+          "ownership": null,
+          "player_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+          "position": "WR",
+          "salary": 7900,
+          "team": "DET"
+        },
+        {
+          "name": "Jalen Coker",
+          "ownership": null,
+          "player_id": "2fa43876-8b80-4de0-a467-82bfa150f042",
+          "position": "WR",
+          "salary": 5500,
+          "team": "CAR"
+        },
+        {
+          "name": "Derrick Henry",
+          "ownership": null,
+          "player_id": "48932b42-a60a-4070-82a7-50475f27bbf2",
+          "position": "RB",
+          "salary": 7700,
+          "team": "BAL"
+        },
+        {
+          "name": "Denzel Boston",
+          "ownership": null,
+          "player_id": "49ac835d-70f6-4fbd-ae80-242eea54c172",
+          "position": "WR",
+          "salary": 4500,
+          "team": "CLE"
+        },
+        {
+          "name": "Jared Goff",
+          "ownership": null,
+          "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+          "position": "QB",
+          "salary": 6300,
+          "team": "DET"
+        },
+        {
+          "name": "Jameson Williams",
+          "ownership": null,
+          "player_id": "900f1061-eb3e-4945-bed6-3a8186cd16aa",
+          "position": "WR",
+          "salary": 5400,
+          "team": "DET"
+        },
+        {
+          "name": "Raiders",
+          "ownership": null,
+          "player_id": "a94997b4-d78a-4d41-ba7d-dd954d36a02f",
+          "position": "DST",
+          "salary": 2600,
+          "team": "LV"
+        }
+      ],
+      "salary": 49600,
+      "stack": {
+        "bring_back_correlation_contribution": 0.0,
+        "bring_back_count": 0,
+        "bring_back_evaluations": [],
+        "bring_backs": [],
+        "game_stack_log_ownership": null,
+        "game_stack_ownership": null,
+        "game_stack_salary": 19600,
+        "game_stack_size": 3,
+        "partner_count": 2,
+        "partners": [
+          {
+            "name": "Amon-Ra St. Brown",
+            "ownership": null,
+            "position": "WR"
+          },
+          {
+            "name": "Jameson Williams",
+            "ownership": null,
+            "position": "WR"
+          }
+        ],
+        "type": "QB+2"
+      }
+    },
+    {
+      "base_solver": 5.119412092303438,
+      "chalk_improvement_vs_best_quality": null,
+      "cheap_skill_opportunity": [
+        {
+          "carries_mean_3": 0.0,
+          "depth_chart_position": null,
+          "evidence_class": "inferred_opportunity",
+          "explicit_role_signal": false,
+          "fallback_threshold_met": false,
+          "name": "Cade Otton",
+          "player_status": null,
+          "position": "TE",
+          "pregame_availability_probability": 1.0,
+          "pregame_carry_share": null,
+          "pregame_expected_carries": null,
+          "pregame_expected_routes": null,
+          "pregame_expected_snaps": null,
+          "pregame_expected_targets": null,
+          "pregame_goal_line_share": null,
+          "pregame_injury_created_opportunity": null,
+          "pregame_red_zone_share": null,
+          "pregame_role_label": null,
+          "pregame_start_probability": 1.0,
+          "pregame_target_share": null,
+          "receiving_yards_mean_3": null,
+          "receptions_mean_3": null,
+          "retention_reason": "outside_low_salary_gate",
+          "roster_status": null,
+          "salary": 3100,
+          "snap_share_mean_3": 0.9700000000000001,
+          "target_share_mean_3": 0.18786773720873717,
+          "targets_mean_3": 5.135051483705483,
+          "team_targets_mean_3": 27.333333333333332
+        },
+        {
+          "carries_mean_3": 0.0,
+          "depth_chart_position": null,
+          "evidence_class": "inferred_opportunity",
+          "explicit_role_signal": false,
+          "fallback_threshold_met": false,
+          "name": "Denzel Boston",
+          "player_status": null,
+          "position": "WR",
+          "pregame_availability_probability": 1.0,
+          "pregame_carry_share": null,
+          "pregame_expected_carries": null,
+          "pregame_expected_routes": null,
+          "pregame_expected_snaps": null,
+          "pregame_expected_targets": null,
+          "pregame_goal_line_share": null,
+          "pregame_injury_created_opportunity": null,
+          "pregame_red_zone_share": null,
+          "pregame_role_label": null,
+          "pregame_start_probability": 1.0,
+          "pregame_target_share": null,
+          "receiving_yards_mean_3": null,
+          "receptions_mean_3": null,
+          "retention_reason": "outside_low_salary_gate",
+          "roster_status": null,
+          "salary": 4500,
+          "snap_share_mean_3": 0.92,
+          "target_share_mean_3": 0.11632182597331481,
+          "targets_mean_3": 2.83049776535066,
+          "team_targets_mean_3": 24.333333333333332
+        }
+      ],
+      "components": {
+        "bring_back": 0.0,
+        "context": 0.07590555974978003,
+        "correlation": 0.0662013392857143,
+        "duplication": 0.0,
+        "game_environment": 0.0,
+        "leverage": 0.0,
+        "mean": 1.8840211730073044,
+        "other_residual": 0.0,
+        "ownership_chalk": 0.0,
+        "p90": 3.1594853595463537,
+        "penalties": 0.0,
+        "qb_stack": 0.16295714285714288
+      },
+      "correlation_negative": 0.0,
+      "correlation_positive": 0.22915848214285717,
+      "correlation_rules": [
+        {
+          "configured_weight": 0.8,
+          "description": "Reward a quarterback paired with a same-team wide receiver or tight end in proportion to the cutoff-safe stack environment.",
+          "effective_weight": 0.4792857142857143,
+          "evidence": {
+            "captain_dst_game_script": {
+              "available": false
+            },
+            "captain_stack_environment": {
+              "available": false
+            },
+            "rb_dst_game_script": {
+              "available": false
+            },
+            "stack_environment": {
+              "available": true,
+              "blowout_risk": 0.0,
+              "competitive_game": 0.5357142857142857,
+              "game_total": 48.5,
+              "opponent_implied_total": 21.0,
+              "opponent_push": 0.35714285714285715,
+              "point_in_time_safe": true,
+              "stack_environment": 0.5991071428571428,
+              "team_implied_total": 27.5,
+              "team_quality": 0.6785714285714286,
+              "team_spread": -6.5,
+              "total_quality": 0.625
+            }
+          },
+          "magnitude": 0.5991071428571428,
+          "objective_contribution": 0.08147857142857144,
+          "players": [
+            {
+              "player_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+              "player_name": "Amon-Ra St. Brown",
+              "position": "WR",
+              "team": "DET"
+            },
+            {
+              "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+              "player_name": "Jared Goff",
+              "position": "QB",
+              "team": "DET"
+            }
+          ],
+          "reason_code": "qb_same_team_pass_catcher",
+          "rule_id": "correlation.qb_pass_catcher_v2",
+          "rule_type": "soft_boost",
+          "score_contribution": 0.4792857142857143,
+          "term_kind": "pair"
+        },
+        {
+          "configured_weight": 0.8,
+          "description": "Reward a quarterback paired with a same-team wide receiver or tight end in proportion to the cutoff-safe stack environment.",
+          "effective_weight": 0.4792857142857143,
+          "evidence": {
+            "captain_dst_game_script": {
+              "available": false
+            },
+            "captain_stack_environment": {
+              "available": false
+            },
+            "rb_dst_game_script": {
+              "available": false
+            },
+            "stack_environment": {
+              "available": true,
+              "blowout_risk": 0.0,
+              "competitive_game": 0.5357142857142857,
+              "game_total": 48.5,
+              "opponent_implied_total": 21.0,
+              "opponent_push": 0.35714285714285715,
+              "point_in_time_safe": true,
+              "stack_environment": 0.5991071428571428,
+              "team_implied_total": 27.5,
+              "team_quality": 0.6785714285714286,
+              "team_spread": -6.5,
+              "total_quality": 0.625
+            }
+          },
+          "magnitude": 0.5991071428571428,
+          "objective_contribution": 0.08147857142857144,
+          "players": [
+            {
+              "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+              "player_name": "Jared Goff",
+              "position": "QB",
+              "team": "DET"
+            },
+            {
+              "player_id": "900f1061-eb3e-4945-bed6-3a8186cd16aa",
+              "player_name": "Jameson Williams",
+              "position": "WR",
+              "team": "DET"
+            }
+          ],
+          "reason_code": "qb_same_team_pass_catcher",
+          "rule_id": "correlation.qb_pass_catcher_v2",
+          "rule_type": "soft_boost",
+          "score_contribution": 0.4792857142857143,
+          "term_kind": "pair"
+        },
+        {
+          "configured_weight": 0.65,
+          "construction_kind": "classic_qb_double_stack",
+          "description": "Reward a GPP quarterback with at least two same-team pass catchers in proportion to the cutoff-safe stack environment.",
+          "effective_weight": 0.38941964285714287,
+          "evidence": {
+            "quarterback_team": "DET",
+            "stack_environment": {
+              "available": true,
+              "blowout_risk": 0.0,
+              "competitive_game": 0.5357142857142857,
+              "game_total": 48.5,
+              "opponent_implied_total": 21.0,
+              "opponent_push": 0.35714285714285715,
+              "point_in_time_safe": true,
+              "stack_environment": 0.5991071428571428,
+              "team_implied_total": 27.5,
+              "team_quality": 0.6785714285714286,
+              "team_spread": -6.5,
+              "total_quality": 0.625
+            }
+          },
+          "magnitude": 0.5991071428571428,
+          "objective_contribution": 0.0662013392857143,
+          "players": [
+            {
+              "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+              "player_name": "Jared Goff",
+              "position": "QB",
+              "team": "DET"
+            },
+            {
+              "player_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+              "player_name": "Amon-Ra St. Brown",
+              "position": "WR",
+              "team": "DET"
+            },
+            {
+              "player_id": "900f1061-eb3e-4945-bed6-3a8186cd16aa",
+              "player_name": "Jameson Williams",
+              "position": "WR",
+              "team": "DET"
+            }
+          ],
+          "reason_code": "quarterback_double_stack",
+          "rule_id": "construction.classic_qb_double_stack_v2",
+          "rule_type": "soft_boost",
+          "score_contribution": 0.38941964285714287,
+          "term_kind": "format_specific"
+        }
+      ],
+      "dst_ownership": null,
+      "football_sanity": {
+        "cheap_players": [
+          {
+            "evidence_class": "inferred_opportunity",
+            "name": "Cade Otton",
+            "player_id": "1f90d290-afb4-48ae-8052-fa99040b8ddb",
+            "retention_reason": "outside_low_salary_gate",
+            "role_signals": {
+              "carries_mean_3": 0.0,
+              "pregame_expected_carries": null,
+              "pregame_expected_routes": null,
+              "pregame_expected_snaps": null,
+              "pregame_expected_targets": null,
+              "pregame_injury_created_opportunity": null,
+              "snap_share_mean_3": 0.9700000000000001,
+              "targets_mean_3": 5.135051483705483
+            },
+            "salary": 3100
+          },
+          {
+            "evidence_class": "inferred_opportunity",
+            "name": "Denzel Boston",
+            "player_id": "49ac835d-70f6-4fbd-ae80-242eea54c172",
+            "retention_reason": "outside_low_salary_gate",
+            "role_signals": {
+              "carries_mean_3": 0.0,
+              "pregame_expected_carries": null,
+              "pregame_expected_routes": null,
+              "pregame_expected_snaps": null,
+              "pregame_expected_targets": null,
+              "pregame_injury_created_opportunity": null,
+              "snap_share_mean_3": 0.92,
+              "targets_mean_3": 2.83049776535066
+            },
+            "salary": 4500
+          }
+        ],
+        "diagnostic_only": true,
+        "driving_players": [
+          {
+            "importance": 0.6619431408634308,
+            "name": "De'Von Achane",
+            "player_id": "626562a6-77cf-4b6a-b4cc-47cef26cf416",
+            "position": "RB",
+            "role_class": "offensive centerpiece",
+            "role_confidence": "high",
+            "team": "MIA"
+          },
+          {
+            "importance": 0.6116844980287635,
+            "name": "Derrick Henry",
+            "player_id": "48932b42-a60a-4070-82a7-50475f27bbf2",
+            "position": "RB",
+            "role_class": "offensive centerpiece",
+            "role_confidence": "high",
+            "team": "BAL"
+          },
+          {
+            "importance": 0.5127699055330635,
+            "name": "Amon-Ra St. Brown",
+            "player_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+            "position": "WR",
+            "role_class": "primary option",
+            "role_confidence": "high",
+            "team": "DET"
+          },
+          {
+            "importance": 0.43652356902356904,
+            "name": "Cade Otton",
+            "player_id": "1f90d290-afb4-48ae-8052-fa99040b8ddb",
+            "position": "TE",
+            "role_class": "primary option",
+            "role_confidence": "high",
+            "team": "TB"
+          },
+          {
+            "importance": 0.42423671833598303,
+            "name": "Jalen Coker",
+            "player_id": "2fa43876-8b80-4de0-a467-82bfa150f042",
+            "position": "WR",
+            "role_class": "primary option",
+            "role_confidence": "high",
+            "team": "CAR"
+          },
+          {
+            "importance": 0.38568181818181824,
+            "name": "Denzel Boston",
+            "player_id": "49ac835d-70f6-4fbd-ae80-242eea54c172",
+            "position": "WR",
+            "role_class": "major secondary option",
+            "role_confidence": "medium",
+            "team": "CLE"
+          },
+          {
+            "importance": 0.36956365272154745,
+            "name": "Jameson Williams",
+            "player_id": "900f1061-eb3e-4945-bed6-3a8186cd16aa",
+            "position": "WR",
+            "role_class": "major secondary option",
+            "role_confidence": "high",
+            "team": "DET"
+          }
+        ],
+        "flags": [],
+        "missing_role_evidence": [],
+        "omitted_central_players": [
+          {
+            "best_candidate_with_player_rank": 41,
+            "candidate_count": 3,
+            "candidate_total": 120,
+            "explanation": "Best generated candidate containing this player scored -0.010 below this lineup; this is a whole-lineup comparison, not a causal swap",
+            "importance": 0.5636328019836793,
+            "mean": 13.837438334093576,
+            "name": "Bucky Irving",
+            "ownership": 3.9756806708492105,
+            "ownership_reason": "Ownership unavailable; no ownership cause assigned",
+            "p90": 26.850784386305644,
+            "player_id": "a9f8d797-040e-4469-b9d5-bb39bf3792b2",
+            "projection_reason": "Mean 13.84; P90 26.85; team mean rank 1, P90 rank 1",
+            "role_class": "offensive centerpiece",
+            "salary": 6300,
+            "salary_value_reason": "Salary $6,300; mean per $1,000 2.20; position value rank 12/135",
+            "selected_count": 0,
+            "selected_total": 1,
+            "stack_correlation_reason": "Best containing candidate stack QB+2 versus selected QB+2",
+            "team": "TB",
+            "whole_lineup_objective_gap": -0.010027508406349916
+          },
+          {
+            "best_candidate_with_player_rank": null,
+            "candidate_count": 0,
+            "candidate_total": 120,
+            "explanation": "No generated candidate contained this player; a legal counterfactual solve is needed",
+            "importance": 0.5365472675472676,
+            "mean": 10.942718680014814,
+            "name": "Quinshon Judkins",
+            "ownership": 3.7953305740277887,
+            "ownership_reason": "Ownership unavailable; no ownership cause assigned",
+            "p90": 18.96397528533683,
+            "player_id": "376836fe-2a4f-42c0-99c4-dd1c9768034f",
+            "projection_reason": "Mean 10.94; P90 18.96; team mean rank 2, P90 rank 2",
+            "role_class": "primary option",
+            "salary": 5500,
+            "salary_value_reason": "Salary $5,500; mean per $1,000 1.99; position value rank 19/135",
+            "selected_count": 0,
+            "selected_total": 1,
+            "stack_correlation_reason": "No containing candidate for construction comparison",
+            "team": "CLE",
+            "whole_lineup_objective_gap": null
+          },
+          {
+            "best_candidate_with_player_rank": null,
+            "candidate_count": 0,
+            "candidate_total": 120,
+            "explanation": "No generated candidate contained this player; a legal counterfactual solve is needed",
+            "importance": 0.4561667747468831,
+            "mean": 13.099617515870948,
+            "name": "Chuba Hubbard",
+            "ownership": 3.8177449228255496,
+            "ownership_reason": "Ownership unavailable; no ownership cause assigned",
+            "p90": 21.120874121192966,
+            "player_id": "1cb58102-1426-459a-82cf-240882d90206",
+            "projection_reason": "Mean 13.10; P90 21.12; team mean rank 2, P90 rank 3",
+            "role_class": "primary option",
+            "salary": 6100,
+            "salary_value_reason": "Salary $6,100; mean per $1,000 2.15; position value rank 15/135",
+            "selected_count": 0,
+            "selected_total": 1,
+            "stack_correlation_reason": "No containing candidate for construction comparison",
+            "team": "CAR",
+            "whole_lineup_objective_gap": null
+          },
+          {
+            "best_candidate_with_player_rank": null,
+            "candidate_count": 0,
+            "candidate_total": 120,
+            "explanation": "No generated candidate contained this player; a legal counterfactual solve is needed",
+            "importance": 0.6648684360378991,
+            "mean": 18.48569181003571,
+            "name": "Jahmyr Gibbs",
+            "ownership": 21.513686314353798,
+            "ownership_reason": "Ownership unavailable; no ownership cause assigned",
+            "p90": 31.49903786224778,
+            "player_id": "693463af-73ba-41d5-889c-388c36703430",
+            "projection_reason": "Mean 18.49; P90 31.50; team mean rank 2, P90 rank 2",
+            "role_class": "offensive centerpiece",
+            "salary": 8800,
+            "salary_value_reason": "Salary $8,800; mean per $1,000 2.10; position value rank 17/135",
+            "selected_count": 0,
+            "selected_total": 1,
+            "stack_correlation_reason": "No containing candidate for construction comparison",
+            "team": "DET",
+            "whole_lineup_objective_gap": null
+          }
+        ],
+        "role_projection_disagreements": [],
+        "script": "DET passing through 2 QB stack partner(s) with 0 opposing skill-player bring-back(s) in favored offense game conditions",
+        "status": "available"
+      },
+      "game_environment": {
+        "game_total": 48.5,
+        "label": "favored offense",
+        "market_safe": true,
+        "raw_rule_score": 0,
+        "reason": "No standalone primary-game bonus in the current Classic objective; no game-related pair rule fired",
+        "selector_contribution": 0.0,
+        "team_spread": -6.5,
+        "team_total": 27.5
+      },
+      "games_represented": [
+        "BAL@DAL 09/27/2026 04:25PM ET",
+        "CAR@CLE 09/27/2026 01:00PM ET",
+        "CIN@PIT 09/27/2026 01:00PM ET",
+        "KC@MIA 09/27/2026 01:00PM ET",
+        "MIN@TB 09/27/2026 04:05PM ET",
+        "NYJ@DET 09/27/2026 01:00PM ET"
+      ],
+      "generation_template": [
+        1,
+        0
+      ],
+      "high_owned_count": null,
+      "large_ceiling_sacrifice_for_chalk": false,
+      "leverage_available": false,
+      "leverage_sum": null,
+      "log_ownership": null,
+      "low_owned_count": null,
+      "mean": 135.10754714016025,
+      "mean_loss_vs_best": 6.705622242489056,
+      "objective_score": 5.3485705744462955,
+      "ownership_objective_gain_vs_best_quality": 0.0,
+      "ownership_product": null,
+      "ownership_sum": null,
+      "p90": 235.76009908715477,
+      "p90_loss_vs_best": 8.497032116598433,
+      "pass_catchers": {
+        "flex_position": "WR",
+        "high_owned_count": null,
+        "low_owned_count": null,
+        "one_offs": [
+          "Cade Otton",
+          "Jalen Coker",
+          "Denzel Boston"
+        ],
+        "salary": 26400,
+        "te_in_qb_stack": false
+      },
+      "player_ids": [
+        "1f90d290-afb4-48ae-8052-fa99040b8ddb",
+        "220c527d-9daf-4348-8f38-c244c8c512b3",
+        "2fa43876-8b80-4de0-a467-82bfa150f042",
+        "48932b42-a60a-4070-82a7-50475f27bbf2",
+        "49ac835d-70f6-4fbd-ae80-242eea54c172",
+        "626562a6-77cf-4b6a-b4cc-47cef26cf416",
+        "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+        "900f1061-eb3e-4945-bed6-3a8186cd16aa",
+        "e56bf4fb-4de6-4974-9143-26a843800acd"
+      ],
+      "primary_game": "DET\u2013NYJ",
+      "qb": {
+        "basis": "expected or recent carries",
+        "carries": 1.6666666666666667,
+        "label": "pocket-oriented QB",
+        "name": "Jared Goff",
+        "ownership": null,
+        "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+        "rushing_role_strength": 0.0,
+        "team": "DET"
+      },
+      "rank": 68,
+      "rb_construction": {
+        "high_owned_pair": null,
+        "same_game_pair": false
+      },
+      "rbs": [
+        {
+          "in_qb_game": false,
+          "name": "Derrick Henry",
+          "opportunity": {
+            "carries_mean_3": 19.930616842244753,
+            "depth_chart_position": null,
+            "evidence_class": "inferred_opportunity",
+            "explicit_role_signal": null,
+            "fallback_threshold_met": null,
+            "player_status": null,
+            "pregame_availability_probability": 1.0,
+            "pregame_carry_share": null,
+            "pregame_expected_carries": null,
+            "pregame_expected_routes": null,
+            "pregame_expected_snaps": null,
+            "pregame_expected_targets": null,
+            "pregame_goal_line_share": null,
+            "pregame_injury_created_opportunity": null,
+            "pregame_red_zone_share": null,
+            "pregame_role_label": null,
+            "pregame_start_probability": 1.0,
+            "pregame_target_share": null,
+            "receiving_yards_mean_3": null,
+            "receptions_mean_3": null,
+            "retention_reason": "not evaluated",
+            "roster_status": null,
+            "snap_share_mean_3": 0.6266666666666666,
+            "target_share_mean_3": 0.05495909546959672,
+            "targets_mean_3": 1.2640591958007246,
+            "team_targets_mean_3": 23.0
+          },
+          "opposing_dst": false,
+          "ownership": null,
+          "p90": 34.54860949122313,
+          "projection": 21.535263439011068,
+          "receiving_role_diagnostic": {
+            "expected_routes": null,
+            "expected_targets": null,
+            "receiving_fantasy_points": null,
+            "receiving_fantasy_points_reason": "Unavailable: no receiving-point decomposition in the projection snapshot",
+            "receiving_yards_mean_3": null,
+            "recent_target_share_mean_3": 0.05495909546959672,
+            "recent_targets_mean_3": 1.2640591958007246,
+            "receptions_mean_3": null,
+            "source": "lagged_three_game",
+            "strength": 0.19628248381998828,
+            "target_share": 0.05495909546959672
+          },
+          "receiving_role_strength": 0.19628248381998828,
+          "salary": 7700,
+          "same_team_dst": false,
+          "spread": -3.0,
+          "team": "BAL",
+          "team_total": 27.75
+        },
+        {
+          "in_qb_game": false,
+          "name": "De'Von Achane",
+          "opportunity": {
+            "carries_mean_3": 10.157110433030082,
+            "depth_chart_position": null,
+            "evidence_class": "inferred_opportunity",
+            "explicit_role_signal": null,
+            "fallback_threshold_met": null,
+            "player_status": null,
+            "pregame_availability_probability": 1.0,
+            "pregame_carry_share": null,
+            "pregame_expected_carries": null,
+            "pregame_expected_routes": null,
+            "pregame_expected_snaps": null,
+            "pregame_expected_targets": null,
+            "pregame_goal_line_share": null,
+            "pregame_injury_created_opportunity": null,
+            "pregame_red_zone_share": null,
+            "pregame_role_label": null,
+            "pregame_start_probability": 1.0,
+            "pregame_target_share": null,
+            "receiving_yards_mean_3": null,
+            "receptions_mean_3": null,
+            "retention_reason": "not evaluated",
+            "roster_status": null,
+            "snap_share_mean_3": 0.7733333333333333,
+            "target_share_mean_3": 0.1394892240916399,
+            "targets_mean_3": 3.347741378199358,
+            "team_targets_mean_3": 24.0
+          },
+          "opposing_dst": false,
+          "ownership": null,
+          "p90": 26.90270515899047,
+          "projection": 16.468436546533084,
+          "receiving_role_diagnostic": {
+            "expected_routes": null,
+            "expected_targets": null,
+            "receiving_fantasy_points": null,
+            "receiving_fantasy_points_reason": "Unavailable: no receiving-point decomposition in the projection snapshot",
+            "receiving_yards_mean_3": null,
+            "recent_target_share_mean_3": 0.1394892240916399,
+            "recent_targets_mean_3": 3.347741378199358,
+            "receptions_mean_3": null,
+            "source": "lagged_three_game",
+            "strength": 0.49817580032728537,
+            "target_share": 0.1394892240916399
+          },
+          "receiving_role_strength": 0.49817580032728537,
+          "salary": 6500,
+          "same_team_dst": false,
+          "spread": 11.5,
+          "team": "MIA",
+          "team_total": 17.0
+        }
+      ],
+      "relative_chalk": null,
+      "roster": [
+        {
+          "name": "Cade Otton",
+          "ownership": null,
+          "player_id": "1f90d290-afb4-48ae-8052-fa99040b8ddb",
+          "position": "TE",
+          "salary": 3100,
+          "team": "TB"
+        },
+        {
+          "name": "Amon-Ra St. Brown",
+          "ownership": null,
+          "player_id": "220c527d-9daf-4348-8f38-c244c8c512b3",
+          "position": "WR",
+          "salary": 7900,
+          "team": "DET"
+        },
+        {
+          "name": "Jalen Coker",
+          "ownership": null,
+          "player_id": "2fa43876-8b80-4de0-a467-82bfa150f042",
+          "position": "WR",
+          "salary": 5500,
+          "team": "CAR"
+        },
+        {
+          "name": "Derrick Henry",
+          "ownership": null,
+          "player_id": "48932b42-a60a-4070-82a7-50475f27bbf2",
+          "position": "RB",
+          "salary": 7700,
+          "team": "BAL"
+        },
+        {
+          "name": "Denzel Boston",
+          "ownership": null,
+          "player_id": "49ac835d-70f6-4fbd-ae80-242eea54c172",
+          "position": "WR",
+          "salary": 4500,
+          "team": "CLE"
+        },
+        {
+          "name": "De'Von Achane",
+          "ownership": null,
+          "player_id": "626562a6-77cf-4b6a-b4cc-47cef26cf416",
+          "position": "RB",
+          "salary": 6500,
+          "team": "MIA"
+        },
+        {
+          "name": "Jared Goff",
+          "ownership": null,
+          "player_id": "8e2d03ad-786a-4a64-b4cd-d866212311ff",
+          "position": "QB",
+          "salary": 6300,
+          "team": "DET"
+        },
+        {
+          "name": "Jameson Williams",
+          "ownership": null,
+          "player_id": "900f1061-eb3e-4945-bed6-3a8186cd16aa",
+          "position": "WR",
+          "salary": 5400,
+          "team": "DET"
+        },
+        {
+          "name": "Steelers",
+          "ownership": null,
+          "player_id": "e56bf4fb-4de6-4974-9143-26a843800acd",
+          "position": "DST",
+          "salary": 2700,
+          "team": "PIT"
+        }
+      ],
+      "salary": 49600,
+      "stack": {
+        "bring_back_correlation_contribution": 0.0,
+        "bring_back_count": 0,
+        "bring_back_evaluations": [],
+        "bring_backs": [],
+        "game_stack_log_ownership": null,
+        "game_stack_ownership": null,
+        "game_stack_salary": 19600,
+        "game_stack_size": 3,
+        "partner_count": 2,
+        "partners": [
+          {
+            "name": "Amon-Ra St. Brown",
+            "ownership": null,
+            "position": "WR"
+          },
+          {
+            "name": "Jameson Williams",
+            "ownership": null,
+            "position": "WR"
+          }
+        ],
+        "type": "QB+2"
+      }
+    }
+  ],
+  "saved_rosters": 120,
+  "selector_sum_difference": 0.002615698454064841,
+  "sha256": "a254dabe4c5ae1b45120e0425829e34489a8691f69ff8b371ac0517f437e9781",
+  "tie_cascade_hypothesis": "One missing/added roster differs only by TB vs PIT DST, with identical fantasy projections and exact selector; changed no-good cuts can cascade. Not a proven explanation for every mismatch."
+}

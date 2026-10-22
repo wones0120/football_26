@@ -288,6 +288,7 @@ def test_existing_collectors_refresh_before_saved_projection_build_and_ownership
                side_effect=mark("starters", SimpleNamespace(rows_written=2)))
         mocked("backend.app.product_services.showdown_player_context.refresh_canonical_context",
                side_effect=mark("canonical_context", {"rows":6}))
+        supplement = mocked("backend.app.product_services.classic_official_context.supplement_unresolved_context",return_value={})
         mocked("backend.app.product_services.showdown_data_readiness.refresh_training_labels",
                side_effect=mark("historical_features", {"periods":[]}))
         mocked("backend.app.product_services.slate_preparation.execute_preparation",
@@ -295,6 +296,8 @@ def test_existing_collectors_refresh_before_saved_projection_build_and_ownership
         ownership = mocked("backend.app.product_services.ownership.OwnershipService.run_projection_model",
                            side_effect=mark("ownership", SimpleNamespace(ownership_run_id="own-1")))
         result = refresh_live_sources(service, season=NOW.year, week=5, slate="THURSDAY_NIGHT", params={"preliminary_research":preliminary})
+        if not identity_unresolved:
+            supplement.assert_called_once_with(service.engine,season=NOW.year,week=5,slate='THURSDAY_NIGHT',contest_format='showdown')
     if identity_unresolved:
         assert calls == ["market", "status", "salary"]
         assert result["projection_run_id"] is None
@@ -488,3 +491,54 @@ def test_missing_prior_week_provider_blocks_build_without_stale_projection_fallb
     assert result['report']['historical_participation']['status'] == 'ERROR'
     player_sources.assert_not_called()
     build.assert_not_called()
+
+
+def test_below_floor_missing_role_is_audited_without_inventing_availability():
+    rows = ready_rows()
+    excluded = deepcopy(rows[-1])
+    excluded.update(player_id="cheap-unknown", dk_player_id="cheap-flex", dk_captain_id="cheap-cpt",
+                    salary=2400, base_salary=1600, player_status="Q", pregame_context_source=None, expected_depth_role=None)
+    rows.append(excluded)
+    assert assess(rows)["status"] == "NOT_READY"
+    result = assess(rows, minimum_player_salary=1700)
+    assert result["status"] == "READY"
+    audit = result["selection_scope"]["nonblocking_player_status_exclusions"][0]
+    assert audit["player_id"] == "cheap-unknown"
+    assert audit["reason"] == "user_minimum_player_salary"
+    assert audit["salary"] == 1600  # Captain's displayed $2,400 must not change base eligibility.
+    assert audit["player_status"] == "Q" and audit["canonical_role"] is None
+    assert "player_status_missing" in audit["reason_codes"]
+    assert audit["model_assessment"]["projection"] == 10
+    frozen = freeze_evidence(rows, result, optimizer_run_id="salary-scoped")
+    assert frozen["native_player_pool"][-1] == excluded
+    assert assess(rows, minimum_player_salary=1600)["status"] == "NOT_READY"
+
+
+def test_salary_floor_does_not_exempt_raw_identity_or_selectable_role_checks():
+    rows = ready_rows()
+    rows[-1].update(salary=200, identity_resolved=False)
+    assert "salary_pool_missing" in assess(rows, minimum_player_salary=1700)["reason_codes"]
+    rows = ready_rows()
+    rows[-1]["pregame_context_source"] = None
+    assert "player_status_missing" in assess(rows, minimum_player_salary=1700)["reason_codes"]
+
+
+def test_canonical_unknown_role_below_floor_keeps_source_and_model_truth():
+    from backend.app.product_services.showdown_player_context import CONTEXT_CONTRACT
+    rows = ready_rows()
+    excluded = {**deepcopy(rows[-1]), "player_id": "canonical-cheap", "dk_player_id": "cheap-flex",
+                "dk_captain_id": "cheap-cpt", "salary": 200, "player_status": "Q",
+                "canonical_context_contract": CONTEXT_CONTRACT, "availability_state": "AVAILABLE",
+                "availability_status": "ACT", "availability_source": "native-roster",
+                "availability_source_ids": ["snapshot-1"], "availability_observed_at": AT,
+                "canonical_role": None, "role_source": None, "role_source_ids": [],
+                "role_observed_at": None, "canonical_context_reason_codes": ["player_role_missing"]}
+    rows.append(excluded)
+    assert "player_role_missing" in assess(rows)["reason_codes"]
+    scoped = assess(rows, minimum_player_salary=1700)
+    assert scoped["status"] == "READY"
+    audit = scoped["selection_scope"]["nonblocking_player_status_exclusions"][0]
+    assert audit["availability_state"] == "AVAILABLE"  # Roster evidence is not rewritten to OUT.
+    assert audit["canonical_role"] is None
+    assert "player_role_missing" in audit["reason_codes"]
+    assert excluded["canonical_role"] is None and excluded["player_status"] == "Q"

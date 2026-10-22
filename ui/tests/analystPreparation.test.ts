@@ -29,10 +29,14 @@ test("normal Prepare and Optimize wire handoff and display actual changes withou
   const ts=await import('typescript'),React=await import('react'),{renderToStaticMarkup}=await import('react-dom/server');
   let code=ts.transpileModule(readFileSync(new URL('../src/AnalystPreparationSummary.tsx',import.meta.url),'utf8'),{compilerOptions:{jsx:ts.JsxEmit.ReactJSX,module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;
   code=code.replace(/import \{ PersonalThoughtSummary \} from \"\.\/PersonalThoughtSummary\";/, 'const PersonalThoughtSummary=()=>null;');
+  let researchCode=ts.transpileModule(readFileSync(new URL('../src/AnalystResearchSummary.tsx',import.meta.url),'utf8'),{compilerOptions:{jsx:ts.JsxEmit.ReactJSX,module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;
+  researchCode=researchCode.replace('"./analystResearchEvidence"',JSON.stringify(new URL('../src/analystResearchEvidence.ts',import.meta.url).href));
+  researchCode=researchCode.replaceAll('"react/jsx-runtime"',JSON.stringify(pathToFileURL(require.resolve('react/jsx-runtime')).href));
+  code=code.replace('"./AnalystResearchSummary"',JSON.stringify(`data:text/javascript;base64,${Buffer.from(researchCode).toString('base64')}`));
   code=code.replaceAll('"react/jsx-runtime"',JSON.stringify(pathToFileURL(require.resolve('react/jsx-runtime')).href));
   const {AnalystPreparationSummary}=await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
   const html=renderToStaticMarkup(React.createElement(AnalystPreparationSummary,{handoff:receipt,mode:"AUTO",busy:false,onAutomatic:()=>{}}));
-  assert.match(html,/automatic/);assert.match(html,/Current role is unverified/);assert.match(html,/Current protection recheck unavailable/);assert.match(html,/checked-v2/);
+  assert.match(html,/Authored football research/);assert.match(html,/automatic/);assert.match(html,/Current role is unverified/);assert.match(html,/Current protection recheck unavailable/);assert.match(html,/checked-v2/);
   let automaticChosen=false;
   const tree=AnalystPreparationSummary({handoff:receipt,mode:"BASELINE",busy:false,onAutomatic:()=>{automaticChosen=true;}});
   const button=tree.props.children.props.children.find((child: {type?:string})=>child?.type==='button');

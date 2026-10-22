@@ -1,0 +1,13 @@
+# A1 — shared original opportunity history evidence
+
+The existing count forecast now consumes a shared, versioned history adapter and freezes its output in `history_evidence`. Original count observations, source/import clocks, role-window decisions and verified inactive proofs remain distinct from proxies and forward forecasts. Unknown or missing actors retain their opportunities in full-source team budgets; no user preference enters this producer.
+
+The adapter normalizes FB to RB, rejects duplicate canonical/native player-game rows and invalid counts, preserves measured zero versus unknown, and rejects supplied imports later than the declared current cutoff. Unmapped source actors remain in observed channel budgets and have separate coverage/count totals. Source-stat rows do not certify snaps or actual participation. Five-clock coverage explicitly identifies missing publication/capture/exact event clocks. Revised historical receipt availability is never claimed as original pregame evidence.
+
+A1 extracts the existing same-team observed-three-game gate without changing count estimates, current-role requirements or verified-inactive policy. Prepare already validates current canonical roles and immutable inactive proofs; this adapter records that boundary rather than inferring role from salary presence. Count evidence retains its own model/source receipt plus this adapter code hash/version.
+
+Focused validation: **29 tests passed in 2.09 seconds** (9 new adapter cases plus existing count/gamebook regressions). A frozen pre-edit-source comparison using a supplied fixed model shows exact forecasts and preexisting metadata parity in **7 cases**: regular, unmapped actor, FB, unknown gap, verified inactive gap, changed team and missing count channel. No fit or solve was run by that comparison. See `parity.json` and `EVIDENCE.json`.
+
+No schema, source ingest, service restart, operational generation or saved lineup change occurred. Current running services have not been claimed to load this patch. The normal next Prepare will freeze the adapter evidence once the reviewed code is activated through the managed workflow. This is evidence integration, **not a claim of improved projection or lineup accuracy**. It does not implement future zoned/TD/route measures, automatic replacement expansion or default allocator activation.
+
+Documentation integration snippet for High: Prepared offensive count forecasts now retain a versioned full-source history receipt with original measurements, same-team role windows, primary inactive-gap lineage, explicit clock gaps and unmapped/missing component coverage. Estimates/defaults remain unchanged; revised history is not original pregame proof.

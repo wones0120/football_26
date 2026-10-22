@@ -1,0 +1,13 @@
+# Recent observed efficiency v1 — G22-M03
+
+The definition is latest observed same-team REG weekly efficiency minus the pooled matched-numerator/exposure ratio from exactly three preceding observed team logs. It is a family of separately named statistical channels, not a dimensionless composite: official completions/attempt, signed passing yards/attempt and /completion, interceptions/attempt, passing TD/attempt, signed rushing yards/carry, receptions/target, signed receiving yards/target and /reception. Passing channels require the upstream source-proven QB scope. Kneels, spikes and scrambles retain the original official statistical definitions.
+
+Each channel pools numerator and denominator from identical source rows. Zero individual exposure may be pooled with other known rows; an entirely zero reference exposure is undefined. Missing numerator or exposure masks the reference, never silently skips a row. Signed negative yardage is valid. A missing actor in the latest team log is unknown, never zero/DNP or replaced by a last-positive log. Windows do not cross seasons or teams. An unbound-team row for a native actor masks that actor’s same-season changes rather than silently ignoring uncertain participation. Fewer than three reference logs is unknown. The observed weekly team universe is not an independently certified complete NFL schedule.
+
+The reader composes the existing High-reviewed immutable weekly component and verifies its producer plus its immutable projected-source bytes. Source IDs, actual import/extraction/derivation clocks, canonical alias uncertainty and durable queue evidence remain upstream provenance. There is no repeated DB extraction, new capture, alias mutation, model fit or current serving. Semantic measurement excludes recapture/source-reference clocks. All outputs are postlock descriptive, explicitly not pregame-serving eligible. No model/optimizer completion is implied.
+
+This package adds one exact proposed catalog definition, G22-M03, pending High adjudication. Its nine channel names are not nine additional catalog IDs. Global README/release behavior is unchanged: this is an internal feature-only artifact, with no UI or configuration change.
+
+## Actual coverage
+
+The authenticated frozen weekly composition produced 7,828 native actor/team/season profiles and 104 SF/WAS 2026 selected profiles. Known changes are 91 for most QB channels (90 yards/completion), 321 rushing YPC, 642 catch-rate/receiving YPT and 582 receiving YPR. Low coverage is retained rather than skipping missing actor logs or shortening the three-log reference. These are observed-source windows, not schedule-completeness claims. Actual composition took 1.23 seconds with no DB read, source fetch or model operation.

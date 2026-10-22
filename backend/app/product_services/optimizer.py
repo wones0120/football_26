@@ -1407,7 +1407,9 @@ def _json_safe(value):
     if isinstance(value, np.generic):
         value = value.item()
     if isinstance(value, datetime):
-        return value.isoformat()
+        # pandas.NaT is also a datetime; serialize missingness before isoformat
+        # can turn it into the non-date string "NaT" in source evidence clocks.
+        return None if pd.isna(value) else value.isoformat()
     if value is None:
         return None
     if isinstance(value, float) and not math.isfinite(value):
@@ -4784,6 +4786,7 @@ class OptimizerService:
         enforce_single_te: bool = False,
         require_qb_captain_receiver: bool = False,
         portfolio_policy: bool = False,
+        strategy_stack_rules: bool = True,
         allow_duplicate_lineups: bool = False,
         portfolio_exposure_rates: dict[str, float] | None = None,
         locked_players_override_exposure: bool = False,
@@ -4924,7 +4927,7 @@ class OptimizerService:
                             "WR or TE in FLEX"
                         )
 
-            if portfolio_policy and not no_qbs:
+            if portfolio_policy and strategy_stack_rules and not no_qbs:
                 starter_qbs = [
                     row for row, position in zip(lineup, natural_positions)
                     if position == "QB" and bool(row.get("showdown_qb_eligible"))
@@ -5480,9 +5483,10 @@ class OptimizerService:
             cap_vars = pulp.LpVariable.dicts("captain", index_range, lowBound=0, upBound=1, cat="Binary")
             flex_vars = pulp.LpVariable.dicts("flex", index_range, lowBound=0, upBound=1, cat="Binary")
             model = pulp.LpProblem("DK_Captain", pulp.LpMaximize)
+            workload_objective = score_col == "workload_utility" or (bool((stack_params or {}).get('bounded_scenario_comparison')) and not (stack_params or {}).get('scenario_incumbent_control'))
             objective_expression = pulp.lpSum(
-                1.5 * _safe_float(pool.loc[i, "showdown_captain_p90"]) * cap_vars[i]
-                + _safe_float(pool.loc[i, "showdown_flex_mean"]) * flex_vars[i]
+                1.5 * _safe_float(pool.loc[i, score_col if workload_objective else "showdown_captain_p90"]) * cap_vars[i]
+                + _safe_float(pool.loc[i, score_col if workload_objective else "showdown_flex_mean"]) * flex_vars[i]
                 for i in index_range
             )
             control_objective = objective_expression
@@ -5767,8 +5771,20 @@ class OptimizerService:
 
             if additional_constraints is not None:
                 additional_constraints(model, pool, selected)
-            solver = pulp.PULP_CBC_CMD(msg=False)
+            solver = pulp.PULP_CBC_CMD(msg=False, timeLimit=10, threads=0 if params.get("scenario_serial_solver") else 1, options=["randomSeed 1"]) if workload_objective or (stack_params or {}).get('bounded_scenario_comparison') else pulp.PULP_CBC_CMD(msg=False)
             status = model.solve(solver)
+            if isinstance(params.get('learned_opportunity_audit'),dict):
+                from .evaluation_record import digest
+                snapshot=_json_safe(dict(model=model.toDict(),players=pool[[c for c in (
+                    'player_id','position','player_team','salary','workload_utility','showdown_captain_shortlisted') if c in pool]].to_dict('records'))
+                )
+                # JSONB erases the sign of zero solver duals. Canonicalize this
+                # non-selection diagnostic before hashing the persisted model.
+                for constraint in snapshot['model']['constraints']:
+                    if constraint.get('pi') == 0:constraint['pi']=0.0
+                params['learned_opportunity_audit'].update(solver_status=pulp.LpStatus[status],
+                    objective=pulp.value(model.objective),input_snapshot=snapshot,input_sha256=digest(snapshot),
+                    points_in_objective=False,points_in_qualification=False)
             if status != pulp.LpStatusOptimal:
                 if infeasibility_diagnostics is not None:
                     infeasibility_diagnostics["solver_status"] = pulp.LpStatus[status]
@@ -5831,7 +5847,7 @@ class OptimizerService:
                                     adjustment[field] = _safe_float(adjustment[field]) * 1.5
                             row["showdown_scenario_adjustment"] = adjustment
                         base_objective = _safe_float(row.get(
-                            "showdown_captain_p90" if selected_cap else "showdown_flex_mean"
+                            score_col if workload_objective else ("showdown_captain_p90" if selected_cap else "showdown_flex_mean")
                         ))
                         row["base_salary"] = base_salary
                         row["base_projection"] = base_projection
@@ -6047,7 +6063,7 @@ class OptimizerService:
 
         if additional_constraints is not None:
             additional_constraints(model, pool, x)
-        solver = pulp.PULP_CBC_CMD(msg=False)
+        solver = pulp.PULP_CBC_CMD(msg=False, timeLimit=10, threads=1, options=["randomSeed 1"]) if score_col == "workload_utility" or (stack_params or {}).get('bounded_scenario_comparison') else pulp.PULP_CBC_CMD(msg=False)
         status = model.solve(solver)
         if status != pulp.LpStatusOptimal:
             return None
@@ -6122,7 +6138,17 @@ class OptimizerService:
         now = datetime.now(timezone.utc).replace(tzinfo=None)
         params = dict(params or {})
         from .classic_highest_projection import normalize_request as normalize_highest_projection
-        highest_projection = normalize_highest_projection(params, contest_format=contest_format, strategy=strategy)
+        showdown_scenario = bool(params.get('scenario_mode')) and contest_format == 'showdown'
+        if showdown_scenario:
+            from .optimizer_scenario_mode import normalize_showdown_request
+            if strategy != SHOWDOWN_GPP_CAPTAIN_INFORMED_STRATEGY_ID or objective != 'gpp':
+                raise ValueError('Showdown scenario comparison requires Captain GPP')
+            normalize_showdown_request(params)
+        highest_projection = False if showdown_scenario else normalize_highest_projection(params, contest_format=contest_format, strategy=strategy)
+        if params.get("scenario_mode") and (not (highest_projection or showdown_scenario) or not params.get("prepared_input_job_id")):
+            raise ValueError("Scenario mode requires its prepared Classic one-lineup comparison")
+        if params.get("scenario_mode") and params.get("workload_comparison"):
+            raise ValueError("Scenario mode cannot be combined with a different scoring comparison")
         params.pop("analyst_handoff_applied", None)  # Only a verified saved handoff may assert application.
         if params.get("prepared_input_job_id"):
             from sqlalchemy.orm import Session
@@ -6132,9 +6158,13 @@ class OptimizerService:
                     "contest_format": contest_format, "objective": objective, "params": params}
                 bind_saved_preparation(analyst_preparation_session, handoff_payload)
         merged_analyst = params.get("analyst_strategy") == "MERGED_SCENARIOS"
+        from .shared_world_selection import POLICY as SHARED_WORLD_POLICY
+        shared_world_mode = params.get("analyst_selection_policy") == SHARED_WORLD_POLICY
+        if shared_world_mode and (not merged_analyst or highest_projection or not params.get("prepared_input_job_id")):
+            raise ValueError("Shared-world optimization requires its explicit prepared automatic Analyst workflow")
         if params.get("analyst_strategy", "CONSTRUCTION") not in {"CONSTRUCTION", "MERGED_SCENARIOS"}:
             raise ValueError("Unknown Analyst strategy")
-        if merged_analyst and not params.get("analyst_packet_sha256"):
+        if merged_analyst and not params.get("analyst_packet_sha256") and not params.get("workload_comparison"):
             raise ValueError("Merged Analyst strategy requires an imported scenario packet")
         single_lineup = strategy in SINGLE_LINEUP_STRATEGIES
         if single_lineup:
@@ -6165,7 +6195,7 @@ class OptimizerService:
             with Session(self.engine) as preparation_session:
                 params["prepared_input_evidence"] = validate_prepared_optimizer(preparation_session, {
                     "season": season, "week": week, "slate": slate,
-                    "contest_format": contest_format,
+                    "contest_format": contest_format, "objective": objective, "strategy": strategy,
                     "projection_run_id": projection_run_id, "params": params})
         if "exclude_questionable" in params and type(params["exclude_questionable"]) is not bool:
             raise ValueError("params.exclude_questionable must be an explicit boolean")
@@ -6186,6 +6216,13 @@ class OptimizerService:
             strategy=strategy,
         )
         strategy = str(strategy_config["strategy_id"])
+        if params.get("workload_comparison"):
+            if contest_format != "showdown" or objective != "gpp" or strategy != SHOWDOWN_GPP_CAPTAIN_INFORMED_STRATEGY_ID:
+                raise ValueError("Workload optimization currently requires the normal Captain GPP workflow")
+            if params.get("classic_selection_mode") == "HIGHEST_PROJECTION":
+                raise ValueError("Choose one comparison objective")
+            if params['workload_comparison'] in {'learned_counts','learned_yards','scenario_first'} and (params.get('require_team_leader') or params.get('require_home_team_leader')):
+                raise ValueError('Learned opportunities cannot use points-based team leader requirements')
         if merged_analyst and objective != "gpp":
             raise ValueError("Merged Analyst scenarios require a GPP strategy")
         from .classic_portfolio_controls import validate_large_gpp_controls
@@ -6231,6 +6268,10 @@ class OptimizerService:
             if contest_format == "showdown"
             else []
         )
+        if shared_world_mode:
+            from .shared_world_runtime import LEGACY_STACK_RULES
+            params["shared_world_omitted_strategy_rules"] = [r for r in optimizer_rules if r["rule_id"] in LEGACY_STACK_RULES]
+            optimizer_rules = [r for r in optimizer_rules if r["rule_id"] not in LEGACY_STACK_RULES]
         params["optimizer_rules"] = optimizer_rules
         require_qb_captain_receiver = any(
             rule.get("rule_id") == SHOWDOWN_QB_CAPTAIN_RECEIVER_RULE_ID
@@ -6521,7 +6562,8 @@ class OptimizerService:
                 slate=slate, projection_run_id=projection_run_id, evidence_cutoff=cutoff, evaluated_at=now,
                 rules=freshness_rules(get_settings()), ownership_required=requires_ownership(params),
                 ownership_attempted="ownership" in source_refresh, refresh=_json_safe(source_refresh),
-                require_canonical_context="canonical_player_context" in source_refresh)
+                require_canonical_context="canonical_player_context" in source_refresh,
+                minimum_player_salary=params.get("minimum_player_salary"))
             if live_showdown and source_refresh.get("projection", {}).get("status") == "ERROR":
                 readiness["status"] = "ERROR"
                 readiness["reason_codes"] = sorted(set(readiness["reason_codes"] + ["projection_refresh_failed"]))
@@ -6787,7 +6829,7 @@ class OptimizerService:
                 ):
                     warnings.append(warning)
 
-        if not merged_analyst and (strategy in {CAPTAIN_SINGLE_LINEUP_STRATEGY_ID, SHOWDOWN_GPP_CAPTAIN_INFORMED_STRATEGY_ID, SHOWDOWN_THREE_MAX_GPP_STRATEGY_ID, SHOWDOWN_SMALL_MAX_GPP_STRATEGY_ID} or strategy in SHOWDOWN_SINGLE_ENTRY_STRATEGY_IDS):
+        if not merged_analyst and not params.get("workload_comparison") and (strategy in {CAPTAIN_SINGLE_LINEUP_STRATEGY_ID, SHOWDOWN_GPP_CAPTAIN_INFORMED_STRATEGY_ID, SHOWDOWN_THREE_MAX_GPP_STRATEGY_ID, SHOWDOWN_SMALL_MAX_GPP_STRATEGY_ID} or strategy in SHOWDOWN_SINGLE_ENTRY_STRATEGY_IDS):
             pool, opportunity_excluded = apply_showdown_opportunity_gate(pool)
             opportunity_eligible_ids = set(pool["player_id"].astype(str))
             for player_id in opportunity_excluded:
@@ -7145,12 +7187,31 @@ class OptimizerService:
                 "objective_weights": {"captain_p90": 1.5, "flex_mean": 1.0},
                 "captain_prior_applied": False,
             })
+            if params.get("workload_comparison"):
+                params["objective_config"] = {
+                    "scoring_version": "offensive_workload_optimizer_v1",
+                    "objective_id": params["workload_comparison"], "score_column": "workload_utility",
+                    "captain_score_column": "weighted_projected_yards" if params["workload_comparison"] == "learned_yards" else "normalized_count_utility" if params["workload_comparison"] != "offensive_mean_control" else "supported_domain_FP_mean",
+                    "flex_score_column": "weighted_projected_yards" if params["workload_comparison"] == "learned_yards" else "normalized_count_utility" if params["workload_comparison"] != "offensive_mean_control" else "supported_domain_FP_mean",
+                    "captain_multiplier": 1.5, "captain_salary_multiplier": 1.5,
+                    "physical_count_multiplier": 1.0, "captain_shortlist_size": len(shortlist_report["shortlist"]),
+                    "captain_eligibility_policy": shortlist_report["policy_id"],
+                    "p90_use": "display only; no qualification/objective/tie-break" if params["workload_comparison"] in {"learned_counts","learned_yards","scenario_first"} else "qualification/display only, never workload objective or tie-break",
+                    "Analyst_scenarios": "inactive_for_explicit_workload_comparison"}
+        if params.get('workload_comparison')=='scenario_first':
+            params['objective_config'].update(objective_id='whole_lineup_case_coverage',
+                scoring_version='captain_shared_scoring_cases_v6',captain_score_column='shared_case_DK_score',
+                flex_score_column='shared_case_DK_score',incumbent_projection_consumed=False,
+                scenario_likelihood='unknown',construction_policy='explicit_3-3',
+                selection_policy='market_primary_complete_roster_case_coverage_then_mean_capture',
+                alternative_scripts_consumed=False,
+                capture_target=params.get('scenario_capture_target',.9))
         if params.get("no_qb_captain", False):
             flex_only_ids.update(qb_player_ids)
         flex_only_ids.update(captain_excluded_ids)
         if contest_format == "showdown":
             params.setdefault("strategy_runtime", {})["showdown_qb_preferences"] = (
-                showdown_qb_preference_report(params)
+                showdown_qb_preference_report(params, qb_player_ids=qb_player_ids)
             )
             params["strategy_runtime"]["showdown_team_constraints"] = team_constraint_report(params)
             params["strategy_runtime"]["showdown_captain_preferences"] = captain_preference_report(params)
@@ -7217,7 +7278,8 @@ class OptimizerService:
             stack_cfg["require_qb_captain_receiver"] = (
                 require_qb_captain_receiver
             )
-            portfolio_v3 = strategy == SHOWDOWN_GPP_CAPTAIN_INFORMED_STRATEGY_ID and not long_shot_mode
+            workload_comparison = params.get("workload_comparison")
+            portfolio_v3 = strategy == SHOWDOWN_GPP_CAPTAIN_INFORMED_STRATEGY_ID and not long_shot_mode and not workload_comparison
             single_entry = strategy in SHOWDOWN_SINGLE_ENTRY_STRATEGY_IDS and not long_shot_mode
             three_max = strategy == SHOWDOWN_THREE_MAX_GPP_STRATEGY_ID and not long_shot_mode
             small_max = strategy == SHOWDOWN_SMALL_MAX_GPP_STRATEGY_ID and not long_shot_mode
@@ -8439,12 +8501,53 @@ class OptimizerService:
                 contest_format == "showdown" and num_lineups == 4
                 and normalize_exposure_rate(params.get("captain_max_exposure"), default=0.60) == 0.25
             )
-            if highest_projection:
+            if showdown_scenario:
+                from .optimizer_scenario_mode import solve as solve_scenario
+                lineup_results, scenario_audit, scenario_report = solve_scenario(self, pool, params=params,
+                    cutoff=data_cutoff_at, contest_format='showdown', stack_params=stack_cfg, flex_only_ids=flex_only_ids)
+                params.setdefault('strategy_runtime', {})['scenario_mode'] = scenario_report
+                params['strategy_runtime']['highest_projection'] = scenario_audit
+                if scenario_report['prepared'].get('new_model_primary'):
+                    old_shortlist=params['strategy_runtime']['showdown_captain_shortlist']
+                    params['strategy_runtime']['scenario_incumbent_captain_shortlist']=old_shortlist
+                    supported={p['player_master_id'] for p in scenario_report['prepared']['players'] if p['conditional_mean'] is not None}
+                    candidates=[dict(player_id=str(r['player_id']),name=r.get('name'),position=r['position'],team=r.get('player_team'))
+                        for r in pool.to_dict('records') if str(r['player_id']) in supported and str(r['player_id']) not in flex_only_ids
+                        and not captain_preference_exclusions(params,r['position'],str(r['player_id']))]
+                    params['strategy_runtime']['showdown_captain_shortlist']=dict(policy_id='new_model_primary_covered_captains_v1',
+                        shortlist=candidates,exclusions=[],ranking='new-model score supported; factual/user constraints remain binding',
+                        parent_incumbent_policy=old_shortlist['policy_id'])
+                params['objective_config'].update(objective_id='conditional_mean', score_column='scenario_mean',
+                    captain_score_column='conditional_mean', flex_score_column='conditional_mean',
+                    conditional_adjustments=True, scoring_version='prepared_optimizer_scenario_v1')
+                if scenario_report['prepared'].get('new_model_primary'):
+                    params['objective_config'].update(objective_id='new_model_primary',scoring_version='new_model_primary_v1',
+                        incumbent_projection_consumed_for_primary=False,incumbent_p90_shortlist_consumed_for_primary=False,
+                        objective_weights={'new_model_captain_score':1.5,'new_model_flex_score':1.0},
+                        captain_shortlist_size=len(candidates),captain_eligibility_policy='new_model_primary_covered_captains_v1')
+                status = 'completed' if lineup_results else 'failed'
+                message = 'Experimental scenario mean; matched Captain baseline; ' + scenario_audit['solver_status']
+            elif workload_comparison:
+                from .workload_optimizer import solve as solve_workload
+                lineup_results, workload_report = solve_workload(self, pool, params=params,
+                    contest_type=contest_type, stack_params=stack_cfg, locked_ids=locked_ids,
+                    flex_only_ids=flex_only_ids, avoid_dst_opponents=avoid_dst_opponents,
+                    enforce_single_te=enforce_single_te, requested_captain_id=requested_captain_id)
+                params.setdefault("strategy_runtime", {})["workload_comparison"] = workload_report
+                status = "completed" if lineup_results else "failed"
+                message = "Offensive workload comparison; " + workload_report["status"]
+            elif highest_projection:
                 from .classic_highest_projection import solve as solve_highest_projection
-                lineup_results, projection_report = solve_highest_projection(self, pool, params=params, cutoff=data_cutoff_at)
+                if params.get("scenario_mode"):
+                    from .optimizer_scenario_mode import solve as solve_scenario
+                    lineup_results,projection_report,scenario_report=solve_scenario(self,pool,params=params,cutoff=data_cutoff_at)
+                    params.setdefault("strategy_runtime", {})["scenario_mode"]=scenario_report
+                    params['objective_config'].update(objective_id='conditional_mean',score_column='scenario_mean',scoring_version='prepared_optimizer_scenario_v1')
+                else:
+                    lineup_results, projection_report = solve_highest_projection(self, pool, params=params, cutoff=data_cutoff_at)
                 params.setdefault("strategy_runtime", {})["highest_projection"] = projection_report
                 status = "completed" if lineup_results else "failed"
-                message = "Highest baseline projection; optional stacks/bringbacks; " + str(projection_report["solver_status"])
+                message = projection_report["objective_label"] + "; optional stacks/bringbacks; " + str(projection_report["solver_status"])
             elif merged_analyst:
                 from .analyst_packets import load_packet
                 from .analyst_scenarios import run_merged
@@ -8474,9 +8577,25 @@ class OptimizerService:
                         "rule_profile": rule_profile, "locked_captain_player_id": requested_captain_id,
                         "enforce_single_te": enforce_single_te, "avoid_dst_opponents": avoid_dst_opponents})
                 params.setdefault("strategy_runtime", {})["football_analyst"] = analyst_report
+                if shared_world_mode:
+                    params["objective_config"] = {"objective_id": SHARED_WORLD_POLICY,
+                        "score_column": "common_world_conditional_mean", "captain_score_column": "conditional_mean",
+                        "flex_score_column": "conditional_mean", "captain_multiplier": 1.5,
+                        "captain_salary_multiplier": 1.5, "marginal_p90_scored": False, "ownership_scored": False,
+                        "captain_shortlist_size": len(params.get("strategy_runtime", {}).get("showdown_captain_shortlist", {}).get("shortlist", [])),
+                        "anchor_world_id": analyst_report["shared_world_selection"].get("anchor_world_id"),
+                        "portfolio_objective": "Expected-anchor conditional mean first, then incremental common-world point coverage"}
+                    params["strategy_config"] = {**params["strategy_config"], "selection_policy": SHARED_WORLD_POLICY,
+                        "description": "Expected anchor and supported shared-world full-roster coverage; static strategy stacks omitted; explicit user controls retained."}
+                if contest_format == "showdown":
+                    analyst_report["captain_workload_policy"] = params["strategy_runtime"]["showdown_captain_shortlist"]
                 params.setdefault("objective_config", {})["analyst_strategy"] = "MERGED_SCENARIOS"
                 status = "completed" if len(lineup_results) == num_lineups else "partial" if lineup_results else "failed"
                 message = f"Merged Analyst scenarios selected {len(lineup_results)}/{num_lineups}; quality screen=none"
+                if contest_format == "showdown" and len(lineup_results) < num_lineups:
+                    qualified = params["strategy_runtime"]["showdown_captain_shortlist"]["shortlist"]
+                    message += (f"; {len(qualified)} supported Captain roles after user preferences; "
+                                "Captain exposure is checked against the achieved portfolio; no constraints relaxed")
             elif captain_coverage:
                 from .showdown_captain_coverage import solve_captain_coverage
                 exposure_rates = None
@@ -9488,6 +9607,7 @@ class OptimizerService:
                     enforce_single_te=enforce_single_te,
                     require_qb_captain_receiver=require_qb_captain_receiver,
                     portfolio_policy=portfolio_v3 or single_entry or three_max or small_max or single_lineup,
+                    strategy_stack_rules=not shared_world_mode,
                     locked_players_override_exposure=single_lineup,
                     allow_duplicate_lineups=single_entry,
                     portfolio_exposure_rates=({"captain": params.get("captain_max_exposure", 1.0),
@@ -9580,7 +9700,7 @@ class OptimizerService:
             if status == "completed" and lineup_results:
                 if contest_format == "showdown":
                     for lineup in lineup_results:
-                        lineup[0]["showdown_qb_preferences"] = showdown_qb_preference_report(params)
+                        lineup[0]["showdown_qb_preferences"] = showdown_qb_preference_report(params, qb_player_ids=qb_player_ids)
                         lineup[0]["showdown_team_constraints"] = team_constraint_report(params)
                         lineup[0]["showdown_captain_preferences"] = captain_preference_report(params)
                         lineup[0]["showdown_captain_shortlist"] = params["strategy_runtime"]["showdown_captain_shortlist"]
@@ -9927,6 +10047,7 @@ class OptimizerService:
                             row.get("official_availability_status")
                             or injury_status
                         ),
+                        "designation_resolution": _json_safe(row.get("designation_resolution")),
                         "availability_override": _json_safe(
                             row.get("availability_override") or "default"
                         ),
@@ -9949,6 +10070,10 @@ class OptimizerService:
                         "captain_shortlist_exclusions": next((entry["exclusions"] for entry in
                             params.get("strategy_runtime", {}).get("showdown_captain_shortlist", {}).get("exclusions", [])
                             if entry["player_id"] == player_id), []),
+                        "captain_workload_assessment": next((entry.get("captain_workload") for entry in
+                            [*params.get("strategy_runtime", {}).get("showdown_captain_shortlist", {}).get("shortlist", []),
+                             *params.get("strategy_runtime", {}).get("showdown_captain_shortlist", {}).get("exclusions", [])]
+                            if entry["player_id"] == player_id), None),
                         "captain_user_preference_exclusions": ([{
                             "reason_code": "user_no_qb_captain",
                             "reason": "No QB Captain; FLEX remains eligible",
@@ -10083,7 +10208,7 @@ class OptimizerService:
             try:
                 with Session(self.engine) as preparation_session:
                     validate_prepared_optimizer(preparation_session, {"season": season, "week": week,
-                        "slate": slate, "contest_format": contest_format,
+                        "slate": slate, "contest_format": contest_format, "objective": objective, "strategy": strategy,
                         "projection_run_id": projection_run_id, "params": params})
             except ValueError as preparation_error:
                 status = "failed"
@@ -10101,12 +10226,26 @@ class OptimizerService:
         # Freeze the comparison only after generation and readiness validation.
         # This does not change the GPP generator, user constraints, or candidates.
         params.pop("gpp_recommendation", None)
-        if status == "completed" and objective == "gpp" and lineup_results and not highest_projection:
-            from .gpp_recommendation import evaluate_candidates
-            params["gpp_recommendation"] = evaluate_candidates(lineup_results,
-                run_id=job_id, season=season, week=week, slate=slate,
-                contest_format=contest_format, projection_run_id=projection_run_id,
-                data_cutoff_at=data_cutoff_at)
+        if status == "completed" and objective == "gpp" and lineup_results and not highest_projection and not params.get('scenario_mode'):
+            if params.get('workload_comparison') in {'learned_counts','learned_yards','scenario_first'}:
+                from .workload_optimizer import learned_recommendation
+                params['gpp_recommendation']=learned_recommendation(lineup_results,mode=params['workload_comparison'],
+                    run_id=job_id,season=season,week=week,slate=slate,contest_format=contest_format,
+                    projection_run_id=projection_run_id,data_cutoff_at=data_cutoff_at)
+            else:
+                from .gpp_recommendation import evaluate_candidates
+                params["gpp_recommendation"] = evaluate_candidates(lineup_results,
+                    run_id=job_id, season=season, week=week, slate=slate,
+                    contest_format=contest_format, projection_run_id=projection_run_id,
+                    data_cutoff_at=data_cutoff_at)
+            if params.get("workload_comparison") and params['workload_comparison'] not in {'learned_counts','learned_yards','scenario_first'}:
+                from .workload_optimizer import recommendation
+                params["gpp_recommendation"] = recommendation(params["gpp_recommendation"],
+                    lineup_results, params["workload_comparison"])
+            elif shared_world_mode:
+                from .shared_world_runtime import recommendation
+                params["gpp_recommendation"] = recommendation(params["gpp_recommendation"], lineup_results,
+                    params["strategy_runtime"]["football_analyst"]["shared_world_selection"])
 
         # Canonical references reuse the once-per-player evidence envelope. Add
         # them after selection so no solver/scoring consumer sees this contract.
@@ -10178,8 +10317,11 @@ class OptimizerService:
             job = self._jobs.get(job_id)
             if job is not None:
                 self._cache_access[job_id] = monotonic()
-                return job
-        return self._load_persisted_job(job_id)
+                if not job.lineage_persisted or job.status in {"completed", "failed"}:
+                    return job
+        # A durable worker can finish after this API process cached its
+        # pre-generation snapshot. Nonterminal persisted state is not final.
+        return self._load_persisted_job(job_id) or job
 
 
 def toy_slate_test() -> dict:

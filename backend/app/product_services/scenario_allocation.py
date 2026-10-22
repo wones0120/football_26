@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .analyst_shadow import digest
 from .cbc_solver import make_cbc_solver
+from .workload_evidence import CONTRACT_ID as WORKLOAD_CONTRACT_ID, select_measurement
 
 
 class AllocationControls(BaseModel):
@@ -29,12 +30,14 @@ class AllocationControls(BaseModel):
 
 
 def measurement(player,channel):
-    evidence=player.get('workload_evidence') or {}
-    for group,key in [('explicit_pregame','pregame_expected_'+channel),('historical',channel+'_mean_3'),('derived_proxies','projected_'+channel)]:
-        item=evidence.get(group,{}).get(key) or {};value=item.get('value')
-        if item.get('status') not in {'after_cutoff','unavailable','coverage_unknown'} and type(value) in (int,float) and math.isfinite(value) and value>=0:
-            return float(value),group+'.'+key
-    return None,'unavailable'
+    return select_measurement(player, channel)
+
+
+def role_measurement(player, channel):
+    # New proxies may inform conditional sensitivity, never certify an observed
+    # role. Archived v1 inputs retain their original consumer behavior.
+    allow_proxy = (player.get('workload_evidence') or {}).get('contract_id') != WORKLOAD_CONTRACT_ID
+    return select_measurement(player, channel, allow_proxy=allow_proxy)
 
 
 def team(row):return row.get('player_team',row.get('team'))
@@ -77,13 +80,19 @@ def build_ideas(packet,rows,controls):
             runners=[r for r in members if r['position']=='RB']
             refs=sorted(set(assessment.get('source_ids',[]))|{sid for hid in scenario['hypothesis_ids'] for sid in hypotheses[hid].get('source_ids',[])})
             verified=[sid for sid in refs if sources.get(sid,{}).get('coverage')=='verified']
-            target_metrics=[measurement(declared.get(str(r['player_id']),r),'targets')[0] for r in receivers]
-            carry_metrics=[measurement(declared.get(str(r['player_id']),r),'carries')[0] for r in runners]
+            target_metrics=[role_measurement(declared.get(str(r['player_id']),r),'targets')[0] for r in receivers]
+            carry_metrics=[role_measurement(declared.get(str(r['player_id']),r),'carries')[0] for r in runners]
+            usage_evidence=[dict(player_id=str(r['player_id']),channel=channel,
+                value=role_measurement(declared.get(str(r['player_id']),r),channel)[0],
+                basis=role_measurement(declared.get(str(r['player_id']),r),channel)[1])
+                for members,channel in ((receivers,'targets'),(runners,'carries')) for r in members]
             eligible=(bool(qbs) and len(receivers)>=controls.passing_receivers and max((v or 0 for v in target_metrics),default=0)>0) if script=='passing' else (bool(runners) and max((v or 0 for v in carry_metrics),default=0)>0)
-            # Fixtures without observed workload may remain explicitly proxy-only,
-            # but do not outrank measured real alternatives.
+            # Archived fixtures retain their proxy-only behavior. New evidence
+            # must not certify a construction role solely from a proxy.
             proxy_only=not any(v is not None for v in (target_metrics if script=='passing' else carry_metrics))
-            if proxy_only:eligible=bool(qbs and receivers) if script=='passing' else bool(runners)
+            role_members=receivers if script=='passing' else runners
+            v2_role=any((declared.get(str(r['player_id']),r).get('workload_evidence') or {}).get('contract_id')==WORKLOAD_CONTRACT_ID for r in role_members)
+            if proxy_only:eligible=False if v2_role else bool(qbs and receivers) if script=='passing' else bool(runners)
             capability=(max((float(r['projection']) for r in qbs),default=0)+max((float(r['projection']) for r in receivers),default=0))/60 if script=='passing' else max((float(r['projection']) for r in runners),default=0)/30
             usage=min(1,max((v or 0 for v in (target_metrics if script=='passing' else carry_metrics)),default=0)/(8 if script=='passing' else 20))
             editorial=(1/(1+(ranks.get(assessment.get('assessment_id'),6)-1)/4)) if script=='passing' else .5
@@ -91,15 +100,16 @@ def build_ideas(packet,rows,controls):
             if derived:score*=.82
             if proxy_only:score*=.6
             reason=None if eligible and verified and score>=controls.minimum_credibility else 'insufficient eligible role/observed opportunity/source capability'
+            if proxy_only and v2_role:reason='original workload unavailable; allocated proxy cannot certify construction role'
             opp=next(t for t in game['teams'] if t!=leading['team'])
             opp_members=[r for r in rows if team(r)==opp and opponent(r) in game['teams']]
             opp_qb=max((float(r['projection']) for r in opp_members if is_qb(r)),default=0)
             own_qb=max((float(r['projection']) for r in qbs),default=1)
-            supported_responders=[str(r['player_id']) for r in opp_members if r['position'] in {'WR','TE'} and (measurement(declared.get(str(r['player_id']),r),'targets')[0] or 0)>=4]
+            supported_responders=[str(r['player_id']) for r in opp_members if r['position'] in {'WR','TE'} and (role_measurement(declared.get(str(r['player_id']),r),'targets')[0] or 0)>=4]
             explicit_opponent_pass=any(a['kind']=='passing_volume' and a['team']==opp and a['factor']>1 for a in assumptions)
             bringback=script=='passing' and explicit_opponent_pass and opp_qb>=.65*own_qb and bool(supported_responders)
             idea=dict(idea_id=gid+':'+leading['team']+':'+script,game_id=gid,team=leading['team'],opponent=opp,script=script,source_scenario_id=scenario['scenario_id'],hypothesis_ids=scenario['hypothesis_ids'],assessment_id=assessment.get('assessment_id'),source_ids=refs,verified_source_ids=verified,derived_alternative=derived,
-                alternative_lineage=assessment.get('strongest_alternative') if derived else assessment.get('lean',scenario['label']),credibility_score=score,score_components=dict(role_capability=capability,observed_usage=usage,editorial_preference=editorial,proxy_only=proxy_only),
+                alternative_lineage=assessment.get('strongest_alternative') if derived else assessment.get('lean',scenario['label']),credibility_score=score,usage_evidence=usage_evidence,score_components=dict(role_capability=capability,observed_usage=usage,editorial_preference=editorial,proxy_only=proxy_only),
                 bringback_required=bringback,opponent_capability=dict(qb_mean_ratio=opp_qb/own_qb,observed_receiver_ids=supported_responders,explicit_two_sided_passing=explicit_opponent_pass),
                 eligible_qb_ids=[str(r['player_id']) for r in qbs],eligible_receiver_ids=[str(r['player_id']) for r in receivers],eligible_rb_ids=[str(r['player_id']) for r in runners],label=scenario['label'] if not derived else 'Conditional contrary '+script+' branch for '+leading['team'],rejection_reason=reason)
             (rejected if reason else ideas).append(idea)

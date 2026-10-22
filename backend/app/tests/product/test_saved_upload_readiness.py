@@ -131,3 +131,159 @@ def test_saved_raw_questionable_flag_requires_named_proof_when_native_status_is_
     e['players'][PID]['official_listed']=True
     e['players'][PID]['salaries']['CPT']['status']='OUT'
     assert not evaluate(job,e)['upload_ready']
+
+
+def classic_fixture():
+    job, evidence = fixture()
+    job.contest_format = 'classic'
+    job.slate = 'SUNDAY_MAIN'
+    evidence['scope'] = dict(season=job.season, week=job.week, slate=job.slate, contest_format='classic')
+    row = job.results[0][0]
+    row.update(roster_position='FLEX', dk_player_id='123', salary=5000)
+    player = evidence['players'][PID]
+    player['salaries'] = {'WR': {**player['salaries']['CPT'], 'salary':5000, 'status':''}}
+    job.params['preliminary_report'] = {'snapshot_sha256':'frozen'}
+    job.params.pop('prepared_input_evidence')
+    frozen = dict(sha256='frozen', scope=evidence['scope'], projection_run_id='projection',
+                  pool=[deepcopy(row)], assumption_manifest={'exclude_player_ids':[]})
+    return job, evidence, frozen
+
+
+def test_classic_preliminary_can_pass_separate_current_roster_check_without_relabeling():
+    job, evidence, frozen = classic_fixture()
+    before = deepcopy(job.params)
+    with patch('backend.app.product_services.preliminary_optimizer.load_snapshot', return_value=frozen):
+        result = evaluate(job, evidence)
+    assert result['upload_ready'] is True
+    assert result['entry_ready'] is False and job.params == before
+
+
+@pytest.mark.parametrize('change', ['excluded','wrong_scope','wrong_projection','changed_salary','unknown','out','missing_clock'])
+def test_classic_clearance_preserves_identity_exclusions_and_current_availability(change):
+    job, evidence, frozen = classic_fixture()
+    if change == 'excluded': frozen['assumption_manifest']['exclude_player_ids']=[PID]
+    elif change == 'wrong_scope': frozen['scope']={**frozen['scope'],'week':5}
+    elif change == 'wrong_projection': frozen['projection_run_id']='other'
+    elif change == 'changed_salary': frozen['pool'][0]['salary']=6000
+    elif change == 'unknown': evidence['players'][PID]['availability_state']='UNKNOWN'
+    elif change == 'out': evidence['players'][PID]['official_status']='OUT'
+    elif change == 'missing_clock': evidence['players'][PID]['role_observed_at']=None
+    with patch('backend.app.product_services.preliminary_optimizer.load_snapshot', return_value=frozen):
+        assert not evaluate(job, evidence)['upload_ready']
+
+
+def test_classic_dst_uses_team_identity_not_individual_injury_status():
+    job, evidence, frozen = classic_fixture()
+    row = job.results[0][0]
+    row.update(position='DST', roster_position='DST', canonical_role='team_defense')
+    player = evidence['players'][PID]
+    player.update(canonical_role='team_defense', availability_status=None,
+                  availability_observed_at=None, role_observed_at=None)
+    player['salaries']={'DST':{**player['salaries']['WR'],'position':'DST'}}
+    frozen['pool']=[deepcopy(row)]
+    with patch('backend.app.product_services.preliminary_optimizer.load_snapshot', return_value=frozen):
+        assert evaluate(job, evidence)['upload_ready']
+        player['salaries']['DST']['native_id']='wrong'
+        assert not evaluate(job, evidence)['upload_ready']
+
+
+def count_fixture():
+    from backend.app.product_services.showdown_data_readiness import freeze_evidence
+    from backend.app.product_services.workload_count_forecast import VERSION
+    job,evidence=fixture()
+    row=job.results[0][0]
+    source={**row,'salary':10000,'projection':8.,'dk_captain_id':'123','dk_player_id':'124'}
+    forecast={'player_master_id':PID,'utility':1.,'counts':{'targets':5.}}
+    counts={'version':VERSION,'projection_run_id':'projection','players':[forecast]}
+    counts['sha256']=digest(counts)
+    row.update(base_projection=8.,workload_forecast=forecast,workload_forecast_sha256=counts['sha256'],dk_player_id='123')
+    job.params.update(workload_comparison='normalized_counts',strategy_runtime={},
+        prepared_input_evidence={'prepared_input_job_id':'prep','projection_run_id':'projection',
+            'workload_forecast':counts,'games':[{'game_id':'2026_06_SEA_DEN'}]},
+        showdown_evidence_snapshot=freeze_evidence([source],{'status':'READY','evaluated_at':NOW.isoformat(),
+            'evidence_cutoff':NOW.isoformat()},optimizer_run_id='saved'))
+    return job,evidence
+
+
+def test_count_upload_authenticates_frozen_inputs_without_semantic_analyst():
+    job,evidence=count_fixture()
+    assert evaluate(job,evidence)['upload_ready']
+
+
+@pytest.mark.parametrize('change',['frozen_hash','count_hash','wrong_run','wrong_projection','wrong_native',
+    'wrong_salary','wrong_mean','wrong_forecast','unknown','override','game','no_preparation'])
+def test_count_upload_rejects_changed_frozen_inputs(change):
+    job,evidence=count_fixture(); row=job.results[0][0]
+    if change=='frozen_hash':job.params['showdown_evidence_snapshot']['sha256']='bad'
+    elif change=='count_hash':job.params['prepared_input_evidence']['workload_forecast']['sha256']='bad'
+    elif change=='wrong_run':job.job_id='other'
+    elif change=='wrong_projection':row['projection_run_id']='other'
+    elif change=='wrong_native':row['dk_player_id']='other'
+    elif change=='wrong_salary':row['salary']=14000
+    elif change=='wrong_mean':row['base_projection']=9.
+    elif change=='wrong_forecast':row['workload_forecast']={'utility':2.}
+    elif change=='unknown':
+        counts=job.params['prepared_input_evidence']['workload_forecast'];counts['players'][0]['utility']=None
+        counts['sha256']=digest({k:v for k,v in counts.items() if k!='sha256'})
+    elif change=='override':
+        frozen=job.params['showdown_evidence_snapshot'];frozen['non_production_override']=True
+        frozen['sha256']=digest({k:v for k,v in frozen.items() if k!='sha256'})
+    elif change=='game':job.params['prepared_input_evidence']['games']=[{'game_id':'other'}]
+    elif change=='no_preparation':job.params['prepared_input_evidence']={}
+    assert not evaluate(job,evidence)['upload_ready']
+
+
+def test_resolver_evaluation_clock_does_not_invalidate_identical_clearance_facts():
+    job,evidence=fixture()
+    resolution={'contract':'legacy-audit','status':'resolved','effective_designation':'ACTIVE',
+        'evaluated_at':NOW.isoformat(),'chosen_fact':{'status':'ACTIVE','source_ids':['original']},'conflicts':[]}
+    evidence['players'][PID]['designation_resolution']=resolution
+    original=evaluate(job,evidence)['input_basis_sha256']
+    resolution['evaluated_at']=(NOW+timedelta(minutes=1)).isoformat()
+    assert evaluate(job,evidence)['input_basis_sha256']==original
+    resolution['chosen_fact']['source_ids']=['new-factual-source']
+    assert evaluate(job,evidence)['input_basis_sha256']!=original
+    resolution['chosen_fact']['source_ids']=['original']
+    resolution['effective_designation']='QUESTIONABLE'
+    assert evaluate(job,evidence)['input_basis_sha256']!=original
+
+
+def scenario_fixture():
+    job,evidence=count_fixture()
+    job.params.pop('workload_comparison')
+    mode=dict(team='SEA',passing_factor=1.,rushing_factor=1.,rationale='Primary fixture',scoring_mode='new_model_primary')
+    actor=dict(player_master_id=PID,baseline_mean=8.,conditional_mean=10.)
+    primary=dict(players=[actor],scoring_head={'incumbent_projection_consumed':False})
+    primary['sha256']=digest(primary)
+    report=dict(config=mode,projection_run_id='projection',players=[actor],new_model_primary=True,primary_model_forecast=primary)
+    report['sha256']=digest(report)
+    job.params.update(scenario_mode=mode,strategy_runtime={'scenario_mode':{'prepared':deepcopy(report)}})
+    job.params['prepared_input_evidence']['scenario_mode']=report
+    job.results[0][0].update(projection=12.,scenario_mean=15.,scenario_mode_player=deepcopy(actor))
+    return job,evidence
+
+
+def test_primary_upload_authenticates_scores_without_analyst_snapshot():
+    job,evidence=scenario_fixture()
+    assert evaluate(job,evidence)['upload_ready']
+
+
+@pytest.mark.parametrize('change',['receipt','primary','runtime','score','native','salary','baseline','player','run','override','game','no_preparation'])
+def test_scenario_upload_rejects_changed_frozen_inputs(change):
+    job,evidence=scenario_fixture();row=job.results[0][0];report=job.params['prepared_input_evidence']['scenario_mode']
+    if change=='receipt':report['sha256']='bad'
+    elif change=='primary':
+        report['primary_model_forecast']['sha256']='bad';report['sha256']=digest({k:v for k,v in report.items() if k!='sha256'})
+        job.params['strategy_runtime']['scenario_mode']['prepared']=deepcopy(report)
+    elif change=='runtime':job.params['strategy_runtime']['scenario_mode']['prepared']={}
+    elif change=='score':row['scenario_mean']=16.
+    elif change=='native':row['dk_player_id']='bad'
+    elif change=='salary':row['salary']=14000
+    elif change=='baseline':row['projection']=13.
+    elif change=='player':row['scenario_mode_player']={}
+    elif change=='run':job.job_id='wrong'
+    elif change=='override':
+        f=job.params['showdown_evidence_snapshot'];f['non_production_override']=True;f['sha256']=digest({k:v for k,v in f.items() if k!='sha256'})
+    elif change=='game':job.params['prepared_input_evidence']['games']=[{'game_id':'wrong'}]
+    elif change=='no_preparation':job.params['prepared_input_evidence']={}
+    assert not evaluate(job,evidence)['upload_ready']

@@ -19,6 +19,7 @@ from .rule_library import (
     StrategyProfile,
 )
 from .salary_eligibility import is_salary_status_eligible, normalize_salary_status
+from .factual_designation import effective_designation, QUESTIONABLE
 
 
 PLAYER_POOL_SAFETY_LIBRARY_ID = "optimizer_player_pool_safety"
@@ -485,11 +486,8 @@ def evaluate_player_pool_safety(
         injury_status = normalize_salary_status(
             _first(row, "pregame_injury_status", "injury_status")
         )
-        confirmed_unavailable = not is_salary_status_eligible(salary_status)
-        if injury_status:
-            confirmed_unavailable = confirmed_unavailable or not is_salary_status_eligible(
-                injury_status
-            )
+        designation = effective_designation(row)
+        confirmed_unavailable = not is_salary_status_eligible(designation)
         availability = _number(row.get("pregame_availability_probability"))
         start_probability = _number(row.get("pregame_start_probability"))
         context_run_id = _context_run_id(row)
@@ -573,10 +571,8 @@ def evaluate_player_pool_safety(
             },
             "user": {
                 "excluded": bool(player_id and player_id in excluded_ids),
-                "exclude_questionable": exclude_questionable and player_id not in questionable_exceptions and (
-                    salary_status in {"Q", "QUESTIONABLE"}
-                    or injury_status in {"Q", "QUESTIONABLE"}
-                ),
+                "exclude_questionable": exclude_questionable and player_id not in questionable_exceptions
+                    and designation in QUESTIONABLE,
             },
             "warnings": {
                 "current_week_context_missing": context_missing,
@@ -628,6 +624,8 @@ def evaluate_player_pool_safety(
                     "max_age_hours": round(max_age_seconds / 3600.0, 3),
                     "role_label": role_label or None,
                     "injury_status": injury_status or None,
+                    "effective_game_designation": designation,
+                    "designation_resolution": row.get('designation_resolution'),
                     "availability_probability": availability,
                     "start_probability": start_probability,
                     "carry_share": _number(row.get("pregame_carry_share")),

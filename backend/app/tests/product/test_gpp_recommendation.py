@@ -11,6 +11,23 @@ from backend.app.api.product_routes import download_optimizer_lineups
 from backend.app.product_services.gpp_recommendation import evaluate_candidates, candidate_id, recommended_lineup
 
 
+def test_shared_world_export_preserves_order_and_authenticates_selection():
+    from backend.app.product_services.shared_world_runtime import recommendation, RECOMMENDATION_POLICY
+    from backend.app.product_services.shared_world_selection import POLICY
+    candidates=[lineup(0,9,50,True),lineup(20,10,20,True)]
+    for index,rs in enumerate(candidates,1):rs[0]['shared_world_selection_rank']=index
+    selection=dict(policy_id=POLICY,status='completed',requested=2,selection_steps=[
+        dict(anchor_conditional_mean_points=90,maximum_incremental_gain_points=0),
+        dict(anchor_conditional_mean_points=80,maximum_incremental_gain_points=20)])
+    saved=job(candidates,'showdown');saved.params.update(analyst_selection_policy=POLICY,
+        strategy_runtime={'football_analyst':{'shared_world_selection':selection}})
+    saved.params['gpp_recommendation']=recommendation(saved.params['gpp_recommendation'],candidates,selection)
+    assert saved.params['gpp_recommendation']['policy_id']==RECOMMENDATION_POLICY
+    assert recommended_lineup(saved) is candidates[0]
+    saved.params['strategy_runtime']['football_analyst']['shared_world_selection']['requested']=3
+    with pytest.raises(ValueError,match='receipt differs'):recommended_lineup(saved)
+
+
 def lineup(offset=0, mean=10, upside=20, showdown=False):
     positions = ['QB', 'RB', 'RB', 'WR', 'WR', 'WR', 'TE', 'RB', 'DST']
     if showdown:

@@ -72,7 +72,8 @@ def parse_club_tables(html, *, team, uri, kind):
                                 continue
                             result.append(dict(team=team, player_name=a.content(), position=pos,
                                 source_key=urljoin(uri, a.attrs['href']).rstrip('/'), kind='role',
-                                role='long_snapper' if pos == 'LS' else 'expected_starter' if rank == 1 else 'expected_backup'))
+                                role='long_snapper' if pos == 'LS' else 'expected_starter' if rank == 1 else 'expected_backup',
+                                depth_rank=rank))
             return
         for child in node.children:
             if hasattr(child, 'tag'):
@@ -80,6 +81,18 @@ def parse_club_tables(html, *, team, uri, kind):
     walk(document)
     if not result:
         raise ValueError('Official club table structure or explicit evidence unavailable')
+    if kind == 'depth':
+        # Multiple WR/TE/RB alignment slots are compatible assignments within
+        # one source document. A listed starter can also back up another slot.
+        grouped = {}
+        for row in result:
+            key = (row['source_key'], row['position'])
+            grouped.setdefault(key, []).append(row)
+        result = []
+        for assignments in grouped.values():
+            row = dict(min(assignments, key=lambda r: r['depth_rank']))
+            row['depth_assignments'] = [dict(rank=r['depth_rank'], role=r['role']) for r in assignments]
+            result.append(row)
     return result
 
 
@@ -177,7 +190,7 @@ def _retain_risk_evidence(context, evidence, *, cutoff=None):
                 context['observed_at'] = max(aware(context['observed_at']), aware(value))
 
 
-def supplement_unresolved_context(engine, *, season, week, slate):
+def supplement_unresolved_context(engine, *, season, week, slate, contest_format='classic'):
     params = dict(season=season, week=week, slate=slate)
     with Session(engine) as session:
         games = slate_games(session, SlatePreparationRequest(**params, action='rebuild'))
@@ -199,7 +212,7 @@ def supplement_unresolved_context(engine, *, season, week, slate):
     captures, errors, identity_failures = [], [], []
     try:
         native_facts, native_captures, discrepancies = refresh_native_statuses(engine,
-            salaries=salaries, games=games, lock=lock, **params)
+            salaries=salaries, games=games, lock=lock, contest_format=contest_format, **params)
         captures.extend(native_captures)
         errors.extend(discrepancies)
         for fact in native_facts:
@@ -208,6 +221,7 @@ def supplement_unresolved_context(engine, *, season, week, slate):
         wanted = [s for s in salaries if str(s['player_id']) in wanted_ids]
     except (httpx.HTTPError, ValueError, KeyError, TypeError, OSError) as exc:
         errors.append(dict(kind='native_slate_status', reason=str(exc)[:500]))
+    wanted = list({str(s['player_id']): s for s in wanted}.values())
     for team in sorted({s['team'] for s in wanted if not facts[str(s['player_id'])]}):
         for kind, suffix in [('roster', 'players-roster/'), ('depth', 'depth-chart'), ('transactions', f'transactions/{datetime.now(UTC).year}')]:
             uri = f'https://www.{CLUBS[team]}.com/team/{suffix}'
@@ -261,7 +275,7 @@ def supplement_unresolved_context(engine, *, season, week, slate):
                         kind=r['kind'], source='official_club_'+kind, status=r.get('status'), role=r.get('role'),
                         observed_at=observed.isoformat(), received_at=received.isoformat(), source_uri=str(response.url),
                         source_ids=[snapshot_id, r['source_key']], identity_match=reason,
-                        **{k:r[k] for k in ('event_date', 'transaction_text', 'observation_basis') if k in r}))
+                        **{k:r[k] for k in ('event_date', 'transaction_text', 'observation_basis', 'depth_assignments') if k in r}))
             except (httpx.HTTPError, ValueError, OSError) as exc:
                 errors.append(dict(team=team, kind=kind, reason=str(exc)[:500]))
     # Supplement original facts, preserving injury and workload clocks. ACT is
@@ -278,7 +292,8 @@ def supplement_unresolved_context(engine, *, season, week, slate):
         combined = list({json.dumps(f, sort_keys=True, default=str): f for f in original_facts + facts[pid]}.values())
         cutoff = datetime.now(UTC)
         context = compose_player_contexts([salary], combined, cutoff=cutoff,
-            max_age_hours=get_settings().classic_player_status_max_age_hours)[0]
+            max_age_hours=(get_settings().showdown_player_status_max_age_hours if contest_format=='showdown'
+                           else get_settings().classic_player_status_max_age_hours))[0]
         _retain_risk_evidence(context, evidence, cutoff=cutoff)
         run = service.create_run(dict(**params, source=CONTEXT_CONTRACT, source_uri=context['source_uri'],
             observed_at=context['observed_at'], players=[dict(player_id=pid, injury_status=context['injury_status'],

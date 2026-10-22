@@ -254,7 +254,13 @@ def test_history_exposes_saved_download_clearance_without_loading_lineups(histor
         'policy_id':'gpp_projection_first_recommendation_v1','status':'provisional','optimizer_run_id':'ready'}})
     saved(engine,'wrong-recommendation',params={'gpp_recommendation':{
         'policy_id':'gpp_projection_first_recommendation_v1','status':'provisional','optimizer_run_id':'other'}})
+    saved(engine,'workload',params={'gpp_recommendation':{
+        'policy_id':'offensive_workload_recommendation_v1','status':'provisional','optimizer_run_id':'workload'}})
+    saved(engine,'unknown-policy',params={'gpp_recommendation':{
+        'policy_id':'unrecognized','status':'provisional','optimizer_run_id':'unknown-policy'}})
     with factory() as session:rows={row['optimizer_run_id']:row for row in list_optimizer_runs(engine,session,**scope())}
+    assert rows['workload']['saved_recommendation_available'] is True
+    assert not rows['unknown-policy']['saved_recommendation_available']
     assert rows['research']['entry_ready'] is False and rows['research']['preliminary_export_blocked'] is True
     assert rows['ready']['entry_ready'] is True and rows['ready']['saved_recommendation_available'] is True
     assert not rows['wrong-recommendation']['saved_recommendation_available']
@@ -267,3 +273,15 @@ def test_highest_baseline_projection_mode_survives_saved_history(history_db):
     with factory() as session:
         rows=list_optimizer_runs(engine,session,**scope())
     assert rows[0]['classic_selection_objective']=='baseline_mean'
+
+
+def test_history_shared_world_exact_policy_run_binding(history_db):
+    engine,factory=history_db
+    policy='shared_world_anchor_recommendation_v1'
+    saved(engine,'shared',params={'analyst_selection_policy':'expected_anchor_incremental_world_gain_v1',
+        'gpp_recommendation':{'policy_id':policy,'status':'provisional','optimizer_run_id':'shared'}})
+    saved(engine,'shared-wrong',params={'gpp_recommendation':{'policy_id':policy,'status':'provisional','optimizer_run_id':'other'}})
+    with factory() as session:rows={r['optimizer_run_id']:r for r in list_optimizer_runs(engine,session,**scope())}
+    assert rows['shared']['saved_recommendation_available'] is True
+    assert rows['shared']['analyst_selection_policy']=='expected_anchor_incremental_world_gain_v1'
+    assert not rows['shared-wrong']['saved_recommendation_available']

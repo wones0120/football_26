@@ -109,6 +109,7 @@ Football realism is the primary domain acceptance criterion for projections, sim
    - UI unit tests: `node --experimental-strip-types --test ui/tests/<affected>.test.ts` with a supported Node runtime (CI uses Node 22).
    - UI type-check/build when warranted: `npm --prefix ui run build` with UI dependencies installed.
 4. Browser checks require their documented browser, Playwright, and fixture prerequisites; inspect each script's artifact paths before running. Source inspection alone is not visual validation.
+5. Operational lineup generation by agents must use the same public **Prepare slate for optimization → Run Optimizer → reopen saved results** workflow and current settings as the UI. Verify that path in the app before claiming readiness. Do not repeat download or saved-run CSV tests for routine lineup/model runs. Test downloads/CSV only when export behavior, native-ID or roster-slot mapping, salary encoding, download/readiness wiring changes, or a concrete export regression is suspected; otherwise rely on the established export checks. Research enumeration is separate, explicitly unsaved analysis; it is not a newly generated or saved lineup.
 
 ## Model efficiency
 

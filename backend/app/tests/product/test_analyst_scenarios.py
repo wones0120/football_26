@@ -58,6 +58,28 @@ def test_concentration_conserves_targets_with_attributed_measurements():
     with pytest.raises(ValueError,match='complete measured'):build_scenarios(packet,snapshot['players'],fmt='CLASSIC',decision_at=NOW.isoformat())
 
 
+def test_user_exclusion_never_changes_full_source_concentration_or_transfer_truth():
+    packet,snapshot=scenario_fixture('CLASSIC')
+    game=packet['games'][0];team=game['teams'][0]
+    members=[p for p in packet['players'] if p['team']==team and p['position'] in {'RB','WR','TE'}]
+    for p in members:p['workload_evidence']['historical']['targets_mean_3']=dict(status='observed',available=True,value=5)
+    for kind,assumption in [('target_concentration',dict(player_master_ids=[members[0]['player_id']],share_delta=.1)),
+                            ('workload_transfer',dict(workload='targets',from_player_master_id=members[1]['player_id'],to_player_master_id=members[0]['player_id'],fraction=.2))]:
+        packet['scenario_assumptions']['scenarios']=[dict(scenario_id='conditional',label='Synthetic supported full-universe condition',hypothesis_ids=['synthetic_context'],
+            assumptions=[dict(kind=kind,game_id=game['game_id'],team=team,elasticity=.5,**assumption)])]
+        full=snapshot['players']
+        baseline=build_scenarios(packet,full,fmt='CLASSIC',decision_at=NOW.isoformat(),measurement_rows=full)[0]
+        for removed in (members[0]['player_id'],members[1]['player_id'],members[-1]['player_id']):
+            eligible=[p for p in full if p['player_id']!=removed]
+            filtered=build_scenarios(packet,eligible,fmt='CLASSIC',decision_at=NOW.isoformat(),measurement_rows=full)[0]
+            assert filtered['moments']=={k:v for k,v in baseline['moments'].items() if k!=removed}
+            budget=filtered['source_workload_budgets'][0]
+            assert budget['workload_before']==baseline['source_workload_budgets'][0]['workload_before']
+            assert budget['workload_after']==baseline['source_workload_budgets'][0]['workload_after']
+            assert budget['total_before']==pytest.approx(budget['total_after'])
+            assert removed in budget['excluded_from_selection_actor_ids']
+
+
 @pytest.mark.parametrize('value',[float('nan'),float('inf'),2,True])
 def test_nonfinite_unbounded_assumptions_rejected(value):
     packet,_=scenario_fixture('CLASSIC');packet['scenario_assumptions']['scenarios'][0]['assumptions'][0]['factor']=value
@@ -94,6 +116,11 @@ def test_full_optimizer_job_persists_explicit_strategy_and_scenario_report(fmt,s
         def _persist_optimizer_run(self,job): self.saved.append(job); return True
     packet,snapshot=scenario_fixture(fmt)
     rows=pd.DataFrame(snapshot['players']);rows['showdown_qb_eligible']=rows['position'].eq('QB');rows['is_starting_qb']=rows['position'].eq('QB');rows['official_availability_status']='available';rows['pregame_role_uncertain']=False
+    if fmt=='SHOWDOWN':
+        from backend.app.tests.product.test_captain_workload import player
+        for key,value in player().items():
+            if key not in {'player_id','name','position','player_team','projection','p90','salary'}:
+                rows[key]=value
     service=InMemoryService(rows)
     with patch('backend.app.product_services.analyst_packets.load_packet',return_value=packet),patch('backend.app.product_services.analyst_scenarios.datetime') as clock:
         clock.now.return_value=NOW
@@ -119,6 +146,10 @@ def test_transfer_conserves_workload_and_retains_source_lineage():
 def test_merged_captain_pool_preserves_preferences_without_base_top_four_veto():
     from backend.app.product_services.showdown_captain_shortlist import build_captain_shortlist
     _,snapshot=fixture('SHOWDOWN');pool=pd.DataFrame(snapshot['players'])
+    from backend.app.tests.product.test_captain_workload import player
+    for key,value in player().items():
+        if key not in {'player_id','name','position','player_team','projection','p90','salary'}:
+            pool[key]=value
     old,old_report=build_captain_shortlist(pool,params={},flex_only_ids=set())
     new,report=build_captain_shortlist(pool,params={'analyst_strategy':'MERGED_SCENARIOS','no_qb_captain':True},flex_only_ids={snapshot['players'][3]['player_id']})
     assert int(old['showdown_captain_shortlisted'].sum())==4
@@ -187,8 +218,33 @@ def test_captain_search_cannot_bypass_a_locked_captain_exposure_conflict():
             packet=packet,fmt='SHOWDOWN',season=2099,week=1,slate='SYNTHETIC_SHOWDOWN',requested=4,
             solve_kwargs={'contest_type':'captain','score_col':'p90','stack_params':{'enabled':False},
                 'locked_captain_player_id':locked,'include_control_comparison':False})
-    assert len(lineups)==1
+    # A single retained locked-Captain lineup would be 100%, not a valid 25%
+    # achieved portfolio. Do not spend the requested four-entry allowance.
+    assert len(lineups)==0
     assert report['status']=='underfilled'
     assert report['captain_exposure_coverage']['added_candidates']==0
     assert report['generation'][-1]['solver_status']=='Infeasible'
     assert report['selection']['constraints_relaxed'] is False
+
+
+def test_shared_component_consumer_replaces_legacy_elasticity_and_preserves_base_rows(monkeypatch):
+    packet,snapshot=scenario_fixture('SHOWDOWN');rows=snapshot['players'];original=deepcopy(rows)
+    seen=[]
+    def response(receipt,scenario,base_means,*,cutoff):
+        seen.append((receipt,scenario['scenario_id'],set(base_means)))
+        return dict(version='matched_linear_count_response_v1',changes=[dict(legacy_elasticity_consumption='not_consumed')],
+            response=dict(players=[dict(player_master_id=r['player_id'],conditional_mean=r['projection']+2,
+                conditional_delta_points=2,supported_components=['receptions']) for r in rows]))
+    monkeypatch.setattr('backend.app.product_services.count_scenario_response.count_world',response)
+    receipt=dict(component_response={'supported':True},sha256='SYNTHETIC-frozen')
+    worlds=build_scenarios(packet,rows,fmt='SHOWDOWN',decision_at=NOW.isoformat(),mean_only=True,
+        measurement_rows=rows,count_receipt=receipt)
+    assert len(seen)==len(worlds)==2
+    for world in worlds:
+        assert world['count_component_response']['version']=='matched_linear_count_response_v1'
+        for r in rows:
+            moment=world['moments'][r['player_id']]
+            assert moment['mean']==r['projection']+2
+            assert moment['p90'] is None
+            assert moment['changes'][0]['legacy_elasticity_consumption']=='not_consumed'
+    assert rows==original

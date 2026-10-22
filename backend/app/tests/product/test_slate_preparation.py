@@ -326,6 +326,55 @@ def test_status_history_scopes_in_sql_and_defers_heavy_audits(fixture):
     assert raw['source_manifest'] == {'large':'immutable'}
 
 
+def test_display_summary_retains_scores_missingness_and_model_refs_without_nested_audits():
+    import copy
+    from backend.app.product_services.slate_preparation import preparation_summary, preparation_input_summary
+    large = {'raw_history': ['evidence'] * 1000}
+    player = {'player_master_id': 'canonical', 'name': 'Player', 'team': 'CHI',
+              'conditional_mean': None, 'supported_components': [], 'missing_evidence': ['unknown workload'],
+              'new_model_evidence': large, 'native_salary_actor': True, 'counts': {'targets': None},
+              'reasons': ['missing participation'], 'position': 'WR', 'utility': None}
+    raw = {'scenario_mode': {'sha256': 'original-full-receipt', 'players': [player],
+        'primary_model_forecast': {'players': [player], 'team_model_consumption': {
+            'model_publication_record_id': 'publication', 'model_refs': ['tree', 'neural'], 'inference_rows': large},
+            'all_player_audit': {'errors': [], 'unknown_native_scores': 1}}},
+        'workload_forecast': {'sha256': 'full-count-receipt', 'players': [player], 'raw_history': large}}
+    original = copy.deepcopy(raw)
+    summary = preparation_summary(raw)
+    assert raw == original
+    assert summary['scenario_mode']['sha256'] == 'original-full-receipt'
+    compact = summary['scenario_mode']['players'][0]
+    assert compact['conditional_mean'] is None and compact['missing_evidence'] == ['unknown workload']
+    assert 'new_model_evidence' not in compact
+    primary = summary['scenario_mode']['primary_model_forecast']
+    assert 'players' not in primary and 'inference_rows' not in primary['team_model_consumption']
+    assert primary['team_model_consumption']['model_publication_record_id'] == 'publication'
+    assert summary['workload_forecast']['players'][0]['counts']['targets'] is None
+    manifest = {'availability': [{'context_run_id': 'source-context', 'injury_status': 'Q',
+        'observed_at': 'original-clock', 'evidence_json': {'source_facts': large,
+            'canonical_context_reason_codes': ['missing practice'], 'designation_resolution': {
+                'status': 'conflict', 'effective_designation': None, 'source_facts': large}}}], 'starters': []}
+    before = copy.deepcopy(manifest)
+    inputs = preparation_input_summary(manifest)
+    assert manifest == before
+    row = inputs['availability'][0]
+    assert row['context_run_id'] == 'source-context' and row['injury_status'] == 'Q'
+    assert row['observed_at'] == 'original-clock' and row['evidence_detail_omitted']
+    assert row['evidence_json']['canonical_context_reason_codes'] == ['missing practice']
+    assert row['evidence_json']['designation_resolution'] == {'status': 'conflict', 'effective_designation': None}
+    assert 'source_facts' not in row['evidence_json']
+
+
+def test_learned_opportunities_require_explicit_normal_showdown_prepare():
+    payload=dict(season=2026,week=7,slate='THURSDAY_NIGHT',action='prepare',
+        contest_format='showdown',learned_opportunities=True)
+    assert SlatePreparationRequest(**payload).include_workload_forecast
+    for change in ({'contest_format':'classic'},{'action':'rebuild'},{'preliminary_research':True},
+                   {'reuse_prepared_input_job_id':'11111111-1111-1111-1111-111111111111'}):
+        with pytest.raises(ValueError,match='Learned opportunities'):
+            SlatePreparationRequest(**{**payload,**change})
+
+
 def test_preliminary_request_is_explicit_classic_only_and_cannot_certify_normal_optimizer(fixture):
     for changed in ({'contest_format':'showdown'}, {'availability_overrides':[{'player_id':'canonical','availability':'assume_out'}]}, {'action':'markets'}):
         payload={'season':2000,'week':1,'slate':'SUNDAY_MAIN','action':'prepare','preliminary_research':True,**changed}
@@ -336,3 +385,25 @@ def test_preliminary_request_is_explicit_classic_only_and_cannot_certify_normal_
         job.request_json={**job.request_json,'preliminary_research':True};db.commit()
         with pytest.raises(ValueError,match='cannot certify normal optimization'):
             validate_prepared_optimizer(db,{'season':2000,'week':1,'slate':'SUNDAY_MAIN','params':{'prepared_input_job_id':job_id}})
+
+
+def test_showdown_preparation_binds_the_salary_floor_before_new_players_can_enter(fixture):
+    enqueue(fixture)
+    build = fixture.work()["result"]
+    with patch("backend.app.product_services.showdown_data_readiness.refresh_live_sources", return_value=prepared_refresh(build)), \
+         patch("backend.app.product_services.slate_preparation.assess_prepared_inputs", return_value={"status": "READY", "reason_codes": []}):
+        response = fixture.client.post("/api/slate/preparation/jobs", headers={"Idempotency-Key": "floor-bound-prepare"},
+            json={"season": 2000, "week": 1, "slate": "SUNDAY_MAIN", "action": "prepare",
+                  "contest_format": "showdown", "minimum_player_salary": 1700})
+        assert response.status_code == 202, response.text
+        completed = fixture.work()
+        assert completed["status"] == "completed", completed
+        prepared = {**completed["result"], "prepared_input_job_id": response.json()["job"]["job_id"]}
+        assert prepared["minimum_player_salary"] == 1700
+        payload = {**optimizer_payload(prepared), "contest_format": "showdown"}
+        with fixture.factory() as db:
+            for value in [1700, 2000]:
+                validate_prepared_optimizer(db, {**payload, "params": {**payload["params"], "minimum_player_salary": value}}, verify_current=False)
+            for value in [None, 200]:
+                with pytest.raises(ValueError, match="salary was lowered"):
+                    validate_prepared_optimizer(db, {**payload, "params": {**payload["params"], "minimum_player_salary": value}}, verify_current=False)

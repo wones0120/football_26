@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from sqlalchemy import and_, or_, select, update
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer
 
 from ..job_schemas import OperationalJobResponse
 from ..models import OperationalJob
@@ -151,8 +151,9 @@ def enqueue_job(
     return job, True
 
 
-def get_job(session: Session, job_id: str) -> OperationalJob | None:
-    return session.get(OperationalJob, job_id)
+def get_job(session: Session, job_id: str, *, include_result: bool = True) -> OperationalJob | None:
+    options=[] if include_result else [defer(OperationalJob.result_json), defer(OperationalJob.request_json)]
+    return session.get(OperationalJob, job_id, options=options)
 
 
 def list_jobs(
@@ -161,8 +162,11 @@ def list_jobs(
     status: str | None = None,
     job_type: str | None = None,
     limit: int = 50,
+    include_result: bool = True,
 ) -> list[OperationalJob]:
     query = select(OperationalJob)
+    if not include_result:
+        query=query.options(defer(OperationalJob.result_json), defer(OperationalJob.request_json))
     if status is not None:
         query = query.where(OperationalJob.status == status)
     if job_type is not None:
@@ -174,7 +178,7 @@ def list_jobs(
     )
 
 
-def job_response(job: OperationalJob) -> OperationalJobResponse:
+def job_response(job: OperationalJob, *, include_result: bool = True) -> OperationalJobResponse:
     total = max(1, int(job.progress_total))
     percent = min(
         100.0,
@@ -196,7 +200,7 @@ def job_response(job: OperationalJob) -> OperationalJobResponse:
         attempt_count=job.attempt_count,
         max_attempts=job.max_attempts,
         error_message=job.error_message,
-        result=job.result_json,
+        result=job.result_json if include_result else None,
         created_at=job.created_at,
         updated_at=job.updated_at,
         started_at=job.started_at,

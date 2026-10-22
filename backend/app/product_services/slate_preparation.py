@@ -10,6 +10,7 @@ import hashlib
 import json
 import subprocess
 import sys
+from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Literal
@@ -47,12 +48,35 @@ class SlatePreparationRequest(BaseModel):
     # The ordinary prediction schema validates these scenario choices below.
     availability_overrides: list[dict] = Field(default_factory=list, max_length=50)
     assume_questionable_out: bool = False
+    minimum_player_salary: int | None = Field(default=None, ge=0, le=50000, strict=True)
+    include_workload_forecast: bool = False
+    learned_opportunities: bool = False
+    opportunity_yards: bool = False
+    scenario_first_captain: bool = False
+    scenario_mode: dict | None = None
+    reuse_prepared_input_job_id: str | None = Field(default=None, pattern=r"^[0-9a-f-]{36}$")
     analyst_mode: Literal["AUTO", "MANUAL", "BASELINE"] = "AUTO"
     analyst_packet_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     analyst_strategy: Literal["MERGED_SCENARIOS", "CONSTRUCTION"] = "MERGED_SCENARIOS"
 
     @model_validator(mode="after")
     def validate_preliminary_scope(self):
+        from .optimizer_scenario_mode import config
+        self.scenario_mode=config(self.scenario_mode)
+        if self.scenario_first_captain:
+            self.opportunity_yards=True
+        if self.opportunity_yards:
+            self.learned_opportunities=True
+        if self.learned_opportunities:
+            if self.action!='prepare' or self.contest_format!='showdown' or self.scenario_mode or self.preliminary_research or self.reuse_prepared_input_job_id:
+                raise ValueError('Learned opportunities require normal Showdown Prepare without another scenario mode')
+            self.include_workload_forecast=True
+        if self.scenario_mode:
+            if self.action!='prepare' or self.preliminary_research or self.reuse_prepared_input_job_id:
+                raise ValueError('Scenario mode requires normal Prepare')
+            self.include_workload_forecast=True
+        if self.reuse_prepared_input_job_id and (self.action != "prepare" or self.preliminary_research):
+            raise ValueError("Research recheck requires normal preparation")
         if self.preliminary_research and (self.contest_format != "classic" or self.action not in {"prepare", "rebuild"}
                 or self.availability_overrides or self.assume_questionable_out):
             raise ValueError("Preliminary research requires Classic preparation without availability overrides")
@@ -158,6 +182,12 @@ def source_manifest(session, request, cutoff=None):
     # Include schedule identity/lock in the hash to detect an incompatible scope.
     manifest = {"scope": scope(request), "games": games, "salaries": salaries,
                 "injuries": injuries, "starters": starters, "availability": context, "markets": markets}
+    from .opportunity_source_publication import prepared_context
+    # Salary actors precede all user eligibility/exposure preferences. Historical
+    # team denominators and excluded actors are never reassigned to survivors.
+    manifest["opportunity_source"] = prepared_context(session, season=request.season,week=request.week,
+        teams=sorted({canonical_team(str(t)) for g in games for t in (g.get("teams") or [g.get("home_team"),g.get("away_team")]) if t}),
+        actor_ids=sorted({str(s["player_master_id"]) for s in salaries if s.get("player_master_id")}),cutoff=cutoff)
     return json.loads(json.dumps(manifest, default=str))
 
 
@@ -321,12 +351,90 @@ def preparation_summary(result):
         return result
     summary = {k: v for k, v in result.items() if k not in {
         'source_manifest', 'source_refresh', 'data_readiness', 'calibration_metrics'}}
+    # Handoffs retain their compatibility IDs and user-facing findings. The
+    # complete dependency snapshot/candidate pool belongs to the saved audit,
+    # not every status refresh. Selection still reads the original result_json.
+    from .browser_payloads import readiness_summary
+    if result.get('analyst_handoff'):
+        summary['analyst_handoff']=readiness_summary(result['analyst_handoff'],
+            omit=('research_dependency_snapshot','selection_candidates'))
+    if result.get('analyst_intent_handoffs'):
+        summary['analyst_intent_handoffs']={intent:readiness_summary(handoff,
+            omit=('research_dependency_snapshot','selection_candidates'))
+            for intent,handoff in result['analyst_intent_handoffs'].items()}
     if 'data_readiness' in result:
         summary['data_readiness'] = {k: v for k, v in result['data_readiness'].items()
             if k in {'status', 'reason_codes'}}
     if 'source_refresh' in result:
         summary['source_refresh'] = {k: {field: v[field] for field in ('status', 'reason') if field in v}
             for k, v in result['source_refresh'].items() if isinstance(v, dict)}
+    # Status is a display projection, not another copy of the immutable audit.
+    # Selection/validation still reads the original persisted result_json.
+    if result.get('workload_forecast'):
+        forecast = result['workload_forecast']
+        summary['workload_forecast'] = {k: forecast[k] for k in (
+            'sha256', 'version', 'source_cutoff_at', 'domain', 'learned_opportunities',
+            'scales', 'normalization_policy', 'yardage_model') if k in forecast}
+        if forecast.get('yardage_model'):
+            summary['workload_forecast']['yardage_model']={k:v for k,v in forecast['yardage_model'].items()
+                if k in {'version','selection_weights','method','prior_attempts','limitations','accounting','validation','status'}}
+        if forecast.get('scenario_first'):
+            summary['workload_forecast']['scenario_first']={k:v for k,v in forecast['scenario_first'].items()
+                if k in {'version','seed','market','implied_points','construction_policy','selection_policy','world_count','assumptions','likelihood','historical_complete_team_games'}}
+        if forecast.get('learned_model_consumption'):
+            learned=forecast['learned_model_consumption']
+            summary['workload_forecast']['learned_model_consumption']={
+                family:{k:v for k,v in learned[family].items() if k in {'model_publication_record_id','model_refs'}}
+                for family in ('team','player')}
+        summary['workload_forecast']['players'] = [
+            {k: p[k] for k in ('player_master_id', 'name', 'native_id', 'native_salary_actor',
+                'position', 'utility', 'counts', 'reasons', 'projected_yards', 'efficiency', 'receiving_team_reconciliation_factor', 'scenario_role_evidence') if k in p}
+            for p in forecast.get('players', [])]
+    if result.get('scenario_mode'):
+        scenario = result['scenario_mode']
+        summary['scenario_mode'] = {k: scenario[k] for k in (
+            'version', 'sha256', 'config', 'status', 'issue', 'changed_player_count',
+            'limitations', 'scoring_basis', 'new_model_primary', 'full_game_simulator_consumed') if k in scenario}
+        summary['scenario_mode']['players'] = [
+            {k: p[k] for k in ('player_master_id', 'name', 'team', 'baseline_mean',
+                'conditional_mean', 'delta', 'supported_components', 'missing_evidence') if k in p}
+            for p in scenario.get('players', [])]
+        primary = scenario.get('primary_model_forecast')
+        if primary:
+            compact = {k: primary[k] for k in ('version', 'source', 'physical_count_budgets',
+                'dst_expert', 'all_player_audit', 'limitations') if k in primary}
+            if primary.get('all_player_audit'):
+                compact['all_player_audit'] = {k: v for k, v in primary['all_player_audit'].items()
+                    if k != 'players'}
+            for field in ('team_model_consumption', 'player_model_consumption'):
+                compact[field] = {k: v for k, v in primary.get(field, {}).items()
+                    if k in {'model_publication_record_id', 'model_refs'}}
+            compact['scoring_head'] = {k: v for k, v in primary.get('scoring_head', {}).items()
+                if k in {'version', 'feature_columns'}}
+            summary['scenario_mode']['primary_model_forecast'] = compact
+    return summary
+
+
+def preparation_input_summary(manifest):
+    """Keep source IDs/statuses/clocks without repeating nested context audits."""
+    summary = dict(manifest)
+    for dataset in ('availability', 'starters'):
+        summary[dataset] = []
+        for row in manifest.get(dataset, []):
+            compact = {k: v for k, v in row.items() if k != 'evidence_json'}
+            evidence = row.get('evidence_json') or {}
+            compact['evidence_json'] = {k: evidence[k] for k in (
+                'canonical_context_contract', 'roster_status', 'canonical_role',
+                'expected_depth_role', 'availability_state', 'availability_status',
+                'binding_roster_unavailability', 'canonical_context_reason_codes',
+                'practice_participation', 'expected_workload_status', 'observed_at') if k in evidence}
+            resolution = evidence.get('designation_resolution')
+            if resolution:
+                compact['evidence_json']['designation_resolution'] = {
+                    k: resolution[k] for k in ('contract', 'status', 'effective_designation',
+                        'evaluated_at') if k in resolution}
+            compact['evidence_detail_omitted'] = True
+            summary[dataset].append(compact)
     return summary
 
 
@@ -371,6 +479,8 @@ def preparation_status(session, request):
                 "contest_format": latest_build.request_json["contest_format"],
                 "projection_run_id": build["projection_run_id"],
                 "params": {"prepared_input_job_id": latest_build.job_id,
+                           "minimum_player_salary": latest_build.request_json.get("minimum_player_salary"),
+                           "scenario_mode": latest_build.request_json.get("scenario_mode"),
                            "availability_overrides": latest_build.request_json.get("availability_overrides", []),
                            "assume_questionable_out": latest_build.request_json.get("assume_questionable_out", False)}})
         except ValueError as exc:
@@ -390,7 +500,7 @@ def preparation_status(session, request):
         r["consumed_by_latest_prepared_build"] = False
     for r in manifest["starters"]:
         r["observed_at"] = (r.get("evidence_json") or {}).get("observed_at")
-    return {"server_time": now.isoformat(), "scope": scope(request), "inputs": manifest,
+    return {"server_time": now.isoformat(), "scope": scope(request), "inputs": preparation_input_summary(manifest),
             "lock_at": min(aware(r["kickoff_at"]) for r in manifest["games"]).isoformat(),
             "prelock": all(now < aware(r["kickoff_at"]) for r in manifest["games"]),
             "weather": weather, "load_freshness": freshness.model_dump(mode="json"), "jobs": job_views,
@@ -442,6 +552,13 @@ def validate_prepared_optimizer(session, payload, *, verify_current=True):
     expected_scenario = {"availability_overrides": request.availability_overrides,
                          "assume_questionable_out": request.assume_questionable_out}
     params = payload.get("params") or {}
+    from .optimizer_scenario_mode import config as scenario_config, verify as verify_scenario
+    if scenario_config(params.get("scenario_mode")) != request.scenario_mode:
+        raise ValueError("Scenario changed; Prepare slate again")
+    if request.scenario_mode:
+        verify_scenario(result.get("scenario_mode"), request.scenario_mode, result["projection_run_id"])
+    if request.contest_format == "showdown" and (params.get("minimum_player_salary") or 0) < (request.minimum_player_salary or 0):
+        raise ValueError("Minimum player salary was lowered after preparation. Prepare slate again to verify the newly eligible players.")
     from ..product_schemas import PredictionRunRequest
     scenario = PredictionRunRequest(**scope(request), availability_overrides=params.get("availability_overrides", []))
     if digest(expected_scenario) != digest({"availability_overrides": [r.model_dump(mode="json") for r in scenario.availability_overrides],
@@ -475,7 +592,11 @@ def validate_prepared_optimizer(session, payload, *, verify_current=True):
             "ownership_required": request.ownership_required or requires_ownership(params)}), result)
         if readiness["status"] != "READY":
             raise ValueError("Prepared evidence is no longer ready. Prepare slate again: " + ", ".join(readiness["reason_codes"]))
+    if params.get("workload_comparison") and not result.get("workload_forecast"):
+        raise ValueError("Prepare with explicit offensive workload forecasts before this comparison")
     return {"action": request.action, "ownership_run_id": result.get("ownership_run_id"),
+            "workload_forecast": result.get("workload_forecast"),
+            "scenario_mode": result.get("scenario_mode"),
             "data_cutoff_at": result.get("data_cutoff_at"), "source_refresh": result.get("source_refresh", {}),
             "prepared_input_job_id": job_id, "projection_run_id": result["projection_run_id"],
             "feature_run_id": result["feature_run_id"], "source_sha256": result["source_sha256"],
@@ -638,7 +759,42 @@ def assess_prepared_inputs(service, request, result):
         for row in pool.to_dict("records")]
     return showdown.evaluate_readiness(_json_safe(pool.to_dict("records")), **arguments,
         rules=showdown.freshness_rules(get_settings()), ownership_required=request.ownership_required,
-        ownership_attempted=True, require_canonical_context=True)
+        ownership_attempted=True, require_canonical_context=True,
+        minimum_player_salary=request.minimum_player_salary)
+
+
+def recheck_saved_preparation(session, request, *, current_job_id):
+    """Rebind research only after revalidating identical frozen numerical inputs."""
+    parent = session.get(OperationalJob, request.reuse_prepared_input_job_id)
+    if not parent or parent.status != "completed" or parent.request_json.get("action") != "prepare":
+        raise ValueError("Research recheck requires a completed normal preparation")
+    original = SlatePreparationRequest.model_validate(parent.request_json)
+    excluded = {"reuse_prepared_input_job_id", "analyst_mode", "analyst_packet_sha256", "analyst_strategy"}
+    if original.model_dump(exclude=excluded) != request.model_dump(exclude=excluded):
+        raise ValueError("Research recheck cannot change scope, source or forecast settings")
+    for job in preparation_jobs(session, request):
+        if job.job_id not in {parent.job_id, current_job_id} and job.created_at > parent.created_at:
+            raise ValueError("A newer preparation action exists; research recheck cannot skip it")
+    result = deepcopy(parent.result_json or {})
+    current = source_manifest(session, request)
+    require_prelock(current["games"])
+    verify_artifacts(current, session)
+    if digest(current) != result.get("source_sha256") or digest(result.get("source_manifest")) != result.get("source_sha256"):
+        raise ValueError("Source inputs changed; a full preparation is required")
+    if digest(projection_proof(session, result)) != result.get("projection_lineage_sha256"):
+        raise ValueError("Frozen projection lineage changed; a full preparation is required")
+    if request.include_workload_forecast:
+        receipt = result.get("workload_forecast") or {}
+        if digest({k:v for k,v in receipt.items() if k != "sha256"}) != receipt.get("sha256"):
+            raise ValueError("Frozen count receipt checksum mismatch")
+    for field in ("analyst_handoff", "analyst_intent_handoffs"):
+        result.pop(field, None)
+    result["research_recheck"] = {"parent_prepared_input_job_id": parent.job_id,
+        "checked_at": datetime.now(UTC).isoformat(), "numerical_inputs_reused": True,
+        "projection_run_id": result["projection_run_id"], "source_sha256": result["source_sha256"],
+        "forecast_sha256": (result.get("workload_forecast") or {}).get("sha256"),
+        "source_capture_or_model_fit_performed": False}
+    return result
 
 
 def prepare_optimizer_inputs(context, request):
@@ -650,26 +806,40 @@ def prepare_optimizer_inputs(context, request):
     if request.preliminary_research and (request.contest_format != "classic" or request.availability_overrides or request.assume_questionable_out):
         raise ValueError("Preliminary preparation requires Classic without projection availability overrides")
     service = OptimizerService()
-    gate = classic if request.contest_format == "classic" else showdown
-    refreshed = gate.refresh_live_sources(service, **scope(request),
-        params={"availability_overrides": request.availability_overrides,
-                "assume_questionable_out": request.assume_questionable_out, "refresh_ownership": True,
-                "ownership_required": request.ownership_required, "preliminary_research": request.preliminary_research},
-        progress=context.progress)
-    build = (refreshed["report"].get("projection", {}).get("result") or {})
-    result = {**build, **scope(request), "action": "prepare", "contest_format": request.contest_format,
-              "projection_run_id": refreshed["projection_run_id"],
-              "ownership_run_id": refreshed["ownership_run_id"],
-              "availability_overrides": request.availability_overrides,
-              "assume_questionable_out": request.assume_questionable_out,
-              "data_cutoff_at": aware(refreshed["data_cutoff_at"]).isoformat(),
-              "source_refresh": _json_safe(refreshed["report"]), "preliminary_research": request.preliminary_research}
+    if request.reuse_prepared_input_job_id:
+        from ..db import SessionLocal
+        with SessionLocal() as session:
+            result = recheck_saved_preparation(session, request, current_job_id=context.job_id)
+    else:
+        gate = classic if request.contest_format == "classic" else showdown
+        if request.learned_opportunities or (request.scenario_mode or {}).get('scoring_mode')=='new_model_primary':
+            from .primary_model_source import ensure_source
+            ensure_source(service.engine,**scope(request))
+        refreshed = gate.refresh_live_sources(service, **scope(request),
+            params={"availability_overrides": request.availability_overrides,
+                    "assume_questionable_out": request.assume_questionable_out, "refresh_ownership": True,
+                    "ownership_required": request.ownership_required, "preliminary_research": request.preliminary_research,
+                    "include_workload_forecast": request.include_workload_forecast},
+            progress=context.progress)
+        build = (refreshed["report"].get("projection", {}).get("result") or {})
+        result = {**build, **scope(request), "action": "prepare", "contest_format": request.contest_format,
+                  "projection_run_id": refreshed["projection_run_id"],
+                  "ownership_run_id": refreshed["ownership_run_id"],
+                  "availability_overrides": request.availability_overrides,
+                  "assume_questionable_out": request.assume_questionable_out,
+                  "minimum_player_salary": request.minimum_player_salary,
+                  "data_cutoff_at": aware(refreshed["data_cutoff_at"]).isoformat(),
+                  "source_refresh": _json_safe(refreshed["report"]), "preliminary_research": request.preliminary_research}
+        if request.include_workload_forecast:result["workload_participation_refresh"]=refreshed["report"].get("workload_participation")
     context.progress("source_checks", 0, 1, "Checking prepared inputs before optimization.",
                      checkpoint={"preparation_result": result})
     if not result["projection_run_id"]:
-        raise ValueError("Slate preparation blocked: " + str(refreshed["report"].get("projection", {}).get("reason", "No verified projection")))
+        reason = (refreshed["report"].get("projection", {}).get("reason", "No verified projection")
+                  if not request.reuse_prepared_input_job_id else "No verified frozen projection")
+        raise ValueError("Slate preparation blocked: " + str(reason))
     readiness = assess_prepared_inputs(service, request, result)
     result["data_readiness"] = readiness
+    result["opportunity_source_context"] = result.get("source_manifest", {}).get("opportunity_source")
     from .analyst_preparation import prepare_handoff
     cached_analyst_rows=None
     def analyst_rows():
@@ -685,6 +855,63 @@ def prepare_optimizer_inputs(context, request):
         cached_analyst_rows=_json_safe(prepared_pool.to_dict("records"))
         return cached_analyst_rows
     from .analyst_personal_context import load_inputs
+    if request.include_workload_forecast and not request.reuse_prepared_input_job_id:
+        from .workload_count_forecast import prepare_receipt
+        try:
+            result["workload_forecast"] = prepare_receipt(service.engine, analyst_rows(),
+                season=request.season, week=request.week, cutoff=aware(result["data_cutoff_at"]),
+                projection_run_id=result["projection_run_id"],opportunity_source_context=result.get("opportunity_source_context"),
+                games=result["source_manifest"]["games"],markets=result["source_manifest"].get("markets",[]))
+        except ValueError as exc:
+            if not request.scenario_mode:raise
+            result["scenario_workload_issue"]=str(exc)
+    if request.learned_opportunities:
+        from .primary_model_forecast import prepare as prepare_primary
+        context.progress('learned_opportunities',0,1,'Forecasting published learned attempts/targets; no point scoring heads.')
+        result['workload_forecast']=prepare_primary(service.engine,result.get('workload_forecast'),analyst_rows(),
+            **scope(request),cutoff=aware(result['data_cutoff_at']),games=result['source_manifest']['games'],
+            markets=result['source_manifest'].get('markets',[]),
+            scenario={'team':'','passing_factor':1.,'rushing_factor':1.},counts_only=True)
+        if request.opportunity_yards:
+            from .opportunity_yards import add_yards
+            from .workload_count_forecast import load_history
+            result['workload_forecast']=add_yards(result['workload_forecast'],
+                load_history(service.engine,season=request.season,week=request.week,cutoff=aware(result['data_cutoff_at'])),
+                before_period=request.season*100+request.week,cutoff=aware(result['data_cutoff_at']))
+    if request.scenario_first_captain:
+        from .captain_game_cases import build as build_cases, load_history as load_case_history
+        context.progress('shared_scoring_cases',0,1,'Building market-first shared scoring cases and sourced player/kicking roles.')
+        result['workload_forecast']=build_cases(result['workload_forecast'],
+            load_case_history(service.engine,season=request.season,week=request.week,cutoff=aware(result['data_cutoff_at'])),analyst_rows(),
+            before_period=request.season*100+request.week,cutoff=aware(result['data_cutoff_at']),
+            games=result['source_manifest']['games'],markets=result['source_manifest'].get('markets',[]))
+    if request.scenario_mode:
+        from .optimizer_scenario_mode import prepare as prepare_scenario
+        from .workload_count_forecast import load_history
+        forecast=result.get("workload_forecast")
+        weekly=load_history(service.engine,season=request.season,week=request.week,cutoff=aware(result["data_cutoff_at"])) if forecast and not forecast.get("component_response") else None
+        result["scenario_mode"]=prepare_scenario(request.scenario_mode,forecast,analyst_rows(),
+            before_period=request.season*100+request.week,cutoff=aware(result["data_cutoff_at"]),
+            projection_run_id=result["projection_run_id"],weekly=weekly)
+        if request.scenario_mode.get('scoring_mode')=='new_model_primary':
+            from .primary_model_forecast import prepare as prepare_primary
+            context.progress('new_model_forecast',0,1,'Scoring published team/player models and complete DK heads; incumbent retained for comparison.')
+            primary=prepare_primary(service.engine,forecast,analyst_rows(),**scope(request),
+                cutoff=aware(result['data_cutoff_at']),games=result['source_manifest']['games'],
+                markets=result['source_manifest'].get('markets',[]),scenario=request.scenario_mode)
+            report=result['scenario_mode']
+            report.update(primary_model_forecast=primary,players=primary['players'],new_model_primary=True,
+                scoring_basis=primary['scoring_basis'],team_model_consumption=primary['team_model_consumption'],
+                count_budgets=primary['physical_count_budgets'],shared_budgets=primary['physical_count_budgets'],
+                component_response_sha256=None,
+                limitations=primary['limitations'],status='NEW_MODELS_PRIMARY',issue=None)
+            report['changed_player_count']=sum(p['delta'] is not None and abs(p['delta'])>1e-9 for p in report['players'])
+            from .evaluation_record import digest as scenario_digest
+            report['sha256']=scenario_digest({k:v for k,v in report.items() if k!='sha256'})
+        if result.get("scenario_workload_issue"):
+            result["scenario_mode"]["limitations"].append(result["scenario_workload_issue"])
+            from .evaluation_record import digest as scenario_digest
+            result["scenario_mode"]["sha256"]=scenario_digest({k:v for k,v in result["scenario_mode"].items() if k!="sha256"})
     personal_context_inputs = _json_safe(load_inputs(service.engine))
     result["analyst_handoff"] = prepare_handoff(request=request, result=result,
         row_loader=analyst_rows, checked_at=datetime.now(UTC).isoformat(), personal_context_inputs=personal_context_inputs)

@@ -1,5 +1,7 @@
 # Saved optimizer DraftKings downloads
 
+Saved-run history stops polling when all runs are finished; refresh it manually after activity elsewhere. History reads scope and limit before expanding report metadata. **Check upload readiness** now supports saved preliminary Classic lineups as well as Showdown: it verifies frozen identities, exclusions, current availability/roles, native IDs and roster legality, then enables a time-limited CSV download. Original preliminary reports and final-inactive status remain unchanged.
+
 In **Operations → Run activity → Recent optimizer runs**, each saved run has **Download Recommended** and **Download All**. Files belong to the clicked row, even when a different run is open in the results panel. Feedback and errors stay beside that row; changing slate clears stale feedback.
 
 **Download Recommended** exports exactly the run's persisted GPP recommendation. The existing contract ranks valid saved candidates by unconditioned projected points, then marginal upside and canonical identity. It is provisional, not calibrated paid-finish EV. The server checks saved run/scope/projection lineage and the recommended candidate's canonical identity. Missing or invalid recommendations are unavailable; the UI does not invent a first-lineup fallback.

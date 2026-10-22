@@ -1,0 +1,13 @@
+# B03 observed defense context
+
+`build_defense_context_evidence(event_receipt, before_period, cutoff, last_n_games=8)` consumes the outer immutable event receipt after the operational caller verifies its parent artifact and indexed raw SourceSnapshot. The pure builder validates the inner event checksum/time scope; it cannot establish source authenticity from a marker alone.
+
+Seven catalog candidates have measured variants: G14-M07 nonspike official-pass-attempt net20 explosive rate; G14-M09 reported nonspike dropback success, including sacks and scrambles; G15-M01/M02 nonkneel official-rush success/EPA; G15-M03 net10 explosive rush; G15-M04 nonpositive-yard stuff; G15-M09 inside5 nonkneel rush TD conversion. All rushing variants include legitimate quarterback scrambles. Supporting dropback EPA is separately labeled; it is not an additional catalog metric. EPA is provider-derived expected points, not fantasy points or a raw physical measurement.
+
+Every metric retains eligible events, unknown eligibility, known outcomes, missing outcomes, measured sum/mean, and a complete-eligibility mean only when all required eligibility/outcomes are known. Empty samples return null. Window aggregates pool known outcome exposure rather than average game rates. Spikes/kneels, no-play, two-point and nonoffensive events are excluded as defined. Inside5 uses preplay yardline, not goal-to-go. Missing defteam is retained as explicit native-game-pair inference; conflicting supplied defteam rejects.
+
+Windows are last N observed prior game logs, not N verified complete games. Current source is 2026 REG before week6, a later revised capture with original historical publication/final-game proof unknown. Pressure, blitz, man/zone, routes and forward probabilities are unavailable. No FP bonus, workload transfer, forecast fitting, or optimizer change is made here.
+
+Output contains defense/native-game rows, per-team observed-game windows, exact definitions/units, semantic measurement hash, original source provenance, per-metric source/event/scope lineage and producer code hash. Rows and outcomes are deterministically ordered; capture-clock recapture does not alter measured semantics. Source quality/reconciliation changes remain significant.
+
+Consumer handoff: A owns the shared source-publication intake. Build this block once during verified parent intake, persist its small immutable output and lineage, and serve a bounded reference thereafter. This package's actual measured artifact establishes source-derived values, not completed app/model consumption. Do not inflate the full parent during every Prepare or inline raw_flags in saved requests.

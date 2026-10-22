@@ -1,0 +1,9 @@
+# Provider same-target receiver catch excess (G09-M02)
+
+For the SAME receiver-attributed eligible official nonspike targets, sum(completion − source cp)/N equals observed catch fraction minus mean source completion probability. The main unit is probability fraction; percentage-points output explicitly multiplies by 100. Spikes are excluded. The denominator never mixes observed catches on all targets with expected completion on only a selected subset.
+
+Each new source projection joins by immutable native game/play key to the approved official target/pass opportunities and raw receiver identity. Missing spike/official target eligibility, completion, cp or attribution retains uncertainty. cp must be finite within [0,1]. Full exact actor rates are unknown with compatible team-level missing eligibility/unattributed target mass, missing matched outcomes, or unresolved canonical identity. Separately named known matched samples preserve the SAME completion/cp subset. Empty sample means are undefined. Unscoped possible official rows are rejected rather than silently omitted.
+
+All native receiver identities use the already reviewed source-wide all-edge global qualification graph. The declared actor universe is observed eligible/possibly eligible native attributed targets, not absent players or an active roster census. No missing weekly row is an inactive zero. Native measurement and canonical catalog value remain separate.
+
+The external nflfastR cp model describes completion likelihood in comparable game situations. Exact vendor model version/training chronology and original historical pregame availability remain unknown. This is not isolated receiver skill, charted catchability, independent own-model calibration, a scoring bonus, causal effect or a current forecast. Old receiver CPOE variants remain untouched. No model training/activation/optimizer integration is performed.

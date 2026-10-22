@@ -123,7 +123,8 @@ def export_readiness(report_key,*,directory=None,now=None):
     if report.get('kind')!='report':raise ValueError('CSV requires a saved lineup report')
     pool=stat.load(report['pool_sha256'],directory)
     validated_native_roster(report,pool)
-    current=stat.readiness(pool,now=now,partial=True)
+    current=stat.readiness(pool,now=now,partial=True,
+        exclude_questionable=(report.get("user_preferences") or {}).get("exclude_questionable",False))
     by_id={p['player_master_id']:p for p in current['players']}
     reasons=[r for r in current['reason_codes'] if r not in {'pool_identity_or_stat_coverage_incomplete','no_legal_three_player_lineup'}]
     for p in report['players']:

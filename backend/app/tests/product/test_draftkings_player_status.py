@@ -50,7 +50,8 @@ def test_native_team_or_position_changes_are_reported_not_applied_to_old_salary(
     assert discrepancies[0]['reason'] == 'native_team_or_position_changed'
 
 
-def test_refresh_captures_native_sources_and_preserves_http_observation(monkeypatch):
+@pytest.mark.parametrize("contest_format,game_type", [("classic", 1), ("showdown", 96)])
+def test_refresh_captures_native_sources_and_preserves_http_observation(monkeypatch, contest_format, game_type):
     from types import SimpleNamespace
     from backend.app.product_services import draftkings_player_status as native
     saved = []
@@ -67,7 +68,7 @@ def test_refresh_captures_native_sources_and_preserves_http_observation(monkeypa
     class Client(Session):
         def __init__(self, **kwargs): pass
         def get(self, uri):
-            payload = dict(DraftGroups=[dict(DraftGroupId=99, Sport='NFL', GameTypeId=1,
+            payload = dict(DraftGroups=[dict(DraftGroupId=99, Sport='NFL', GameTypeId=game_type,
                 GameCount=1, StartDate=GAMES[0]['kickoff_at'])]) if uri == native.LOBBY_URI else PAYLOAD
             return SimpleNamespace(url=uri, headers={'date':'Sat, 10 Oct 2026 20:00:00 GMT'},
                                    raise_for_status=lambda: None, json=lambda: deepcopy(payload))
@@ -79,7 +80,7 @@ def test_refresh_captures_native_sources_and_preserves_http_observation(monkeypa
     monkeypatch.setattr(native, 'SourceCaptureService', Capture)
     monkeypatch.setattr(native.httpx, 'Client', Client)
     facts, captures, discrepancies = native.refresh_native_statuses(None, salaries=SALARIES, games=GAMES,
-        season=2026, week=5, slate='SUNDAY_MAIN', lock=datetime(2026,10,11,20,25,tzinfo=UTC))
+        season=2026, week=5, slate='SUNDAY_MAIN', lock=datetime(2026,10,11,20,25,tzinfo=UTC), contest_format=contest_format)
     assert len(saved) == len(captures) == 2 and not discrepancies
     assert saved[1][0]['body'] == PAYLOAD
     assert saved[1][1]['source_system'] == 'draftkings'
@@ -91,3 +92,18 @@ def test_refresh_captures_native_sources_and_preserves_http_observation(monkeypa
         native.refresh_native_statuses(None, salaries=SALARIES, games=GAMES,
             season=2026, week=5, slate='SUNDAY_MAIN', lock=datetime(2026,10,10,20,tzinfo=UTC))
     assert not saved
+
+
+def test_showdown_questionable_is_explicit_designation_not_healthy_or_role():
+    payload = deepcopy(PAYLOAD)
+    payload['draftables'][0]['status'] = 'Q'
+    facts, discrepancies = parse_native_statuses(payload, SALARIES, GAMES, contest_format='showdown')
+    now = datetime(2026, 10, 10, 22, tzinfo=UTC)
+    facts[0].update(source_ids=['snapshot', '123'], observed_at=now.isoformat(), received_at=now.isoformat())
+    context = compose_player_contexts(SALARIES, facts, cutoff=now, max_age_hours=24)[0]
+    assert context['injury_status'] == 'Q'
+    assert context['availability_probability'] is None
+    assert context['evidence_json']['canonical_role'] is None
+    assert 'player_role_missing' in context['evidence_json']['canonical_context_reason_codes']
+    payload['draftables'][0]['status'] = ''
+    assert not parse_native_statuses(payload, SALARIES, GAMES, contest_format='showdown')[0]

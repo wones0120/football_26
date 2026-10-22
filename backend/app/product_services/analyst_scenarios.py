@@ -95,17 +95,11 @@ def _measurement(player, channel, decision):
             try: observed=clock(value)
             except (TypeError,ValueError): return None, 'unverified_workload_chronology'
             if observed>decision: raise ValueError('future workload evidence')
-    for group, field in [('explicit_pregame', 'pregame_expected_' + channel),
-                         ('historical', channel + '_mean_3'),
-                         ('derived_proxies', 'projected_' + channel)]:
-        item = evidence.get(group, {}).get(field) or {}
-        value = item.get('value')
-        if item.get('status') not in {'after_cutoff', 'unavailable', 'coverage_unknown'} and type(value) in (float,int) and math.isfinite(value) and value >= 0:
-            return float(value), group + '.' + field
-    return None, 'unavailable'
+    from .workload_evidence import select_measurement
+    return select_measurement(player, channel)
 
 
-def build_scenarios(packet, rows, *, fmt, decision_at):
+def build_scenarios(packet, rows, *, fmt, decision_at, mean_only=False, measurement_rows=None, count_receipt=None):
     errors = validate(packet) + validate_scenarios(packet)
     if errors: raise ValueError('; '.join(errors))
     decision = clock(decision_at)
@@ -113,6 +107,10 @@ def build_scenarios(packet, rows, *, fmt, decision_at):
     declared = {p['player_master_id']: p for p in packet['players']}
     by_id = {str(r.get('player_id',r.get('player_master_id'))): r for r in rows}
     if len(by_id) != len(rows): raise ValueError('duplicate canonical pool identity')
+    full_rows=rows if measurement_rows is None else measurement_rows
+    source_by_id={str(r.get('player_id',r.get('player_master_id'))):r for r in full_rows}
+    if len(source_by_id)!=len(full_rows) or not set(by_id)<=set(source_by_id):
+        raise ValueError('Scenario measurement universe has duplicate or missing canonical actors')
     games = {g['game_id']:g for g in packet['games']}
     result=[]
     for scenario in packet['scenario_assumptions']['scenarios']:
@@ -122,21 +120,43 @@ def build_scenarios(packet, rows, *, fmt, decision_at):
         if any(clock(h['expires_at']) <= decision for h in packet['hypotheses'] if h['hypothesis_id'] in scenario['hypothesis_ids']): raise ValueError('scenario hypothesis expired')
         moments={}
         for pid,r in by_id.items():
-            try: mean=float(r['projection']); p90=float(r.get('p90',r.get('ceiling')))
+            try:
+                mean=float(r['projection'])
+                try:p90=float(r.get('p90',r.get('ceiling')))
+                except (TypeError,ValueError):p90=None
             except (TypeError,ValueError) as exc: raise ValueError('missing base scenario moments') from exc
-            if not all(math.isfinite(v) and v>=0 for v in (mean,p90)): raise ValueError('invalid base scenario moments')
-            moments[pid]=dict(mean=mean,p90=max(mean,p90),opportunity_ratio=1.0,changes=[],workload={})
+            if not math.isfinite(mean) or mean<0:raise ValueError('invalid base scenario moments')
+            if p90 is None or not math.isfinite(p90) or p90<0:
+                if not mean_only:raise ValueError('invalid base scenario moments')
+                p90=None
+            moments[pid]=dict(mean=mean,p90=max(mean,p90) if p90 is not None else None,
+                opportunity_ratio=1.0,changes=[],workload={},**({'tail_status':'unavailable_not_imputed'} if p90 is None else {}))
+        if count_receipt is not None and count_receipt.get('component_response'):
+            from .count_scenario_response import count_world
+            response=count_world(count_receipt,scenario,{pid:r.get('projection') for pid,r in source_by_id.items()},cutoff=decision_at)
+            by_actor={a['player_master_id']:a for a in response['response']['players']}
+            for pid,moment in moments.items():
+                actor=by_actor.get(pid)
+                if actor is None:continue  # K/DST/absent actors preserve base, explicitly unmodeled.
+                if actor['conditional_mean'] is not None:moment['mean']=actor['conditional_mean']
+                moment.update(p90=None,tail_status='conditional_tail_unmodeled',
+                    component_response=actor,response_ancestry=response['version'],
+                    changes=response['changes'],conditional_delta_points=actor['conditional_delta_points'])
+            result.append(dict(**deepcopy(scenario),moments=moments,count_component_response=response,
+                measurement_universe_sha256=digest(full_rows),design_weight=1,probability_status='conditional_likelihood_unknown'))
+            continue
+        budgets=[]
         for a in scenario['assumptions']:
-            members=[pid for pid,r in by_id.items() if r.get('player_team',r.get('team'))==a['team'] and r.get('opponent_team',r.get('opponent')) in games[a['game_id']]['teams']]
+            members=[pid for pid,r in source_by_id.items() if r.get('player_team',r.get('team'))==a['team'] and r.get('opponent_team',r.get('opponent')) in games[a['game_id']]['teams']]
             channel='targets' if a['kind'] in {'passing_volume','target_concentration'} else a.get('workload','carries')
-            if not members: raise ValueError('scenario game/team is absent from eligible pool')
-            measured={pid:_measurement(declared.get(pid,by_id[pid]),channel,decision) for pid in members}
+            if not members: raise ValueError('scenario game/team is absent from source measurement universe')
+            measured={pid:_measurement(declared.get(pid,source_by_id[pid]),channel,decision) for pid in members}
             ratios={}
             if a['kind'] in {'passing_volume','rushing_volume'}:
                 positions={'QB','WR','TE','RB'} if channel=='targets' else {'RB','QB'}
-                ratios={pid:a['factor'] for pid in members if by_id[pid]['position'] in positions}
+                ratios={pid:a['factor'] for pid in members if source_by_id[pid]['position'] in positions}
             else:
-                if any(measured[pid][0] is None for pid in members if by_id[pid]['position'] in {'RB','WR','TE'}):
+                if any(measured[pid][0] is None for pid in members if source_by_id[pid]['position'] in {'RB','WR','TE'}):
                     raise ValueError('concentration/transfer requires complete measured or explicitly attributed proxy workload for team skill players')
                 amounts={pid:value for pid,(value,_) in measured.items() if value is not None}
                 total=sum(amounts.values()); updated=dict(amounts)
@@ -152,8 +172,13 @@ def build_scenarios(packet, rows, *, fmt, decision_at):
                     if donor not in amounts or receiver not in amounts or amounts[receiver]<=0: raise ValueError('transfer identity lacks positive measured baseline workload')
                     moved=amounts[donor]*a['fraction']; updated[donor]-=moved; updated[receiver]+=moved
                 ratios={pid:updated[pid]/value for pid,value in amounts.items() if value>0}
+                budgets.append(dict(assumption=deepcopy(a),full_source_actor_ids=sorted(members),
+                    excluded_from_selection_actor_ids=sorted(set(members)-set(by_id)),
+                    workload_before=amounts,workload_after=updated,total_before=total,total_after=sum(updated.values()),
+                    meaning='Source-universe conditional sensitivity; user exclusions never create or redistribute football workload'))
                 if any(ratio>2 or ratio<0 for ratio in ratios.values()): raise ValueError('workload ratio exceeds bounded 0 through 2 response')
             for pid,ratio in ratios.items():
+                if pid not in moments:continue
                 moment=moments[pid]; response=1+a['elasticity']*(ratio-1)
                 moment['opportunity_ratio']*=response
                 moment['changes'].append(dict(assumption=deepcopy(a),workload_before=measured.get(pid,(None,''))[0],workload_lineage=measured.get(pid,(None,'unavailable'))[1],ratio=ratio,response=response))
@@ -161,14 +186,15 @@ def build_scenarios(packet, rows, *, fmt, decision_at):
             ratio=m['opportunity_ratio']; base=by_id[pid]
             if not math.isfinite(ratio) or not 0<=ratio<=2: raise ValueError('combined opportunity response exceeds bounded 0 through 2 range')
             m['mean']=float(base['projection'])*ratio
-            m['p90']=m['mean']+max(0,float(base.get('p90',base.get('ceiling')))-float(base['projection']))*math.sqrt(ratio)
-        result.append(dict(**deepcopy(scenario),moments=moments,design_weight=1,probability_status='uncalibrated_equal_design_weights'))
+            m['p90']=(m['mean']+max(0,m['p90']-float(base['projection']))*math.sqrt(ratio)) if m['p90'] is not None else None
+        result.append(dict(**deepcopy(scenario),moments=moments,source_workload_budgets=budgets,
+            measurement_universe_sha256=digest(full_rows),design_weight=1,probability_status='uncalibrated_equal_design_weights'))
     if not result: raise ValueError('No applicable scenarios in selected format')
     from .team_game_outlook import attach_context
     return attach_context(packet,result,decision_at=decision_at,rows=rows)
 
 
-def projection_distribution_pool(pool):
+def projection_distribution_pool(pool, *, mean_only=False):
     """Missing forecasts are unscored model eligibility, never a zero estimate."""
     def valid(value):
         try: return math.isfinite(float(value)) and float(value)>=0
@@ -176,10 +202,48 @@ def projection_distribution_pool(pool):
     keep=[];excluded=[]
     for index,row in pool.iterrows():
         mean=row.get('projection');p90=row.get('p90',row.get('ceiling'))
-        if valid(mean) and valid(p90): keep.append(index)
+        if valid(mean) and (mean_only or valid(p90)): keep.append(index)
         else: excluded.append(dict(player_master_id=str(row.get('player_id',row.get('player_master_id'))),
             reason='missing_or_invalid_base_projection_distribution',base_projection=mean,base_p90=p90))
     return pool.loc[keep].copy(deep=True).reset_index(drop=True),excluded
+
+
+def _research_explanations(report, lineups, params):
+    """Saved full-roster consumer proof, separate from the scenario objective."""
+    handoff = params.get('analyst_handoff_applied') or {}
+    coverage = handoff.get('research_coverage')
+    if not coverage:
+        return
+    worlds = {s['scenario_id']: s for s in report.get('scenario_definitions', [])}
+    material = {sid for sid, world in worlds.items()
+                if any(m.get('changes') and (m.get('opportunity_ratio', 1) != 1 or m.get('conditional_delta_points',0) != 0)
+                       for m in world.get('moments', {}).values())}
+    games = []
+    for game in coverage.get('games', []):
+        assessment = game.get('authored_assessment') or {}
+        games.append({**deepcopy(game),
+            'material_scenario_ids_consumed': sorted(set(assessment.get('scenario_ids', [])) & material),
+            'interpretation': 'Conditional sensitivity; occurrence likelihood unknown. An explicit no-change assessment does not claim a numerical effect.'})
+    receipt = dict(coverage=deepcopy(coverage), games=games,
+        source_packet_sha256=handoff.get('source_packet_sha256'),
+        checked_packet_sha256=handoff.get('checked_packet_sha256'),
+        compatibility_sha256=handoff.get('compatibility_sha256'),
+        pending_requests=deepcopy(handoff.get('research_requests', [])),
+        baseline_comparison_roster=deepcopy(report.get('baseline_comparison_roster')),
+        alternative_status='same_legal_model_reference' if report.get('baseline_comparison_roster') else 'not_captured_by_this_generation_path',
+        portfolio_dependency='All entries share these conditional game worlds; this is not a calibrated joint success probability.')
+    report['research_consumption'] = receipt
+    for lineup in lineups:
+        if not lineup:
+            continue
+        lineup[0]['analyst_research_explanation'] = dict(
+            research_consumption=receipt,
+            selected_scenario_ids=lineup[0].get('analyst_thesis_ids', []),
+            canonical_roster=[dict(player_master_id=str(p['player_id']),
+                role=p.get('roster_position', 'SELECTED'), salary=p.get('salary')) for p in lineup],
+            salary=sum(float(p.get('salary') or 0) for p in lineup),
+            base_mean_sum=sum(float(p.get('projection') or 0) for p in lineup),
+            meaning='Complete saved legal roster; base fantasy means and user controls remain unchanged. Scenario mechanisms, shared risks and the reference alternative are retained separately.')
 
 
 def run_merged(service, pool, *, params, packet, fmt, season, week, slate, requested, solve_kwargs, progress=None, source_pool_rows=None, research_only_joint_opportunity=False):
@@ -193,9 +257,13 @@ def run_merged(service, pool, *, params, packet, fmt, season, week, slate, reque
     from .analyst_generation import ModelCaptured, runtime_snapshot
     from .optimizer import _json_safe
     now=datetime.now(timezone.utc).isoformat()
+    from .shared_world_selection import POLICY as SHARED_WORLD_POLICY
+    shared_world=params.get('analyst_selection_policy')==SHARED_WORLD_POLICY
+    if shared_world and (params.get('analyst_scenario_focus_mode','MIXED')!='MIXED' or params.get('analyst_teammate_choice')):
+        raise ValueError('Shared-world coverage cannot silently combine a manual story or teammate construction')
     intent=params.get('analyst_optimization_intent','MIXED')
     intent_scope=None
-    if intent!='MIXED':
+    if intent!='MIXED' and not shared_world:
         from .analyst_intents import validate_scoped_packet
         if fmt not in {'SHOWDOWN','CLASSIC'}:raise ValueError('Unsupported optimization intent format')
         if params.get('analyst_scenario_focus_mode','MIXED')!='MIXED':raise ValueError('An optimization intent cannot be blended with a manual scenario focus')
@@ -205,8 +273,11 @@ def run_merged(service, pool, *, params, packet, fmt, season, week, slate, reque
     original_packet_sha256=packet_digest(packet)
     from .analyst_focus import prepare_focus
     packet,focus=prepare_focus(packet,params,fmt)
+    if shared_world:
+        from .shared_world_runtime import common_packet
+        packet=common_packet(packet)
     original_rows=_json_safe(pool.to_dict('records'))
-    pool,distribution_exclusions=projection_distribution_pool(pool)
+    pool,distribution_exclusions=projection_distribution_pool(pool,mean_only=shared_world)
     if set(solve_kwargs.get('locked_player_ids') or []) & {r['player_master_id'] for r in distribution_exclusions}:
         raise ValueError('Locked player has no finite base projection distribution for merged scenarios')
     from .joint_opportunity import PARAM,enable_world,attach_objective,candidate_metric,summary
@@ -214,15 +285,20 @@ def run_merged(service, pool, *, params, packet, fmt, season, week, slate, reque
     def capture(model,frame,selected):
         captured.update(model=model,frame=frame.copy(deep=True)); raise ModelCaptured()
     kwargs={**solve_kwargs,'quality_floor':None,'include_control_comparison':False}
+    if shared_world:
+        from .shared_world_runtime import user_legal_kwargs
+        kwargs=user_legal_kwargs(kwargs)
     try: service._solve_lineup(pool,**{**kwargs,'additional_constraints':capture})
     except ModelCaptured: pass
     if not captured: return [],dict(mode=STRATEGY,status='blocked',reasons=['legal_model_unavailable'])
     rows=_json_safe(captured['frame'].to_dict('records'))
     if any(g.get('season',season)!=season or g.get('week',week)!=week for g in packet['games'] if g.get('format_membership',{}).get(fmt)=='confirmed_in_scope'):
         raise ValueError('scenario game is outside selected season/week')
-    scenarios=build_scenarios(packet,rows,fmt=fmt,decision_at=now)
+    scenarios=build_scenarios(packet,rows,fmt=fmt,decision_at=now,mean_only=shared_world,
+        measurement_rows=source_pool_rows if source_pool_rows is not None else original_rows,
+        count_receipt=(params.get("prepared_input_evidence") or {}).get("workload_forecast") if shared_world else None)
     captain_analysis=None
-    if fmt=='SHOWDOWN' and packet.get('captain_analysis') is not None:
+    if not shared_world and fmt=='SHOWDOWN' and packet.get('captain_analysis') is not None:
         from .captain_analyst import condition_captains
         scenarios,captain_analysis=condition_captains(packet,rows,scenarios,
             decision_at=now,locked_captain=kwargs.get('locked_captain_player_id'))
@@ -238,7 +314,14 @@ def run_merged(service, pool, *, params, packet, fmt, season, week, slate, reque
         mapping={('player_'+str(i)):dict(player_master_id=str(r['player_id']),role='SELECTED') for i,r in enumerate(rows)}
     names={v.name for v in captured['model'].variables()}
     if not set(mapping)<=names: raise ValueError('merged roster variable mapping mismatch')
-    snapshot=runtime_snapshot(captured['model'],mapping,rows,packet=original_packet,season=season,week=week,slate=slate,fmt=fmt,decision_at=now,policy={'quality_screen':'none','strategy':STRATEGY})
+    snapshot=runtime_snapshot(captured['model'],mapping,rows,packet=original_packet,season=season,week=week,slate=slate,fmt=fmt,decision_at=now,policy={'quality_screen':'none','strategy':STRATEGY,
+        **({'mean_only':True,'selection_policy':SHARED_WORLD_POLICY} if shared_world else {})})
+    if shared_world:
+        from .shared_world_runtime import run_prepared
+        return run_prepared(service,pool,kwargs=kwargs,snapshot=snapshot,rows=rows,packet=original_packet,
+            scenarios=scenarios,params={**params,'locked_player_ids':sorted(kwargs.get('locked_player_ids') or []),
+            'data_cutoff_at':params.get('data_cutoff_at',now)},fmt=fmt,requested=requested,focus=focus,
+            distribution_exclusions=distribution_exclusions,original_rows=original_rows)
     if params.get('analyst_teammate_choice'):
         from .teammate_opportunity import validate_choice
         validate_choice(service,params,packet,source_pool_rows or rows,pool.iloc[0].get('projection_run_id'))
@@ -279,6 +362,7 @@ def run_merged(service, pool, *, params, packet, fmt, season, week, slate, reque
         if params.get(PARAM):
             from .joint_opportunity import annotate_report
             annotate_report(report)
+        _research_explanations(report, lineups, params)
         return lineups,report
     candidates={}; generation=[]
     budget=int(params.get('analyst_candidates_per_thesis',2))
@@ -425,17 +509,24 @@ def run_merged(service, pool, *, params, packet, fmt, season, week, slate, reque
     if params.get(PARAM):
         from .joint_opportunity import annotate_report
         annotate_report(report)
+    _research_explanations(report, lineups, params)
     return lineups,report
 
 
-def select_portfolio(candidates,scenarios,rows,*,requested,params,fmt):
-    by_id={str(r['player_id']):r for r in rows}
-    for candidate in candidates:
-        from .joint_opportunity import candidate_metric
-        candidate['scores']={s['scenario_id']:candidate_metric(candidate,s) for s in scenarios}
-        # A Captain-conditioned opportunity world is shared football context.
-        # Other Captain rosters retain their actual scores in that world.
-    if not candidates: return [],dict(solver_status='no_candidates',quality_rejected=0)
+def _solve_joint_research(model):
+    """Bounded research only; a CBC incumbent is not an optimality proof."""
+    solver=_solver();solver.timeLimit=30
+    model.solve(solver)
+    return model.status==pulp.LpStatusOptimal and model.sol_status==pulp.LpSolutionOptimal
+
+
+def candidate_portfolio_model(candidates,rows,*,requested,params,fmt,allocation_plan=None,allocation_controls=None):
+    """One unchanged hard-constraint model for selection and exact completion.
+
+    Individual roster legality is already captured by candidate generation.
+    This model retains all existing cross-roster controls without objectives.
+    """
+    by_id={str(r["player_id"]):r for r in rows}
     model=pulp.LpProblem('AnalystScenarioPortfolio',pulp.LpMaximize)
     chosen=pulp.LpVariable.dicts('candidate',range(len(candidates)),cat='Binary')
     model+=pulp.lpSum(chosen.values())<=requested
@@ -471,8 +562,15 @@ def select_portfolio(candidates,scenarios,rows,*,requested,params,fmt):
     if fmt=='SHOWDOWN':
         caprate=float(params.get('captain_max_exposure',1))
         if not math.isfinite(caprate) or not 0<=caprate<=1: raise ValueError('invalid captain exposure')
+        # An underfilled set must not silently spend the full requested
+        # portfolio's Captain allowance (e.g. 2/2 of a 4-entry 50% request).
+        sizes=pulp.LpVariable.dicts('achieved_portfolio_size',range(requested+1),cat='Binary')
+        model+=pulp.lpSum(sizes.values())==1
+        model+=pulp.lpSum(chosen.values())==pulp.lpSum(size*sizes[size] for size in sizes)
+        achieved_limit=pulp.lpSum((math.ceil(requested*caprate) if size==requested else math.floor(size*caprate))*sizes[size] for size in sizes)
         for pid in by_id:
             model+=pulp.lpSum(chosen[i] for i,c in enumerate(candidates) if any(p['player_master_id']==pid and p['role']=='CPT' for p in c['roster']))<=math.ceil(requested*caprate)
+            model+=pulp.lpSum(chosen[i] for i,c in enumerate(candidates) if any(p['player_master_id']==pid and p['role']=='CPT' for p in c['roster']))<=achieved_limit
     if fmt=='CLASSIC' and params.get('max_lineups_per_primary_game') is not None:
         from .classic_primary_game import canonical_primary_game
         game_candidates={}
@@ -490,25 +588,82 @@ def select_portfolio(candidates,scenarios,rows,*,requested,params,fmt):
             ids={p['player_master_id'] for p in c['roster']}
             for j in range(i):
                 if len(ids & {p['player_master_id'] for p in candidates[j]['roster']})>int(overlap): model+=chosen[i]+chosen[j]<=1
-    coverage=[]; utility=[]
+    if allocation_plan is not None:
+        from .scenario_breadth import add_selection_constraints
+        add_selection_constraints(model,chosen,candidates,rows,requested,params,allocation_plan,allocation_controls)
+    return model,chosen
+
+
+def select_portfolio(candidates,scenarios,rows,*,requested,params,fmt,allocation_plan=None,allocation_controls=None,selection_objective=None,candidate_utilities=None,joint_state_scores=None,research_solver_seconds=None):
+    by_id={str(r['player_id']):r for r in rows}
+    for candidate in candidates:
+        from .joint_opportunity import candidate_metric
+        candidate['scores']={s['scenario_id']:candidate_metric(candidate,s) for s in scenarios}
+        # A Captain-conditioned opportunity world is shared football context.
+        # Other Captain rosters retain their actual scores in that world.
+    if not candidates: return [],dict(solver_status='no_candidates',quality_rejected=0)
+    model,chosen=candidate_portfolio_model(candidates,rows,requested=requested,params=params,fmt=fmt,allocation_plan=allocation_plan,allocation_controls=allocation_controls)
+    coverage=[]; utility=[]; joint_stages=[]; joint_floor=None
     # Identical shared outcomes must not gain votes from Captain labels.
     from .analyst_shadow import digest
     unique_worlds={}
     for scenario in scenarios:
         unique_worlds.setdefault(digest(dict(moments={pid:{key:moment[key] for key in ('mean','p90')} for pid,moment in scenario['moments'].items()},**({'joint_costs':scenario['joint_opportunity']['costs']} if scenario.get('joint_opportunity') else {}))),scenario)
-    weighted_scenarios=list(unique_worlds.values())
+    weighted_scenarios=[] if selection_objective=="JOINT_WORST_REGRET" else list(unique_worlds.values())
     for scenario in weighted_scenarios:
         sid=scenario['scenario_id']; best=max(c['scores'][sid] for c in candidates) or 1
         # Coverage measures the best selected roster for each possible outcome.
         assignments=pulp.LpVariable.dicts('coverage_'+str(len(coverage)),range(len(candidates)),cat='Binary')
         model+=pulp.lpSum(assignments.values())<=1
         for i in assignments: model+=assignments[i]<=chosen[i]
-        coverage.append(pulp.lpSum(assignments[i]*candidates[i]['scores'][sid]/best for i in assignments))
+        priority=next((i['credibility_score'] for i in allocation_plan['ideas'] if i['idea_id']==sid),0) if allocation_plan is not None else 1
+        coverage.append(priority*pulp.lpSum(assignments[i]*candidates[i]['scores'][sid]/best for i in assignments))
         utility.extend(chosen[i]*candidates[i]['scores'][sid]/best/(requested*len(weighted_scenarios)) for i in chosen)
     # Lexicographic size dominates every bounded secondary term: never relax caps.
-    model.setObjective((len(scenarios)+2)*pulp.lpSum(chosen.values())+pulp.lpSum(coverage)+pulp.lpSum(utility))
-    model.solve(_solver())
-    selected=[c for i,c in enumerate(candidates) if model.status==pulp.LpStatusOptimal and pulp.value(chosen[i])>.5]
-    return selected,dict(solver_status=pulp.LpStatus[model.status],requested=requested,achieved=len(selected),quality_rejected=0,quality_screen='none',constraints_relaxed=False,
+    if selection_objective=='JOINT_WORST_REGRET':
+        if not joint_state_scores or any(len(values)!=len(candidates) or any(type(v) not in (int,float) or not math.isfinite(v) for v in values) or max(values)<=0 for values in joint_state_scores.values()):
+            raise ValueError('Complete finite joint-state scores and positive state normalizers required')
+        # Genuine lexicographic stages: no invented scenario probabilities or
+        # scalar weight trading a lineup against shared-outcome coverage.
+        model.setObjective(pulp.lpSum(chosen.values())); proven=_solve_joint_research(model)
+        if not proven:
+            return [],dict(solver_status='unproven_count_research_limit',requested=requested,achieved=0,constraints_relaxed=False)
+        feasible_count=round(pulp.value(pulp.lpSum(chosen.values())))
+        joint_stages.append(dict(stage='maximum_feasible_count',solver_status='Optimal',value=feasible_count))
+        if not feasible_count:
+            return [],dict(solver_status='no_feasible_rosters',requested=requested,achieved=0,constraints_relaxed=False)
+        model+=pulp.lpSum(chosen.values())==feasible_count
+        from .joint_coverage_solver import optimize_coverage
+        optimum,coverage_attempts=optimize_coverage(model,chosen,joint_state_scores)
+        if optimum is None:
+            return [],dict(solver_status='unproven_joint_research_limit',requested=requested,achieved=0,constraints_relaxed=False,joint_selection_stages=joint_stages,coverage_attempts=coverage_attempts)
+        joint_floor=optimum
+        joint_stages.append(dict(stage='worst_relative_best_roster_coverage',solver_status='Optimal',value=optimum,feasibility_attempts=coverage_attempts))
+        model.setObjective(pulp.lpSum(chosen[i]*sum(float(by_id[p['player_master_id']]['projection']) for p in c['roster']) for i,c in enumerate(candidates)))
+    elif selection_objective=='EXTERNAL_LINEUP_SCORE':
+        if candidate_utilities is None or len(candidate_utilities)!=len(candidates) or any(type(v) not in (int,float) or not math.isfinite(v) or not 0<=v<=1 for v in candidate_utilities):
+            raise ValueError('External complete-lineup utilities must be finite values in [0,1] for every candidate')
+        model.setObjective((requested+1)*pulp.lpSum(chosen.values())+pulp.lpSum(chosen[i]*candidate_utilities[i] for i in chosen))
+    elif selection_objective=='BASELINE_MEAN':
+        means=[sum(float(by_id[p['player_master_id']]['projection']) for p in c['roster']) for c in candidates]
+        bound=max(means) or 1
+        model.setObjective((requested+1)*pulp.lpSum(chosen.values())+pulp.lpSum(chosen[i]*means[i]/bound for i in chosen))
+    else:
+        model.setObjective((len(scenarios)+2)*pulp.lpSum(chosen.values())+pulp.lpSum(coverage)+pulp.lpSum(utility))
+    proven=_solve_joint_research(model) if selection_objective=='JOINT_WORST_REGRET' else None
+    if selection_objective!='JOINT_WORST_REGRET':
+        solver=_solver()
+        if research_solver_seconds is not None:
+            if selection_objective not in {'BASELINE_MEAN','EXTERNAL_LINEUP_SCORE'} or not 0<research_solver_seconds<=30:raise ValueError('Invalid bounded research solver contract')
+            solver.timeLimit=research_solver_seconds
+            solver.threads=1
+        model.solve(solver)
+        if research_solver_seconds is not None:proven=model.status==pulp.LpStatusOptimal and model.sol_status==pulp.LpSolutionOptimal
+    valid=model.status==pulp.LpStatusOptimal and (model.valid(1e-6) if selection_objective=='JOINT_WORST_REGRET' or research_solver_seconds is not None else True)
+    if selection_objective=='JOINT_WORST_REGRET':joint_stages.append(dict(stage='original_mean_tiebreak',solver_status='Optimal' if proven else 'feasible_unproven' if valid else 'no_verified_incumbent'))
+    selected=[c for i,c in enumerate(candidates) if valid and pulp.value(chosen[i])>.5]
+    return selected,dict(solver_status=('Optimal' if proven else 'feasible_unproven_mean_tiebreak' if valid else pulp.LpStatus[model.status]) if selection_objective=='JOINT_WORST_REGRET' or research_solver_seconds is not None else pulp.LpStatus[model.status],requested=requested,achieved=len(selected),quality_rejected=0,quality_screen='none',constraints_relaxed=False,
+        captain_exposure_basis='requested-size rounding for complete portfolio; actual achieved-size bound without rounding up for underfill' if fmt=='SHOWDOWN' else None,
+        joint_selection_stages=joint_stages,joint_worst_relative_coverage=float(pulp.value(joint_floor)) if joint_floor is not None and model.status==pulp.LpStatusOptimal else None,
         unique_shared_outcome_count=len(weighted_scenarios),comparison_policy='All rosters evaluated under every shared opportunity world; equivalent moment worlds counted once',
-        scenario_coverage={s['scenario_id']:max((c['scores'][s['scenario_id']] for c in selected),default=0) for s in scenarios},selection_reason='Maximum feasible count, then best-roster coverage across equal-weight plausible outcomes and average conditional upside')
+        scenario_coverage={s['scenario_id']:max((c['scores'][s['scenario_id']] for c in selected),default=0) for s in scenarios},selection_reason=('Maximum feasible count, then worst-state best-roster relative coverage, then original mean tie-break; stress set has no probabilities' if selection_objective=='JOINT_WORST_REGRET' else 'Maximum feasible count, then declared external complete-lineup research utility under unchanged hard controls' if selection_objective=='EXTERNAL_LINEUP_SCORE' else 'Maximum feasible count, then highest summed baseline mean under unchanged constraints' if selection_objective=='BASELINE_MEAN' else 'Maximum feasible count, then ordinal evidence-priority conditional coverage; weights are not probabilities' if allocation_plan is not None else 'Maximum feasible count, then best-roster coverage across equal-weight plausible outcomes and average conditional upside'))

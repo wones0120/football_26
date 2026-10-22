@@ -46,6 +46,7 @@ export function SlatePreparation(props: Props) {
       props.onCheckState?.({ scope, loading: true, error: null });
       return fetchPreparation(scope);
     },
+      intervalMs: r => r?.jobs.some(j => j.status === "queued" || j.status === "running") ? 3000 : 30_000,
       onValue: r => { setStatus(current => nextPreparationStatus(current, r, scope)); setError(null); props.onStatus?.(r);
         props.onCheckState?.({ scope, loading: false, error: null }); },
       onError: e => { setError(String(e)); props.onCheckState?.({ scope, loading: false, error: String(e) }); },
@@ -89,6 +90,7 @@ export function SlatePreparation(props: Props) {
   ];
   return <div className="slate-preparation" data-testid="slate-preparation">
     <h3>Prepare slate inputs</h3>
+    <p>Status updates every 30 seconds while idle and every 3 seconds during a job. Background tabs pause updates and refresh when visible again. Reload preparation status checks immediately.</p>
     <p>{scope.season} · Week {scope.week} · {scope.slate} · Server time: {status?.server_time ?? "Checking…"}</p>
     {status?.lock_at && <p>First game lock: {status.lock_at} · {status.prelock ? "Pregame" : "LOCKED: pregame preparation blocked. Use the existing late-swap workflow for locked entries."}</p>}
     <p>Preparation imports/captures evidence and rebuilds dependencies. Run Optimizer is a separate user action. Entry clearance remains unverified.</p>
@@ -121,6 +123,7 @@ export function SlatePreparation(props: Props) {
       </tbody></table></div>
       <details><summary>Existing load-age freshness policy (import age, separate from publication freshness)</summary><pre>{JSON.stringify(status.load_freshness ?? {}, null, 2)}</pre></details>
       <p>{status.latest_build ? `${status.build_current ? "Verified current" : "Older or superseded"} prepared projection: ${status.latest_build.projection_run_id} · feature: ${status.latest_build.feature_run_id}` : "No current verified dependent build. Rebuild slate features and projections."}</p>
+      <p>Source and model details below are display summaries. Full evidence remains in the saved preparation audit; original receipt hashes identify the full records.</p>
       <details><summary>Prepared build and consumption summary</summary><pre>{JSON.stringify(status.latest_build, null, 2)}</pre>
         {status.latest_build?.audit_url && <a href={status.latest_build.audit_url} target="_blank" rel="noreferrer">Open full saved preparation audit</a>}</details>
       <ul>{status.limitations.map(v => <li key={v}>{v}</li>)}</ul>

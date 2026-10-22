@@ -1,0 +1,13 @@
+# Prior-period NGS tracking measurements
+
+Feature-only catalog scope: **G04-M02 completion percentage over expectation** and **G07-M10 rushing yards over expectation**. Each is the provider's native weekly selected-sample measurement, with explicit exposure, units and unknown expectation-model vintage. CPOE is percentage points and requires source-native QB position proof and positive known attempts. RYOE is signed total yards and requires positive known rush attempts. No clipping, zero substitution or inferred role is allowed.
+
+Source: the three actual indexed immutable NGS snapshots in the source receipt. Derivation authenticates their raw artifacts through `load_nextgen_snapshot`. Exact persisted native GSIS aliases supply canonical UUIDs; no name joins. Actor/team/week remains native grain: no game ID or full-team denominator is invented. Week0 season summaries and POST rows are excluded, and every retained REG period must be strictly before `before_period`. Current actual output uses before202607 and actual postlock clocks; it is descriptive retrospective evidence, not reconstructed pregame availability or current serving.
+
+Supplemental measurements retain source fields and declared units: snap-to-throw time (sacks excluded, not pressure time), intended air depth, aggressiveness, eight-defender box exposure, snap-to-line-of-scrimmage time, vendor RYOE/attempt, separation, cushion and YAC/vendor-expected YAC/YAC above expectation. These have **no new catalog IDs** and do not stand in for routes, pressure, contact, alignment or calibrated probabilities. `rush_pct_over_expected` retains provider-native scale marked unverified rather than inventing a percentage conversion.
+
+Actual coverage: 2016–2026 sources; RYOE is absent in2016–17 and remains null. Threshold-selected cohort means absent players and full-team totals remain unknown. Positive sample support and exact field availability are retained. Known CPOE differs from passing-row count where source measurement is missing. Global semantics and selected-scope semantics are distinct; opaque source snapshot IDs and execution clocks stay in provenance. The selected SF/WAS artifact is an exact row slice of the full output.
+
+Primary definitions: [NGS dictionary](https://nflreadr.nflverse.com/articles/dictionary_nextgen_stats.html), [provider reference](https://nflreadr.nflverse.com/reference/load_nextgen_stats.html).
+
+No model, forecast, Analyst, optimizer or app consumer is claimed; those are paused/pending under the current feature-only instruction. `require_feature_use` rejects current/pregame registration purposes.

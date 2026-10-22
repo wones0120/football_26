@@ -172,7 +172,7 @@ def revalidate(packet,rows,*,games,fmt,checked_at,source_sha256,projection_run_i
     return out,audit,usable,errors
 
 
-def prepare_handoff(*,request,result,rows=None,row_loader=None,checked_at,packets=None,directory=None,preliminary_snapshot_sha256=None,optimization_intent='MIXED',personal_context_inputs=None):
+def prepare_handoff(*,request,result,rows=None,row_loader=None,checked_at,packets=None,directory=None,preliminary_snapshot_sha256=None,optimization_intent='MIXED',personal_context_inputs=None,research_directory=None):
     if optimization_intent not in {'MIXED','EXPECTED_GAME','CONTRARIAN'}:raise ValueError('Unknown Analyst optimization intent')
     mode=getattr(request,'analyst_mode','AUTO');strategy=getattr(request,'analyst_strategy','MERGED_SCENARIOS')
     fmt='SHOWDOWN' if request.contest_format=='showdown' else 'CLASSIC';games=result['source_manifest']['games']
@@ -227,6 +227,21 @@ def prepare_handoff(*,request,result,rows=None,row_loader=None,checked_at,packet
         from .analyst_personal_context import evaluate
         context_packet=load_packet(base['checked_packet_sha256'],directory=directory) if base['checked_packet_sha256'] else None
         base['personal_context']=evaluate(personal_context_inputs,scope=dict(season=request.season,week=request.week,slate=request.slate,contest_format=request.contest_format,objective=None),games=games,checked_at=checked_at,packet=context_packet)
+    if mode != 'BASELINE':
+        from .analyst_research_requests import semantic_dependencies, coverage, ensure_requests
+        if rows is None:rows=row_loader() if row_loader is not None else []
+        dependencies=semantic_dependencies(games=games,rows=rows,checked_at=checked_at,
+            source_manifest=result.get('source_manifest'),workload_receipt=result.get('workload_forecast'))
+        research_packet=load_packet(base['checked_packet_sha256'],directory=directory) if base['checked_packet_sha256'] else None
+        # Unit/fixture callers with an isolated packet ledger get an isolated
+        # request ledger too. Production uses the dedicated immutable ledger.
+        request_root=research_directory if research_directory is not None else (Path(directory)/'research_requests' if directory is not None else None)
+        base['research_coverage']=coverage(research_packet,dependencies,directory=request_root)
+        requests=ensure_requests(dependencies,prior_packet_sha256=base['source_packet_sha256'],
+            requested_at=checked_at,current_binding=(research_packet or {}).get('research_producer'),directory=request_root)
+        base['research_requests']=[dict(request_id=r['request_id'],game_id=r['identity']['game_id'],
+            dependency_sha256=r['identity']['dependency_sha256'],requested_at=r['requested_at'],status=r['status']) for r in requests]
+        base['research_dependency_snapshot']=dependencies
     base['compatibility_sha256']=digest(base)
     return base
 
@@ -238,14 +253,42 @@ def handoff_for_intent(result,intent='MIXED'):
 def bind_handoff(payload,result):
     """Server-owned exact prepared artifact; caller cannot forge its audit."""
     params=payload.setdefault('params',{});params.pop('analyst_handoff_applied',None)
+    from .shared_world_selection import POLICY as SHARED_WORLD_POLICY
+    shared=params.get('analyst_selection_policy')
+    if shared is not None and shared!=SHARED_WORLD_POLICY:
+        raise ValueError('Unknown Analyst portfolio selection policy')
+    if shared and (payload.get('contest_format','').lower()!='showdown' or payload.get('objective')!='gpp'
+        or params.get('workload_comparison') or params.get('analyst_handoff_mode','AUTO')!='AUTO'
+        or params.get('analyst_optimization_intent','EXPECTED_GAME')!='EXPECTED_GAME'
+        or params.get('analyst_strategy','MERGED_SCENARIOS')!='MERGED_SCENARIOS'):
+        raise ValueError('Shared-world coverage requires the automatic Captain GPP Expected-anchor workflow without another comparison objective')
+    if shared:params.setdefault('analyst_optimization_intent','EXPECTED_GAME')
+    if params.get('workload_comparison'):
+        if params['workload_comparison'] not in {'normalized_counts','offensive_mean_control','learned_counts','learned_yards','scenario_first'} or not result.get('workload_forecast'):
+            raise ValueError('Explicit workload comparison requires its frozen Prepare count receipt')
+        if bool(result['workload_forecast'].get('yardage_model')) != (params['workload_comparison'] in {'learned_yards','scenario_first'}):
+            raise ValueError('Prepare again for the selected learned count/yard objective')
+        if bool(result['workload_forecast'].get('scenario_first')) != (params['workload_comparison']=='scenario_first'):
+            raise ValueError('Prepare again for the selected scenario-first objective')
+        if params['workload_comparison']=='scenario_first':
+            from .captain_game_cases import VERSION as CASE_VERSION
+            if result['workload_forecast']['scenario_first'].get('version')!=CASE_VERSION:
+                raise ValueError('Prepare again for current scenario-first case version; no prior receipt substitution')
+        for key in ('analyst_packet_sha256','analyst_candidates_per_thesis'):
+            params.pop(key,None)
+        params['analyst_handoff_applied']={'status':'inactive','reason':'explicit_offensive_count_comparison_does_not_consume_Analyst_scenarios',
+            'workload_forecast_sha256':result['workload_forecast']['sha256']}
+        return
     intent=params.get('analyst_optimization_intent','MIXED')
     if not isinstance(intent,str) or intent not in {'MIXED','EXPECTED_GAME','CONTRARIAN'}:raise ValueError('Unknown Analyst optimization intent')
-    handoff=handoff_for_intent(result,intent)
-    if intent!='MIXED' and (not handoff or handoff.get('optimization_intent')!=intent):
+    handoff=result.get('analyst_handoff') if shared else handoff_for_intent(result,intent)
+    if intent!='MIXED' and not shared and (not handoff or handoff.get('optimization_intent')!=intent):
         raise ValueError('Prepare Slate again for the selected optimization intent; no mixed or baseline fallback is used')
     if intent!='MIXED' and params.get('analyst_handoff_mode','AUTO')!='AUTO':
         raise ValueError('Expected Game and Contrarian require automatic checked research')
-    if not handoff:return  # Legacy preparations retain their previous API behavior.
+    if not handoff:
+        if shared:raise ValueError('Prepare the checked common-world Analyst parent before shared-world optimization')
+        return  # Legacy preparations retain their previous API behavior.
     if digest({k:v for k,v in handoff.items() if k!='compatibility_sha256'})!=handoff['compatibility_sha256']:raise ValueError('Prepared Analyst compatibility hash mismatch')
     expected=params.get('analyst_handoff_compatibility_sha256')
     if expected and expected!=handoff['compatibility_sha256']:raise ValueError('Analyst preparation receipt changed; prepare/select again')
@@ -262,13 +305,26 @@ def bind_handoff(payload,result):
     if chosen and chosen not in {handoff['source_packet_sha256'],handoff['checked_packet_sha256']}:raise ValueError('Selected Analyst packet differs from prepared research; Prepare Slate with the manual override')
     if payload.get('objective')=='cash' and params.get('analyst_strategy',handoff['preferred_strategy'])=='MERGED_SCENARIOS':raise ValueError('Merged Analyst research requires GPP; choose baseline-only explicitly for cash')
     params['analyst_packet_sha256']=handoff['checked_packet_sha256'];params.setdefault('analyst_strategy',handoff['preferred_strategy']);params.setdefault('analyst_candidates_per_thesis',2)
-    if params.get('analyst_strategy')=='MERGED_SCENARIOS' and params.get('analyst_scenario_focus_mode','MIXED')=='MIXED':
+    if shared:
+        from .analyst_packets import load_packet
+        from .shared_world_runtime import common_packet
+        coverage=handoff.get('research_coverage') or {}
+        if coverage.get('status')!='mechanisms_current' or not coverage.get('producer_loop_closed'):
+            raise ValueError('Shared-world coverage requires current authored research with its prepared producer closure')
+        common_packet(load_packet(handoff['checked_packet_sha256']))
+    if not shared and params.get('analyst_strategy')=='MERGED_SCENARIOS' and params.get('analyst_scenario_focus_mode','MIXED')=='MIXED':
         for key,value in handoff.get('preferred_params',{}).items():params.setdefault(key,value)
-    if intent!='MIXED':
+    if intent!='MIXED' and not shared:
         params['analyst_intent_scenario_ids']=handoff['scenario_ids']
     params['analyst_handoff_applied']=dict(mode=mode,compatibility_sha256=handoff['compatibility_sha256'],source_packet_sha256=handoff['source_packet_sha256'],checked_packet_sha256=handoff['checked_packet_sha256'],checked_at=handoff['checked_at'],research_decision_at=handoff['research_decision_at'],status=handoff['status'],active_features=handoff['active_features'])
+    if handoff.get('research_coverage'):
+        params['analyst_handoff_applied']['research_coverage']=deepcopy(handoff['research_coverage'])
+        params['analyst_handoff_applied']['research_requests']=deepcopy(handoff.get('research_requests',[]))
 
-    if intent!='MIXED':params['analyst_handoff_applied'].update(optimization_intent=intent,scenario_ids=handoff['scenario_ids'],scoped_packet_sha256=handoff['scoped_packet_sha256'])
+    if shared:
+        params['analyst_handoff_applied'].update(selection_policy=SHARED_WORLD_POLICY,anchor_intent='EXPECTED_GAME',common_checked_parent=True)
+        params.pop('analyst_intent_scenario_ids',None)
+    elif intent!='MIXED':params['analyst_handoff_applied'].update(optimization_intent=intent,scenario_ids=handoff['scenario_ids'],scoped_packet_sha256=handoff['scoped_packet_sha256'])
     if handoff.get('personal_context'):
         context=deepcopy(handoff['personal_context'])
         if any(item['resolved_scope'].get('objective') not in {None,payload.get('objective')} for item in context['considered']):raise ValueError('Personal thought approval belongs to another objective; Prepare Slate again')

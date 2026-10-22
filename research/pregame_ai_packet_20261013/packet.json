@@ -1,0 +1,996 @@
+{
+  "contract_id": "wones_football_analyst_v1",
+  "analyst_name": "Wones Football Analyst",
+  "packet_id": "20261013_SEA_DEN_SUNDAY_preview_v3",
+  "decision_at": "2026-10-13T14:11:42.480865+00:00",
+  "frozen_at": "2026-10-13T14:11:42.480865+00:00",
+  "preview_only": true,
+  "baseline_mutation": false,
+  "user_preferences": [],
+  "games": [
+    {
+      "game_id": "2026_W06_SEA_DEN",
+      "season": 2026,
+      "week": 6,
+      "teams": [
+        "SEA",
+        "DEN"
+      ],
+      "kickoff_at": "2026-10-16T00:15:00Z",
+      "schedule_source_ids": [
+        "schedule"
+      ],
+      "format_membership": {
+        "SHOWDOWN": "confirmed_in_scope",
+        "CLASSIC": "out_of_scope_sunday_main"
+      },
+      "scope_note": "Thursday game; excluded from Sunday Main. No Sunday salary slate membership captured."
+    },
+    {
+      "game_id": "2026_W06_LAC_KC",
+      "season": 2026,
+      "week": 6,
+      "teams": [
+        "LAC",
+        "KC"
+      ],
+      "kickoff_at": "2026-10-18T20:25:00Z",
+      "schedule_source_ids": [
+        "kc_schedule"
+      ],
+      "format_membership": {
+        "CLASSIC": "confirmed_in_scope",
+        "SHOWDOWN": "not_in_scope"
+      },
+      "scope_note": "Actual imported SUNDAY_MAIN salary game, schedule cross-check from primary team."
+    }
+  ],
+  "sources": [
+    {
+      "source_id": "sea_injury",
+      "uri": "https://www.seahawks.com/news/week-6-injury-report-seahawks-at-broncos",
+      "coverage": "verified",
+      "published_at": null,
+      "publication_time_note": "Oct 12, 2026 at 02:10 PM (page timezone not established)",
+      "observed_at": "2026-10-13T13:51:24Z",
+      "available_at": "2026-10-13T13:51:24Z",
+      "capture_sha256": "c75edcd064de099f543e5ca3a65868641aa1579bdf05391162f9efd18ad53e02",
+      "capture_kind": "structured_browser_observation"
+    },
+    {
+      "source_id": "den_injury",
+      "uri": "https://www.denverbroncos.com/news/injury-report-cb-riley-moss-listed-as-limited-participant-on-initial-practice-report-ahead-of-week-6-game-vs-seahawks",
+      "coverage": "verified",
+      "published_at": null,
+      "publication_time_note": "Oct 12, 2026 at 02:22 PM (page timezone not established)",
+      "observed_at": "2026-10-13T13:52:10Z",
+      "available_at": "2026-10-13T13:52:10Z",
+      "capture_sha256": "94470d3955f80d2aeb252c5c61c88651d50998d733b9c332982aad773d2ed8c5",
+      "capture_kind": "structured_browser_observation"
+    },
+    {
+      "source_id": "schedule",
+      "uri": "https://www.denverbroncos.com/schedule/",
+      "coverage": "verified",
+      "published_at": null,
+      "publication_time_note": null,
+      "observed_at": "2026-10-13T13:51:24Z",
+      "available_at": "2026-10-13T13:51:24Z",
+      "capture_sha256": "f5a5288ea9133bd0e086e544c7fd1f56f9e0b4dda36854112270a47bca3a3086",
+      "capture_kind": "structured_browser_observation"
+    },
+    {
+      "source_id": "roster",
+      "uri": "/Users/wones/git/football_26/artifacts/projection_source_readiness_recovery/verified_roster_preview.json",
+      "coverage": "verified",
+      "published_at": null,
+      "observed_at": "2026-10-13T13:18:56.914417+00:00",
+      "available_at": "2026-10-13T13:54:47.272758+00:00",
+      "capture_sha256": "c5a9051aaa3de5743821edf5a1117532f69c902f768bb99885836da475eaf67d",
+      "capture_kind": "existing_local_artifact",
+      "limitation": "Snapshot observation is independently identified; file availability proven only by this research read."
+    },
+    {
+      "source_id": "baseline_run",
+      "uri": "/Users/wones/git/football_26/artifacts/projection_source_readiness_recovery/persistence_verification.json",
+      "coverage": "verified",
+      "published_at": null,
+      "observed_at": "2026-10-13T13:24:50.773525+00:00",
+      "available_at": "2026-10-13T13:54:47.272758+00:00",
+      "capture_sha256": "c57b590f3ae3a71832a80043c72cc6788c725172b3c5fcf73f878eaae5b58e44",
+      "capture_kind": "existing_local_artifact",
+      "limitation": "Snapshot observation is independently identified; file availability proven only by this research read."
+    },
+    {
+      "source_id": "sunday_salary_scope",
+      "uri": "local-db:curated_salary/2026/W06/SUNDAY_MAIN",
+      "coverage": "verified",
+      "published_at": null,
+      "observed_at": "2026-10-13T14:03:39.409676+00:00",
+      "available_at": "2026-10-13T14:03:39.409676+00:00",
+      "capture_sha256": "9262769a380a42d324c0155d241e5f0d53b1a5ddfd23fbcffcb9d7bfa1578262",
+      "capture_kind": "read_only_database_query",
+      "limitation": "Game times remain source display strings; timezone and external kickoff not independently verified in this probe."
+    },
+    {
+      "source_id": "kc_market",
+      "uri": "https://www.chargers.com/news/nfl-betting-odds-chiefs-game-picks-week-6-2026",
+      "coverage": "verified",
+      "published_at": null,
+      "observed_at": "2026-10-13T14:09:40Z",
+      "available_at": "2026-10-13T14:09:40Z",
+      "capture_sha256": "e278f056596e220b548e799f0a25461d4f8392d00c3232cc76d134c60a1da34c",
+      "capture_kind": "structured_browser_observation",
+      "fact_assertions": {
+        "kc_favorite": "Chargers team article reports Kansas City favored as of Monday morning, citing sportsbook lines."
+      }
+    },
+    {
+      "source_id": "kc_schedule",
+      "uri": "https://www.chiefs.com/schedule/2026/",
+      "coverage": "verified",
+      "published_at": null,
+      "observed_at": "2026-10-13T14:09:40Z",
+      "available_at": "2026-10-13T14:09:40Z",
+      "capture_sha256": "84c68411c7f8b23a880b0f5823cd520d017be3942328ae892235ed66253812bc",
+      "capture_kind": "structured_browser_observation",
+      "fact_assertions": {
+        "kc_home_after_bye": "Chiefs schedule lists Week 5 bye, then home versus Chargers Week 6 October 18 at 3:25 PM CDT."
+      }
+    },
+    {
+      "source_id": "kc_salary_identity",
+      "uri": "local-db:curated_salary/2026/W06/SUNDAY_MAIN/KC_LAC",
+      "coverage": "verified",
+      "published_at": null,
+      "observed_at": "2026-10-13T14:09:40.438490+00:00",
+      "available_at": "2026-10-13T14:09:40.438490+00:00",
+      "capture_sha256": "7b9cb83cc608743c07e14547a7813fcd1cef6f41817201ecf97a5efb8b72279a",
+      "capture_kind": "read_only_database_query"
+    }
+  ],
+  "players": [
+    {
+      "player_master_id": "1838dd60-35e8-4018-b307-39cde90e1f03",
+      "display_name": "Jaxon Smith-Njigba",
+      "team": "SEA",
+      "position": "WR",
+      "game_id": "2026_W06_SEA_DEN",
+      "source_native_key": "/team/players-roster/jaxon-smith-njigba/",
+      "identity_source_ids": [
+        "roster"
+      ],
+      "identity_linkage": "Reused persisted canonical UUID with verified team, normalized position, roster native key; no display-name-only join.",
+      "workload_evidence": {
+        "contract_id": "workload_evidence_v1",
+        "player_id": "1838dd60-35e8-4018-b307-39cde90e1f03",
+        "status": "unavailable",
+        "historical": {},
+        "historical_coverage": {},
+        "derived_proxies": {},
+        "explicit_pregame": {},
+        "availability_depth": {
+          "roster_status": "Active"
+        },
+        "existing_assessment": {},
+        "team_volume_proxies": {},
+        "lineage": {
+          "projection_run_id": "116e6a12-cc86-4d99-9c2c-0db547ce6639",
+          "evidence_cutoff_at": "2026-10-13T13:23:47.123653Z",
+          "workload_feature_run_id": "6a987498-ed36-42d2-b054-20092aa91c3a"
+        },
+        "limitations": [
+          "Current feature rows not captured by this pilot; empty groups mean unavailable, not zero.",
+          "Projection/feature identifiers do not prove per-player workload coverage or source chronology.",
+          "Roster status is not game availability or expected role."
+        ]
+      }
+    },
+    {
+      "player_master_id": "2b3590c3-0eef-4d4c-a226-fd793d010103",
+      "display_name": "Emanuel Wilson",
+      "team": "SEA",
+      "position": "RB",
+      "game_id": "2026_W06_SEA_DEN",
+      "source_native_key": "/team/players-roster/emanuel-wilson/",
+      "identity_source_ids": [
+        "roster"
+      ],
+      "identity_linkage": "Reused persisted canonical UUID with verified team, normalized position, roster native key; no display-name-only join.",
+      "workload_evidence": {
+        "contract_id": "workload_evidence_v1",
+        "player_id": "2b3590c3-0eef-4d4c-a226-fd793d010103",
+        "status": "unavailable",
+        "historical": {},
+        "historical_coverage": {},
+        "derived_proxies": {},
+        "explicit_pregame": {},
+        "availability_depth": {
+          "roster_status": "Active"
+        },
+        "existing_assessment": {},
+        "team_volume_proxies": {},
+        "lineage": {
+          "projection_run_id": "116e6a12-cc86-4d99-9c2c-0db547ce6639",
+          "evidence_cutoff_at": "2026-10-13T13:23:47.123653Z",
+          "workload_feature_run_id": "6a987498-ed36-42d2-b054-20092aa91c3a"
+        },
+        "limitations": [
+          "Current feature rows not captured by this pilot; empty groups mean unavailable, not zero.",
+          "Projection/feature identifiers do not prove per-player workload coverage or source chronology.",
+          "Roster status is not game availability or expected role."
+        ]
+      }
+    },
+    {
+      "player_master_id": "3b32dba2-e153-4396-894e-25ac07319cb7",
+      "display_name": "George Holani",
+      "team": "SEA",
+      "position": "RB",
+      "game_id": "2026_W06_SEA_DEN",
+      "source_native_key": "/team/players-roster/george-holani/",
+      "identity_source_ids": [
+        "roster"
+      ],
+      "identity_linkage": "Reused persisted canonical UUID with verified team, normalized position, roster native key; no display-name-only join.",
+      "workload_evidence": {
+        "contract_id": "workload_evidence_v1",
+        "player_id": "3b32dba2-e153-4396-894e-25ac07319cb7",
+        "status": "unavailable",
+        "historical": {},
+        "historical_coverage": {},
+        "derived_proxies": {},
+        "explicit_pregame": {},
+        "availability_depth": {
+          "roster_status": "Active"
+        },
+        "existing_assessment": {},
+        "team_volume_proxies": {},
+        "lineage": {
+          "projection_run_id": "116e6a12-cc86-4d99-9c2c-0db547ce6639",
+          "evidence_cutoff_at": "2026-10-13T13:23:47.123653Z",
+          "workload_feature_run_id": "6a987498-ed36-42d2-b054-20092aa91c3a"
+        },
+        "limitations": [
+          "Current feature rows not captured by this pilot; empty groups mean unavailable, not zero.",
+          "Projection/feature identifiers do not prove per-player workload coverage or source chronology.",
+          "Roster status is not game availability or expected role."
+        ]
+      }
+    },
+    {
+      "player_master_id": "480d4188-7bf6-4684-b2b5-1d47f93d542a",
+      "display_name": "Sam Darnold",
+      "team": "SEA",
+      "position": "QB",
+      "game_id": "2026_W06_SEA_DEN",
+      "source_native_key": "/team/players-roster/sam-darnold/",
+      "identity_source_ids": [
+        "roster"
+      ],
+      "identity_linkage": "Reused persisted canonical UUID with verified team, normalized position, roster native key; no display-name-only join.",
+      "workload_evidence": {
+        "contract_id": "workload_evidence_v1",
+        "player_id": "480d4188-7bf6-4684-b2b5-1d47f93d542a",
+        "status": "unavailable",
+        "historical": {},
+        "historical_coverage": {},
+        "derived_proxies": {},
+        "explicit_pregame": {},
+        "availability_depth": {
+          "roster_status": "Active"
+        },
+        "existing_assessment": {},
+        "team_volume_proxies": {},
+        "lineage": {
+          "projection_run_id": "116e6a12-cc86-4d99-9c2c-0db547ce6639",
+          "evidence_cutoff_at": "2026-10-13T13:23:47.123653Z",
+          "workload_feature_run_id": "6a987498-ed36-42d2-b054-20092aa91c3a"
+        },
+        "limitations": [
+          "Current feature rows not captured by this pilot; empty groups mean unavailable, not zero.",
+          "Projection/feature identifiers do not prove per-player workload coverage or source chronology.",
+          "Roster status is not game availability or expected role."
+        ]
+      }
+    },
+    {
+      "player_master_id": "651d2655-f851-43a2-8c17-28d8905c5818",
+      "display_name": "Zach Charbonnet",
+      "team": "SEA",
+      "position": "RB",
+      "game_id": "2026_W06_SEA_DEN",
+      "source_native_key": "/team/players-roster/zach-charbonnet/",
+      "identity_source_ids": [
+        "roster"
+      ],
+      "identity_linkage": "Reused persisted canonical UUID with verified team, normalized position, roster native key; no display-name-only join.",
+      "workload_evidence": {
+        "contract_id": "workload_evidence_v1",
+        "player_id": "651d2655-f851-43a2-8c17-28d8905c5818",
+        "status": "unavailable",
+        "historical": {},
+        "historical_coverage": {},
+        "derived_proxies": {},
+        "explicit_pregame": {},
+        "availability_depth": {
+          "roster_status": "Reserve/Physically Unable to Perform"
+        },
+        "existing_assessment": {},
+        "team_volume_proxies": {},
+        "lineage": {
+          "projection_run_id": "116e6a12-cc86-4d99-9c2c-0db547ce6639",
+          "evidence_cutoff_at": "2026-10-13T13:23:47.123653Z",
+          "workload_feature_run_id": "6a987498-ed36-42d2-b054-20092aa91c3a"
+        },
+        "limitations": [
+          "Current feature rows not captured by this pilot; empty groups mean unavailable, not zero.",
+          "Projection/feature identifiers do not prove per-player workload coverage or source chronology.",
+          "Roster status is not game availability or expected role."
+        ]
+      }
+    },
+    {
+      "player_master_id": "724bd3c9-3014-4367-9ad8-490dab910139",
+      "display_name": "Cooper Kupp",
+      "team": "SEA",
+      "position": "WR",
+      "game_id": "2026_W06_SEA_DEN",
+      "source_native_key": "/team/players-roster/cooper-kupp/",
+      "identity_source_ids": [
+        "roster"
+      ],
+      "identity_linkage": "Reused persisted canonical UUID with verified team, normalized position, roster native key; no display-name-only join.",
+      "workload_evidence": {
+        "contract_id": "workload_evidence_v1",
+        "player_id": "724bd3c9-3014-4367-9ad8-490dab910139",
+        "status": "unavailable",
+        "historical": {},
+        "historical_coverage": {},
+        "derived_proxies": {},
+        "explicit_pregame": {},
+        "availability_depth": {
+          "roster_status": "Active"
+        },
+        "existing_assessment": {},
+        "team_volume_proxies": {},
+        "lineage": {
+          "projection_run_id": "116e6a12-cc86-4d99-9c2c-0db547ce6639",
+          "evidence_cutoff_at": "2026-10-13T13:23:47.123653Z",
+          "workload_feature_run_id": "6a987498-ed36-42d2-b054-20092aa91c3a"
+        },
+        "limitations": [
+          "Current feature rows not captured by this pilot; empty groups mean unavailable, not zero.",
+          "Projection/feature identifiers do not prove per-player workload coverage or source chronology.",
+          "Roster status is not game availability or expected role."
+        ]
+      }
+    },
+    {
+      "player_master_id": "3b2fed31-d793-46d1-949b-18caac632e63",
+      "display_name": "Patrick Mahomes",
+      "team": "KC",
+      "position": "QB",
+      "game_id": "2026_W06_LAC_KC",
+      "source_native_key": "44475671",
+      "identity_source_ids": [
+        "kc_salary_identity"
+      ],
+      "identity_linkage": "Existing curated salary canonical UUID plus source_player_key, team and position; no display-name join.",
+      "workload_evidence": {
+        "contract_id": "workload_evidence_v1",
+        "player_id": "3b2fed31-d793-46d1-949b-18caac632e63",
+        "status": "unavailable",
+        "historical": {},
+        "historical_coverage": {},
+        "derived_proxies": {},
+        "explicit_pregame": {},
+        "availability_depth": {},
+        "existing_assessment": {},
+        "team_volume_proxies": {},
+        "lineage": {
+          "projection_run_id": null,
+          "evidence_cutoff_at": "2026-10-13T14:11:42.480865+00:00"
+        },
+        "limitations": [
+          "Current player workload rows not captured; salary listing does not prove health, starting role or touch share."
+        ]
+      }
+    },
+    {
+      "player_master_id": "5169c450-ece6-4729-8952-ba040d3f64f2",
+      "display_name": "Kenneth Walker III",
+      "team": "KC",
+      "position": "RB",
+      "game_id": "2026_W06_LAC_KC",
+      "source_native_key": "44475738",
+      "identity_source_ids": [
+        "kc_salary_identity"
+      ],
+      "identity_linkage": "Existing curated salary canonical UUID plus source_player_key, team and position; no display-name join.",
+      "workload_evidence": {
+        "contract_id": "workload_evidence_v1",
+        "player_id": "5169c450-ece6-4729-8952-ba040d3f64f2",
+        "status": "unavailable",
+        "historical": {},
+        "historical_coverage": {},
+        "derived_proxies": {},
+        "explicit_pregame": {},
+        "availability_depth": {},
+        "existing_assessment": {},
+        "team_volume_proxies": {},
+        "lineage": {
+          "projection_run_id": null,
+          "evidence_cutoff_at": "2026-10-13T14:11:42.480865+00:00"
+        },
+        "limitations": [
+          "Current player workload rows not captured; salary listing does not prove health, starting role or touch share."
+        ]
+      }
+    },
+    {
+      "player_master_id": "f57e0806-3a25-44b1-9bcc-295699cb9536",
+      "display_name": "Chiefs",
+      "team": "KC",
+      "position": "DST",
+      "game_id": "2026_W06_LAC_KC",
+      "source_native_key": "44476587",
+      "identity_source_ids": [
+        "kc_salary_identity"
+      ],
+      "identity_linkage": "Existing curated salary canonical UUID plus source_player_key, team and position; no display-name join.",
+      "workload_evidence": {
+        "contract_id": "workload_evidence_v1",
+        "player_id": "f57e0806-3a25-44b1-9bcc-295699cb9536",
+        "status": "unavailable",
+        "historical": {},
+        "historical_coverage": {},
+        "derived_proxies": {},
+        "explicit_pregame": {},
+        "availability_depth": {},
+        "existing_assessment": {},
+        "team_volume_proxies": {},
+        "lineage": {
+          "projection_run_id": null,
+          "evidence_cutoff_at": "2026-10-13T14:11:42.480865+00:00"
+        },
+        "limitations": [
+          "Current player workload rows not captured; salary listing does not prove health, starting role or touch share."
+        ]
+      }
+    }
+  ],
+  "baseline_facts": [
+    {
+      "fact_id": "run_metadata",
+      "kind": "observed_fact",
+      "text": "Recovered local projection run completed with 37 rows; roster context is membership evidence. Per-player predictions/workload values have not been copied into this packet.",
+      "source_ids": [
+        "baseline_run",
+        "roster"
+      ],
+      "projection_run_id": "116e6a12-cc86-4d99-9c2c-0db547ce6639"
+    },
+    {
+      "fact_id": "reported_status",
+      "kind": "observed_fact",
+      "text": "Initial Week 6 team injury reporting is an estimated Monday participation report, not final game status.",
+      "source_ids": [
+        "sea_injury",
+        "den_injury"
+      ]
+    }
+  ],
+  "hypotheses": [
+    {
+      "hypothesis_id": "JSN_availability_watch",
+      "game_id": "2026_W06_SEA_DEN",
+      "formats": [
+        "SHOWDOWN"
+      ],
+      "player_master_ids": [
+        "1838dd60-35e8-4018-b307-39cde90e1f03"
+      ],
+      "status": "actionable_monitor",
+      "action": "refresh_evidence_only",
+      "hypothesis": "Refresh Jaxon Smith-Njigba availability before interpreting SEA receiving constructions.",
+      "supporting_evidence": [
+        "Primary Week 6 ankle listing is present."
+      ],
+      "contrary_evidence": [
+        "Estimated participation is not an out designation or workload restriction."
+      ],
+      "conditional_assumptions": [
+        "If later reports change availability, independently obtain role evidence before changing opportunity assumptions."
+      ],
+      "testable_implication": "Compare the next official designation with this frozen watch item; separately inspect routes/targets if a role limitation is reported.",
+      "unknowns": [
+        "No quantified route restriction, final designation or expected targets."
+      ],
+      "source_ids": [
+        "sea_injury",
+        "roster"
+      ],
+      "uncertainty": "Unquantified; no calibrated probability or confidence number is available.",
+      "numeric_effect_proposal": null,
+      "expires_at": "2026-10-14T18:00:00Z",
+      "recheck_triggers": [
+        "Next official practice report",
+        "Wednesday game designations",
+        "Roster activation or new injury",
+        "Final inactive list",
+        "Any source correction or game/scope change"
+      ]
+    },
+    {
+      "hypothesis_id": "SEA_backfield_conditional",
+      "game_id": "2026_W06_SEA_DEN",
+      "formats": [
+        "SHOWDOWN"
+      ],
+      "player_master_ids": [
+        "651d2655-f851-43a2-8c17-28d8905c5818",
+        "2b3590c3-0eef-4d4c-a226-fd793d010103",
+        "3b32dba2-e153-4396-894e-25ac07319cb7"
+      ],
+      "status": "research_only",
+      "action": "none",
+      "hypothesis": "Investigate continuity versus an activation-driven change in the SEA backfield.",
+      "supporting_evidence": [
+        "Current roster places Charbonnet on PUP."
+      ],
+      "contrary_evidence": [
+        "Return remains subject to change; available backups do not prove touch allocation."
+      ],
+      "conditional_assumptions": [
+        "Only if Charbonnet remains unavailable and current role evidence confirms a lead runner could continuity be supported."
+      ],
+      "testable_implication": "Freeze a role/availability branch, then compare actual carries and routes against a separately sourced or calibrated forecast, if obtained.",
+      "unknowns": [
+        "No current observed carry-share window, routes, goal-line usage or supported expected-carry allocation."
+      ],
+      "source_ids": [
+        "sea_injury",
+        "roster"
+      ],
+      "uncertainty": "Unquantified; no calibrated probability or confidence number is available.",
+      "numeric_effect_proposal": null,
+      "expires_at": "2026-10-14T18:00:00Z",
+      "recheck_triggers": [
+        "Next official practice report",
+        "Wednesday game designations",
+        "Roster activation or new injury",
+        "Final inactive list",
+        "Any source correction or game/scope change"
+      ]
+    },
+    {
+      "hypothesis_id": "SEA_pass_environment_conditional",
+      "game_id": "2026_W06_SEA_DEN",
+      "formats": [
+        "SHOWDOWN"
+      ],
+      "player_master_ids": [
+        "1838dd60-35e8-4018-b307-39cde90e1f03",
+        "480d4188-7bf6-4684-b2b5-1d47f93d542a",
+        "724bd3c9-3014-4367-9ad8-490dab910139"
+      ],
+      "status": "research_only",
+      "action": "none",
+      "hypothesis": "Research whether changed DEN coverage personnel alters the SEA passing scenario.",
+      "supporting_evidence": [
+        "Primary DEN report identifies secondary uncertainty."
+      ],
+      "contrary_evidence": [
+        "Estimated nonparticipation does not establish absence; JSN availability is unresolved; replacements and assignments unknown."
+      ],
+      "conditional_assumptions": [
+        "Only if absences are confirmed and current coverage evidence supports the mechanism."
+      ],
+      "testable_implication": "If activated as a research branch later, compare passing opportunity/coverage evidence separately from fantasy points.",
+      "unknowns": [
+        "No current pressure/coverage tendencies, matchup assignment, calibrated efficiency effect or fresh spread/total."
+      ],
+      "source_ids": [
+        "den_injury",
+        "sea_injury",
+        "roster"
+      ],
+      "uncertainty": "Unquantified; no calibrated probability or confidence number is available.",
+      "numeric_effect_proposal": null,
+      "expires_at": "2026-10-14T18:00:00Z",
+      "recheck_triggers": [
+        "Next official practice report",
+        "Wednesday game designations",
+        "Roster activation or new injury",
+        "Final inactive list",
+        "Any source correction or game/scope change"
+      ]
+    },
+    {
+      "hypothesis_id": "KC_controlled_game_branch",
+      "game_id": "2026_W06_LAC_KC",
+      "formats": [
+        "CLASSIC"
+      ],
+      "player_master_ids": [
+        "5169c450-ece6-4729-8952-ba040d3f64f2",
+        "f57e0806-3a25-44b1-9bcc-295699cb9536",
+        "3b2fed31-d793-46d1-949b-18caac632e63"
+      ],
+      "status": "research_only",
+      "action": "none",
+      "hypothesis": "Research KC home-control branch alongside passing-led alternative.",
+      "supporting_evidence": [
+        "Team market article reports KC favored Monday; schedule identifies home after bye."
+      ],
+      "contrary_evidence": [
+        "Market is dated; current role/availability and opponent context remain incomplete."
+      ],
+      "conditional_assumptions": [
+        "KC controls score; selected runner has independently supported role for this branch."
+      ],
+      "testable_implication": "Compare RB/DST and passing-led shadow construction coverage; evaluate opportunity separately from fantasy outcomes.",
+      "unknowns": [
+        "Current carry share, lineup health, ownership, opponent strengths."
+      ],
+      "source_ids": [
+        "kc_market",
+        "kc_schedule",
+        "kc_salary_identity"
+      ],
+      "uncertainty": "Unquantified; no calibrated probability or confidence number is available.",
+      "numeric_effect_proposal": null,
+      "expires_at": "2026-10-17T18:00:00Z",
+      "recheck_triggers": [
+        "Wednesday practice reports",
+        "Saturday update",
+        "Current role changes",
+        "Fresh markets",
+        "Final availability"
+      ]
+    }
+  ],
+  "coverage_gaps": [
+    "Sunday Main salary scope is now captured (ten games); complete current football reviews and cross-slate ranking remain pending.",
+    "Current matchup tendencies, routes/snaps/carries/targets/red-zone history absent; no old values substituted.",
+    "Primary sportsbook search was attempted; no independently timestamped live spread/total captured. Search results alone not promoted to market evidence.",
+    "No final game designations/inactives, candidate pool, ownership or salary audit in this pilot."
+  ],
+  "evaluation_disclosure": "Pilot assembled before this future kickoff. Researchers know historical outcomes; no retrospective outcome-blindness claim. No Week 5 outcome statistics were used as Week 6 forecasts.",
+  "predecessor": {
+    "packet_id": "20261013_SEA_DEN_preview_v2",
+    "path": "versions/v2/packet.json",
+    "sha256": "cd6e0c75ff2fe472b1a33035fb4a41d93d3b2eacc39961c3784029fee84c2584"
+  },
+  "analyst_assessments": [
+    {
+      "assessment_id": "SEA_passing_construction_lean",
+      "kind": "subjective_analyst_judgment",
+      "status": "research_only",
+      "game_id": "2026_W06_SEA_DEN",
+      "formats": [
+        "SHOWDOWN"
+      ],
+      "player_master_ids": [
+        "1838dd60-35e8-4018-b307-39cde90e1f03",
+        "480d4188-7bf6-4684-b2b5-1d47f93d542a"
+      ],
+      "source_ids": [
+        "den_injury",
+        "sea_injury",
+        "roster"
+      ],
+      "source_hypothesis_ids": [
+        "SEA_pass_environment_conditional",
+        "JSN_availability_watch",
+        "SEA_backfield_conditional"
+      ],
+      "lean": "Investigate SEA passing-led script and receiving Captain before an unsupported lead-runner Captain; conditional Seattle win lean only if JSN usual role and DEN coverage absences are confirmed. No defensible unconditional winner call yet.",
+      "supporting_reasoning": [
+        "DEN coverage personnel uncertainty supplies a plausible conditional passing mechanism.",
+        "SEA backfield evidence cannot identify a dominant runner."
+      ],
+      "contrary_evidence": [
+        "DEN absences are not confirmed; receiving role and coverage assignments unresolved.",
+        "JSN injury could remove the key premise; passing production may be spread among receivers."
+      ],
+      "conditions": [
+        "JSN cleared for usual role with independent current evidence.",
+        "DEN coverage absences confirmed; no automatic replacement-quality assumption."
+      ],
+      "strongest_alternative": "DEN secondary returns and JSN role is limited: withdraw SEA receiving-Captain lean and test balanced two-team passing constructions; Denver offensive rebound is a plausible scenario, not a measured forecast.",
+      "construction_implications": [
+        {
+          "format": "SHOWDOWN",
+          "roles": {
+            "CPT": [
+              "1838dd60-35e8-4018-b307-39cde90e1f03"
+            ],
+            "FLEX": [
+              "480d4188-7bf6-4684-b2b5-1d47f93d542a"
+            ]
+          },
+          "condition": "Only under confirmed SEA passing branch; baseline evidence selects any Denver bring-back.",
+          "action": "shadow_comparison_only",
+          "type": "explicit_roles"
+        },
+        {
+          "format": "SHOWDOWN",
+          "roles": {
+            "CPT": [
+              "480d4188-7bf6-4684-b2b5-1d47f93d542a"
+            ],
+            "FLEX": [
+              "1838dd60-35e8-4018-b307-39cde90e1f03"
+            ]
+          },
+          "condition": "Contrast a spread-receiving-production branch after confirming roles.",
+          "action": "shadow_comparison_only",
+          "type": "explicit_roles"
+        }
+      ],
+      "classic_implication": "SEA\u2013DEN excluded from Sunday Main; no stack action. On a separately verified inclusive Classic slate, research Darnold/receiver plus supported DEN bring-back.",
+      "confidence_label": "low, unquantified qualitative conviction",
+      "unverified_claims_not_adopted": [
+        "Denver poor tackling",
+        "Seattle great defense",
+        "Denver offensive rebound is likely",
+        "Any back receives a quantified opportunity increase"
+      ],
+      "what_changes_view": [
+        "DEN secondary clearance",
+        "JSN role restriction",
+        "Charbonnet activation plus independent workload evidence",
+        "Current routes/carries/coverage and timestamped markets"
+      ],
+      "numeric_effect_proposal": null,
+      "selection_weight": null,
+      "production_action": "none",
+      "expires_at": "2026-10-14T18:00:00Z"
+    },
+    {
+      "assessment_id": "KC_preliminary_control_lean",
+      "kind": "subjective_analyst_judgment",
+      "status": "research_only",
+      "game_id": "2026_W06_LAC_KC",
+      "formats": [
+        "CLASSIC"
+      ],
+      "player_master_ids": [
+        "5169c450-ece6-4729-8952-ba040d3f64f2",
+        "f57e0806-3a25-44b1-9bcc-295699cb9536",
+        "3b2fed31-d793-46d1-949b-18caac632e63"
+      ],
+      "source_ids": [
+        "kc_market",
+        "kc_schedule",
+        "kc_salary_identity"
+      ],
+      "source_hypothesis_ids": [
+        "KC_controlled_game_branch"
+      ],
+      "coverage_label": "partial research; dated October12 market plus October13 scope/schedule/identity capture",
+      "lean": "Tentative KC home win with controlled-game branch ahead of a forced shootout; first investigate Walker + KC DST construction versus Mahomes-led passing alternative.",
+      "supporting_reasoning": [
+        "Verified favorite/home-after-bye premises make this a coherent preliminary branch, not a measured rushing forecast."
+      ],
+      "factual_premises": [
+        {
+          "source_id": "kc_market",
+          "fact_key": "kc_favorite",
+          "text": "Chargers team article reports Kansas City favored as of Monday morning, citing sportsbook lines."
+        },
+        {
+          "source_id": "kc_schedule",
+          "fact_key": "kc_home_after_bye",
+          "text": "Chiefs schedule lists Week 5 bye, then home versus Chargers Week 6 October 18 at 3:25 PM CDT."
+        }
+      ],
+      "contrary_evidence": [
+        "Monday market snapshot may change.",
+        "Current roles/injuries are incomplete; Chargers keeping pace could favor passing production."
+      ],
+      "conditions": [
+        "Branch assumes KC game control and viable rushing role; no quantified workload asserted."
+      ],
+      "strongest_alternative": "Chargers keep pace and KC production comes through Mahomes; rushing/DST combination misses the scoring distribution.",
+      "construction_implications": [
+        {
+          "type": "rb_dst_scenario",
+          "format": "CLASSIC",
+          "roles": {
+            "RB": [
+              "5169c450-ece6-4729-8952-ba040d3f64f2"
+            ],
+            "DST": [
+              "f57e0806-3a25-44b1-9bcc-295699cb9536"
+            ]
+          },
+          "condition": "Test controlled-game branch; role assumptions are conditional.",
+          "action": "shadow_comparison_only"
+        },
+        {
+          "type": "player_emphasis",
+          "format": "CLASSIC",
+          "roles": {
+            "PLAYER": [
+              "3b2fed31-d793-46d1-949b-18caac632e63"
+            ]
+          },
+          "condition": "Contrast passing-led alternative, baseline receiver selection remains independent.",
+          "action": "shadow_comparison_only"
+        }
+      ],
+      "classic_implication": "Generate separate legal shadow branches and compare using the same baseline; no production exposure or projection override.",
+      "confidence_label": "low, unquantified qualitative conviction",
+      "what_changes_view": [
+        "Current role/availability",
+        "Fresh markets",
+        "Opponent coverage evidence",
+        "Saturday revision"
+      ],
+      "numeric_effect_proposal": null,
+      "selection_weight": null,
+      "production_action": "none",
+      "expires_at": "2026-10-17T18:00:00Z"
+    }
+  ],
+  "slate_synthesis": {
+    "slate_id": "SUNDAY_MAIN",
+    "scope_source_ids": [
+      "sunday_salary_scope"
+    ],
+    "all_games_reviewed": false,
+    "status": "preliminary_partial",
+    "game_checklist": [
+      {
+        "source_game_info": "ARI@LAR 10/18/2026 04:05PM ET",
+        "teams": [
+          "ARI",
+          "LAR"
+        ],
+        "salary_scope": "observed",
+        "usage_review": "pending",
+        "injury_review": "pending",
+        "market_review": "pending",
+        "opponent_review": "pending",
+        "review_complete": false
+      },
+      {
+        "source_game_info": "BAL@CLE 10/18/2026 01:00PM ET",
+        "teams": [
+          "BAL",
+          "CLE"
+        ],
+        "salary_scope": "observed",
+        "usage_review": "pending",
+        "injury_review": "pending",
+        "market_review": "pending",
+        "opponent_review": "pending",
+        "review_complete": false
+      },
+      {
+        "source_game_info": "BUF@LV 10/18/2026 04:25PM ET",
+        "teams": [
+          "BUF",
+          "LV"
+        ],
+        "salary_scope": "observed",
+        "usage_review": "pending",
+        "injury_review": "pending",
+        "market_review": "pending",
+        "opponent_review": "pending",
+        "review_complete": false
+      },
+      {
+        "source_game_info": "CAR@PHI 10/18/2026 01:00PM ET",
+        "teams": [
+          "CAR",
+          "PHI"
+        ],
+        "salary_scope": "observed",
+        "usage_review": "pending",
+        "injury_review": "pending",
+        "market_review": "pending",
+        "opponent_review": "pending",
+        "review_complete": false
+      },
+      {
+        "source_game_info": "CHI@ATL 10/18/2026 01:00PM ET",
+        "teams": [
+          "ATL",
+          "CHI"
+        ],
+        "salary_scope": "observed",
+        "usage_review": "pending",
+        "injury_review": "pending",
+        "market_review": "pending",
+        "opponent_review": "pending",
+        "review_complete": false
+      },
+      {
+        "source_game_info": "LAC@KC 10/18/2026 04:25PM ET",
+        "teams": [
+          "KC",
+          "LAC"
+        ],
+        "salary_scope": "observed",
+        "usage_review": "pending",
+        "injury_review": "pending",
+        "market_review": "dated_report_reviewed",
+        "opponent_review": "pending",
+        "review_complete": false,
+        "schedule_review": "reviewed",
+        "research_priority": "initial_opinion_published"
+      },
+      {
+        "source_game_info": "NO@NYG 10/18/2026 01:00PM ET",
+        "teams": [
+          "NO",
+          "NYG"
+        ],
+        "salary_scope": "observed",
+        "usage_review": "pending",
+        "injury_review": "pending",
+        "market_review": "pending",
+        "opponent_review": "pending",
+        "review_complete": false
+      },
+      {
+        "source_game_info": "NYJ@NE 10/18/2026 01:00PM ET",
+        "teams": [
+          "NE",
+          "NYJ"
+        ],
+        "salary_scope": "observed",
+        "usage_review": "pending",
+        "injury_review": "pending",
+        "market_review": "pending",
+        "opponent_review": "pending",
+        "review_complete": false
+      },
+      {
+        "source_game_info": "PIT@TB 10/18/2026 01:00PM ET",
+        "teams": [
+          "PIT",
+          "TB"
+        ],
+        "salary_scope": "observed",
+        "usage_review": "pending",
+        "injury_review": "pending",
+        "market_review": "pending",
+        "opponent_review": "pending",
+        "review_complete": false
+      },
+      {
+        "source_game_info": "TEN@IND 10/18/2026 01:00PM ET",
+        "teams": [
+          "IND",
+          "TEN"
+        ],
+        "salary_scope": "observed",
+        "usage_review": "pending",
+        "injury_review": "pending",
+        "market_review": "pending",
+        "opponent_review": "pending",
+        "review_complete": false
+      }
+    ],
+    "ranked_upside_leans": [
+      {
+        "rank": 1,
+        "assessment_id": "KC_preliminary_control_lean",
+        "comparison_scope": "Initial order among researched branches, not a complete best-player ranking."
+      }
+    ],
+    "ranking_semantics": "Qualitative editorial order only; no probability, effect or selection weight.",
+    "coverage_gap": "Ten-game salary checklist; one Sunday game has deeper schedule/dated-market review. Other game categories remain pending and may displace this first lean.",
+    "review_policy": "Review all games to available depth, publish useful partial leans Wednesday, revise Saturday."
+  },
+  "revision_notes": [
+    "Partial-coverage subjective opinions now allowed; factual provenance/identity/time gates retained.",
+    "Wednesday first opinions and Saturday revisions; scheduling handled separately.",
+    "Added first preliminary Sunday KC construction judgment with typed shadow implications."
+  ]
+}

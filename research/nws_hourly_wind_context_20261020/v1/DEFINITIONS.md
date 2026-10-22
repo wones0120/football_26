@@ -1,0 +1,9 @@
+# G20-M05 NWS source-native prevailing/sustained hourly forecast
+
+The official DWML hourly-product definition and explicit SCN24-50 migration to the NWS hourly API support this source-product interpretation; the numeric magnitude does not establish sustained wind. See SOURCE_DEFINITION_REVIEW.md for primary links, access limitations and the separate grid-versus-hourly distinction.
+
+Consume the already approved original hourly period/native venue-geometry/forecast issuance and capture proof. This new transform preserves raw `windSpeed`, its explicit unit, and a source scalar or textual range. A textual range retains both endpoints with undefined scalar, including equal endpoints: no midpoint or arbitrary selected bound. Exact unit conversions to meters/second use mph×0.44704, km/h÷3.6, m/s unchanged, knots×1852/3600. Unsupported/missing units, nonfinite/negative/malformed values and reversed bounds remain unknown; known source zero is valid. Gusts never substitute for speed or vice versa.
+
+Height and averaging duration are UNKNOWN for the retained JSON. A one-hour forecast validity interval is not an assertion of a one-hour wind mean. No stadium-interior measurement, observed wind, gust, physical wind effect, calibrated forecast skill or new internal model is inferred.
+
+Actual original source:2026_04_PIT_CLE, kickoff2026-10-02T00:15Z, selected source period20:00–21:00 Eastern. Raw windSpeed='10 mph' =>10mph/4.4704m/s, one forecast observation/two team contexts. Original generated/update/capture clocks and later revised schedule/registry attribution remain distinct as in the reviewed parent. The parent has no gust field: G20-M06 remains a missing-source gap. The tiny new transform performs no source adapter, database read/write, capture, alias or model replay. Model/optimizer serving remains disabled.

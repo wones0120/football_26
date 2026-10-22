@@ -1,0 +1,25 @@
+import importlib.util
+from pathlib import Path
+import pytest
+s=importlib.util.spec_from_file_location('proof',Path(__file__).with_name('proof.py'));m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
+def p(**changes):return dict(dict(observed_source_offense_rows=80,known_physical_snaps=60,unknown_possible_physical=0,unknown_units=0,all_physical_units_known=True,native_on_field_union={'on'}),**changes)
+def rush(**changes):return dict(dict(source_offense_rows=80,unknown_official_rush_membership=0,unknown_rusher_events=0,lateral_or_unknown_lateral_events=0,known_official_carries=1,actors={'runner':dict(official_carries=1)}),**changes)
+def target(**changes):return dict(dict(counts={'rec':1},unknown_all=False,unknown_native={'rec'},events=40,observed_game=True),**changes)
+@pytest.mark.parametrize('channel',['pass_attempts','rush_attempts','targets'])
+def test_off_field_every_source_play_known_zero_all_roles(channel):assert m.proof_zero('missing',channel,p())['zero']
+@pytest.mark.parametrize('channel',['pass_attempts','rush_attempts','targets'])
+def test_unknown_possible_play_masks_every_zero(channel):assert not m.proof_zero('missing',channel,p(unknown_possible_physical=1),rush(),target())['zero']
+def test_onfield_not_no_passing_eligibility():assert not m.proof_zero('on','pass_attempts',p())['zero']
+def test_rush_credit_census_can_prove_onfield_zero():assert m.proof_zero('on','rush_attempts',p(),rush())['zero']
+@pytest.mark.parametrize('field',['unknown_official_rush_membership','unknown_rusher_events','lateral_or_unknown_lateral_events'])
+def test_unknown_rush_membership_credit_masks(field):assert not m.proof_zero('on','rush_attempts',p(),rush(**{field:1}))['zero']
+def test_positive_rush_not_relabelled_zero():assert not m.proof_zero('runner','rush_attempts',p(native_on_field_union={'runner'}),rush())['zero']
+def test_target_unknown_recipient_offfield_specific_actor_only():
+ assert m.proof_zero('on','targets',p(),target=target())['zero']
+ assert not m.proof_zero('rec','targets',p(native_on_field_union={'rec'}),target=target())['zero']
+def test_attribution_conflict_unknown_other_candidates_masks():assert not m.proof_zero('on','targets',p(),target=target(unknown_all=True))['zero']
+def test_missing_game_not_zero():assert not m.proof_zero('on','targets',p(),target=target(observed_game=False))['zero']
+def test_unknown_unit_prevents_offfield_shortcut_but_not_independent_rush_census():
+ q=p(all_physical_units_known=False,unknown_units=1)
+ assert not m.proof_zero('missing','pass_attempts',q)['zero']
+ assert m.proof_zero('missing','rush_attempts',q,rush())['zero']

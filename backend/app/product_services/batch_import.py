@@ -36,6 +36,9 @@ class BatchFileResult:
     contest_id: str | None = None
     message: str = ""
     template_id: str | None = None
+    contest_format: str | None = None
+    scoring_variant: str | None = None
+    result_record_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -45,6 +48,11 @@ class SelectedWeeklyContestFile:
     season: int
     week: int
     slate: str
+    contest_format: str | None = None
+    scoring_variant: str | None = None
+    pool_sha256: str | None = None
+    source_reference: str = ''
+    correction_of: str | None = None
 
 
 @dataclass
@@ -513,6 +521,31 @@ class DraftKingsBatchImportService:
                         raise ValueError("File changed since preview; preview the folder again before loading")
                     detected_contest_id = None
                     scope_note = ""
+                    if weekly_contests_only:
+                        from . import special_contest_results as typed
+                        hint = typed.format_hint(path)
+                        assigned_format = selected.contest_format if selected else None
+                        if hint in {'tiers','single_stat'} or assigned_format in {'tiers','single_stat'}:
+                            if assigned_format and assigned_format != hint:
+                                raise ValueError('Assigned contest format conflicts with native roster slots')
+                            fmt = hint or assigned_format
+                            match = re.search(r'contest-standings-(\d+)',path.stem,re.I)
+                            detected_contest_id = match[1] if match else None
+                            if dry_run:
+                                result = BatchFileResult(str(path),file_type,'would_stage',file_season,file_week,'UNRESOLVED',
+                                    source_file_id=source_id,contest_id=detected_contest_id,contest_format=fmt,
+                                    message='Assign season/week/slate and scoring evidence; three FLEX slots do not identify a stat variant. Native pool optional; names alone remain unverified.')
+                            else:
+                                if not selected:raise ValueError('Select and explicitly scope typed contest results before loading')
+                                record,duplicate = typed.import_results(path,season=file_season,week=file_week,slate=file_slate,
+                                    contest_id=detected_contest_id,contest_format=fmt,variant=selected.scoring_variant,
+                                    pool_sha256=selected.pool_sha256,source_reference=selected.source_reference,correction_of=selected.correction_of)
+                                result = BatchFileResult(str(path),file_type,'deduplicated' if duplicate else 'imported',
+                                    file_season,file_week,file_slate,record['entry_count'],source_id,record['contest_id'],
+                                    message=f"Observed {record['variant']} / {record['units']}; reconciliation unverified; financial records unchanged",
+                                    contest_format=fmt,scoring_variant=record['variant'],result_record_id=record['record_id'])
+                            results.append(result)
+                            continue
                     if weekly_contests_only:
                         verified_season, verified_week, detected_slate, detected_contest_id = self._weekly_contest_scope(
                             path, root=root, season=file_season, week=file_week,

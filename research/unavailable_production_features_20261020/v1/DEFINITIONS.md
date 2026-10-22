@@ -1,0 +1,11 @@
+# Historical production held by unavailable actors
+
+`unavailable_observed_production_v1` supplies declared partial variants of G17-M09, G18-M08 and G18-M09. Current factual unavailability comes from the reviewed same-period/same-cutoff role-feature contract. User exclusions, Assume-Q settings and salary selection are not inputs.
+
+The reference is three prior observed team games in the same season/team, separately for original pass attempts, rush attempts, targets, receptions, passing yards, rushing yards and receiving yards. Every required actor/channel observation must be present; an absent stat row is unknown rather than DNP/zero. Negative observed yardage remains signed. A stat row does not certify a full-game role. The reference is neither an OUT player's actual forecast nor a guaranteed replacement vacancy.
+
+G17-M09 retains the reference held by unavailable offensive actors; G18-M08 covers RB/FB/WR/TE receiving-production channels, and G18-M09 covers RB/FB backfield channels. Units never sum together. Per-actor values, selected team periods and channel-specific unknown observations are retained. Team totals have exact values only with independently complete roster/status/position evidence and all matched actor windows; otherwise only the explicitly named sum of known actor references is shown. Unknown positions may belong to either unit and therefore mask exact totals. The current source has no complete-team certification, so zero exact team aggregates is the expected result, not an error.
+
+Routes, touchdowns and scoring-role splits are unsupported by this weekly source and remain explicit gaps. No replacement share, opportunity donation, numerical model or optimizer adjustment occurs. Original import clocks must be present and before the feature cutoff, but revised current sources do not prove original pregame availability. Identity uses UUID and native-key historical ingestion, never display names. Refreshed retrieval IDs do not change measured semantics.
+
+Actual outputs are derived after lock with current timestamps and descriptive/non-serving classification. Raw sources, prior feature artifacts, models, saved lineups and settings remain unchanged. This package is not a complete unavailable-production forecast or all-channel catalog implementation.

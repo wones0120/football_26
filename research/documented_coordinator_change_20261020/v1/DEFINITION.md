@@ -1,0 +1,9 @@
+# G22-M07 documented coordinator transition
+
+This is a source-scoped outgoing/incoming offensive coordinator announcement transition for native team NO, supported by two authoritative Saints documents. The departure and appointment require an explicit same-team head-coach announcing subject and a unique literal person/responsibility statement in that source's own NewsArticle body. Related galleries, rival-team hires in background biography, vague hires and a new appointment alone do not establish this transition. Source-native article UUIDs, URIs, byte/manifest identities, exact character ranges and body digests remain separate.
+
+The source-reported announcement and modification timestamps differ from actual original-byte capture. Past-tense announced actions establish only a source-claim effective upper bound no later than publication. Exact employment start/end times, continuous vacancy duration and any intervening staff/interim universe remain unknown. The Jan16→Feb14 interval is an ANNOUNCEMENT gap, never an employment or vacancy duration. No first-game or current/target-game applicability, complete all-team staffing history or no-change zeros are inferred.
+
+The individuals remain literal authoritative coach mentions, with native source article keys. They are not joined to player_master by display name and do not acquire invented coach IDs. No coordinator-title event infers play-calling duties (G22-M08), scheme, workload change, coaching effectiveness or a causal/forecast response. This is a retrospective source fact; no original pregame receipt or new model/optimizer integration is claimed.
+
+The existing source-capture service defaults snapshot effective_at to observation/capture when no effective point is supplied. That storage clock is preserved explicitly as snapshot_effective_at, separate from unknown employment_effective_at. Neither service defaults nor HTTP Date manufacture historical job-effectiveness timestamps.

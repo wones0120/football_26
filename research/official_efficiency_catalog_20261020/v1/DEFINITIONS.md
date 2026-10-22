@@ -1,0 +1,21 @@
+# Exact official-inclusive efficiency catalog v1
+
+This package corrects four catalog semantics while leaving the earlier measured variant producer and immutable artifacts unchanged. It proposes nine IDs: G04-M06/M07/M09, G05-M06, G07-M02–M06. Original named rates/means are retained in each row's preserved_measured_variants; canonical values are explicit value fields.
+
+G04-M09 is source sacks divided by the physical official dropback union (pass attempt including spike OR sack OR scramble once), not one minus that rate. Sack-avoidance remains a named variant. G05-M06 is source EPA-positive QB official-carry fraction, not mean QB rushing EPA; the old EPA mean stays separate. G07-M02 is masked sum of source EPA on official carries, not EPA/carry. Zero eligible carries imply a zero within-observed-log sum only when eligibility/attribution are known; rates remain undefined at zero exposure. Unknown outcomes or native attribution mask exact totals. Signed negative EPA totals remain negative.
+
+G07-M06 uses an explicitly declared conversion-opportunity definition: third/fourth-down official carries, including kneels, with source first_down_rush OR rush_touchdown as conversion. It excludes first/second-down carries rather than counting every first-down-producing run across all carries. Unknown down/eligibility/outcome or a possible unattributed converter masks exact rates. A known missing rusher on a first/second-down carry cannot pollute the known-false conversion subset. The earlier all-carry first-down/TD fraction stays a named variant.
+
+G04-M06/M07 remain provider EPA/dropback and EPA-positive fraction over the same official physical union. G07-M03/M04/M05 remain EPA-positive success, credited native rusher yards >=10 explosive rate, and credited yards <=0 stuffed rate, over official carries including kneels/scrambles. Team net/lateral yards are never assigned to the initial rusher. Scoped historical native QB position proof gates G04/G05. All source actors and full team source measurements remain before user preferences.
+
+The reader retains original prelock immutable source/parent/event proofs and actual nonfuture postlock read/derive/publication. It is explicitly revised descriptive/nonserving, with original historical availability and complete-game proof unknown. No forecast/scenario/optimizer/model use or new source fetch occurs. This wrapper is necessary to match the stable catalog; it does not overwrite or silently relabel v1 measurements. No global UI/config behavior changes.
+
+## Actual coverage
+
+The corrected catalog materialization has 1,559 actor-games and 158 team source logs, with 106 actors/10 logs in the selected slice. Scoped QB rows number 182: 174 exact passing EPA/success/sack rates and 161 exact QB rushing success rates. Exact rushing EPA totals: 1,541 actor-games, consisting of 622 known positive-exposure cases and 919 known zero-official-carry cases (within observed logs only). These zeros do not invent participation for missing players; all rows already belong to the source actor universe. Exact rushing success/explosive/stuffed rates: 622 each; conversion rates: 332 eligible actor-games. Unknown or zero rate exposures remain undefined. The original non-catalog variants and artifacts stay immutable.
+
+Actual corrected derivation took 13.52 seconds from the same verified parent, with no source fetch, DB mutation or model operation. Earlier successful v1 variants remain separately identified rather than being reclassified.
+
+## Preserved team-variant definition binding
+
+The original team support counters retain their v1 numerator meanings. They now carry an explicit full_team_source_measurement_definitions map and preserved-v1/all-source scope; corrected actor catalog definitions do not relabel those counters. A metadata-only composition verified unchanged actor arrays, both team measurement arrays, unattributed events and identity requests against the earlier immutable catalog artifact. It preserved the original measurement producer/read/derive clock, recorded current metadata-binding producer/time and prior artifact separately, and emitted new full/selected artifacts. No event parent was inflated during this 0.15-second metadata operation. Earlier source code, receipt, evidence pins and artifacts remain preserved.

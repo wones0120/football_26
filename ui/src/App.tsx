@@ -1,6 +1,15 @@
+type ScenarioFirstPreferences = {enabled:boolean; rbMinimum:number; receiverMinimum:number; captureTarget:number; referencePlayers:string[]; referenceCaptain:string};
+import { ScenarioFirstLineup } from "./ScenarioFirstLineup";
+import {ScenarioControls,PreparedScenarioSummary,SavedScenarioSummary} from "./OptimizerScenarioPanel";
+import {scenarioIssue,scenarioParams,type ScenarioMode} from "./scenarioMode";
+import { TypedAssignment, TypedResultsLibrary, TypedGroups, typedChoiceReady, type TypedChoice } from "./TypedContestResults";
 import { JointOpportunitySummary } from "./JointOpportunitySummary";
 import { WeeklyLearningLibrary } from "./WeeklyLearningLibrary";
 import { PersonalThoughtSummary, type PersonalContext } from "./PersonalThoughtSummary";
+import { AnalystResearchSummary } from "./AnalystResearchSummary";
+import { SharedWorldSummary } from "./SharedWorldSummary";
+import { SHARED_WORLD_POLICY } from "./sharedWorldPolicy";
+import { analystResearchEvidence } from "./analystResearchEvidence";
 import { AnalystIntentComparison } from "./AnalystIntentComparison";
 import { intentHandoff, intentLabel, type OptimizationIntent } from "./analystIntent";
 import { AnalystPreparationSummary } from "./AnalystPreparationSummary";
@@ -14,6 +23,7 @@ import { CLASSIC_OBJECTIVE_STORAGE_KEY, classicSelectionParams, savedHighestProj
 import { preliminaryRunParams, preliminaryScopeIssue, analystFocusedRunIssue, type PreliminarySnapshot } from "./preliminaryResearch";
 import { runPreliminaryOptimizer, freezePreliminarySnapshot } from "./api";
 import { nextPreparationStatus } from "./preparationStatus";
+import { startSingleFlightPolling } from "./singleFlightPolling";
 import { AnalystReports } from "./AnalystReports";
 import { SingleStat } from "./SingleStat";
 import { Tiers } from "./Tiers";
@@ -26,6 +36,7 @@ import { ALL_LEARNING_SLATES, LEARNING_CONTEXT_STORAGE_KEY, initialLearningConte
 import { optimizerHasPreparedInputs, optimizerWaitingStatus } from "./preparedOptimizer";
 import { OptimizerLineupControls } from "./OptimizerLineupControls";
 import { LINEUP_CONTROLS_STORAGE_KEY, lineupControlParams, restoreLineupControls, serializeLineupControls } from "./lineupControls";
+import { useScopedOperationState } from "./useScopedOperationState";
 import { LARGE_GPP_CONTROLS_STORAGE_KEY } from "./classicLargeGppControls";
 import { defaultTournamentStrategyId, DEFAULT_OPTIMIZER_OBJECTIVE, ACTIVE_OPTIMIZER_STRATEGIES } from "./optimizerStrategy";
 import { singleLineupReportHtml } from "./singleLineupReport";
@@ -132,7 +143,7 @@ import {
   loadStartingQBs,
   processUnmatchedToPlayerMaster,
   queuePreparation,
-  waitForOperationalJob,
+  waitForOperationalJobCompletion,
   runAgent,
   runOptimizer,
   runOwnershipModel,
@@ -450,8 +461,9 @@ function App() {
   const [historyStartSeason, setHistoryStartSeason] = useState(2018);
   const [historyEndSeason, setHistoryEndSeason] = useState(2025);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const operationScope = `${season}:${week}:${slate.toUpperCase()}`;
+  const [error, setError] = useScopedOperationState<string | null>(operationScope, null);
+  const [loadError, setLoadError] = useScopedOperationState<string | null>(operationScope, null);
   const [preparationCheck, setPreparationCheck] = useState<PreparationCheckState | null>(null);
   const [preparationStatus, storePreparationStatus] = useState<PreparationStatus | null>(null);
   const preparationScopeRef = useRef({season, week, slate});
@@ -459,9 +471,9 @@ function App() {
   const setPreparationStatus = useCallback((next: PreparationStatus | null) => {
     storePreparationStatus(current => nextPreparationStatus(current, next, preparationScopeRef.current));
   }, []);
-  const [loadSummaries, setLoadSummaries] = useState<LoadSummary[]>([]);
-  const [lastLoadType, setLastLoadType] = useState<string | null>(null);
-  const [slateStatus, setSlateStatus] = useState<SlateLoadResponse | null>(null);
+  const [loadSummaries, setLoadSummaries] = useScopedOperationState<LoadSummary[]>(operationScope, []);
+  const [lastLoadType, setLastLoadType] = useScopedOperationState<string | null>(operationScope, null);
+  const [slateStatus, setSlateStatus] = useScopedOperationState<SlateLoadResponse | null>(operationScope, null);
   const [optimizerStatuses, setOptimizerStatuses] = useState<Record<string, OptimizerResponse>>({});
   const optimizerResultsRef = useRef<HTMLDivElement>(null);
   const [optimizerOpenRequest, setOptimizerOpenRequest] = useState(0);
@@ -497,7 +509,7 @@ function App() {
   const [requireTeamLeader, setRequireTeamLeader] = useState(true);
   const [requireHomeTeamLeader, setRequireHomeTeamLeader] = useState(false);
   const [captainPositions, setCaptainPositions] = useState("WR,RB");
-  const [namedResearchPreferences, setNamedResearchPreferences] = useState<Record<string, {captain: string[]; questionable: string[]}>>(() => {
+  const [namedResearchPreferences, setNamedResearchPreferences] = useState<Record<string, {captain: string[]; questionable: string[]; scenario_first?:ScenarioFirstPreferences}>>(() => {
     try { return JSON.parse(window.localStorage.getItem("dfs-named-research-preferences-v1") ?? "{}"); } catch { return {}; }
   });
   const namedResearch = namedResearchPreferences[activeContextKey] ?? {captain: [], questionable: []};
@@ -546,8 +558,18 @@ function App() {
   });
   useEffect(() => { try { window.localStorage.setItem(CLASSIC_OBJECTIVE_STORAGE_KEY, JSON.stringify(classicSelectionObjectives)); } catch { /* Keep session selection. */ } }, [classicSelectionObjectives]);
   const optimizationIntent = optimizationIntents[activeContextKey] ?? (contestFormat === "showdown" ? "EXPECTED_GAME" : "MIXED");
-  const normalHandoff = intentHandoff(preparationStatus?.latest_build, optimizationIntent);
-  const candidateHandoff = preparationStatus?.build_current && preparationStatus.latest_build?.data_readiness?.status?.toUpperCase() === "READY" ? normalHandoff : intentHandoff(preliminaryAnalystInputs[activeContextKey], optimizationIntent) ?? normalHandoff;
+  const [workloadComparisonSelection, setWorkloadComparison] = useState<"standard" | "normalized_counts" | "offensive_mean_control" | "learned_counts" | "learned_yards" | "scenario_first">("standard");
+  const workloadComparison = contestFormat === "showdown" ? workloadComparisonSelection : "standard";
+  const scenarioFirstPreferences:ScenarioFirstPreferences = namedResearch.scenario_first ?? {enabled:true,rbMinimum:6,receiverMinimum:3,captureTarget:.9,referencePlayers:[],referenceCaptain:""};
+  const updateScenarioFirstPreferences = (change:Partial<ScenarioFirstPreferences>) => setNamedResearchPreferences(current => ({...current,[activeContextKey]:{...namedResearch,scenario_first:{...scenarioFirstPreferences,...change}}}));
+
+  const [sharedWorldPolicies,setSharedWorldPolicies] = useState<Record<string,boolean>>(()=>{
+    try { return JSON.parse(window.localStorage.getItem("dfs-shared-world-policy-v1")??"{}")||{}; } catch { return {}; }
+  });
+  useEffect(()=>{try{window.localStorage.setItem("dfs-shared-world-policy-v1",JSON.stringify(sharedWorldPolicies));}catch{/* Session choice remains available. */}},[sharedWorldPolicies]);
+  const sharedWorldCoverage = contestFormat === "showdown" && workloadComparison === "standard" && sharedWorldPolicies[activeContextKey] === true;
+  const normalHandoff = sharedWorldCoverage ? preparationStatus?.latest_build?.analyst_handoff ?? null : intentHandoff(preparationStatus?.latest_build, optimizationIntent);
+  const candidateHandoff = sharedWorldCoverage ? normalHandoff : preparationStatus?.build_current && preparationStatus.latest_build?.data_readiness?.status?.toUpperCase() === "READY" ? normalHandoff : intentHandoff(preliminaryAnalystInputs[activeContextKey], optimizationIntent) ?? normalHandoff;
   const preparedAnalystHandoff = scopedAnalystHandoff(candidateHandoff, {season,week,slate,format:contestFormat});
   const [checkedAnalystPackets, setCheckedAnalystPackets] = useState<Record<string, AnalystPacketMetadata>>({});
   const checkedAnalystHash = preparedAnalystHandoff?.checked_packet_sha256;
@@ -596,6 +618,8 @@ function App() {
   const highestProjectionReport = savedHighestProjectionReport(optimizerStatus);
   const selectedOptimizerStrategy = defaultTournamentStrategyId(contestFormat);
   const highestProjection = contestFormat === "classic" && classicSelectionObjectives[activeContextKey] === "baseline_mean";
+  const [scenarioModes,setScenarioModes]=useState<Record<string,ScenarioMode|undefined>>({});
+  const scenarioMode=scenarioModes[`${activeContextKey}:${contestFormat}`];
   const [predictionStatuses, setPredictionStatuses] = useState<Record<string, PredictionOperationStatus>>({});
   const predictionStatus = predictionStatuses[activeContextKey] ?? null;
   const setPredictionStatus = useCallback((status: PredictionOperationStatus | null) => {
@@ -658,6 +682,7 @@ function App() {
   const injuryFileToLoad = resolveCsvIngestPath(injuryPath, `FanDuel_injuries_${season}_${week}_${injurySourceSlate(activeContext.slate)}.csv`);
   const [weeklyContestDirectory, setWeeklyContestDirectory] = useState("~/NFL");
   const [weeklyContestImport, setWeeklyContestImport] = useState<{
+    batch_id?: string;
     discovered: number;
     imported: number;
     deduplicated: number;
@@ -670,13 +695,13 @@ function App() {
   const weeklyContestFiles = weeklyContestImport?.files.filter((file) => file.file_type === "contest_standings") ?? [];
   const [weeklyContestSelections, setWeeklyContestSelections] = useState<Record<string, {
     selected: boolean; season: number; week: number; slate: string;
-  }>>({});
+  } & TypedChoice>>({});
   const selectedWeeklyContestFiles = weeklyContestFiles.filter((file) => weeklyContestSelections[file.path]?.selected);
   const selectedWeeklyContestReady = selectedWeeklyContestFiles.length > 0 && selectedWeeklyContestFiles.every((file) => {
     const choice = weeklyContestSelections[file.path];
     return Boolean(file.source_file_id && choice && Number.isInteger(choice.season)
       && choice.season >= 2000 && Number.isInteger(choice.week)
-      && choice.week >= 1 && choice.week <= 25 && isValidSlateId(choice.slate));
+      && choice.week >= 1 && choice.week <= 25 && isValidSlateId(choice.slate) && !["UNRESOLVED","UNKNOWN","DEFAULT"].includes(choice.slate) && typedChoiceReady(choice));
   });
   const [ownershipEvidence, setOwnershipEvidence] = useState<OwnershipEvidenceDraft>({
     contestId: "",
@@ -878,7 +903,7 @@ function App() {
   const [unmatchedInjuryError, setUnmatchedInjuryError] = useState<string | null>(null);
   const [unmatchedInjuryLoading, setUnmatchedInjuryLoading] = useState(false);
   const [featureStatus, setFeatureStatus] = useState<BuildFeaturesResponse | null>(null);
-  const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useScopedOperationState<string | null>(operationScope, null);
   const [postgresStatus, setPostgresStatus] = useState<StartPostgresResponse | null>(null);
   const [postgresError, setPostgresError] = useState<string | null>(null);
   const [postgresLoading, setPostgresLoading] = useState(false);
@@ -1027,29 +1052,21 @@ function App() {
 
   useEffect(() => {
     if (viewMode !== "workspace") return;
-    let cancelled = false;
-    let timer: number | undefined;
-    const refreshJobs = async () => {
-      try {
-        const [jobs, workflows] = await Promise.all([
+    const controller = startSingleFlightPolling({
+      fetch: () => Promise.all([
           fetchOperationalJobs(12),
           fetchWeeklyRuns({ season, week, slate, limit: 5 }),
-        ]);
-        if (!cancelled) {
+        ]),
+      onValue: ([jobs, workflows]) => {
           setOperationalJobs(jobs.rows);
           setWeeklyRuns(workflows.rows);
-        }
-      } catch {
+      },
+      intervalMs: value => value?.some(result => result.rows.some(row => row.status === "queued" || row.status === "running")) ? 3000 : 30_000,
+      onError: () => {
         // The worker/API may be intentionally offline during local UI-only work.
-      } finally {
-        if (!cancelled) timer = window.setTimeout(refreshJobs, 3000);
-      }
-    };
-    refreshJobs().catch(() => undefined);
-    return () => {
-      cancelled = true;
-      if (timer !== undefined) window.clearTimeout(timer);
-    };
+      },
+    });
+    return () => controller.stop();
   }, [viewMode, season, week, slate]);
 
   const optimizerParams = () => ({
@@ -1305,11 +1322,15 @@ function App() {
   const preparedBuild = preparationStatus?.latest_build;
   const preparationRunning = Boolean(preparationStatus?.scope.season === season && preparationStatus.scope.week === week && preparationStatus.scope.slate.toUpperCase() === slate.toUpperCase() && preparationStatus.jobs.some(j => j.status === "queued" || j.status === "running"));
   const optimizerPrepared = optimizerHasPreparedInputs(preparationStatus, { season, week, slate },
-    contestFormat, availabilityPreview.overrides);
+    contestFormat, availabilityPreview.overrides, lineupControls.minimumPlayerSalary,scenarioMode)
+    && (workloadComparison === 'standard' || Boolean(preparedBuild?.workload_forecast?.yardage_model) === (['learned_yards','scenario_first'].includes(workloadComparison)))
+    && (workloadComparison === 'standard' || Boolean(preparedBuild?.workload_forecast?.scenario_first) === (workloadComparison === 'scenario_first'))
+    && (workloadComparison !== 'scenario_first' || preparedBuild?.workload_forecast?.scenario_first?.version === 'captain_shared_scoring_cases_v6')
+    && (!['learned_counts','learned_yards','scenario_first'].includes(workloadComparison) || (preparedBuild?.workload_forecast?.learned_opportunities === true && Boolean(preparedBuild.workload_forecast.yardage_model) === (['learned_yards','scenario_first'].includes(workloadComparison))));
   const currentCheckError = preparationCheck?.scope.season === season && preparationCheck.scope.week === week
     && preparationCheck.scope.slate.toUpperCase() === slate.toUpperCase() ? preparationCheck.error : null;
   const optimizerWait = optimizerWaitingStatus(preparationStatus, { season, week, slate },
-    optimizerPrepared, pendingAction, currentCheckError, availabilityPreview.error);
+    optimizerPrepared, pendingAction, currentCheckError, availabilityPreview.error??scenarioIssue(scenarioMode));
 
 
   const prepareOptimizerSlate = async (preliminary = false): Promise<PreliminarySnapshot | undefined> => {
@@ -1318,11 +1339,17 @@ function App() {
     try {
       if (preliminary) preliminaryRunParams({exclude_questionable: true, availability_overrides: configuredAvailabilityOverrides()}, false);
       const response = await queuePreparation({ season, week, slate, action: "prepare", contest_format: contestFormat, ownership_required: true, preliminary_research: preliminary,
+        ...(contestFormat === "showdown" ? { minimum_player_salary: lineupControls.minimumPlayerSalary } : {}),
         availability_overrides: preliminary ? [] : configuredAvailabilityOverrides(), assume_questionable_out: false,
-        analyst_mode: analystHandoffMode, ...(analystHandoffMode === "MANUAL" && selectedAnalystPacket ? { analyst_packet_sha256:selectedAnalystPacket.analyst_packet_sha256, analyst_strategy:selectedAnalystPacket.selected_strategy ?? "MERGED_SCENARIOS" } : {}) });
+        include_workload_forecast: workloadComparison !== "standard" || sharedWorldCoverage || Boolean(!preliminary&&scenarioMode),
+        learned_opportunities: !preliminary && ["learned_counts","learned_yards","scenario_first"].includes(workloadComparison),
+        opportunity_yards: !preliminary && ["learned_yards","scenario_first"].includes(workloadComparison),
+        scenario_first_captain: !preliminary && workloadComparison === "scenario_first",
+        ...(!preliminary&&scenarioMode?{scenario_mode:scenarioMode}:{}),
+        analyst_mode: !preliminary&&scenarioMode ? "BASELINE" : analystHandoffMode, ...((preliminary||!scenarioMode) && analystHandoffMode === "MANUAL" && selectedAnalystPacket ? { analyst_packet_sha256:selectedAnalystPacket.analyst_packet_sha256, analyst_strategy:selectedAnalystPacket.selected_strategy ?? "MERGED_SCENARIOS" } : {}) });
       setPreparationStatus(await fetchPreparation({ season, week, slate }));
       setPendingAction(`Preparing slate on the durable worker (${response.job.job_id}). Source checks appear in Preparation and data tools.`);
-      await waitForOperationalJob(response.job.job_id);
+      await waitForOperationalJobCompletion(response.job.job_id);
       if (preliminary) return await freezePreliminarySnapshot(response.job.job_id, {analyst_mode: analystHandoffMode, ...(analystHandoffMode === "MANUAL" && selectedAnalystPacket ? {analyst_packet_sha256: selectedAnalystPacket.analyst_packet_sha256, analyst_strategy: selectedAnalystPacket.selected_strategy} : {})});
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -1340,24 +1367,29 @@ function App() {
     setError(null);
     setPendingAction("Checking optimizer request...");
     try {
-      const normalCheckedHandoff = highestProjection ? null : scopedAnalystHandoff(normalHandoff, {season,week,slate,format:contestFormat});
+      const noAnalystObjective = highestProjection || Boolean(scenarioMode) || workloadComparison !== "standard";
+      const normalCheckedHandoff = noAnalystObjective ? null : scopedAnalystHandoff(normalHandoff, {season,week,slate,format:contestFormat});
       const normalCheckedMetadata = normalCheckedHandoff?.checked_packet_sha256 ? await fetchAnalystPacket(normalCheckedHandoff.checked_packet_sha256) : null;
-      const normalPacket = highestProjection ? null : checkedAnalystSelection(analystHandoffMode,normalCheckedHandoff,normalCheckedMetadata,analystPacketsByContext[activeContextKey] ?? selectedAnalystPacket);
-      const handoffIssue = highestProjection ? null : analystHandoffIssue(analystHandoffMode, normalCheckedHandoff, normalPacket); if (handoffIssue) throw new Error(handoffIssue);
+      const normalPacket = noAnalystObjective ? null : checkedAnalystSelection(analystHandoffMode,normalCheckedHandoff,normalCheckedMetadata,analystPacketsByContext[activeContextKey] ?? selectedAnalystPacket);
+      const handoffIssue = noAnalystObjective ? null : analystHandoffIssue(analystHandoffMode, normalCheckedHandoff, normalPacket); if (handoffIssue) throw new Error(handoffIssue);
       if (normalPacket) {
         const issue = analystPacketScopeIssue(normalPacket, season, week, contestFormat);
         if (issue) throw new Error(issue);
       }
       const focusIssue = analystFocusedRunIssue(normalPacket); if (focusIssue) throw new Error(focusIssue);
-      const params = classicSelectionParams({ ...optimizerParams(), ...analystOptimizerParams(normalPacket, contestFormat), analyst_optimization_intent: optimizationIntent, ...(contestFormat === "showdown" && optimizationIntent === "EXPECTED_GAME" && constructionComparison ? {analyst_strategy: "CONSTRUCTION"} : {}) }, highestProjection);
+      const params = scenarioParams(classicSelectionParams({ ...optimizerParams(), ...analystOptimizerParams(normalPacket, contestFormat), analyst_optimization_intent: optimizationIntent,
+        ...(sharedWorldCoverage ? {analyst_selection_policy:SHARED_WORLD_POLICY,analyst_strategy:"MERGED_SCENARIOS"} : {}),
+        ...(contestFormat === "showdown" && optimizationIntent === "EXPECTED_GAME" && constructionComparison && !sharedWorldCoverage ? {analyst_strategy: "CONSTRUCTION"} : {}) }, highestProjection&&!scenarioMode),scenarioMode,contestFormat);
       if (!optimizerPrepared || !preparedBuild) throw new Error("Prepare slate for optimization first.");
+      if (!scenarioMode && workloadComparison !== "standard" && !preparedBuild.workload_forecast) throw new Error("Select the workload mode, then Prepare to create explicit count forecasts first.");
+      if (workloadComparison === "scenario_first" && scenarioFirstPreferences.referencePlayers.length && (scenarioFirstPreferences.referencePlayers.length!==6 || !scenarioFirstPreferences.referencePlayers.includes(scenarioFirstPreferences.referenceCaptain))) throw new Error("Choose six reference players and one Captain among them, or clear the reference.");
       submittedRunId = globalThis.crypto.randomUUID();
       updateActiveRunSelection({ optimizerRunId: submittedRunId });
       setPendingAction("Submitting optimizer request...");
       const response = await runOptimizer({ season, week, slate, strategy: selectedOptimizerStrategy,
         optimizer_run_id: submittedRunId, contest_format: contestFormat,
         objective: effectiveOptimizerObjective, projection_run_id: preparedBuild.projection_run_id,
-        params: { ...params, prepared_input_job_id: preparedBuild.prepared_input_job_id, analyst_handoff_mode:highestProjection ? "BASELINE" : analystHandoffMode, ...(normalCheckedHandoff ? {analyst_handoff_compatibility_sha256:normalCheckedHandoff.compatibility_sha256} : {}) } },
+        params: { ...params, ...(workloadComparison === "scenario_first" ? {scenario_capture_target:scenarioFirstPreferences.captureTarget,scenario_role_preference:{enabled:scenarioFirstPreferences.enabled,rb_min_opportunities:scenarioFirstPreferences.rbMinimum,receiver_min_targets:scenarioFirstPreferences.receiverMinimum},...(scenarioFirstPreferences.referencePlayers.length ? {scenario_reference_roster:{player_ids:scenarioFirstPreferences.referencePlayers,captain_player_id:scenarioFirstPreferences.referenceCaptain}} : {})} : {}), ...(!scenarioMode && workloadComparison !== "standard" ? {workload_comparison: workloadComparison} : {}), ...(["learned_counts","learned_yards","scenario_first"].includes(workloadComparison) ? {require_team_leader:false, require_home_team_leader:false, inactive_point_preferences:{require_team_leader:requireTeamLeader, require_home_team_leader:requireHomeTeamLeader, reason:"explicit learned-opportunity comparison has no points-based gates"}} : {}), prepared_input_job_id: preparedBuild.prepared_input_job_id, analyst_handoff_mode:highestProjection||scenarioMode ? "BASELINE" : analystHandoffMode, ...(normalCheckedHandoff ? {analyst_handoff_compatibility_sha256:normalCheckedHandoff.compatibility_sha256} : {}) } },
         () => setPendingAction("Optimizer queued on the durable worker. Reopen it in Recent optimizer runs."));
       setOptimizerStatus(response);
       updateActiveRunSelection({ optimizerRunId: response.job_id,
@@ -1419,6 +1451,7 @@ function App() {
       params.analyst_handoff_mode = highestProjection ? "BASELINE" : analystHandoffMode;
       if (snapshotHandoff) params.analyst_handoff_compatibility_sha256 = snapshotHandoff.compatibility_sha256;
       if (noSeasonRankRestriction) params.preliminary_rank_preference = "explicit_no_restriction_for_this_research_run";
+      if (workloadComparison === "scenario_first" && scenarioFirstPreferences.referencePlayers.length && (scenarioFirstPreferences.referencePlayers.length!==6 || !scenarioFirstPreferences.referencePlayers.includes(scenarioFirstPreferences.referenceCaptain))) throw new Error("Choose six reference players and one Captain among them, or clear the reference.");
       submittedRunId = globalThis.crypto.randomUUID();
       updateActiveRunSelection({ optimizerRunId: submittedRunId });
       const response = await runPreliminaryOptimizer(snapshot, { season, week, slate, strategy: selectedOptimizerStrategy,
@@ -1855,6 +1888,11 @@ function App() {
           season: weeklyContestSelections[file.path].season,
           week: weeklyContestSelections[file.path].week,
           slate: weeklyContestSelections[file.path].slate,
+          contest_format: weeklyContestSelections[file.path].contest_format,
+          scoring_variant: weeklyContestSelections[file.path].scoring_variant,
+          pool_sha256: weeklyContestSelections[file.path].pool_sha256,
+          source_reference: weeklyContestSelections[file.path].source_reference,
+          correction_of: weeklyContestSelections[file.path].correction_of,
         })) } : {}),
       });
       if (learningScopeRef.current !== requestScope) return;
@@ -1864,7 +1902,8 @@ function App() {
           .filter((file) => file.file_type === "contest_standings")
           .map((file) => [file.path, {
             selected: false, season: file.season, week: file.week,
-            slate: isValidSlateId(file.slate) ? file.slate : "",
+            contest_format: file.contest_format ?? undefined, scoring_variant: file.scoring_variant ?? undefined,
+            slate: isValidSlateId(file.slate) && !["UNRESOLVED","UNKNOWN","DEFAULT"].includes(file.slate) ? file.slate : "",
           }])));
       } else {
         setWeeklyContestSelections({});
@@ -2215,7 +2254,7 @@ function App() {
                     review their suggested season, week, and slate before loading. Leave unrelated files unchecked.
                   </p>}
                   <table className="compact-table learning-contest-table">
-                    <thead><tr>{weeklyContestImport.dry_run && <th>Load</th>}<th>File</th><th>Season</th><th>Week</th><th>Slate</th><th>Status</th><th>Contest</th><th>Details</th></tr></thead>
+                    <thead><tr>{weeklyContestImport.dry_run && <th>Load</th>}<th>File</th><th>Season</th><th>Week</th><th>Slate</th><th>Format / scoring</th><th>Status</th><th>Contest</th><th>Details</th></tr></thead>
                     <tbody>
                       {weeklyContestFiles.map((file) => (
                         <tr key={file.path}>
@@ -2244,8 +2283,9 @@ function App() {
                             <option value="">Choose slate</option>
                             {learningSlateOptions.map((option) => <option key={option} value={option}>{option.replaceAll("_", " ")}</option>)}
                           </select> : file.slate.replaceAll("_", " ")}</td>
+                          <td>{weeklyContestImport.dry_run ? <TypedAssignment label={file.path.split("/").pop() ?? file.path} choice={weeklyContestSelections[file.path] ?? {contest_format:file.contest_format ?? undefined}} onChange={value => setWeeklyContestSelections(current => ({...current,[file.path]:{...current[file.path],...value}}))} /> : `${file.contest_format ?? "Classic / Showdown"} ${file.scoring_variant ?? ""}`}</td>
                           <td>{file.status === "would_stage" || file.status === "staged"
-                            ? weeklyContestSelections[file.path]?.slate ? "Ready to load" : "Needs slate"
+                            ? !weeklyContestSelections[file.path]?.slate ? "Needs slate" : typedChoiceReady(weeklyContestSelections[file.path]) ? "Ready to load" : "Needs scoring evidence"
                             : file.status === "would_import" ? "Ready to load"
                               : file.status === "deduplicated" ? "Already loaded"
                                 : file.status.replaceAll("_", " ")}</td>
@@ -2263,6 +2303,7 @@ function App() {
               )}
             </div>
           </section>
+          <TypedResultsLibrary refreshKey={weeklyContestImport?.batch_id ?? ""} entryUser={learningEntryUser} season={learningSeason} week={learningWeek} />
           <section className="panel operations-panel" aria-labelledby="learning-report-title">
             <div className="operations-panel-heading">
               <span>02 · Review</span>
@@ -2296,8 +2337,10 @@ function App() {
             {learningReport && (
               <div className="status-card">
                 <strong>
-                  Week {learningReport.week} learning report: {learningReport.status} · {learningReport.summary.slates} slates · {learningReport.summary.contests_entered} contests · {learningReport.summary.entries} entries
+                  Week {learningReport.week} learning report: {learningReport.status} · {learningReport.summary.slates} slates · {learningReport.summary.contests_entered} contests · {learningReport.summary.entries} Classic / Showdown entries · {learningReport.summary.typed_contest_groups ?? 0} typed contests · {learningReport.summary.typed_contest_entries ?? 0} typed entries
                 </strong>
+                <p>Classic / Showdown totals above; typed standings below retain separate scoring units and have no inferred financial result.</p>
+                <TypedGroups groups={(learningReport.format_results ?? []).filter(g => learningSlate === ALL_LEARNING_SLATES || g.slate === learningSlate)} />
                 {learningReport.summary.weekly_stats && (
                   <p>Weekly stats pulled: {learningReport.summary.weekly_stats.rows_raw} player records for {learningReport.season}, week {learningReport.week}.</p>
                 )}
@@ -2518,10 +2561,51 @@ function App() {
         <div className="operations-panel-heading">
           <span>02 · Prepare</span>
           <h2 id="prepare-slate-title">Prepare slate</h2>
+          <ScenarioControls value={scenarioMode} disabled={Boolean(pendingAction)||preparationRunning} teams={[...new Set((preparationStatus?.inputs.salaries??[]).map(r=>String(r.team??"")).filter(Boolean))].sort()} onChange={v=>setScenarioModes(current=>({...current,[`${activeContextKey}:${contestFormat}`]:v}))}/>
+          {preparedBuild?.scenario_mode&&<PreparedScenarioSummary report={preparedBuild.scenario_mode}/>}
+          {contestFormat === "showdown" && <label>Optimizer comparison
+            <select aria-label="Optimizer comparison" value={workloadComparison} onChange={event => setWorkloadComparison(event.target.value as typeof workloadComparison)}>
+              <option value="standard">Standard optimizer (unchanged)</option>
+              <option value="scenario_first">Scenario-first Captain · market primary · 3–3 · conditional v6</option>
+              <option value="learned_yards">Learned opportunities → projected yards · experimental</option>
+              <option value="learned_counts">Learned opportunities · no points selection gates</option>
+              <option value="normalized_counts">Reference offensive workload forecasts</option>
+              <option value="offensive_mean_control">Comparison · FP mean on same offensive domain</option>
+            </select>
+          </label>}
+          {workloadComparison === "scenario_first" && <div aria-label="Scenario-first selection controls">
+            <p>Market-first shared scoring cases → team opportunities → player/kicker roles → complete Captain roster. Explicit 3–3 construction. Current-starter-compatible prior games vary workloads, observed zero roles, completions and shared yards. Passing follows sourced full-team passer shares; a player/team forecast gap cannot create an unknown passer. Observed relief/trick-play work remains explicit. The market total and spread determine the primary scoring environment. Only four market-centered cases select the whole roster, including the mean-relative-capture tie-break; sixteen alternative-script cases are diagnostic only. Case likelihood is unknown. Worst-case protection is diagnostic only. Current user QB/Captain restrictions remain binding.</p>
+            <label><input type="checkbox" aria-label="Exclude low-involvement backups" disabled={Boolean(pendingAction)} checked={scenarioFirstPreferences.enabled} onChange={e=>updateScenarioFirstPreferences({enabled:e.target.checked})}/>Exclude low-involvement backups (user preference; projections retained)</label>
+            <label>Backup RB minimum carries + targets<input aria-label="Backup RB minimum carries and targets" disabled={Boolean(pendingAction)} type="number" min="0" step=".5" value={scenarioFirstPreferences.rbMinimum} onChange={e=>updateScenarioFirstPreferences({rbMinimum:Number(e.target.value)})}/></label>
+            <label>Backup WR/TE minimum targets<input aria-label="Backup receiver minimum targets" disabled={Boolean(pendingAction)} type="number" min="0" step=".5" value={scenarioFirstPreferences.receiverMinimum} onChange={e=>updateScenarioFirstPreferences({receiverMinimum:Number(e.target.value)})}/></label>
+            <p>Prepare applies supported availability/role adjustments before these cutoffs. Injury flags alone do not waive the preference or donate workload; missing expansion evidence remains explicit.</p>
+            <label>Competitive case target (%)<input aria-label="Competitive case target percentage" disabled={Boolean(pendingAction)} type="number" min="1" max="100" value={scenarioFirstPreferences.captureTarget*100} onChange={e=>updateScenarioFirstPreferences({captureTarget:Number(e.target.value)/100})}/></label>
+            <small>Declared decision rule: count complete-roster cases reaching this fraction of that case’s best legal score. 90% is the initial policy setting, not a learned probability or a guaranteed contest threshold.</small>
+            <label>Reference players (six; comparison only)<select aria-label="Scenario reference players" disabled={Boolean(pendingAction)} multiple value={scenarioFirstPreferences.referencePlayers} onChange={e=>updateScenarioFirstPreferences({referencePlayers:Array.from(e.target.selectedOptions,o=>o.value)})}>
+              {(optimizerStatus?.player_pool?.rows??[]).map(player=><option key={player.player_id} value={player.player_id}>{player.player_name} · {player.position} · {player.team}</option>)}
+            </select></label>
+            <label>Reference Captain<select aria-label="Scenario reference Captain" disabled={Boolean(pendingAction)} value={scenarioFirstPreferences.referenceCaptain} onChange={e=>updateScenarioFirstPreferences({referenceCaptain:e.target.value})}><option value="">Choose Captain</option>
+              {(optimizerStatus?.player_pool?.rows??[]).filter(player=>scenarioFirstPreferences.referencePlayers.includes(player.player_id)).map(player=><option key={player.player_id} value={player.player_id}>{player.player_name} · {player.position} · {player.team}</option>)}
+            </select></label>
+            <button type="button" disabled={Boolean(pendingAction)} onClick={()=>updateScenarioFirstPreferences({referencePlayers:[],referenceCaptain:""})}>Clear scenario reference</button>
+            <small>The reference never locks the selected roster or adds Captain exceptions. Preference conflicts are reported; its Captain is also evaluated with five reoptimized FLEX players when eligible. One different-Captain comparison is retained.</small>
+          </div>}
+
+          {workloadComparison === "learned_yards" && <p>Experimental role-aware efficiency × latest learned attempts/targets. Selection weights: passing yard 0.04; rushing yard 0.10; receiving yard 0.10. These are partial DraftKings yard points, not learned optimum weights or a complete points forecast: receptions, touchdowns and bonuses are omitted. No positional count normalization or full-points/P90 selection gates. Points-based team-leader preferences are inactive for this comparison request. Same-team passing/receiving yards reconcile with explicit unallocated actors. Conditional role/availability and small-sample uncertainty remain; no proven lineup improvement. Stored settings remain unchanged.</p>}
+          {workloadComparison === "learned_counts" && <p>Latest published team/player models forecast attempts and targets. Fixed prior position count scales normalize selection; fantasy points and P90 are report-only. Points-based team-leader preferences are inactive for this run; stored settings remain unchanged. Captain salary/utility multiply by 1.5, physical opportunities do not. K/DST and unsupported counts are outside this comparison.</p>}
+          {workloadComparison !== "standard" && workloadComparison !== "scenario_first" && <p>Count forecasts, conditional on active participation and stable observed role. K/DST and unknown forecasts are outside this comparison domain. Salary is a constraint; full fantasy projections and ownership do not enter selection; the yard arm uses declared partial DK yard weights. Prepare creates a frozen forecast receipt. Standard settings and projections remain unchanged.</p>}
+          {preparationStatus?.latest_build?.workload_forecast && <details><summary>Prepared offensive count forecasts · {preparationStatus.latest_build.workload_forecast.version}</summary>
+            <p>{preparationStatus.latest_build.workload_forecast.domain} · {preparationStatus.latest_build.workload_forecast.source_cutoff_at}</p>
+            {preparationStatus.latest_build.workload_forecast.learned_opportunities&&!preparationStatus.latest_build.workload_forecast.yardage_model&&<><p>Latest learned opportunities · points heads unused. Team publication: {preparationStatus.latest_build.workload_forecast.learned_model_consumption?.team?.model_publication_record_id}; player publication: {preparationStatus.latest_build.workload_forecast.learned_model_consumption?.player?.model_publication_record_id}.</p><p>Utility averages pass/rush components for QBs and target/rush components for RB/WR/TE. Each component is divided by its prior position mean, with divisor floor 1. These are transparent comparison weights, not fantasy values or independent play totals.</p><details><summary>Fixed prior count normalization divisors</summary><pre>{JSON.stringify(preparationStatus.latest_build.workload_forecast.scales,null,2)}</pre></details></>}
+            {preparationStatus.latest_build.workload_forecast.scenario_first&&<><p>Shared scoring cases: {preparationStatus.latest_build.workload_forecast.scenario_first.world_count} · Likelihood: unknown · Explicit policy: 3–3. Market-implied team points: {JSON.stringify(preparationStatus.latest_build.workload_forecast.scenario_first.implied_points)}. Case-mean utility below is display only.</p><details><summary>Scenario assumptions and source-role limits</summary><p>{preparationStatus.latest_build.workload_forecast.scenario_first.assumptions.join(" ")}</p></details></>}
+            {preparationStatus.latest_build.workload_forecast.yardage_model&&!preparationStatus.latest_build.workload_forecast.scenario_first&&<><p>Yard weights: {JSON.stringify(preparationStatus.latest_build.workload_forecast.yardage_model.selection_weights)}. Physical yards are unmultiplied; Captain selection utility ×1.5. Unknown forecasts remain excluded; not zeros.</p><p>{preparationStatus.latest_build.workload_forecast.yardage_model.limitations.join(" ")}</p><details><summary>Forecast validation · retrospective diagnostic</summary><p>Uses actual historical attempts/targets to evaluate efficiency only; not end-to-end lineup validation. Revised history and previously inspected outcomes are not fresh held-out evidence. Mixed errors; no proven improvement.</p><pre>{JSON.stringify(preparationStatus.latest_build.workload_forecast.yardage_model.validation,null,2)}</pre></details><details><summary>Shared-yard accounting and residuals</summary><pre>{JSON.stringify(preparationStatus.latest_build.workload_forecast.yardage_model.accounting,null,2)}</pre></details><table><thead><tr><th>Player</th><th>Pass yards</th><th>Rush yards</th><th>Receiving yards</th><th>Efficiency evidence</th></tr></thead><tbody>{preparationStatus.latest_build.workload_forecast.players.filter(row=>row.native_salary_actor).map(row=><tr key={row.player_master_id}><td>{row.name}</td>{['passing_yards','rushing_yards','receiving_yards'].map(key=><td key={key}>{row.projected_yards?.[key]?.toFixed(2)??"Unknown / outside role"}</td>)}<td><details><summary>Prior efficiency and role</summary><pre>{JSON.stringify(row.efficiency,null,2)}</pre></details></td></tr>)}</tbody></table></>}
+            <table><thead><tr><th>Player / native ID</th><th>Position</th><th>Pass attempts</th><th>Rush attempts</th><th>Targets</th><th>Utility</th><th>Limitations</th></tr></thead><tbody>
+              {preparationStatus.latest_build.workload_forecast.players.filter(row => row.native_salary_actor).map(row => <tr key={row.player_master_id}><td>{row.name ?? row.player_master_id} · {row.native_id ?? "—"}</td><td>{row.position}</td><td>{row.counts.pass_attempts?.toFixed(2) ?? "Unknown"}</td><td>{row.counts.rush_attempts?.toFixed(2) ?? "Unknown"}</td><td>{row.counts.targets?.toFixed(2) ?? "Unknown"}</td><td>{row.utility?.toFixed(3) ?? "Not modeled"}</td><td>{row.reasons.join("; ")}</td></tr>)}
+            </tbody></table></details>}
           <p>After loading files, prepare the selected {contestFormat === "classic" ? "Classic" : "Showdown"} slate. This checks identities, availability, prior-week stats and snaps, spreads, game totals, projections, and ownership together. Missing historical stats or snaps are downloaded automatically before rebuilding. Every game needs valid market data within the freshness limit. Missing, stale or inconsistent spreads/totals block optimization. Running projections alone does not certify readiness.</p>
         </div>
         <div className="button-row">
-              <button onClick={() => void prepareOptimizerSlate()} disabled={Boolean(pendingAction) || preparationRunning}>Prepare slate for optimization</button>
+              <button onClick={() => void prepareOptimizerSlate()} disabled={Boolean(pendingAction) || preparationRunning || Boolean(scenarioIssue(scenarioMode))}>Prepare slate for optimization</button>
               <small>{preparationStatus?.build_issue}</small>
               <strong role="status">{preparationRunning ? "Preparing slate…" : optimizerPrepared ? "Prepared — ready to optimize" : currentCheckError ? "Readiness check unavailable — see status beside Run Optimizer" : !preparationStatus ? "Checking saved slate readiness…" : "Preparation required before optimization"}</strong>
         </div>
@@ -2629,7 +2713,7 @@ function App() {
                     <option value="RB">RB only</option>
                     <option value="TE">TE only</option>
                   </select>
-                  <small>Applies to Captain in every lineup. WR Captain requires his team’s QB; RB Captain does not require a QB. Other positions remain eligible at FLEX; projections remain unchanged.</small>
+                  <small>{sharedWorldCoverage || workloadComparison === "scenario_first" ? "Captain position eligibility applies in every lineup. Shared-case selection adds no mandatory QB/receiver stack. Other positions remain eligible at FLEX; projections remain unchanged." : "Applies to Captain in every lineup. WR Captain requires his team’s QB; RB Captain does not require a QB. Other positions remain eligible at FLEX; projections remain unchanged."}</small>
                 </label>
                 {([['captain', 'Named Captain position exceptions'], ['questionable', 'Named questionable research eligibility']] as const).map(([key, label]) => <label className="text-label" key={key}>{label}
                   <select aria-label={label} multiple value={namedResearch[key]} disabled={Boolean(pendingAction)} onChange={event => { const values = Array.from(event.target.selectedOptions, option => option.value); setNamedResearchPreferences(current => ({...current, [activeContextKey]: {...namedResearch, [key]: values}})); }}>
@@ -2840,15 +2924,23 @@ function App() {
               </select></label>
               {highestProjection && <p>One lineup with no player locks. Maximizes unchanged average projected points; QB stacks and opponent bringbacks are optional. Other eligibility, salary and roster settings remain binding. Scenario, ownership and ceiling scores are not added.</p>}
             </div>}
+            {contestFormat === "showdown" && workloadComparison === "standard" && <div className="readiness-preflight"><label>Portfolio selection policy
+              <select aria-label="Portfolio selection policy" value={sharedWorldCoverage?"shared_world":"legacy"} disabled={Boolean(pendingAction)} onChange={event=>{
+                const enabled=event.target.value==="shared_world";
+                setSharedWorldPolicies(current=>({...current,[activeContextKey]:enabled}));
+                if(enabled){setOptimizationIntents(current=>({...current,[activeContextKey]:"EXPECTED_GAME"}));setAnalystModes(current=>({...current,[activeContextKey]:"AUTO"}));}
+              }}><option value="legacy">Existing intent selection</option><option value="shared_world">Expected anchor + shared conditional coverage</option></select></label>
+              {sharedWorldCoverage&&<p>First select the strongest completion-feasible expected-game anchor. Later entries add conditional point coverage across the same supported expected and contrary worlds. Likelihoods are unknown. No mandatory strategy stacks or starting-QB construction; your explicit settings and Captain workload eligibility remain binding. Fantasy means remain unchanged.</p>}
+            </div>}
             {!highestProjection && <div className="readiness-preflight"><label>Optimization intent
-              <select aria-label="Optimization intent" value={optimizationIntent} disabled={Boolean(pendingAction)} onChange={event => {
+              <select aria-label="Optimization intent" value={optimizationIntent} disabled={Boolean(pendingAction)||sharedWorldCoverage} onChange={event => {
                 setOptimizationIntents(current => ({...current, [activeContextKey]: event.target.value as OptimizationIntent}));
                 setAnalystModes(current => ({...current, [activeContextKey]: "AUTO"}));
               }}><option value="EXPECTED_GAME">Expected Game</option><option value="CONTRARIAN">Contrarian</option><option value="MIXED">Mixed research (legacy)</option></select></label>
-              <p>{optimizationIntent === "EXPECTED_GAME" ? "The sourced primary game assessment and its upside. Explicit contrarian what-ifs are excluded; roster and exposure rules remain binding." : optimizationIntent === "CONTRARIAN" ? "Only the authored alternate story. Conditional opportunity and roster requirements remain explicit; this is not a prediction." : "Legacy mixed scenario research; expected and alternate worlds may influence the same portfolio."}</p>
+              <p>{sharedWorldCoverage ? "Expected-game anchor plus supported authored conditional coverage; explicit personal what-ifs remain excluded. The common checked parent is used, rather than the legacy expected-only packet." : optimizationIntent === "EXPECTED_GAME" ? "The sourced primary game assessment and its upside. Explicit contrarian what-ifs are excluded; roster and exposure rules remain binding." : optimizationIntent === "CONTRARIAN" ? "Only the authored alternate story. Conditional opportunity and roster requirements remain explicit; this is not a prediction." : "Legacy mixed scenario research; expected and alternate worlds may influence the same portfolio."}</p>
               <p>Both intents use automatic checked Analyst research from the same prepared build. Your lineup settings remain binding. Selected: {intentLabel(optimizationIntent)}.</p>
             </div>}
-            {contestFormat === "showdown" && optimizationIntent === "EXPECTED_GAME" && <label className="checkbox-label"><input type="checkbox" checked={constructionComparison} disabled={Boolean(pendingAction)} onChange={event => setConstructionComparison(event.target.checked)} /><span>Original CONSTRUCTION comparison · checked Expected Game evidence recorded only; original generation and scoring policy</span></label>}
+            {contestFormat === "showdown" && optimizationIntent === "EXPECTED_GAME" && !sharedWorldCoverage && <label className="checkbox-label"><input type="checkbox" checked={constructionComparison} disabled={Boolean(pendingAction)} onChange={event => setConstructionComparison(event.target.checked)} /><span>Original CONSTRUCTION comparison · checked Expected Game evidence recorded only; original generation and scoring policy</span></label>}
             {!highestProjection && <><AnalystPreparationSummary handoff={preparedAnalystHandoff} mode={analystHandoffMode} busy={Boolean(pendingAction)} onAutomatic={() => setAnalystModes(current => ({...current,[activeContextKey]:"AUTO"}))} />
             <AnalystPacketControls season={season} week={week} format={contestFormat} disabled={Boolean(pendingAction) || optimizationIntent !== "MIXED"}
               selected={selectedAnalystPacket} onSelect={selectAnalystOverride} /></>}
@@ -3740,16 +3832,19 @@ function App() {
             {<AnalystIntentComparison key={activeContextKey} contextKey={activeContextKey} current={optimizerStatus} scope={{season,week,slate}} />}
             {optimizerStatus?.preliminary_report && <div className="status-card">
               <h3>Preliminary research · not entry cleared</h3>
-              <p>Both current injury assumptions and missing source evidence remain explicit. Contest CSV export is blocked for this research run.</p>
+              <p>Both current injury assumptions and missing source evidence remain explicit. Use Check upload readiness in Recent optimizer runs to validate the saved players for CSV download.</p>
               <details><summary>Frozen preliminary assumptions and normal readiness failures</summary>
                 <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{JSON.stringify(optimizerStatus.preliminary_report, null, 2)}</pre>
               </details>
             </div>}
             {optimizerStatus?.football_analyst?.teammate_opportunity && <TeammateOpportunityReview report={optimizerStatus.football_analyst.teammate_opportunity} busy={Boolean(pendingAction)} focusOnly={selectedAnalystPacket?.selected_strategy === "MERGED_SCENARIOS" && selectedAnalystPacket.focus_mode === "SELECTED_ONLY"} onChoose={pair => void stageTeammateAlternative(pair)} />}
             {optimizerStatus?.football_analyst && <details className="operations-disclosure">
-              <summary>Wones Football Analyst · {optimizerStatus.football_analyst.status ?? "construction report"}</summary>
+              <summary>Wones Football Analyst · {analystResearchEvidence(optimizerStatus.football_analyst.research_consumption ?? optimizerStatus.analyst_handoff_applied?.research_coverage).lines[0]}</summary>
               {optimizerStatus.football_analyst.optimization_intent && <p>Intent: {intentLabel(optimizerStatus.football_analyst.optimization_intent.intent)} · {optimizerStatus.football_analyst.optimization_intent.assessment}</p>}
               <PersonalThoughtSummary context={optimizerStatus.analyst_handoff_applied?.personal_context as PersonalContext | undefined} />
+              <AnalystResearchSummary value={optimizerStatus.football_analyst.research_consumption ?? optimizerStatus.analyst_handoff_applied?.research_coverage} results={optimizerStatus.results} />
+              <SharedWorldSummary value={optimizerStatus.football_analyst.shared_world_selection} players={optimizerStatus.player_pool?.rows} />
+              <p>Construction status: {optimizerStatus.football_analyst.status ?? "unavailable"}</p>
               <p>Strategy: {optimizerStatus.football_analyst.mode ?? "ANALYST_CONSTRUCTION"} · {optimizerStatus.football_analyst.portfolio_mode ?? "conditional coverage"}</p>
               {optimizerStatus.football_analyst.focus && <AnalystFocusSummary focus={optimizerStatus.football_analyst.focus} results={Array.isArray(optimizerStatus.results) ? optimizerStatus.results : []} />}
               {optimizerStatus.football_analyst.challenger && <details><summary>Blind-spot hunter · {optimizerStatus.football_analyst.challenger.status}</summary><p>Targeted solves: {optimizerStatus.football_analyst.challenger.solver_calls} · New candidates: {optimizerStatus.football_analyst.challenger.accepted_candidate_count}</p><pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{JSON.stringify(optimizerStatus.football_analyst.challenger, null, 2)}</pre></details>}
@@ -3870,13 +3965,14 @@ function App() {
                   (strategy) => strategy.id === optimizerStatus.strategy
                 )?.label ?? optimizerStatus.strategy}
               </h3>
-              {highestProjectionReport && <section aria-label="Highest baseline projection result">
+              {optimizerStatus.scenario_mode&&<SavedScenarioSummary report={optimizerStatus.scenario_mode}/>}
+              {highestProjectionReport && !optimizerStatus.scenario_mode && <section aria-label="Highest baseline projection result">
                 <h4>Highest baseline projection · optional stacks</h4>
                 <p>{highestProjectionReport.solver_status} · {highestProjectionReport.base_mean?.toFixed(2)} projected points · ${highestProjectionReport.salary?.toLocaleString()} · No player locks</p>
                 <p>Highest among the eligible prepared pool under the remaining user rules. Baseline means only; no scenario, ownership, ceiling or correlation bonuses.</p>
               </section>}
               {singleLineupReportHtml(optimizerStatus) && <div dangerouslySetInnerHTML={{ __html: singleLineupReportHtml(optimizerStatus) }} />}
-              {optimizerStatus.status === "completed" && optimizerStatus.objective === "gpp" && !optimizerStatus.gpp_recommendation && !highestProjectionReport &&
+              {optimizerStatus.status === "completed" && optimizerStatus.objective === "gpp" && !optimizerStatus.gpp_recommendation && !highestProjectionReport && !optimizerStatus.scenario_mode &&
                 <p>This saved run predates GPP recommendations. Run the optimizer to save a candidate comparison and one recommendation.</p>}
               {optimizerStatus.status === "completed" && optimizerStatus.objective === "gpp" && optimizerStatus.gpp_recommendation && !highestProjectionReport && !optimizerStatus.preliminary_report &&
                 <GppRecommendation report={optimizerStatus.gpp_recommendation} pending={lineupExportPending}
@@ -3888,12 +3984,12 @@ function App() {
                   }} />}
               <p>Job ID: {optimizerStatus.job_id}</p>
               <p>Status: {optimizerStatus.status}</p>
-              <p>Strategy: {optimizerStatus.strategy}</p>
+              <p>Strategy: {((optimizerStatus.results as any[][])?.[0])?.some(row => row.scenario_first_lineup_report) ? 'Scenario-first Captain · whole-roster conditional case selection' : optimizerStatus.strategy}</p>
               <ClassicGameConcentrationReport optimizer={optimizerStatus} />
               <ClassicLargeGppReadinessReport key={optimizerStatus.job_id} optimizer={optimizerStatus}
                 onAssessment={value => setOptimizerStatus({ ...optimizerStatus, readiness_assessment: value })} />
               <ClassicConstructionReport key={`${optimizerStatus.job_id}:${enforceSingleTE}`} optimizer={optimizerStatus} enforceSingleTE={enforceSingleTE} />
-              {!highestProjectionReport && typeof optimizerStatus.strategy_config.description === "string" && (
+              {!highestProjectionReport && !optimizerStatus.scenario_mode && !((optimizerStatus.results as any[][])?.[0])?.some(row => row.scenario_first_lineup_report) && typeof optimizerStatus.strategy_config.description === "string" && (
                 <p>{optimizerStatus.strategy_config.description}</p>
               )}
               <p>{optimizerStatus.message}</p>
@@ -4089,7 +4185,7 @@ function App() {
                 </div>;
               })()}
               <RbDstDiagnosticsPanel optimizer={optimizerStatus} />
-              <ModelDisagreementPanel projectionRunId={optimizerStatus.projection_run_id} optimizer={optimizerStatus} />
+              <details open={!optimizerStatus.scenario_mode}><summary>{optimizerStatus.scenario_mode?"Baseline projection diagnostics · comparison only":"Projection diagnostics"}</summary><ModelDisagreementPanel projectionRunId={optimizerStatus.projection_run_id} optimizer={optimizerStatus} /></details>
               {optimizerStatus.status === "completed" && !optimizerStatus.preliminary_report && <SkillExposureApprovalPanel optimizer={optimizerStatus} onNewRun={async (runId) => {
                 const response = await fetchOptimizerResults(runId);
                 setOptimizerStatus(response);
@@ -4335,18 +4431,22 @@ function App() {
                     };
 
                     const sortedLineup = assignSlots(lineup);
+                    const workloadLineup = lineup.some((p:any)=>p.workload_forecast);
+                    const scenarioFirstLineup = lineup.some((p:any)=>p.scenario_first_lineup_report);
                     return (
                       <div className="lineup-card" id={`optimizer-lineup-${idx + 1}`} key={`lineup-${idx}`}>
                         <JointOpportunitySummary summary={lineup[0]?.analyst_joint_opportunity_summary} />
                         <div className="lineup-header">
-                          {!highestProjectionReport && optimizerStatus.gpp_recommendation?.recommended?.lineup_number === idx + 1 && <strong>Recommended GPP candidate · provisional</strong>}
+                          {!highestProjectionReport && optimizerStatus.gpp_recommendation?.recommended?.lineup_number === idx + 1 && <strong>{lineup.some((row:any) => row.workload_forecast) ? "Workload recommendation" : "Recommended GPP candidate · provisional"}</strong>}
                           <strong>{lineup.some((row: any) => row.cash_lineup_selection) ? idx === 0 ? "Primary recommendation" : `Additional requested lineup ${idx + 1}` : lineup[0]?.lineup_variant === "long_shot" ? "Long-shot lineup" : `Lineup ${idx + 1}`}</strong>
                           <span>Salary: {totalSalary.toLocaleString()}</span>
-                          <span>Mean: {totalProj.toFixed(2)}</span>
+                          {!lineup.some((p:any)=>p.scenario_first_lineup_report)&&<span>{lineup.some((p:any)=>p.workload_forecast) ? "Incumbent points (report only)" : optimizerStatus.scenario_mode ? "Baseline mean" : "Mean"}: {totalProj.toFixed(2)}</span>}
+                          {lineup.some((p:any)=>p.workload_forecast)&&<span>{lineup.some((p:any)=>p.scenario_first_lineup_report)?"Mean conditional case score (display only)":"Opportunity utility"}: {lineup.reduce((sum:number,p:any)=>sum+Number(p.workload_forecast?.utility??0)*(p.roster_position==="CPT"?1.5:1),0).toFixed(3)}</span>}
+                          {optimizerStatus.scenario_mode&&<span>Selection forecast: {lineup.reduce((sum:number,p:any)=>sum+Number(p.scenario_mean??0),0).toFixed(2)}</span>}
                           {cashDiagnostic && <span>Downside: {Number(cashDiagnostic.downside_diagnostic).toFixed(2)} · Upside: {Number(cashDiagnostic.upside_diagnostic).toFixed(2)} · Proxy score: {Number(cashDiagnostic.selection_score).toFixed(2)}</span>}
-                          <span>{ceilingSummary.label}: {ceilingSummary.value.toFixed(2)}</span>
+                          {!scenarioFirstLineup&&<span>{optimizerStatus.scenario_mode||workloadLineup?"Baseline individual ceiling sum (report only)":ceilingSummary.label}: {ceilingSummary.value.toFixed(2)}</span>}
                           {lineup[0]?.showdown_scenario && <span>Scenario: {lineup[0].showdown_scenario.label} · winner {lineup[0].showdown_scenario.conditioned_winner ?? "market"} · {lineup[0].showdown_scenario.decisive_margin_threshold}+ points · baseline mean {lineup.reduce((sum: number, row: any) => sum + Number(row.baseline_projection ?? row.projection ?? 0), 0).toFixed(2)} → discovery-conditioned {lineupConditionedTotal(lineup, "mean")} · baseline P90 {lineup.reduce((sum: number, row: any) => sum + Number(row.baseline_p90 ?? row.p90 ?? 0), 0).toFixed(2)} → discovery-conditioned {lineupConditionedTotal(lineup, "p90")}</span>}
-                          {hasContextScoring && !highestProjectionReport && (
+                          {hasContextScoring && !highestProjectionReport && !optimizerStatus.scenario_mode && !workloadLineup && (
                             <span>
                               Context: {totalContextAdjustment >= 0 ? "+" : ""}
                               {totalContextAdjustment.toFixed(2)}
@@ -4356,20 +4456,20 @@ function App() {
                             <span>Floor: {totalFloor.toFixed(2)} · Risk: {(totalProj - totalFloor).toFixed(2)}</span>
                           )}
                           {stackSummary && <span>Stack: {stackSummary}</span>}
-                          {correlationSummary && !highestProjectionReport && (
+                          {correlationSummary && !highestProjectionReport && !optimizerStatus.scenario_mode && !workloadLineup && (
                             <span>
                               Correlation: {correlationAdjustment >= 0 ? "+" : ""}
                               {correlationAdjustment.toFixed(2)}
                             </span>
                           )}
-                          {gameScript && <span>Lineup structure: {gameScript}</span>}
+                          {gameScript && !optimizerStatus.scenario_mode && !workloadLineup && <span>Lineup structure: {gameScript}</span>}
                           {lineup[0]?.showdown_selection_diagnostic && <span>Global rank #{lineup[0].showdown_selection_diagnostic.global_candidate_rank} · mean loss {Number(lineup[0].showdown_selection_diagnostic.mean_loss).toFixed(2)} · P90 loss {Number(lineup[0].showdown_selection_diagnostic.p90_loss).toFixed(2)} · selector loss {Number(lineup[0].showdown_selection_diagnostic.selector_loss).toFixed(2)} · scenario diversity changed selection {lineup[0].showdown_selection_diagnostic.scenario_diversity_changed_selection ? "yes" : "no"}</span>}
                           {optimizerStatus.objective === "gpp" && (
                             <>
                               <span>
-                                {ownershipAvailable
+                                {workloadLineup ? "Ownership not used in opportunity selection" : ownershipAvailable
                                   ? `Ownership: ${totalOwnership.toFixed(2)}`
-                                  : highestProjectionReport ? "Ownership unavailable — not used in baseline objective" : "GPP ownership unavailable — optimizing ceiling/correlation only"}
+                                  : optimizerStatus.scenario_mode ? "Ownership not used in this selection objective" : highestProjectionReport ? "Ownership unavailable — not used in baseline objective" : "GPP ownership unavailable — optimizing ceiling/correlation only"}
                               </span>
                               {duplicationRisk?.ownership_available && (
                                 <span>
@@ -4410,6 +4510,14 @@ function App() {
                             </ul>
                           </details>
                         )}
+                        {lineup.some((row:any)=>row.scenario_first_lineup_report)&&<ScenarioFirstLineup report={lineup.find((row:any)=>row.scenario_first_lineup_report).scenario_first_lineup_report} lineup={sortedLineup}/>}
+                        {!scenarioFirstLineup&&lineup.some((row:any) => row.workload_forecast) && <details><summary>Saved explicit offensive forecasts and assumptions</summary>
+                          <p>Physical counts and yards are unmultiplied, including Captain. Targets and QB pass attempts share the same plays. The yard comparison uses explicit partial DK scoring; count utility uses positional normalization. Neither establishes calibrated tournament value.</p>
+                          {lineup.some((row:any)=>row.workload_forecast?.projected_yards)&&<><p>Yard selection: 0.04 × passing + 0.10 × rushing + 0.10 × receiving. Partial DK yard scoring only; no count normalizers, receptions, touchdowns or bonuses. Captain utility ×1.5; physical yards unchanged. Experimental, conditional on role/participation; no proven tournament improvement.</p><table><thead><tr><th>Player</th><th>Pass yards</th><th>Rush yards</th><th>Receiving yards</th><th>Role / efficiency</th></tr></thead><tbody>{sortedLineup.map((row:any)=><tr key={row.player_id}><td>{row.name}</td>{['passing_yards','rushing_yards','receiving_yards'].map(key=><td key={key}>{row.workload_forecast?.projected_yards?.[key]?.toFixed(2)??"Outside role / unknown"}</td>)}<td><details><summary>Prior evidence and reconciliation</summary><pre>{JSON.stringify({efficiency:row.workload_forecast?.efficiency,receiving_factor:row.workload_forecast?.receiving_team_reconciliation_factor},null,2)}</pre></details></td></tr>)}</tbody></table></>}
+                          <table className="compact-table"><thead><tr><th>Player</th><th>Pass attempts</th><th>Rush attempts</th><th>Targets</th><th>Selection utility</th><th>Forecast / assumption</th></tr></thead><tbody>
+                            {sortedLineup.map((row:any) => <tr key={row.player_id}><td>{row.name}</td><td>{row.workload_forecast?.counts.pass_attempts?.toFixed(2) ?? "N/A"}</td><td>{row.workload_forecast?.counts.rush_attempts?.toFixed(2) ?? "N/A"}</td><td>{row.workload_forecast?.counts.targets?.toFixed(2) ?? "N/A"}</td><td>{row.workload_forecast?.utility?.toFixed(3)}</td><td>{row.workload_forecast?.version} · {row.workload_forecast?.conditional_on}</td></tr>)}
+                          </tbody></table>
+                        </details>}
                         <table className="compact-table">
                           <thead>
                             <tr>
@@ -4417,8 +4525,9 @@ function App() {
                               <th>Slot · Pos</th>
                               <th>Team</th>
                               <th>Salary</th>
-                              <th>Proj</th>
-                              <th>P90</th>
+                              <th>{scenarioFirstLineup?"Case mean · display only":optimizerStatus.scenario_mode?"Baseline proj":"Proj"}</th>
+                              {optimizerStatus.scenario_mode&&<th>Selection forecast</th>}
+                              {!scenarioFirstLineup&&<th>P90</th>}
                               {lineup[0]?.showdown_scenario && <><th>Baseline mean / P90</th><th>Scenario reason</th></>}
                               <th>Rules</th>
                             </tr>
@@ -4445,8 +4554,9 @@ function App() {
                                   </td>
                                   <td>{player.player_team || player.team || player.recent_team}</td>
                                   <td>{Number(player.salary || 0).toLocaleString()}</td>
-                                  <td>{(Number(player.projection ?? player.predicted_mean) || 0).toFixed(2)}</td>
-                                  <td>{(Number(player.p90 ?? player.predicted_p90 ?? player.projection) || 0).toFixed(2)}</td>
+                                  <td>{scenarioFirstLineup?(Number(player.workload_forecast?.utility??0)*(player.roster_position==="CPT"?1.5:1)).toFixed(2):(Number(player.projection ?? player.predicted_mean) || 0).toFixed(2)}</td>
+                                  {optimizerStatus.scenario_mode&&<td>{(player.scenario_mean??player.scenario_mode_player?.conditional_mean)==null?"Unknown":Number(player.scenario_mean??player.scenario_mode_player?.conditional_mean).toFixed(2)}</td>}
+                                  {!scenarioFirstLineup&&<td>{(Number(player.p90 ?? player.predicted_p90 ?? player.projection) || 0).toFixed(2)}</td>}
                                   {lineup[0]?.showdown_scenario && <><td>{Number(player.baseline_projection ?? player.projection ?? 0).toFixed(2)} / {Number(player.baseline_p90 ?? player.p90 ?? 0).toFixed(2)}</td><td>{player.showdown_scenario_adjustment?.reason ?? "market baseline"}</td></>}
                                   <td title={explanations.map((item: any) => item.reason).filter(Boolean).join(" | ")}>
                                     {ruleSummary || "-"}

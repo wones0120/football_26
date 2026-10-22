@@ -95,17 +95,30 @@ def evaluate_candidates(lineups, *, run_id, season, week, slate, contest_format,
 def recommended_lineup(job):
     """Export only the frozen recommendation; never trust a client index."""
     report = (job.params or {}).get("gpp_recommendation") or {}
-    if (job.status != "completed" or job.objective != "gpp" or report.get("policy_id") != POLICY_ID
+    from .workload_optimizer import RECOMMENDATION_POLICY
+    from .shared_world_runtime import RECOMMENDATION_POLICY as SHARED_RECOMMENDATION_POLICY
+    from .shared_world_selection import POLICY as SHARED_WORLD_POLICY
+    shared = (job.params or {}).get("analyst_selection_policy") == SHARED_WORLD_POLICY
+    policy = SHARED_RECOMMENDATION_POLICY if shared else RECOMMENDATION_POLICY if (job.params or {}).get("workload_comparison") else POLICY_ID
+    if (job.status != "completed" or job.objective != "gpp" or report.get("policy_id") != policy
             or report.get("optimizer_run_id") != job.job_id or report.get("status") != "provisional"):
         raise ValueError("This completed GPP run has no saved recommendation; run the optimizer again")
     scope = dict(season=job.season, week=job.week, slate=job.slate, contest_format=job.contest_format)
     if report.get("scope") != scope or report.get("projection_run_id") != job.projection_run_id:
         raise ValueError("Recommendation scope or projection does not match its saved run")
+    if shared:
+        from .analyst_shadow import digest
+        selection = ((job.params or {}).get("strategy_runtime") or {}).get("football_analyst", {}).get("shared_world_selection") or {}
+        if (selection.get("policy_id") != SHARED_WORLD_POLICY or selection.get("status") != "completed"
+            or report.get("shared_world_selection_sha256") != digest(selection)):
+            raise ValueError("Shared-world recommendation receipt differs from saved selection")
     selected = report.get("recommended") or {}
     index = selected.get("lineup_number")
     if type(index) is not int or not 1 <= index <= len(job.results or []):
         raise ValueError("Recommended candidate is missing")
     lineup = job.results[index - 1]
+    if shared and (index != 1 or lineup[0].get("shared_world_selection_rank") != 1):
+        raise ValueError("Shared-world recommendation must retain the frozen anchor-first rank")
     if candidate_id(lineup) != selected.get("candidate_id"):
         raise ValueError("Recommended candidate identity no longer matches its saved lineup")
     return lineup

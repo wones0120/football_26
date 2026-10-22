@@ -1,0 +1,544 @@
+"""Pure retained-source game-state reconstruction; never a prediction policy.
+
+All native rows survive, including controls and excluded official opportunities.
+Adjacent observations are labels, not an inferred physical post-play state.
+"""
+from collections import Counter, defaultdict
+from copy import deepcopy
+from decimal import Decimal, InvalidOperation
+import re
+
+from .factual_designation import clock
+from .fumble_event_components import _flag, _eligibility
+from .market_snapshots import canonical_team
+from .personnel_package_continuity import physical_membership
+from .play_caller_package_choices import classify_choice
+
+VERSION = 'game_state_reconstruction_v1'
+SCOPE_FIELDS = ('game_id', 'play_id', 'season', 'week', 'season_type', 'home_team', 'away_team',
+                'order_sequence', 'drive', 'fixed_drive', 'series')
+STATE_FIELDS = ('posteam', 'defteam', 'qtr', 'game_half', 'quarter_seconds_remaining',
+                'half_seconds_remaining', 'game_seconds_remaining', 'time', 'down', 'ydstogo',
+                'goal_to_go', 'yardline_100', 'posteam_score', 'defteam_score',
+                'posteam_score_post', 'defteam_score_post', 'total_home_score', 'total_away_score',
+                'home_timeouts_remaining', 'away_timeouts_remaining')
+EVENT_FIELDS = ('play_type', 'play_type_nfl', 'no_play', 'play_deleted', 'desc', 'penalty',
+                'penalty_type', 'penalty_team', 'penalty_yards', 'first_down_penalty',
+                'replay_or_challenge', 'replay_or_challenge_result', 'aborted_play',
+                'quarter_end', 'pass_attempt', 'rush_attempt', 'sack', 'qb_dropback', 'qb_scramble',
+                'qb_kneel', 'qb_spike', 'complete_pass', 'incomplete_pass', 'interception',
+                'fumble', 'fumble_lost', 'touchdown', 'pass_touchdown', 'rush_touchdown',
+                'return_touchdown', 'safety', 'punt_attempt', 'punt_blocked', 'kickoff_attempt', 'field_goal_attempt',
+                'field_goal_result', 'extra_point_attempt', 'extra_point_result', 'two_point_attempt',
+                'two_point_conv_result', 'defensive_two_point_attempt', 'defensive_two_point_conv',
+                'defensive_extra_point_attempt', 'defensive_extra_point_conv', 'return_team',
+                'yards_gained', 'passing_yards', 'rushing_yards', 'receiving_yards', 'return_yards',
+                'lateral_rush', 'lateral_reception', 'lateral_return', 'lateral_recovery', 'fourth_down_failed')
+ACTOR_FIELDS = ('passer_player_id', 'rusher_player_id', 'receiver_player_id', 'td_player_id',
+                'td_team', 'lateral_rusher_player_id', 'lateral_receiver_player_id',
+                'lateral_rushing_yards', 'lateral_receiving_yards', 'kicker_player_id',
+                'punter_player_id', 'kickoff_returner_player_id', 'punt_returner_player_id',
+                'fumbled_1_player_id', 'fumbled_1_team', 'fumbled_2_player_id', 'fumbled_2_team',
+                'fumble_recovery_1_player_id', 'fumble_recovery_1_team',
+                'fumble_recovery_2_player_id', 'fumble_recovery_2_team')
+BOUNDARY_FIELDS = ('drive_play_id_started', 'drive_play_id_ended', 'drive_start_transition',
+                   'drive_end_transition', 'drive_start_yard_line', 'drive_end_yard_line',
+                   'end_clock_time', 'end_yard_line')
+PROJECTION_FIELDS = tuple(dict.fromkeys((*SCOPE_FIELDS, *STATE_FIELDS, *EVENT_FIELDS,
+                                        *ACTOR_FIELDS, *BOUNDARY_FIELDS)))
+
+
+def number(value):
+    if value in (None, '') or type(value) is bool:
+        return None
+    try:
+        value = Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        return None
+    return float(value) if value.is_finite() else None
+
+
+def integer(value):
+    value = number(value)
+    return int(value) if value is not None and value == int(value) else None
+
+
+def _side(value, sides):
+    team = canonical_team(value) if value not in (None, '') else None
+    return sides.index(team) if team in sides else None
+
+
+def _phase(raw):
+    if _flag(raw.get('two_point_attempt')) is True or _flag(raw.get('extra_point_attempt')) is True:
+        return 'try'
+    kind = raw.get('play_type')
+    if kind == 'kickoff':
+        return 'kickoff'
+    if kind in {'pass', 'run', 'qb_kneel', 'qb_spike', 'punt', 'field_goal'}:
+        return 'scrimmage'
+    if kind == 'no_play' or _flag(raw.get('no_play')) is True:
+        return 'penalty_or_no_play'
+    if raw.get('play_type_nfl') in {'GAME_START', 'END_QUARTER', 'END_GAME', 'TIMEOUT'} or kind in {'quarter_end', 'time_out'}:
+        return 'control'
+    return 'unknown'
+
+
+def state_before(raw, sides):
+    """Scores use declared possession pre-scores, never game final-score columns."""
+    problems = []
+    off, defense = (_side(raw.get(k), sides) for k in ('posteam', 'defteam'))
+    if off is None or defense is None or off == defense:
+        problems.append('unknown_or_conflicting_sides')
+    qtr = integer(raw.get('qtr'))
+    half = 1 if qtr in (1, 2) else 2 if qtr in (3, 4) else None
+    if half is None:
+        problems.append('overtime_or_unknown_regulation_period')
+    if raw.get('game_half') != ('Half1' if half == 1 else 'Half2' if half == 2 else None):
+        problems.append('unknown_or_conflicting_half')
+    remaining = number(raw.get('half_seconds_remaining'))
+    quarter = number(raw.get('quarter_seconds_remaining'))
+    game = number(raw.get('game_seconds_remaining'))
+    if remaining is None or not 0 <= remaining <= 1800 or quarter is None or not 0 <= quarter <= 900:
+        problems.append('invalid_half_or_quarter_clock')
+    elif qtr in (1, 2, 3, 4) and remaining != quarter + (900 if qtr in (1, 3) else 0):
+        problems.append('quarter_half_clock_disagreement')
+    if half and (game is None or remaining is None or game != remaining + (1800 if half == 1 else 0)):
+        problems.append('game_half_clock_disagreement')
+    scores = [None, None]
+    if off is not None and defense is not None and off != defense:
+        for key, side in (('posteam_score', off), ('defteam_score', defense)):
+            value = integer(raw.get(key))
+            scores[side] = value if value is not None and value >= 0 else None
+    if None in scores:
+        problems.append('unknown_preplay_scores')
+    phase = _phase(raw)
+    down, distance, field = integer(raw.get('down')), number(raw.get('ydstogo')), number(raw.get('yardline_100'))
+    if (field is None or not 0 <= field <= 100) and phase != 'control':
+        problems.append('unknown_field_position')
+    if phase == 'scrimmage' and (down not in (1, 2, 3, 4) or distance is None or distance < 0):
+        problems.append('unknown_scrimmage_down_distance')
+    if phase == 'unknown':
+        problems.append('unknown_phase')
+    return dict(possession_side=off, defense_side=defense, qtr=qtr, half=half,
+                half_seconds_remaining=remaining, quarter_seconds_remaining=quarter,
+                game_seconds_remaining=game, scores=scores, phase=phase, yardline100=field,
+                down=down, distance=distance, problems=problems)
+
+
+def _reported_post_scores(raw, state):
+    values = [None, None]
+    if state['possession_side'] is not None and state['defense_side'] is not None and state['possession_side'] != state['defense_side']:
+        for key, side in (('posteam_score_post', state['possession_side']), ('defteam_score_post', state['defense_side'])):
+            n = integer(raw.get(key))
+            values[side] = n if n is not None and n >= 0 else None
+    return values
+
+
+def _typed_points(raw, state, sides):
+    """Points belong to the native scorer's team, not to the initial offense."""
+    points = [0, 0]
+    reasons = []
+    flags = {k:_flag(raw.get(k)) for k in ('touchdown', 'safety', 'field_goal_attempt',
+             'extra_point_attempt', 'two_point_attempt', 'defensive_two_point_conv',
+             'defensive_extra_point_conv')}
+    if any(v is None for v in flags.values()):
+        return None, ['unknown_scoring_event_flags']
+    if flags['touchdown']:
+        side = _side(raw.get('td_team'), sides)
+        if side is None:
+            reasons.append('unknown_touchdown_scoring_side')
+        else:
+            points[side] += 6
+    for attempt, result, success, count in (
+        ('field_goal_attempt', 'field_goal_result', 'made', 3),
+        ('extra_point_attempt', 'extra_point_result', 'good', 1),
+        ('two_point_attempt', 'two_point_conv_result', 'success', 2),
+    ):
+        if not flags[attempt]:
+            continue
+        value = raw.get(result)
+        if value == success:
+            side = state['possession_side']
+            if side is None:
+                reasons.append('unknown_kick_or_try_scoring_side')
+            else:
+                points[side] += count
+        elif value not in {'missed', 'failed', 'failure', 'blocked', 'aborted'}:
+            reasons.append('unknown_kick_or_try_result')
+    if flags['safety']:
+        side = state['defense_side']
+        if side is None:
+            reasons.append('unknown_safety_scoring_side')
+        else:
+            points[side] += 2
+    if flags['defensive_two_point_conv'] or flags['defensive_extra_point_conv']:
+        side = state['defense_side']
+        if side is None:
+            reasons.append('unknown_defensive_try_scoring_side')
+        else:
+            points[side] += 2
+    if flags['defensive_two_point_conv'] and flags['defensive_extra_point_conv']:
+        reasons.append('conflicting_defensive_try_types')
+    return (None if reasons else points), reasons
+
+
+def _event(raw, state, sides):
+    """Keep source actors/yard units; a target recipient census remains tri-state."""
+    barriers = []
+    physical = physical_membership(raw)
+    choice = classify_choice(raw, physical)
+    live, _ = _eligibility(raw)
+    if state['phase'] == 'kickoff' or raw.get('play_type') in {'punt', 'field_goal', 'extra_point'}:
+        if live is not True:
+            barriers.append('unproven_native_kick_or_try_class')
+    if physical is None or physical is True and choice is None:
+        barriers.append('unknown_physical_or_call_shape')
+    if _flag(raw.get('play_deleted')) is True:
+        barriers.append('deleted_source_row')
+    elif 'play_deleted' in raw and _flag(raw.get('play_deleted')) is None:
+        barriers.append('unknown_deleted_status')
+    if _flag(raw.get('replay_or_challenge')) is True:
+        barriers.append('replay_or_challenge_not_independently_resolved')
+    elif _flag(raw.get('replay_or_challenge')) is None:
+        barriers.append('unknown_replay_status')
+    p, r, sack = (_flag(raw.get(k)) for k in ('pass_attempt', 'rush_attempt', 'sack'))
+    official = {'pass_attempts': None, 'rush_attempts': None, 'targets': None}
+    excluded = raw.get('play_type') == 'no_play' or _flag(raw.get('no_play')) is True or _flag(raw.get('two_point_attempt')) is True
+    if excluded or physical is False:
+        official = dict.fromkeys(official, 0)
+    elif physical is True and choice is not None:
+        official['pass_attempts'] = int(p is True and sack is False)
+        official['rush_attempts'] = int(r is True)
+        if not official['pass_attempts'] or choice == 'spike':
+            official['targets'] = 0
+        elif re.fullmatch(r'00-\d{7}', str(raw.get('receiver_player_id') or '')):
+            official['targets'] = 1
+        else:
+            barriers.append('unknown_target_recipient_census')
+    for channel, field in (('pass_attempts', 'passer_player_id'), ('rush_attempts', 'rusher_player_id')):
+        if official[channel] == 1 and not re.fullmatch(r'00-\d{7}', str(raw.get(field) or '')):
+            barriers.append('unknown_' + channel + '_credit')
+    for name in ('lateral_rush', 'lateral_reception', 'lateral_return', 'lateral_recovery'):
+        if _flag(raw.get(name)) is True:
+            barriers.append('lateral_credit_chain_unproven')
+    post = _reported_post_scores(raw, state)
+    delta = [b - a for a, b in zip(state['scores'], post)] if None not in state['scores'] + post else None
+    if delta is None or any(v < 0 for v in delta):
+        barriers.append('unknown_or_corrected_score_delta')
+    typed_points, scoring_problems = _typed_points(raw, state, sides)
+    barriers.extend(scoring_problems)
+    if typed_points is not None and delta != typed_points:
+        barriers.append('typed_event_vs_reported_score_disagreement')
+    if (raw.get('play_type') == 'no_play' or _flag(raw.get('no_play')) is True) and typed_points != [0, 0]:
+        barriers.append('no_play_scoring_conflict')
+    if _flag(raw.get('fumble')) is True:
+        barriers.append('unproven_full_fumble_possession_chain')
+    td_flags = {k:_flag(raw.get(k)) for k in ('pass_touchdown', 'rush_touchdown', 'return_touchdown')}
+    if sum(v is True for v in td_flags.values()) > 1:
+        barriers.append('conflicting_physical_touchdown_types')
+    if any(v is True for v in td_flags.values()) and _flag(raw.get('touchdown')) is not True:
+        barriers.append('touchdown_subtype_without_physical_touchdown')
+    if any(td_flags[k] is True for k in ('pass_touchdown', 'rush_touchdown')):
+        if _side(raw.get('td_team'), sides) != state['possession_side'] or physical is not True:
+            barriers.append('offensive_touchdown_side_or_physical_conflict')
+    if _flag(raw.get('penalty')) is None:
+        barriers.append('unknown_penalty_status')
+    elif _flag(raw.get('penalty')) is True and (number(raw.get('penalty_yards')) is None or not raw.get('penalty_type')):
+        barriers.append('unknown_penalty_details')
+    stats = [dict(), dict()]
+    off = state['possession_side']
+    if off is not None:
+        stats[off] = dict(**official, physical_offensive_snaps=int(physical) if physical is not None else None,
+                          net_offensive_yards=number(raw.get('yards_gained')) if physical is True else 0,
+                          sacks=int(_flag(raw.get('sack'))) if _flag(raw.get('sack')) is not None else None)
+        if physical is True and stats[off]['net_offensive_yards'] is None:
+            barriers.append('unknown_signed_physical_yards')
+        for key, flag in (('passing_tds', 'pass_touchdown'), ('rushing_tds', 'rush_touchdown')):
+            stats[off][key] = int(td_flags[flag]) if td_flags[flag] is not None else None
+    point_types = [dict(), dict()]
+    scorer = _side(raw.get('td_team'), sides)
+    if _flag(raw.get('touchdown')) is True and scorer is not None:
+        kind = next((name for name, flag in td_flags.items() if flag is True), 'other_touchdown')
+        point_types[scorer][kind] = 6
+    for attempt, result, success, name, points in (
+        ('field_goal_attempt', 'field_goal_result', 'made', 'field_goal', 3),
+        ('extra_point_attempt', 'extra_point_result', 'good', 'extra_point', 1),
+        ('two_point_attempt', 'two_point_conv_result', 'success', 'two_point', 2),
+    ):
+        if _flag(raw.get(attempt)) is True and raw.get(result) == success and off is not None:
+            point_types[off][name] = points
+    defense = state['defense_side']
+    if defense is not None:
+        if _flag(raw.get('safety')) is True:
+            point_types[defense]['safety'] = 2
+        if _flag(raw.get('defensive_two_point_conv')) is True or _flag(raw.get('defensive_extra_point_conv')) is True:
+            point_types[defense]['defensive_try'] = 2
+    return dict(physical_offensive_snap=physical, choice=choice, official_counts=official,
+                reported_post_scores=post, score_delta=delta, typed_points=typed_points,
+                team_stats_by_side=stats, points_by_type=point_types,
+                raw_actors={k:raw.get(k) for k in ACTOR_FIELDS},
+                source_signed_yards={k:number(raw.get(k)) for k in ('yards_gained', 'passing_yards', 'rushing_yards', 'receiving_yards', 'return_yards')},
+                barriers=barriers)
+
+
+def reconstruct_game_transitions(rows, *, source_lineage, max_rows=200000):
+    """Pure all-row projection. It deliberately has no source or model I/O."""
+    read = clock(source_lineage.get('actual_read_at'))
+    capture = clock(source_lineage.get('captured_at'))
+    if read is None or capture is None or capture > read or not re.fullmatch(r'[a-f0-9]{64}', str(source_lineage.get('sha256', ''))):
+        raise ValueError('Immutable source hash/capture/read clocks required')
+    if source_lineage.get('all_source_rows_retained') is not True:
+        raise ValueError('Explicit complete source projection receipt required')
+    games, quarantine = defaultdict(list), []
+    for ordinal, raw in enumerate(rows):
+        if ordinal >= max_rows:
+            raise ValueError('Reconstruction row cap exceeded')
+        raw = deepcopy(raw)
+        year, week, play = (integer(raw.get(k)) for k in ('season', 'week', 'play_id'))
+        gid = raw.get('game_id')
+        pieces = gid.split('_') if isinstance(gid, str) else []
+        valid = (year in (2023, 2024, 2026) and week is not None and 1 <= week <= 18 and play is not None
+                 and len(pieces) == 4 and pieces[:2] == [str(year), f'{week:02}'] and raw.get('season_type') == 'REG')
+        if not valid:
+            quarantine.append(dict(source_ordinal=ordinal, raw=raw, reason='invalid_or_out_of_contract_native_scope'))
+            continue
+        home, away = (canonical_team(raw.get(k)) if raw.get(k) else None for k in ('home_team', 'away_team'))
+        if home is None or away is None or home == away or {home, away} != {canonical_team(t) for t in pieces[2:]}:
+            quarantine.append(dict(source_ordinal=ordinal, raw=raw, reason='invalid_native_home_away'))
+            continue
+        state = state_before(raw, [home, away])
+        step = dict(source_ordinal=ordinal, game_id=gid, play_id=str(play), source_order=number(raw.get('order_sequence')),
+                    original_drive=integer(raw.get('drive')), fixed_drive=integer(raw.get('fixed_drive')),
+                    raw=raw, state_before=state, event=_event(raw, state, [home, away]), next_observed_state=None,
+                    next_play_id=None, elapsed_to_next=None, barriers=[])
+        step['barriers'].extend(state['problems'] + step['event']['barriers'])
+        games[gid].append(step)
+    output = []
+    for gid, steps in sorted(games.items()):
+        keys = Counter(s['play_id'] for s in steps)
+        orders = [s['source_order'] for s in steps]
+        order_ok = None not in orders and len(set(orders)) == len(orders) and max(keys.values()) == 1
+        sides = [[canonical_team(s['raw']['home_team']), canonical_team(s['raw']['away_team'])] for s in steps]
+        if any(pair != sides[0] for pair in sides):
+            order_ok = False
+        if order_ok:
+            steps.sort(key=lambda s:s['source_order'])
+        for i, step in enumerate(steps):
+            if not order_ok:
+                step['barriers'].append('unverified_game_order_or_side_orientation')
+                continue
+            if i + 1 == len(steps):
+                step['barriers'].append('no_next_observed_row')
+                continue
+            nxt = steps[i+1]
+            a, b = step['state_before'], nxt['state_before']
+            step.update(next_observed_state=deepcopy(b), next_play_id=nxt['play_id'])
+            if a['half'] is None or a['half'] != b['half']:
+                step['barriers'].append('half_or_regulation_boundary')
+            elif a['half_seconds_remaining'] is None or b['half_seconds_remaining'] is None:
+                step['barriers'].append('unknown_elapsed_clock')
+            else:
+                elapsed = a['half_seconds_remaining'] - b['half_seconds_remaining']
+                if elapsed < 0:
+                    step['barriers'].append('reversed_or_corrected_clock')
+                else:
+                    step['elapsed_to_next'] = elapsed
+            if step['event']['reported_post_scores'] != b['scores']:
+                step['barriers'].append('reported_post_vs_next_pre_score_disagreement')
+            if b['problems']:
+                step['barriers'].append('next_state_unqualified')
+        output.append(dict(game_id=gid, sides=sides[0], native_order_verified=order_ok, rows=steps))
+    input_rows = sum(len(g['rows']) for g in output)+len(quarantine)
+    if source_lineage.get('projected_rows') is not None and source_lineage['projected_rows'] != input_rows:
+        raise ValueError('Source projection cardinality differs')
+    return dict(version=VERSION, games=output, quarantine=quarantine, source_lineage=deepcopy(source_lineage),
+                input_rows=input_rows,
+                prediction_use='OBSERVED_STATE_LABELS_ONLY_NOT_PREGAME_FEATURES')
+
+
+def _support(state):
+    return dict(possession_side=state['possession_side'], phase=state['phase'],
+                yardline100=state['yardline100'], half=state['half'])
+
+
+def _terminal_proven(label, last):
+    raw = last['raw']
+    phase = last['state_before']['phase']
+    if label == 'TOUCHDOWN':
+        return _flag(raw.get('touchdown')) is True and last['event']['typed_points'] is not None
+    if label in {'FIELD_GOAL', 'MISSED_FG'}:
+        return phase == 'scrimmage' and _flag(raw.get('field_goal_attempt')) is True and raw.get('field_goal_result') == ('made' if label == 'FIELD_GOAL' else 'missed')
+    if label == 'PUNT':
+        return raw.get('play_type') == 'punt' and _flag(raw.get('punt_attempt')) is True and _flag(raw.get('punt_blocked')) is False
+    if label == 'INTERCEPTION':
+        return last['event']['official_counts']['pass_attempts'] == 1 and _flag(raw.get('interception')) is True
+    if label == 'DOWNS':
+        return _flag(raw.get('fourth_down_failed')) is True and last['event']['physical_offensive_snap'] is True
+    if label == 'SAFETY':
+        return _flag(raw.get('safety')) is True and last['event']['typed_points'] is not None
+    if label in {'END_HALF', 'END_GAME'}:
+        state = last['state_before']
+        return (state['qtr'] == (2 if label == 'END_HALF' else 4)
+                and state['half_seconds_remaining'] == 0
+                and raw.get('play_type_nfl') in ({'END_QUARTER'} if label == 'END_HALF' else {'END_QUARTER', 'END_GAME'})
+                and last['event']['typed_points'] == [0, 0])
+    # Fumble/blocked-kick possession and half/game boundary composition require
+    # separate proof, rather than metadata or a clock reaching zero alone.
+    return False
+
+
+def _boundary_endpoint(step):
+    """A zero-clock native boundary, not the next half's field or elapsed time."""
+    label = step['raw'].get('drive_end_transition')
+    if label not in {'END_HALF', 'END_GAME'} or not _terminal_proven(label, step):
+        return None
+    result = deepcopy(step['state_before'])
+    result.update(phase='halftime' if label == 'END_HALF' else 'regulation_end',
+                  possession_side=None, defense_side=None, yardline100=None, down=None, distance=None)
+    return result
+
+
+def build_original_drive_blocks(reconstruction):
+    """Certify contiguous source groups, never discard their unsupported mass.
+
+    A reported drive ending at a TD does not imply the try or kickoff belongs
+    to it. Their actual rows/groups remain in this ledger and need independent
+    phase support. No kickoff or score default is introduced here.
+    """
+    if reconstruction.get('version') != VERSION:
+        raise ValueError('Matched reconstruction version required')
+    blocks = []
+    for game in reconstruction['games']:
+        runs = []
+        for step in game['rows']:
+            if not runs or step['original_drive'] is None or runs[-1][0]['original_drive'] != step['original_drive']:
+                runs.append([])
+            runs[-1].append(step)
+        appearances = Counter(run[0]['original_drive'] for run in runs if run[0]['original_drive'] is not None)
+        for ordinal, run in enumerate(runs):
+            first, last = run[0], run[-1]
+            reasons = []
+            if not game['native_order_verified']:
+                reasons.append('unverified_game_order')
+            did = first['original_drive']
+            if did is None or appearances[did] != 1:
+                reasons.append('missing_or_noncontiguous_original_drive')
+            for field, endpoint in (('drive_play_id_started', first), ('drive_play_id_ended', last)):
+                values = {integer(s['raw'].get(field)) for s in run}
+                if len(values) != 1 or None in values or str(next(iter(values))) != endpoint['play_id']:
+                    reasons.append('unproven_' + field)
+            start = first['state_before']
+            if start['phase'] not in {'scrimmage', 'kickoff', 'try'}:
+                reasons.append('unqualified_start_phase')
+            steps, prefixes = [], []
+            totals = [dict(pass_attempts=0, rush_attempts=0, targets=0),
+                      dict(pass_attempts=0, rush_attempts=0, targets=0)]
+            points = [0, 0]
+            cumulative = 0.
+            prefix_ok = not reasons
+            for s in run:
+                local = list(s['barriers'])
+                boundary = _boundary_endpoint(s) if s is last else None
+                if boundary is not None:
+                    # The boundary is certified from this row itself; a following
+                    # halftime/OT/absent row does not supply its field or clock.
+                    boundary_only = {'half_or_regulation_boundary', 'no_next_observed_row',
+                                     'next_state_unqualified', 'reported_post_vs_next_pre_score_disagreement'}
+                    local = [reason for reason in local if reason not in boundary_only]
+                prefix_ok = prefix_ok and not local
+                off = s['state_before']['possession_side']
+                counts = s['event']['official_counts']
+                if off is None or any(v is None for v in counts.values()):
+                    prefix_ok = False
+                    local.append('unqualified_team_official_counts')
+                else:
+                    for key, n in counts.items():
+                        totals[off][key] += n
+                delta = s['event']['score_delta']
+                if delta is None:
+                    prefix_ok = False
+                else:
+                    points = [a+b for a,b in zip(points, delta)]
+                elapsed = 0. if boundary is not None else s['elapsed_to_next']
+                if elapsed is None:
+                    prefix_ok = False
+                else:
+                    cumulative += elapsed
+                steps.append(dict(play_id=s['play_id'], source_ordinal=s['source_ordinal'],
+                                  source_order=s['source_order'], state_before=deepcopy(s['state_before']),
+                                  event=deepcopy(s['event']), elapsed_to_next=elapsed,
+                                  cumulative_elapsed_endpoint=cumulative if prefix_ok else None,
+                                  next_observed_state=deepcopy(s['next_observed_state']),
+                                  certified_endpoint=deepcopy(boundary or s['next_observed_state']), barriers=local))
+                if prefix_ok:
+                    prefixes.append(dict(through_play_id=s['play_id'], elapsed_seconds=cumulative,
+                                         terminal_state=deepcopy(boundary or s['next_observed_state']),
+                                         points_by_side=list(points), team_official_counts=deepcopy(totals)))
+                reasons.extend(local)
+            terminal = _boundary_endpoint(last) or last['next_observed_state']
+            if terminal is None or terminal['phase'] not in {'scrimmage', 'kickoff', 'try', 'control', 'halftime', 'regulation_end'}:
+                reasons.append('unqualified_terminal_observation')
+            transitions = {s['raw'].get('drive_end_transition') for s in run}
+            known_terminal = {'TOUCHDOWN', 'FIELD_GOAL', 'MISSED_FG', 'PUNT', 'DOWNS',
+                              'INTERCEPTION', 'FUMBLE', 'END_HALF', 'END_GAME', 'SAFETY',
+                              'BLOCKED_PUNT,_DOWNS', 'BLOCKED_FG,_DOWNS'}
+            if len(transitions) != 1 or not transitions <= known_terminal:
+                reasons.append('unproven_typed_original_drive_terminal')
+            elif not _terminal_proven(next(iter(transitions)), last):
+                reasons.append('terminal_metadata_without_event_proof')
+            reasons = sorted(set(reasons))
+            blocks.append(dict(game_id=game['game_id'], block_ordinal=ordinal, original_drive=did,
+                               source_sides=list(game['sides']), source_row_count=len(run),
+                               source_play_ids=[s['play_id'] for s in run],
+                               physical_offensive_snap_count=sum(s['event']['physical_offensive_snap'] is True for s in run),
+                               start_state=deepcopy(start), physical_start_support=_support(start),
+                               steps=steps, certified_prefixes=prefixes,
+                               terminal_state=deepcopy(terminal), elapsed_seconds=cumulative if not reasons else None,
+                               points_by_side=points if not reasons else None,
+                               team_official_counts=totals if not reasons else None,
+                               certified=not reasons, barriers=reasons))
+    return dict(version='original_drive_trajectory_blocks_v1', blocks=blocks,
+                coverage=dict(all_groups=len(blocks), certified_groups=sum(b['certified'] for b in blocks),
+                              uncertified_groups=sum(not b['certified'] for b in blocks),
+                              quarantine_rows=len(reconstruction['quarantine']),
+                              unsupported_probability='UNKNOWN_NOT_RENORMALIZED'),
+                source_lineage=deepcopy(reconstruction['source_lineage']))
+
+
+def opening_state_evidence(reconstruction):
+    """Empirical TRAIN openings only with native kickoff and beginning evidence.
+
+    Every game/half gets a status; a first observed offensive LOS is never used
+    as a substitute for an unseen kickoff or coin-toss/return trajectory.
+    """
+    out = []
+    for game in reconstruction['games']:
+        for half in (1, 2):
+            rows = [r for r in game['rows'] if r['state_before']['half'] == half]
+            first_action = next((r for r in rows if r['state_before']['phase'] != 'control'), None)
+            reasons = []
+            if first_action is None:
+                reasons.append('no_observed_half_opening_action')
+            else:
+                s = first_action['state_before']
+                if s['qtr'] != (1 if half == 1 else 3) or s['half_seconds_remaining'] != 1800:
+                    reasons.append('opening_clock_not_proven')
+                if s['phase'] != 'kickoff' or _flag(first_action['raw'].get('kickoff_attempt')) is not True:
+                    reasons.append('first_action_not_proven_kickoff')
+                reasons.extend(s['problems'] + first_action['event']['barriers'])
+                if half == 1 and s['scores'] != [0, 0]:
+                    reasons.append('nonzero_or_unknown_game_opening_score')
+                prior = [r for r in game['rows'] if r['source_order'] is not None and first_action['source_order'] is not None and r['source_order'] < first_action['source_order']]
+                if half == 1:
+                    if not prior or any(r['raw'].get('play_type_nfl') != 'GAME_START' for r in prior):
+                        reasons.append('native_game_beginning_unproven')
+                elif not any(_boundary_endpoint(r) is not None and r['state_before']['half'] == 1 for r in prior):
+                    reasons.append('native_first_half_end_unproven')
+            if not game['native_order_verified']:
+                reasons.append('unverified_game_order')
+            out.append(dict(game_id=game['game_id'], source_half=half,
+                            source_season=integer(game['rows'][0]['raw']['season']),
+                            certified=not reasons, barriers=sorted(set(reasons)),
+                            row_id=first_action['play_id'] if first_action else None,
+                            start_state=deepcopy(first_action['state_before']) if first_action else None))
+    return out

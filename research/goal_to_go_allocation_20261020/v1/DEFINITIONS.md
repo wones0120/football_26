@@ -1,0 +1,9 @@
+# Goal-to-go allocation: three compatible channel views
+
+G11-M10 chooses the audited three-channel family: native actor official pass attempts, rush attempts, or receiver targets on source goal-to-go events, divided by the identical same-team channel's all-native GTG opportunities. Each family is one feature; pass and receiver target can represent one physical play and are never added. GTG overlaps field-position zones rather than forming a fourth exclusive zone.
+
+Use up to the latest 1, 3 or 8 source-observed team games in a single season before the explicit period. Store the achieved count and exact native game list. Pool counts over that identical game list before division, never average game shares. This is observed log support, not certified scheduled/full-game coverage. Every native actor appearing anywhere in the selected source window is retained, with original canonical attachment if consistent; missing actor/channel on any selected game stays unknown, not absent/inactive/zero. Known lower actor counts remain separately named.
+
+Source unknown eligibility and inherited unattributed native mass mask exact actor counts/shares. Compatible team denominators include all native actors and unassigned eligible opportunities. Retain known unattributed event counts, never donate or renormalize them. Zero GTG exposure makes the share undefined. Reject mismatched native scopes, conflicting identity, negative/invalid counts or native allocation exceeding source budgets. All three channels retain separate definitions and units.
+
+Authenticate the reviewed immutable player-scoring-zone block, current producer and actual publication clock. Preserve original snapshot/event/native identity lineage, revised historical availability and actual composition clocks. The prior measured variants and artifacts remain intact. No expected allocation, injury transfer, forecast, fit, optimizer or serving is established.

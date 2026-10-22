@@ -1,0 +1,9 @@
+# Isolated joint-mean iteration-budget v2 — implementation gate only
+
+The approved TRAIN-only stopping diagnosis supports one bounded experiment that changes only the iteration ceiling from500 to2500. This new wrapper preserves both original modules, global recipe dictionaries, data/manifests, parameters, failed records and original runtimes. It starts from the same original seed17 parameter initialization, not from either failed parameter vector.
+
+The shared original objective/derivatives, tensors, train preprocessing, architecture, loss weights/scales, L2, L-BFGS-B method, tolerances and300-second wall cap remain unchanged. The new model receipt truthfully separates the immutable objective recipe from the effective version2 optimizer recipe/options and records the initial parameter SHA. The runner enforces the wall cap, verifies both original prefit and new repair gates, and writes to new version2 result/artifact namespaces. No retry/grid or tolerance relaxation is provided. Any failure/nonconvergence blocks inference and preserves finite partial parameters.
+
+Four targeted fake-optimizer tests cover both channels: exact fresh initialization and objective/gradient equivalence, options2500 vs unchanged method/tolerances, no global mutation, preflight before optimization, timeout/failure preservation and blocked inference. No real optimizer or model fit ran to construct this packet. New runner syntax was compiled. No source or matrix reread was needed; parent pins and small metadata were verified only.
+
+High must approve this concrete implementation/options/metadata gate before root dispatches any fit.2500 is a resource allowance, not a convergence or prediction-improvement guarantee. No held-out outcomes selected the repair. Injury-replacement evaluation remains unknown due missing dated evidence; no live forecast, settings or lineups are changed.

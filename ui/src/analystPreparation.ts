@@ -1,6 +1,7 @@
 import type { AnalystPacketMetadata } from "./analystPacket";
 export type AnalystHandoffMode = "AUTO" | "MANUAL" | "BASELINE";
 export type AnalystHandoff = {
+  research_coverage?: unknown;
   personal_context?: import("./PersonalThoughtSummary").PersonalContext;
   optimization_intent?: string; scenario_ids?: string[];
   contract_id: string; mode: AnalystHandoffMode; status: "compatible" | "needs_review" | "unavailable" | "baseline_only";

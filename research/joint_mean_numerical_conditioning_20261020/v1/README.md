@@ -1,0 +1,13 @@
+# TRAIN-only numerical diagnosis
+
+No sign, shape, overflow, initialization-replay or analytic-gradient defect was demonstrated. Both failed v2 points remain nonstationary. Rank deficiency and curvature scale variation are measured numerical properties, not proof of a unique cause of the stopping limit.
+
+The prepared TRAIN designs have rank 56/138 and 57/140, including 45/46 zero columns and deterministic exposure/three-game-mean duplicates. Centering gives rank55/56. Analytically removing redundant input-weight components preserves TRAIN hidden values to6e-14 and removes the exact original L2 null-weight penalty. That penalty is only6.5e-8/1.8e-7; nullspace directions explain less than0.12% of remaining effective input gradients. Dropping columns is therefore not a demonstrated main fix; omitting penalty/bias mapping would also change the objective.
+
+Full objective Gauss-Newton diagonals include cell, group budget, target-budget and original weight-L2 terms. Their final ratios are about3203/34624. These are diagonal scale ratios, not full Hessian condition numbers. A fixed initial-TRAIN diagonal coordinate scale was tested without optimization: it worsened the sampled eight-direction curvature spread. It is rejected, not offered for fitting. No parameter updates were applied.
+
+The exact existing objective is half the squared norm of a residual vector: scaled cell errors, scaled group budget errors, the target-budget errors where applicable, and sqrt(L2) times original weight parameters (biases excluded). Independent residual, Jacobian-vector and adjoint checks match the original objective/gradient and transpose identity to2.4e-16. This supports one explicitly versioned matrix-free trust-region nonlinear least-squares experiment on the SAME objective, not an asserted correction of a proven coding bug or a convergence guarantee.
+
+Three small TRAIN-only numerical checks took0.3831+0.0865+0.0502=0.5198seconds of measured numerical work. They reused the two saved NPZ tensors and failed parameter JSONs; no source adapters, full prefit audit, model prediction API, holdout objective/metric, optimizer or fit ran. All original code/arrays/models remain unchanged. Exact artifacts and scripts are pinned in EVIDENCE.json.
+
+The proposed solver contract is in PROPOSAL.json. It requires a narrow implementation/Jacobian/operator/termination gate and root dispatch before any fit. No cap-only increase, tolerance relaxation, grid or live activation is authorized. A successful fit would still require honest retrospective paired week/matchup evaluation; no qualified dated injury-replacement cohort exists in the inspected evidence.

@@ -1,0 +1,11 @@
+# G17-M09 unavailable-teammate opportunity ledger
+
+Enumerate EVERY ordinary official NOT_ACTIVE source fact from the declared native game, retaining unresolved facts. DID_NOT_PLAY and emergency-third-QB-exception records are distinct excluded domains, not interchangeable absence anchors. The roster/GSIS/UUID linkage is inherited from the reviewed official-source adapter; no name-only join or new alias truth is introduced.
+
+For each source unavailable actor, use EXACTLY the TWO immediately preceding scheduled same-team/season games. Never substitute latest available/active logs, skip unknown games or infer DNP from a missing row. Each official pass-attempt, rush-attempt and target count comes from the matched reviewed normalization/source row. A source-reported numeric zero is allowed; position alone never proves zero trick-pass, target or carry exposure. The native source game, source-row ID, native identity and canonical attachment must match. Source native game ID absence can remain explicitly at native player-week-team grain, uniquely bound to the schedule; a present conflicting native game is rejected.
+
+The unavailable prior quantity is a two-game per-game mean for each channel; unlike units are never summed. Native measured means remain separate from canonical catalog values. Unresolved or conflicting identity, missing count/row or unknown team/window makes the relevant exact catalog baseline unknown. All source facts remain represented even when no baseline is known.
+
+At team-game level, complete unavailable prior mean sum is null unless EVERY potentially relevant ordinary unavailable actor has proven compatible volume and identity. The known partial sum and known/unknown actor counts are separate. An incomplete sum is not a complete vacated budget, a lower-bound forecast or a replacement allocation. No opportunity is donated to teammates. Routes, yards, touchdowns, future role and G18-M08/M09 are outside this ledger.
+
+The evidence is source-scoped historical measurement, not complete NFL absence history or an injury/health cause. Source revisions and later canonical attachment clocks remain explicit. Provider upstream preprocessing remains unknown, while numeric source zeros are verified only within the approved feature stage. Models and optimizer integration remain paused.

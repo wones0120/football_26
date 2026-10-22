@@ -1,3 +1,4 @@
+import { ScenarioBreadthReplay } from "./ScenarioBreadthReplay";
 import { AnalystReportMarkdown } from "./AnalystReportMarkdown";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchAnalystReport, fetchAnalystReportEvidence, fetchAnalystReports } from "./api";
@@ -37,6 +38,7 @@ export function AnalystReports() {
   const slates = [...new Set(reports.flatMap(r => r.slates))].sort();
   return <section className="analyst-reports" aria-label="Analyst Reports">
     <div className="report-library-intro"><h2>Analyst Reports</h2><p>Read the main football briefing, specialist research and saved lineup reviews. Reading a report does not apply it to an optimizer run.</p><button onClick={() => setRefresh(r => r + 1)} disabled={catalogLoading}>Refresh report list</button></div>
+    <ScenarioBreadthReplay />
     <div className="report-library-filters">
       <label>Week<select value={filters.week} onChange={e => setFilters(f => ({ ...f, week: e.target.value }))}><option value="">All weeks</option>{weeks.map(w => <option key={w} value={w}>{w.replace("-W", " · Week ")}</option>)}</select></label>
       <label>Slate<select value={filters.slate} onChange={e => setFilters(f => ({ ...f, slate: e.target.value }))}><option value="">All slates</option>{slates.map(s => <option key={s} value={s}>{s.replaceAll("_", " ")}</option>)}</select></label>

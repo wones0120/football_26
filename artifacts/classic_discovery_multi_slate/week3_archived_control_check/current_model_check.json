@@ -1,0 +1,7 @@
+{
+  "mathematical_model_sha256": "b50562d7ab1e306d33ac2f67717b35710e307d5fbc10587bc09ca2643febf155",
+  "variables": 2204,
+  "constraints": 5507,
+  "adapter": "current",
+  "method": "Canonical objective, variable bounds/categories and constraint coefficient multiset; disregard row names/order; no solve"
+}

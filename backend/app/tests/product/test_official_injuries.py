@@ -108,11 +108,15 @@ def test_readiness_error_names_affected_player_and_preserves_machine_audit():
     assert error.readiness is readiness
 
 
-def test_classic_partial_weekly_report_retains_observed_rows_without_clearing_missing_teams(monkeypatch):
+@pytest.mark.parametrize('kicker_scope',['no_row','outside_native','inside_native','empty_native'])
+def test_classic_partial_weekly_report_retains_observed_rows_without_clearing_missing_teams(monkeypatch,kicker_scope):
     from types import SimpleNamespace
     from backend.app.product_services import official_injuries as official
     current=datetime.now(UTC)
-    response=SimpleNamespace(text=report(),content=report().encode(),headers={},raise_for_status=lambda:None)
+    html=report()
+    if kicker_scope!='no_row':
+        html=html.replace('</tbody>','<tr><td><a href="/players/example-kicker/">Example Kicker</a></td><td>K</td><td>Hip</td><td>Limited Participation in Practice</td><td></td></tr></tbody>',1)
+    response=SimpleNamespace(text=html,content=html.encode(),headers={},raise_for_status=lambda:None)
     monkeypatch.setattr(official.httpx,"get",lambda *a,**k:response)
     games=[dict(home_team="TB",away_team="DAL"),dict(home_team="NYG",away_team="WAS")]
     engine=MagicMock()
@@ -121,23 +125,41 @@ def test_classic_partial_weekly_report_retains_observed_rows_without_clearing_mi
     monkeypatch.setattr(official,"Session",MagicMock())
     salaries=[dict(player_id="qb",player_name="Example Quarterback",full_name="Example Quarterback",team="TB",position="QB"),
               dict(player_id="wr",player_name="Example Receiver",full_name="Example Receiver",team="DAL",position="WR")]
+    if kicker_scope=='empty_native':salaries=[]
+    if kicker_scope=='inside_native':
+        salaries.append(dict(player_id='k',player_name='Example Kicker',full_name='Example Kicker',team='TB',position='K'))
+    aliases=[dict(player_master_id='k',source_system='nfl_official',source_key='/players/example-kicker',alias_name='Example Kicker',team='TB',position='K')]
     connection=engine.connect.return_value.__enter__.return_value
-    connection.execute.side_effect=[SimpleNamespace(mappings=lambda:salaries),SimpleNamespace(mappings=lambda:[])]
-    monkeypatch.setattr(official,"_record_identity",lambda *a,**k:True)
+    connection.execute.side_effect=[SimpleNamespace(mappings=lambda:salaries),SimpleNamespace(mappings=lambda:aliases)]
+    record=MagicMock(return_value=True)
+    monkeypatch.setattr(official,"_record_identity",record)
     context=MagicMock();context.create_run.return_value={"context_run_id":"observed-context"}
     monkeypatch.setattr(official,"PregameContextService",lambda **k:context)
     with pytest.raises(ValueError,match="all slate teams"):
         official.refresh_official_injuries(engine,season=2026,week=5,slate="SUNDAY_MAIN",games=games,slate_lock_at=current+timedelta(days=2))
     capture.capture_file.assert_not_called()
+    if kicker_scope=='empty_native':
+        with pytest.raises(ValueError,match='nonempty native salary pool'):
+            official.refresh_official_injuries(engine,season=2026,week=5,slate='SUNDAY_MAIN',games=games,
+                slate_lock_at=current+timedelta(days=2),require_complete_team_coverage=False)
+        context.create_run.assert_not_called()
+        record.assert_not_called()
+        return
     result=official.refresh_official_injuries(engine,season=2026,week=5,slate="SUNDAY_MAIN",games=games,
         slate_lock_at=current+timedelta(days=2),require_complete_team_coverage=False)
     assert result["missing_slate_teams"]==["NYG","WAS"] and result["complete_team_coverage"] is False
-    assert result["blank_status_rows"]==1 and result["game_status_rows"]==1
+    assert result["blank_status_rows"]==(1 if kicker_scope=='no_row' else 2) and result["game_status_rows"]==1
     players=context.create_run.call_args.args[0]["players"]
-    assert len(players)==2 and players[0]["injury_status"]=="OUT"
-    assert players[1]["injury_status"] is None  # Practice never invents game clearance.
-    assert players[1]["evidence"]["practice_report"]["practice_status"] == "Did Not Participate In Practice"
-    assert result["practice_status_rows"] == 2
+    assert len(players)==(3 if kicker_scope=='inside_native' else 2) and players[0]["injury_status"]=="OUT"
+    receiver=next(p for p in players if p['player_id']=='wr')
+    assert receiver["injury_status"] is None  # Practice never invents game clearance.
+    assert receiver["evidence"]["practice_report"]["practice_status"] == "Did Not Participate In Practice"
+    assert result["practice_status_rows"] == len(players)
+    assert len(result['outside_native_position_domain'])==int(kicker_scope=='outside_native')
+    if kicker_scope=='outside_native':
+        assert all(p['position']!='K' for p in players)
+        assert any(call.args[3]=='source_native_id_outside_native_position_domain' for call in record.call_args_list)
+        assert result['rows']==3  # The retained official report still includes K.
     assert capture.capture_file.call_args.kwargs["metadata"]["missing_slate_teams"]==["NYG","WAS"]
 
 

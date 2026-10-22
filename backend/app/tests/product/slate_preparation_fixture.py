@@ -9,6 +9,10 @@ from datetime import UTC, datetime
 import json
 from types import SimpleNamespace
 from unittest.mock import patch
+from tempfile import TemporaryDirectory
+from pathlib import Path
+
+import pandas as pd
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -51,6 +55,8 @@ class PreparationFixture:
         self.fail_capture = False
         self.calls = []
         self.stack = ExitStack()
+        research_root = self.stack.enter_context(TemporaryDirectory())
+        self.stack.enter_context(patch('backend.app.product_services.analyst_research_requests.DIRECTORY', Path(research_root)))
         for name in ("backend.app.db.SessionLocal", "backend.app.services.job_handlers.SessionLocal", "backend.app.worker.SessionLocal"):
             self.stack.enter_context(patch(name, self.factory))
         prefix = "backend.app.product_services.slate_preparation."
@@ -68,6 +74,9 @@ class PreparationFixture:
         self.stack.enter_context(patch("backend.app.product_services.predictions.PredictionsService.fetch_completed_run_summary", return_value=None))
         self.stack.enter_context(patch("backend.app.product_services.predictions.PredictionsService.train_and_predict", side_effect=self.projections))
         self.stack.enter_context(patch("backend.app.product_services.optimizer.OptimizerService.run_job", side_effect=AssertionError("Preparation must never solve")))
+        # AUTO handoff now reads the prepared pool even without a checked
+        # packet. Keep that I/O inside the synthetic fixture as well.
+        self.stack.enter_context(patch("backend.app.product_services.optimizer.OptimizerService._load_player_pool", return_value=pd.DataFrame()))
         self.app = FastAPI(); self.app.include_router(router); self.app.include_router(job_router)
         def session():
             with self.factory() as db:

@@ -1,3 +1,4 @@
+import {scenarioKey as opportunityScenarioKey,type ScenarioMode} from "./scenarioMode.ts";
 import type { PreparationScope, PreparationStatus } from "./api";
 
 export function optimizerWaitingStatus(status: PreparationStatus | null, scope: PreparationScope,
@@ -13,7 +14,7 @@ export function optimizerWaitingStatus(status: PreparationStatus | null, scope: 
   if (job) return { busy: true, message: `Preparing slate… ${job.message || (job.status === "queued" ? "Waiting for a worker." : job.stage)}` };
   if (prepared) return { busy: false, message: "Ready to optimize — prepared inputs verified." };
   if (status.prelock === false) return { busy: false, message: "This slate has locked. Live optimization is unavailable." };
-  return { busy: false, message: status.build_issue || "Preparation required. Select Prepare slate for optimization above; changed availability assumptions also require preparation again." };
+  return { busy: false, message: status.build_issue || "Preparation required. Select Prepare slate for optimization above; changed availability or scenario assumptions, or a lower salary minimum, also require preparation again." };
 }
 
 // Compare semantic scenario fields, ignoring JSON key order and server null defaults.
@@ -25,7 +26,7 @@ function scenarioKey(rows: unknown[]) {
 }
 
 export function optimizerHasPreparedInputs(status: PreparationStatus | null, scope: PreparationScope,
-  format: "classic" | "showdown", overrides: unknown[] | null): boolean {
+  format: "classic" | "showdown", overrides: unknown[] | null, minimumPlayerSalary: number | null = null, scenario?: ScenarioMode): boolean {
   const build = status?.latest_build;
   return Boolean(overrides && status?.build_current && status.prelock !== false
     && !status.jobs.some(j => j.status === "queued" || j.status === "running")
@@ -33,5 +34,7 @@ export function optimizerHasPreparedInputs(status: PreparationStatus | null, sco
     && build.contest_format === format && build.season === scope.season && build.week === scope.week
     && build.slate.toUpperCase() === scope.slate.toUpperCase()
     && scenarioKey(build.availability_overrides ?? []) === scenarioKey(overrides)
+    && (format !== "showdown" || (minimumPlayerSalary ?? 0) >= (build.minimum_player_salary ?? 0))
+    && opportunityScenarioKey(build.scenario_mode?.config) === opportunityScenarioKey(scenario)
     && !build.assume_questionable_out);
 }

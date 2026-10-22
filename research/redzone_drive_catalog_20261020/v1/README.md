@@ -1,0 +1,9 @@
+# Passing TDs per observed red-zone trip: native chronology correction
+
+G14-M10 counts physical passing TDs after a proven preplay inside20 entry on the same native drive, divided by observed entered drives. A later pass from outside20 still counts after entry; a long TD never observed entering does not. Passing and receiving TD are one physical event.
+
+The wrapper now accepts only native_order_redzone_drives_v1 with chronology_basis=native_order_sequence. It requires each known terminal's native order and rejects terminal-before-entry, missing/contradictory proofs and the earlier numeric-play-ID source contract. The source builder retains full native controls and incomplete order evidence; absent completion proof never becomes a zero terminal outcome. Missing native drive IDs mask the all-eligible rate. Known-terminal sample rates remain separate.
+
+Actual authenticated source has517 native-verified entered drives,503 known outcomes and14 unknown outcomes;141 exact rates across158 team logs and10 SF/WAS logs. Native reordering changes no actual metric values, but corrects the unsupported chronology method and guards future inverted IDs. Neither end of file nor all-zero pass-TD flags proves a completed drive. No complete official-possession claim is made.
+
+Legacy review and actual receipts are preserved as legacy_*_before_native_order.json; their immutable source/artifact bytes remain unchanged. The corrected full/selected refs bind current wrapper code, native source producer, original indexed raw source and compressed-parent lineage. Actual postlock read/publication timestamps remain current; original historical availability is unknown. Evidence is descriptive/nonserving, with models/optimizer/app consumers pending. Combined26 pace/wrapper tests pass; High restoration of G14-M10 is pending.

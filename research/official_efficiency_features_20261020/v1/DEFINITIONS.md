@@ -1,0 +1,17 @@
+# Official-inclusive observed efficiency v1
+
+Proposed exact catalog IDs: G04-M06/M07/M09, G05-M06, G07-M02–M06 (nine total). Old nonspike/nonkneel variants and artifacts remain unchanged.
+
+Passing denominator is the physical union of official pass attempts (including spikes), sacks and official scramble rushes, once per play. EPA/dropback and EPA-positive success retain the provider's expected-points model lineage, not an independent calibrated scoring law. Sack avoidance is one minus source sack fraction over that same union. G04 and G05 interpretation requires historical game/team/native QB position proof, never a generic positive passing count or current reputation. Contradictory scramble passer/rusher native IDs reject.
+
+Official rushing includes kneels and scrambles. G05-M06 is provider EPA per source-proven QB official carry. G07-M02/M03 are provider EPA and EPA-positive fraction per official source rusher carry. G07-M04 is credited native rusher yards >=10, G07-M05 credited yards <=0, and G07-M06 source first_down_rush OR rush_touchdown, each per official carry. Credited rushing_yards is retained rather than assigning the team's net or lateral yards to the initial rusher. No passing+receiving EPA is added into a second scoring effect.
+
+Every metric preserves own eligible, unknown eligibility, known outcome and unknown outcome counts. Known-attributed sample means remain separate from exact all-eligible within-log means. An unattributed eligible/unknown native actor can belong to any actor on that team/channel; exact actor means are masked, while full-source team evidence remains available. Unknown outcomes never become zero or silently disappear from a denominator. Empty outcome samples are undefined. No user preference changes any count or actor universe.
+
+The retrospective reader verifies the original prelock parent boundary and requires actual nonfuture postlock read time. It leaves source guards unchanged, records original source/parent/position proofs and actual read/derive/publication clocks, and marks output nonserving. This is revised historical source evidence, not original historical pregame availability or independently certified full games. Forecast/scenario/optimizer use is rejected. No model/fitting/activation occurs; no new dependencies or global UI/configuration changes. Internal feature package only.
+
+## Actual source coverage
+
+The corrected actual derivation produced 1,559 native/canonical actor-games and 158 full-source team logs; selected SF/WAS slice has 106 actors and 10 team logs. Source-proven QB catalog scope has 182 actor-games: 174 exact official dropback EPA/success/sack-avoidance means and 161 exact QB rushing EPA means. Each five G07 official rushing rates has 622 exact actor-games. Unknown participation/outcomes and 27 unattributed metric exposures are retained; no identity mappings are unresolved. No claim of independently complete games or current serving is made.
+
+The initial attempt failed only while assembling provenance because it used the wrong source-envelope key. No artifact was published from it. The correction reads event_evidence.source and event_evidence.sha256, with an actual-shaped reader regression added before the successful retry. The failure note remains immutable evidence of that attempt. Successful retry took 11.41 seconds, one verified parent load and no capture, DB mutation or model operation.

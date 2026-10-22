@@ -1,4 +1,5 @@
 import { PersonalThoughtSummary } from "./PersonalThoughtSummary";
+import { AnalystResearchSummary } from "./AnalystResearchSummary";
 import type { AnalystHandoff, AnalystHandoffMode } from "./analystPreparation";
 export function AnalystPreparationSummary({ handoff, mode, busy, onAutomatic }: { handoff: AnalystHandoff | null; mode: AnalystHandoffMode; busy: boolean; onAutomatic: () => void }) {
   return <div className="readiness-preflight" data-testid="analyst-preparation-handoff">
@@ -14,6 +15,7 @@ export function AnalystPreparationSummary({ handoff, mode, busy, onAutomatic }: 
           {handoff.missing_checks.map((reason, index) => <p key={`missing-${index}`}>Unknown or unverified: {reason}</p>)}
         </details>}
         <PersonalThoughtSummary context={handoff.personal_context} />
+        <AnalystResearchSummary value={handoff.research_coverage} />
         <p>Preparation checks compatibility and records changes. Experimental unknowns remain visible; entry clearance is separate.</p>
       </> : <p>Prepare slate to check the latest compatible Analyst research and carry it into optimization. No manual hash is required.</p>}
     </div>

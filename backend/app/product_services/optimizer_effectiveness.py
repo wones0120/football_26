@@ -17,7 +17,7 @@ from statistics import median
 from typing import Any, Callable, Iterable, Mapping
 from zoneinfo import ZoneInfo
 
-from .workload_evidence import CONTRACT_ID as WORKLOAD_CONTRACT_ID
+from .workload_evidence import SUPPORTED_CONTRACT_IDS
 
 
 POOL_PATHS = (
@@ -90,6 +90,64 @@ def candidate_signature(candidate: Mapping[str, Any], contest_format: str) -> tu
     return tuple(sorted(pairs))
 
 
+def _analyst_saved_pool(config, contest_format):
+    """Adapt persisted canonical Analyst variants, never today's projections."""
+    analyst = _mapping(_mapping(config.get("strategy_runtime")).get("football_analyst"))
+    original = analyst.get("candidates")
+    if not isinstance(original, list) or not original:
+        return None
+    snapshot = _mapping(analyst.get("input_snapshot"))
+    players = {}
+    for row in snapshot.get("players") or []:
+        if not isinstance(row, Mapping):
+            return {"status":"unavailable","reason":"analyst_snapshot_identity_missing_or_duplicate"}
+        pid = str(row.get("player_id") or "")
+        if not pid or pid in players:
+            return {"status":"unavailable","reason":"analyst_snapshot_identity_missing_or_duplicate"}
+        players[pid] = row
+    manifest=_mapping(_mapping(config.get("strategy_runtime")).get("candidate_pool_manifest"))
+    if manifest.get("source_path")=="strategy_runtime.football_analyst.candidates" and manifest.get("sha256") and manifest["sha256"]!=_digest(original):
+        return {"status":"unavailable","reason":"candidate_pool_hash_mismatch"}
+    converted = []
+    for index, raw in enumerate(original, 1):
+        roster = raw.get("roster") if isinstance(raw, Mapping) else None
+        if not isinstance(roster, list) or any(not isinstance(r, Mapping) or not r.get("player_master_id") for r in roster):
+            return {"status":"unavailable","reason":"saved_candidate_rows_lack_canonical_rosters"}
+        forbidden = {"postgame", "actual_points", "actual_score", "actual_rank"}
+        if forbidden.intersection(raw) or any(forbidden.intersection(r) for r in roster):
+            return {"status":"unavailable","reason":"postgame_data_in_saved_candidate_pool"}
+        if contest_format == "showdown" and any(r.get("role") not in {"CPT","FLEX"} for r in roster):
+            return {"status":"unavailable","reason":"analyst_showdown_role_missing"}
+        if contest_format=="classic" and any(r.get("role")=="CPT" for r in roster):
+            return {"status":"unavailable","reason":"analyst_classic_captain_invalid"}
+        normalized = [{"player_id":str(r["player_master_id"]),"slot":r.get("role")} for r in roster]
+        candidate = {"roster":normalized,"candidate_id":raw.get("candidate_id"),
+            "source_candidate_ordinal":index,"source_candidate_sha256":_digest(raw),
+            "source_scenario_ids":raw.get("scenario_ids"),"source_scenario_scores":raw.get("scores"),
+            "analyst_adapter":True,"games_represented":[],"mean":None,"p90":None,"salary":None}
+        if candidate_signature(candidate, contest_format) is None:
+            return {"status":"unavailable","reason":"saved_candidate_rows_lack_canonical_rosters"}
+        terms=[]
+        for r in normalized:
+            row=players.get(r["player_id"])
+            if row is None:break
+            terms.append((row,1.5 if contest_format=="showdown" and r["slot"]=="CPT" else 1))
+        if len(terms)==len(roster):
+            for target,source in (("mean","projection"),("p90","p90"),("salary","salary")):
+                values=[_number(row.get(source)) for row,mult in terms]
+                if all(v is not None for v in values):candidate[target]=sum(v*mult for v,(row,mult) in zip(values,terms))
+            candidate["games_represented"] = sorted({str(row["game_id"]) for row,mult in terms if row.get("game_id")})
+        converted.append(candidate)
+    signatures=[candidate_signature(c,contest_format) for c in converted]
+    return {"status":"original_candidate_pool","source_path":"strategy_runtime.football_analyst.candidates",
+        "adapter_contract":"saved_analyst_candidate_adapter_v1","sha256":_digest(original),
+        "source_input_snapshot_sha256":analyst.get("input_snapshot_sha256"),
+        "source_candidate_identity":"original candidate_id where recorded; source array ordinal/hash are adapter lineage, not selector rank",
+        "source_chronology_verified":False,"count":len(original),"candidates":converted,
+        "unique_roster_count":len(set(signatures)),"scenario_variant_duplicates":len(original)-len(set(signatures)),
+        "metric_basis":"mean/P90 sum from frozen baseline player moments with Captain multiplier once; scenario scores retained separately, no objective inferred"}
+
+
 def extract_saved_pool(config: Any, contest_format: str) -> dict[str, Any]:
     """Only saved runtime candidates qualify as original; never synthesize a pool."""
     source = _mapping(config)
@@ -123,7 +181,7 @@ def extract_saved_pool(config: Any, contest_format: str) -> dict[str, Any]:
                 "sha256": _digest(value), "candidates": value, "count": len(value),
                 "unique_roster_count": len(set(signatures)),
                 "scenario_variant_duplicates": len(value) - len(set(signatures))}
-    return {"status": "unavailable", "reason": "no_complete_saved_candidate_pool"}
+    return _analyst_saved_pool(source, contest_format) or {"status": "unavailable", "reason": "no_complete_saved_candidate_pool"}
 
 
 def candidate_snapshot(config: Any, contest_format: str) -> dict[str, Any]:
@@ -135,7 +193,7 @@ def candidate_snapshot(config: Any, contest_format: str) -> dict[str, Any]:
     evidence = saved_workload_evidence(config)
     if evidence:
         manifest["workload_evidence"] = {
-            "contract_id": WORKLOAD_CONTRACT_ID, "sha256": _digest(evidence),
+            "contract_id": saved_workload_contract(evidence), "sha256": _digest(evidence),
             "player_count": len(evidence),
             "source_path": "strategy_runtime.player_pool.rows[player_id].workload_evidence",
             "linkage": "canonical player_id; shared by all saved candidate variants and CPT/FLEX roles",
@@ -150,7 +208,13 @@ def saved_workload_evidence(config: Any) -> dict[str, dict]:
             for row in _mapping(runtime.get("player_pool")).get("rows", [])
             if isinstance(row, Mapping) and row.get("player_id")
             and isinstance(row.get("workload_evidence"), Mapping)
-            and row["workload_evidence"].get("contract_id") == WORKLOAD_CONTRACT_ID}
+            and row["workload_evidence"].get("contract_id") in SUPPORTED_CONTRACT_IDS}
+
+
+def saved_workload_contract(evidence):
+    """Report original saved versions, without stamping legacy packets as v2."""
+    versions = {row["contract_id"] for row in evidence.values()}
+    return next(iter(versions)) if len(versions) == 1 else "mixed_saved_workload_versions" if versions else None
 
 
 def chronological_validation(run: Mapping[str, Any], pool: Mapping[str, Any]) -> dict[str, Any]:
@@ -202,6 +266,13 @@ def chronological_validation(run: Mapping[str, Any], pool: Mapping[str, Any]) ->
                      and cutoff < min(kicks) and created < min(kicks))
     except ValueError:
         valid = False
+    if pool.get("adapter_contract"):
+        return {"status":"unavailable", "reason":"original_code_and_source_availability_proof_not_verified",
+            "stored_timing_status":"predecision" if valid else "unavailable",
+            "first_saved_kickoff_at":min(kicks).isoformat(),"input_cutoff_at":cutoff.isoformat() if isinstance(cutoff,datetime) else cutoff,
+            "decision_at":created.isoformat() if isinstance(created,datetime) else created,
+            "decision_time_basis":created_basis,"retrospective_scoring_only":True,
+            "limitation":"Saved timestamps establish timing correspondence, not original source availability or code reproducibility."}
     return {"status": "predecision" if valid else "unavailable",
             "reason": None if valid else "cutoff_or_run_creation_not_before_saved_kickoff",
             "first_saved_kickoff_at": min(kicks).isoformat(),
@@ -511,10 +582,15 @@ def _pregame(candidate: Mapping[str, Any], rank: int, run: Mapping[str, Any]) ->
     return {
         "candidate_id": f"{run['optimizer_run_id']}:candidate:{rank}",
         "source_candidate_id": candidate.get("candidate_id"),
+        "source_candidate_ordinal":candidate.get("source_candidate_ordinal"),
+        "source_candidate_sha256":candidate.get("source_candidate_sha256"),
+        "source_scenario_ids":candidate.get("source_scenario_ids"),
+        "conditional_scenario_scores":candidate.get("source_scenario_scores"),
+        "metric_basis": "frozen_baseline_player_moments; P90 is marginal sum, not joint upside" if candidate.get("analyst_adapter") else None,
         "candidate_ordinal": rank,
         "optimizer_run_id": str(run["optimizer_run_id"]), "generation_rank": candidate.get("generation_rank"),
         "selector_rank": candidate.get("selector_rank", candidate.get("rank")),
-        "order_basis": "recorded_selector_rank" if candidate.get("rank") is not None or candidate.get("selector_rank") is not None else "saved_generation_order",
+        "order_basis": "recorded_selector_rank" if candidate.get("rank") is not None or candidate.get("selector_rank") is not None else "saved_candidate_array_order_not_proven_generation_rank" if candidate.get("analyst_adapter") else "saved_generation_order",
         "mean": _number(candidate.get("mean")), "p90": _number(candidate.get("p90")),
         "objective_score": _number(candidate.get("objective_score") or candidate.get("single_entry_score") or candidate.get("selector")),
         "ownership_sum": _number(candidate.get("ownership_sum")),
@@ -549,7 +625,7 @@ def evaluate_run(
                               "candidate_pool": {k: v for k, v in pool.items() if k != "candidates"},
                               "chronological_validation": chronological_validation(run, pool)}
     workload = saved_workload_evidence(run.get("constraint_config_json"))
-    output["workload_evidence"] = {"contract_id": WORKLOAD_CONTRACT_ID,
+    output["workload_evidence"] = {"contract_id": saved_workload_contract(workload),
                                    "status": "saved" if workload else "unavailable_in_saved_run",
                                    "players": workload}
     if pool["status"] != "original_candidate_pool":
@@ -762,6 +838,9 @@ def build_optimizer_effectiveness(
             "data_cutoff_at", "projection_run_id", "optimizer_created_at",
         )})
     attached = set(slate_report.get("run_ids", {}).get("optimizer_run_ids", []))
+    corresponding = {str(match["optimizer_run_id"]) for entry in slate_report.get("entries", [])
+        for match in _mapping(entry.get("submission_evidence")).get("saved_lineup_matches", [])
+        if match.get("optimizer_run_id") and str(match["optimizer_run_id"]) in runs}
     requested = set(diagnostic_run_ids)
     if requested - set(runs):
         raise ValueError("Diagnostic optimizer runs must be completed runs in the requested slate")
@@ -769,7 +848,7 @@ def build_optimizer_effectiveness(
                        if extract_saved_pool(run.get("constraint_config_json"),
                                              str(run.get("contest_format") or "").lower())["status"]
                        == "original_candidate_pool"}
-    evaluated_run_ids = attached | saved_pool_runs | requested
+    evaluated_run_ids = attached | corresponding | saved_pool_runs | requested
     selected: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for lineup_id, players in saved.items():
         run_id = str(players[0]["optimizer_run_id"])
@@ -783,13 +862,19 @@ def build_optimizer_effectiveness(
     entered: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for entry in slate_report.get("entries", []):
         run_id = str(entry.get("optimizer_run_id") or "")
-        if run_id not in attached or not entry.get("identity_complete"):
+        possible = {str(m["optimizer_run_id"]) for m in _mapping(entry.get("submission_evidence")).get("saved_lineup_matches", []) if m.get("optimizer_run_id")}
+        if not entry.get("identity_complete"):
             continue
+        matched = ({run_id} if run_id in attached else possible) & evaluated_run_ids
+        if not matched:continue
         signature = tuple(sorted((str(row["player_id"]),
                                   str(row.get("roster_position") or "").upper() == "CPT")
                                  for row in entry["players"]))
-        entered[run_id].append({"entry_id": entry["entry_id"], "contest_id": entry["contest_id"],
-                                "entry_points": entry.get("entry_points"), "signature": signature})
+        for matched_run_id in matched:
+            entered[matched_run_id].append({"entry_id":entry["entry_id"],"contest_id":entry["contest_id"],
+                "entry_points":entry.get("entry_points"),"signature":signature,
+                "match_basis":"unique_roster_correspondence" if run_id in attached else "ambiguous_roster_correspondence",
+                "origin_proven":False})
     execution = execution_diagnostics(slate_report.get("entries", []), [*evidence.get("assignments", []), *evidence.get("recommendation_assignments", [])], saved)
     output = []
     for run_id in sorted(evaluated_run_ids, key=lambda value: (value not in attached, value)):
@@ -807,11 +892,13 @@ def build_optimizer_effectiveness(
                 for entry in slate_report.get("entries", [])])
         evaluated["execution_diagnostics"] = [row for row in execution if row.get("optimizer_run_id") == run_id]
         evaluated.setdefault("diagnostic", []).extend(row for row in evaluated["execution_diagnostics"] if row["status"] == "mismatch")
+        evaluated["entry_correspondence"] = [{k:row[k] for k in ("entry_id","contest_id","match_basis","origin_proven") if k in row} for row in entered[run_id]]
         evaluated["run_scope"] = ("entry_linked" if run_id in attached else
+                                  "entry_correspondence" if run_id in corresponding else
                                   "explicit_diagnostic" if run_id in requested else "other_completed_saved_pool")
         if run_loader:
             evaluated["inclusion_reason"] = ("canonical_entered_lineup_match" if run_id in attached
-                                              else "explicit_diagnostic_request")
+                                              else "ambiguous_canonical_roster_correspondence" if run_id in corresponding else "explicit_diagnostic_request")
             evaluated["configuration_hash"] = run.get("configuration_hash")
         cutoff = run.get("data_cutoff_at")
         if isinstance(cutoff, str):
@@ -897,7 +984,7 @@ def build_optimizer_effectiveness(
                               if benchmark["cash_line"] is not None else None})
     return {"contract_id": "optimizer_effectiveness_v2" if run_loader else "optimizer_effectiveness_v1", "runs": output,
             **({"inclusion_policy": {
-                "policy_id": "entry_linked_and_explicit_diagnostics_v1",
+                "policy_id": "entry_correspondence_and_explicit_diagnostics_v2",
                 "completed_run_count": len(runs), "included_run_count": len(evaluated_run_ids),
                 "excluded_run_count": len(set(runs) - evaluated_run_ids),
                 "excluded_runs": [{"optimizer_run_id": run_id, "reason": "unrelated_completed_run",

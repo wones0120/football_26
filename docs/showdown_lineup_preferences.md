@@ -1,5 +1,13 @@
 # Showdown lineup preferences
 
+## Salary minimum and preparation
+
+**Minimum player salary ($)** uses base FLEX salary in both slots. **Prepare slate for optimization** records the current minimum; lowering it makes newly eligible identities require preparation again. Raising it remains a selection-only restriction.
+
+The full native salary pool and model assessments are preserved. A below-minimum player's missing role/status is retained in `data_readiness.selection_scope.nonblocking_player_status_exclusions` with `user_minimum_player_salary`, original unknown facts and source clocks. This does not label the player OUT, invent a role, or relax raw identity/salary checks. Missing evidence for selectable players still blocks generation. The optimizer worker rechecks the same bound contract.
+
+Operations errors, pending messages and import receipts belong to their submitted season/week/slate; late replies from another scope cannot replace the active scope's messages. Agent research enumeration is explicitly unsaved analysis. Operational acceptance uses the same public Prepare → Optimize → reopen path as the app and validates the saved-run CSV response separately from final inactives or contest submission.
+
 Named Captain position exceptions bypass only the position filter for the selected canonical players. Saved app and readable reports show **Named exceptions may qualify** and **1 if a named QB is eligible** when the saved position filter otherwise excludes QBs; explicit **No QBs** or **No QB Captain** still shows **No** and zero. The Captain position summary retains the base positions and named-exception count. This wording does not certify any named player's availability or override other eligibility rules.
 
 ## Four lineups at 25% captain coverage
@@ -154,6 +162,18 @@ with reason `user_no_qbs`, retaining their projections and model assessment.
 
 ## Captain app defaults
 
+### Normal merged Captain workload qualification
+
+Named Captain position exceptions can include a specific TE or a verified starting QB while the default WR/RB filter remains intact. They bypass only that position filter: supported workload, current availability, No QB Captain/No QBs and all roster/exposure rules still apply. The saved QB-permission report intersects exception IDs with the slate's canonical QB IDs, so a named TE does not imply blanket QB permission and named QBs are reported accurately. An exception does not force selection or clear a questionable designation.
+
+`showdown_supported_captain_workload_v1` applies to normal `MERGED_SCENARIOS` Captain search before baseline/scenario solving and exact replay. It keeps broad supported alternatives rather than reinstating a top-four quota. Legacy non-merged top-four runs retain their policy for comparison. Model points, marginal quantiles and FLEX eligibility are unchanged.
+
+The versioned conservative role floors are football review criteria, **not calibrated success probabilities**: WR/TE receiving history needs at least five observed targets per game, at least15% prior target share, and50% latest snaps. Established20% receiving share survives a quiet latest game; a secondary role also needs at least15% latest share. RBs may qualify on that receiving role or at least10 observed carries,35% carry share and50% latest snaps. Measurement flags, original feature cutoff and native role observation clocks are mandatory; missing evidence cannot be filled with zero or a healthy status. These floors require further chronological predictive validation before any claim of tournament improvement.
+
+Counts/shares come from the original `pregame_base_*` evidence before opportunity allocation. `projected_targets` and `projected_carries` are disclosed allocated proxies, not independently calibrated workload forecasts, and never qualify a Captain. A role-expansion exception needs an ingested explicit workload record marked VERIFIED, source IDs, original observation time no later than cutoff, and supported expected count/share meeting the position criteria. Salary savings, one possible touchdown, Q exclusions, depth placement and optional Captain-story prose do not establish expansion.
+
+The saved result exposes each Captain's workload decision and reasons, including user-position/Q exclusions separately. If qualified roles cannot meet portfolio exposure, show the shortfall; do not relax eligibility, force a player, change projections or call two identical Captains a valid50% two-entry portfolio. Complete portfolios retain requested-size exposure rounding; underfilled sets must additionally satisfy the cap against their actual size without rounding upward. A single remaining Captain below100% maximum can yield no valid nonempty portfolio.
+
 New sessions require at least one season-average non-QB team leader at Captain or FLEX.
 Home-team-only remains off. Leaders use each team's highest season DK points per participating game through the prior week
 among RB/WR/TE/K before user exclusions. No current-week outcomes enter this average.
@@ -164,3 +184,7 @@ Omitted API parameters and saved historical runs retain their existing semantics
 Captain team-leader preferences now use prior-week season averages instead of projections. Require at least one defaults on; home-team-only defaults off. The leader may be Captain or FLEX. Missing/ambiguous history remains unranked; missing team history or Week 1 fails explicitly without falling back to projections. Frozen run metadata records prior-game scores, averages, source lineage and tied leader IDs. Existing historical runs are unchanged.
 
 After optimizer changes, restart both local API and durable worker before rerunning. Fresh preparation remains required; ESPN provider ID 100 accepts the display names DraftKings and Draft Kings without relaxing line validation.
+
+Normal Showdown preparation refreshes explicit native DraftKings Q/OUT designations through immutable source captures. Discovery requires the Showdown game type, exact game/kickoff set and imported native IDs with matching canonical team/position. A current Q remains questionable with unknown workload; a blank native status cannot clear an injury or establish availability. Refresh capture errors and identity discrepancies remain in the preparation audit.
+
+A verified final official game report can establish `NO_GAME_DESIGNATION` while retaining an older native Q in raw evidence. The user’s Exclude questionable policy evaluates the versioned effective designation; it is not silently disabled. Generic NFL/FanDuel/DraftKings blanks and roster ACT do not establish this fact. Current conflicting source reports block canonical readiness; final inactives are still separate. See [the factual designation contract](product/factual_game_designations.md).

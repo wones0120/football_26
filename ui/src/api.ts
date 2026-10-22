@@ -3,6 +3,7 @@ import type { ConstructionSummary } from "./classicConstruction";
 import { requestConstructionReview } from "./classicConstructionReview";
 import { assertLargeGppOverlapResult, assertPortfolioSummaryMatchesRequest } from "./classicOverlapConsistency";
 import { recordPortfolioTrace } from "./portfolioSubmissionTrace";
+import { createJobCompletionWaiter } from "./operationalJobPolling";
 
 export type LoadSummary = {
   dataset: string;
@@ -211,8 +212,9 @@ export type OptimizerResponse = {
   data_readiness?: Record<string, unknown> | null;
   preliminary_report?: { classification: string; entry_ready: boolean; snapshot_sha256: string; assumption_manifest_sha256: string; assumption_manifest?: Record<string, unknown>; normal_readiness?: Record<string, unknown> } | null;
   analyst_handoff_applied?: Record<string, unknown> | null;
+  scenario_mode?: import("./scenarioMode").ScenarioResult | null;
   highest_projection?: {objective_label: string; solver_status: string; base_mean?: number; salary?: number; optimal: boolean; locked_player_ids: string[]; input_snapshot_sha256: string} | null;
-  football_analyst?: { optimization_intent?: import("./analystIntent").IntentScope; prepared_research?: Record<string, unknown>; preparation_compatibility?: Record<string, unknown>; focus?: import("./AnalystFocusSummary").AnalystFocus; teammate_opportunity?: import("./teammateOpportunity").TeammateOpportunity; challenger?: { status: string; solver_calls: number; accepted_candidate_count: number; candidate_pool_count?: number; attempts: { classification?: string; status?: string; reason?: string }[] }; discovery?: { scanned_games: unknown[]; findings: { finding_id: string; action_status?: string; decision_reason?: string; actual_allocation_slots?: number[] }[] }; portfolio_mode?: string; scenario_allocation_plan?: Record<string, unknown>; captain_analysis?: { eligible_captain_count: number; forced_bringback: boolean; assessments: { player_master_id: string; player_name: string; team: string; position: string; opponent_team: string; opponent_capability: string; mechanism_status: string; generation_status: string; generated_candidate_count: number; selected_lineup_count: number }[] }; requested_portfolio_size?: number; achieved_portfolio_size?: number; selection?: { solver_status?: string; selection_reason?: string }; mode?: string; status?: string; packet_sha256?: string; eligible_generated_count?: number; generated_count?: number; selected_count?: number; generated_candidate_count?: number; requested_candidate_count?: number; selected_lineup_count?: number; abstention_count?: number; theses?: { thesis_id: string; analyst_thought?: string; requested?: number; achieved?: number; status?: string; reasons?: string[] }[]; steps?: { status?: string; eligible_generated_count?: number }[] } | null;
+  football_analyst?: { shared_world_selection?: unknown; selection_policy?: string; research_consumption?: unknown; optimization_intent?: import("./analystIntent").IntentScope; prepared_research?: Record<string, unknown>; preparation_compatibility?: Record<string, unknown>; focus?: import("./AnalystFocusSummary").AnalystFocus; teammate_opportunity?: import("./teammateOpportunity").TeammateOpportunity; challenger?: { status: string; solver_calls: number; accepted_candidate_count: number; candidate_pool_count?: number; attempts: { classification?: string; status?: string; reason?: string }[] }; discovery?: { scanned_games: unknown[]; findings: { finding_id: string; action_status?: string; decision_reason?: string; actual_allocation_slots?: number[] }[] }; portfolio_mode?: string; scenario_allocation_plan?: Record<string, unknown>; captain_analysis?: { eligible_captain_count: number; forced_bringback: boolean; assessments: { player_master_id: string; player_name: string; team: string; position: string; opponent_team: string; opponent_capability: string; mechanism_status: string; generation_status: string; generated_candidate_count: number; selected_lineup_count: number }[] }; requested_portfolio_size?: number; achieved_portfolio_size?: number; selection?: { solver_status?: string; selection_reason?: string }; mode?: string; status?: string; packet_sha256?: string; eligible_generated_count?: number; generated_count?: number; selected_count?: number; generated_candidate_count?: number; requested_candidate_count?: number; selected_lineup_count?: number; abstention_count?: number; theses?: { thesis_id: string; analyst_thought?: string; requested?: number; achieved?: number; status?: string; reasons?: string[] }[]; steps?: { status?: string; eligible_generated_count?: number }[] } | null;
   showdown_captain_coverage?: Record<string, unknown> | null;
   single_lineup_selection?: Record<string, unknown> | null;
   gpp_recommendation?: import("./GppRecommendation").GppRecommendationReport | null;
@@ -1299,11 +1301,13 @@ function newIdempotencyKey(jobType: string): string {
 
 export type PreparationScope = { season: number; week: number; slate: string };
 export type PreparedBuild = PreparationScope & {
+  scenario_mode?: import("./scenarioMode").PreparedScenario | null;
+  workload_forecast?: { sha256: string; version: string; source_cutoff_at: string; domain: string; learned_opportunities?: boolean; scenario_first?: {version:string; world_count:number; implied_points:Record<string,number>; market:Record<string,unknown>; construction_policy:Record<string,unknown>; assumptions:string[]; likelihood:string}; yardage_model?: {version: string; selection_weights: Record<string,number>; limitations: string[]; accounting: Record<string,unknown>; validation: {status:string; summary:Record<string,{rows:number;mae:number|null;baseline_mae:number|null;bias:number|null}>;limitations:string[]}}; scales?: Record<string, Record<string, number>>; learned_model_consumption?: Record<string, {model_publication_record_id?: string}>; players: Array<{player_master_id: string; name?: string; native_id?: string; native_salary_actor: boolean; position: string; utility: number | null; projected_yards?: Record<string,number|null>; efficiency?: Record<string,unknown>; scenario_role_evidence?: Record<string,unknown>; counts: Record<string, number | null>; reasons: string[]}> };
   analyst_handoff?: import("./analystPreparation").AnalystHandoff | null;
   analyst_intent_handoffs?: Partial<Record<"EXPECTED_GAME" | "CONTRARIAN", import("./analystPreparation").AnalystHandoff>>;
   audit_url?: string;
   action?: string; contest_format?: "classic" | "showdown"; data_readiness?: { status: string };
-  availability_overrides?: unknown[]; assume_questionable_out?: boolean;
+  availability_overrides?: unknown[]; assume_questionable_out?: boolean; minimum_player_salary?: number | null;
   prepared_input_job_id: string; projection_run_id: string; feature_run_id: string;
   source_sha256: string; consumption: Record<string, unknown>; limitations: string[];
   rows_written?: number;
@@ -1320,6 +1324,12 @@ export function fetchPreparation(scope: PreparationScope): Promise<PreparationSt
 }
 export function queuePreparation(payload: PreparationScope & {
   ownership_required?: boolean; preliminary_research?: boolean;
+  minimum_player_salary?: number | null;
+  include_workload_forecast?: boolean;
+  learned_opportunities?: boolean;
+  opportunity_yards?: boolean;
+  scenario_first_captain?: boolean;
+  scenario_mode?: import("./scenarioMode").ScenarioMode;
   analyst_mode?: import("./analystPreparation").AnalystHandoffMode; analyst_packet_sha256?: string; analyst_strategy?: "CONSTRUCTION" | "MERGED_SCENARIOS";
   action: "salary" | "injuries" | "markets" | "weather" | "rebuild" | "prepare";
   contest_format?: "classic" | "showdown";
@@ -1329,18 +1339,19 @@ export function queuePreparation(payload: PreparationScope & {
   return enqueueOperationalJob("/slate/preparation/jobs", payload, "slate-preparation");
 }
 
+const waitForJobProgress=createJobCompletionWaiter((jobId:string)=>
+  getJson<OperationalJob>(`/jobs/${encodeURIComponent(jobId)}?include_result=false`,30_000));
+
+export async function waitForOperationalJobCompletion(jobId:string):Promise<void> {
+  await waitForJobProgress(jobId);
+}
+
 export async function waitForOperationalJob<T>(jobId: string): Promise<T> {
-  for (;;) {
-    const job = await getJson<OperationalJob>(`/jobs/${encodeURIComponent(jobId)}`, 30_000);
-    if (job.status === "completed") {
-      if (!job.result) throw new Error(`Operational job ${jobId} completed without a result`);
-      return job.result as T;
-    }
-    if (job.status === "failed") {
-      throw new Error(job.error_message || `Operational job ${jobId} failed`);
-    }
-    await new Promise((resolve) => window.setTimeout(resolve, 1000));
-  }
+  await waitForJobProgress(jobId);
+  // Result-bearing actions fetch their artifact once, after status-only polling.
+  const job=await getJson<OperationalJob>(`/jobs/${encodeURIComponent(jobId)}`,30_000);
+  if (!job.result) throw new Error(`Operational job ${jobId} completed without a result`);
+  return job.result as T;
 }
 
 async function enqueueAndWait<T>(
@@ -1371,7 +1382,7 @@ async function enqueueOperationalJob(
 }
 
 export function fetchOperationalJobs(limit = 25): Promise<{ rows: OperationalJob[] }> {
-  return getJson(`/jobs?limit=${encodeURIComponent(String(limit))}`, 30_000);
+  return getJson(`/jobs?limit=${encodeURIComponent(String(limit))}&include_result=false`, 30_000);
 }
 
 export function createWeeklyRun(payload: {
@@ -1653,6 +1664,7 @@ export type OptimizerRunSummary = {
   requested_lineups: number | null; lineup_count: number;
   expanded_discovery: boolean | null;
   optimization_intent?: string | null;
+  analyst_selection_policy?: string | null;
   classic_selection_objective?: string | null;
   saved_report_available?: boolean;
   entry_ready?: boolean | null;
@@ -1773,7 +1785,7 @@ export function reviewClassicConstructions(jobId: string, entry: number, enforce
 export function fetchOptimizerResults(jobId: string): Promise<OptimizerResponse> {
   const existing = optimizerResultRequests.get(jobId);
   if (existing) return existing;
-  const request = getJson<OptimizerResponse>(`/optimizer/results/${encodeURIComponent(jobId)}`)
+  const request = getJson<OptimizerResponse>(`/optimizer/results/${encodeURIComponent(jobId)}?compact=true`)
     .finally(() => optimizerResultRequests.delete(jobId));
   optimizerResultRequests.set(jobId, request);
   return request;
@@ -2132,6 +2144,9 @@ export type DraftKingsBatchFile = {
   contest_id?: string | null;
   template_id?: string | null;
   message: string;
+  contest_format?: string | null;
+  scoring_variant?: string | null;
+  result_record_id?: string | null;
 };
 
 export function batchImportDraftKings(payload: {
@@ -2166,6 +2181,11 @@ export function importWeeklyContestFolder(payload: {
     season: number;
     week: number;
     slate: string;
+    contest_format?: string;
+    scoring_variant?: string;
+    pool_sha256?: string;
+    source_reference?: string;
+    correction_of?: string;
   }>;
 }): Promise<{
   batch_id: string;
@@ -2385,6 +2405,7 @@ export type SlateLearningReport = {
 };
 
 export type WeeklyLearningReport = {
+  format_results?: import("./TypedContestResults").TypedGroup[];
   report_id: string;
   contract_id: "weekly_learning_report_v1" | "weekly_learning_report_v2";
   builder_version: string;
@@ -2395,6 +2416,8 @@ export type WeeklyLearningReport = {
   evidence_hash: string;
   status: "completed" | "partial";
   summary: {
+    typed_contest_entries?: number;
+    typed_contest_groups?: number;
     weekly_stats?: {
       status: string;
       season: number;

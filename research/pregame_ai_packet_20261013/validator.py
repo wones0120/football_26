@@ -94,13 +94,17 @@ def validate(packet):
         evidence = player.get('workload_evidence')
         need(isinstance(evidence, dict), 'missing shared workload evidence')
         if isinstance(evidence, dict):
-            need(evidence.get('contract_id') == 'workload_evidence_v1', 'workload contract mismatch')
+            need(evidence.get('contract_id') in {'workload_evidence_v1', 'workload_evidence_v2'}, 'workload contract mismatch')
             need(evidence.get('player_id') == pid, 'workload canonical identity mismatch')
             for group in ('historical', 'derived_proxies', 'explicit_pregame'):
                 need(isinstance(evidence.get(group), dict), 'missing workload group ' + group)
-            for item in evidence.get('historical', {}).values():
+            for key, item in evidence.get('historical', {}).items():
                 if item.get('status') == 'observed':
                     need(item.get('available') is True, 'observed workload requires measurement flag')
+                    if evidence.get('contract_id') == 'workload_evidence_v2':
+                        need(item.get('evidence_kind') == 'observed_history', 'observed workload requires original-history attribution')
+                        original = 'pregame_base_' + key if key in {'targets_mean_3', 'carries_mean_3', 'target_share_mean_3', 'carry_share_mean_3'} else key
+                        need(item.get('source_field') == original, 'observed workload source is not original history')
                 if item.get('available') is False:
                     need(item.get('value') is None, 'unavailable workload cannot be measured zero')
     for fact in packet.get('baseline_facts', []):

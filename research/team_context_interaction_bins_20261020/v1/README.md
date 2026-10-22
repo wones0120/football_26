@@ -1,0 +1,19 @@
+# Observed team context responses
+
+Candidate X01-M04–M08, feature-only. These summaries pair actual observed same-team/season responses with their native home/away and intended pregame market conditions. They are not fitted responses, causal estimates or forecasts. High adjudicates the bounded catalog meaning; shrinkage, within-time predictive validation, calibration and model/serving integration remain pending.
+
+| ID | Conditional source measurement |
+|---|---|
+| X01-M04 | Separately within native home and away logs, intended total versus each observed channel: paired exposure, means, centered cross sum and population covariance; home-minus-away covariance when both defined. |
+| X01-M05 | The same native home/away stratification for signed spread versus observed channels; signed market points preserved. |
+| X01-M06 | Reference-defined high-total logs (>= reference total q75), subdivided into canonical favorite/underdog/pickem. Per-channel known exposures and means; favorite-minus-underdog contrast only when both known and no unknown condition. |
+| X01-M07 | Analogous low-total logs (<= reference total q25). High/low tie membership remains explicitly independent. |
+| X01-M08 | Close absolute spread <= reference absolute-spread median versus larger spread. Preserve every signed line, paired moments and close-minus-large mean contrast. |
+
+Responses are physical offensive snaps, observed per-game called-pass fraction, and official full-team carries. Called-pass response uses the matched game-level denominator nonspike dropbacks plus designed nonkneel rushes; its mean is explicitly the mean of per-game fractions, not a pooled exposure ratio. The physical union includes each official play once. Full-team carry primitive is `official_workload_components.full_team_denominators.official_carries` (all rushers including kneels and unmapped actors), not an RB-only player count.
+
+Reference totals/spreads come only from native 2026 weeks 1–3 (strictly before 202604), using linear empirical quantiles at `(n-1)*q`; no evaluated week4–6 line or response influences the thresholds. Response summaries evaluate weeks4–6 and preserve every target game slot. The authenticated event parent ends before202606, so absent week6 target responses remain unknown, not zero. Outcome responses are retrospective measured labels, explicitly never pregame predictors. Small/empty/constant cells can have undefined contrasts/covariances; no shrinkage or sample-size fabrication fills them. Population covariance uses paired known exposures; exact versions are null if any eligible pair is unknown. Known-paired summaries remain separately labeled. Unknown condition membership masks the exact statistics of every cell it could belong to, while preserving measured known-member sample statistics.
+
+Native game IDs bind team and home/away, including canonical team aliases. Original indexed PBP, managed environment and official budget lineage, immutable producer hashes, native schedule and intended quote fields are checked by the actual runner. Only commutative physical/called-pass counts are consumed from the legacy environment context; superseded play-ID pace is unused. No parent inflation, fetch, fit, DB mutation, user preference or raw-name join occurs. Current actual source capture/read/publication clocks remain real; revised archived intended quote original decision availability and full-game completeness remain unknown. Every artifact declares postlock descriptive nonserving use.
+
+`actual_receipt.json` provides exact full/selected immutable refs, source ancestry, reference counts/cutpoints and response coverage. Targeted tests cover native venue and market axes, frozen thresholds, observed response arithmetic, signed groups/pickem/unknowns, missing target logs, zero versus unknown, native aliases, input ordering and lineage conflicts.

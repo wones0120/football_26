@@ -1,6 +1,6 @@
 # Wones Football Analyst protocol v1
 
-The pilot is an offline evidence and hypothesis layer. It does not create forecasts, change defaults, write context, ingest news, or run scheduled jobs. A machine-readable packet and concise human briefing are two renderings of the same identified claims. `validator.py` is the deterministic acceptance gate; `packet.schema.json` documents structure. Use the shared `workload_evidence_v1` groups without flattening history, derived proxies and explicit pregame forecasts together.
+The pilot is an offline evidence and hypothesis layer. It does not create forecasts, change defaults, write context, ingest news, or run scheduled jobs. A machine-readable packet and concise human briefing are two renderings of the same identified claims. `validator.py` is the deterministic acceptance gate; `packet.schema.json` documents structure. Use the versioned shared workload evidence groups without flattening original history, allocated proxies and attributed explicit pregame inputs together. New packets use `workload_evidence_v2`; archived v1 packets retain their original values/version and are not backfilled.
 
 ## Automatic intake and triage design
 

@@ -14,7 +14,7 @@ export function largeGppReadinessHtml(optimizer: OptimizerResponse): string {
     const analyst = optimizer.analyst_handoff_applied ?? optimizer.football_analyst?.prepared_research ?? {};
     return `<h3>Preliminary research · not entry cleared</h3>
       <p><strong>Research optimizer: ${escape(optimizer.status)} · ${Array.isArray(optimizer.results) ? optimizer.results.length : 0} ${optimizer.status === "completed" ? "saved" : "reported"} lineups · ENTRY READY: NO</strong></p>
-      <p>Normal source readiness: ${escape(normal.status)}. Missing evidence below remains unresolved; research assumptions do not establish current game-day clearance. Contest CSV export is blocked.</p>
+      <p>Normal source readiness: ${escape(normal.status)}. Missing evidence below remains unresolved; research assumptions do not establish current game-day clearance. CSV download requires Check upload readiness in Recent optimizer runs; final inactives remain a separate review.</p>
       <table><thead><tr><th>Retained source check</th><th>Status</th></tr></thead><tbody>${Object.entries(sourceChecks).map(([name,value]) => `<tr><td>${escape(sourceLabels[name] ?? name)}</td><td>${escape((value as Row).status)}</td></tr>`).join("")}</tbody></table>
       <p>Normal source blockers: ${escape((normal.reason_codes ?? []).join(", "))}</p>
       <p style="overflow-wrap:anywhere">Research snapshot: ${escape(preliminary.snapshot_sha256)}<br>Assumption receipt: ${escape(preliminary.assumption_manifest_sha256)}<br>Checked Analyst packet: ${escape((analyst as Row).checked_packet_sha256)}<br>Compatibility receipt: ${escape((analyst as Row).compatibility_sha256)}</p>

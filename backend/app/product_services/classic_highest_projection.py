@@ -37,7 +37,7 @@ def stack_policy():
                 description="Highest baseline projection; stacks and opponent bringbacks optional.")
 
 
-def solve(service, pool, *, params, cutoff=None, locked_ids=(), excluded_qb_ids=()):
+def solve(service, pool, *, params, cutoff=None, locked_ids=(), excluded_qb_ids=(), conditional_means=None):
     """One exact solve. Internal research locks are explicit in the returned audit.
 
     The public mode rejects locks. Internal matched controls can use this helper
@@ -49,6 +49,12 @@ def solve(service, pool, *, params, cutoff=None, locked_ids=(), excluded_qb_ids=
     from .classic_portfolio_controls import explicit_appearance_limit
 
     frame = pool.copy(deep=True)
+    score_column='projection'
+    if conditional_means is not None:
+        score_column='scenario_mean'
+        frame[score_column]=frame['player_id'].astype(str).map(conditional_means)
+        if frame[score_column].isna().any() or not frame[score_column].map(lambda v: math.isfinite(float(v))).all():
+            raise ValueError('Every eligible scenario actor requires a finite frozen mean')
     values = pd.to_numeric(frame["projection"], errors="coerce")
     valid = values.map(lambda value: pd.notna(value) and math.isfinite(float(value)))
     missing = frame.loc[~valid, "player_id"].astype(str).tolist()
@@ -59,7 +65,7 @@ def solve(service, pool, *, params, cutoff=None, locked_ids=(), excluded_qb_ids=
         raise ValueError("Research lock is outside the exact eligible baseline-mean pool")
     captured = {}
     def exact_objective(model, rows, variables):
-        model.setObjective(pulp.lpSum(float(rows.loc[i, "projection"]) * variables[i] for i in rows.index))
+        model.setObjective(pulp.lpSum(float(rows.loc[i, score_column]) * variables[i] for i in rows.index))
         for i in rows.index:
             pid = str(rows.loc[i, "player_id"])
             if pid in set(excluded_qb_ids):
@@ -72,10 +78,11 @@ def solve(service, pool, *, params, cutoff=None, locked_ids=(), excluded_qb_ids=
                 model += variables[i] == 0, f"user_elevated_maximum_{i}"
         captured.update(model=model, rows=rows.copy(deep=True), variables=variables)
     settings = {**stack_policy(), "correlation_bonus": 0,
+                "bounded_scenario_comparison": bool(params.get('scenario_mode')),
                 "single_lineup_user_controls": {key: params[key] for key in
                     ("max_players_per_team", "max_players_per_game", "max_elevated_players_per_lineup") if params.get(key) is not None},
                 "single_lineup_cutoff": cutoff}
-    lineup = service._solve_lineup(frame, score_col="projection", contest_type="tournament", stack_params=settings,
+    lineup = service._solve_lineup(frame, score_col=score_column, contest_type="tournament", stack_params=settings,
         locked_player_ids=set(locked_ids), enforce_single_te=bool(params.get("enforce_single_te", False)),
         avoid_dst_opponents=bool(params.get("avoid_dst_opponents", False)), rule_profile=None,
         include_control_comparison=False, quality_floor=None, additional_constraints=exact_objective)
@@ -95,10 +102,18 @@ def solve(service, pool, *, params, cutoff=None, locked_ids=(), excluded_qb_ids=
     if lineup:
         assert model is not None and model.valid(1e-5)
         total = sum(float(player["projection"]) for player in lineup)
-        assert abs(total - pulp.value(model.objective)) < 1e-6
+        objective_total=sum(float(player[score_column]) for player in lineup)
+        assert abs(objective_total - pulp.value(model.objective)) < 1e-6
         audit.update(base_mean=total, salary=sum(float(player["salary"]) for player in lineup))
         for player in lineup:
             player.update(selection_objective=OBJECTIVE, selection_policy_id=POLICY_ID,
                           roster_position=player.get("position"), solver_scoring_policy=POLICY_ID)
         lineup[0]["highest_projection_report"] = {key: value for key, value in audit.items() if key != "input_snapshot"}
+    if conditional_means is not None:
+        audit.update(policy_id='prepared_optimizer_scenario_v1',objective_id='conditional_mean',objective_label='Experimental scenario mean',
+            objective_definition='sum frozen conditional component-adjusted means',conditional_adjustments=True,
+            conditional_mean=sum(float(p[score_column]) for p in lineup) if lineup else None)
+        for player in lineup:
+            player.update(selection_objective='conditional_mean',selection_policy_id='prepared_optimizer_scenario_v1',solver_scoring_policy='prepared_optimizer_scenario_v1')
+        if lineup:lineup[0]['highest_projection_report']={k:v for k,v in audit.items() if k!='input_snapshot'}
     return ([lineup] if lineup else []), audit

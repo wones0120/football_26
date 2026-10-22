@@ -1,0 +1,35 @@
+# WAS–SF authored source investigation
+
+Scope: canonical game `2026_06_WAS_SF`, 2026 week 6 Monday Night, kickoff 2026-10-20 00:15 UTC. Research began against actual immutable request `46b98133b8cef269fb7d58bfd184418f37f44135d28d0cb55831d555d96016a9`; publication waits for the stable request emitted after the reviewed native-capture semantic normalization. The original request remains unchanged. No new count receipt was supplied: `count_contract=null`, zero count-forecast rows. Stored `projected_targets`/`projected_carries` are not relabeled as newly produced count forecasts.
+
+## Sourced findings
+
+The preserved official Commanders final-report snapshot `2d243b31-20c8-5176-83c1-5fc46fb102f0` is byte-verified at SHA256 `6447fb206d3bd41afbc1a3f2da13e607f8f4066f51a26d4416ad84eadc7314c0`. Its source is the [official final team report](https://www.commanders.com/news/game-status-commanders-49ers-week-6), published 2026-10-17 17:04:41.368 UTC, modified 18:55:17.289 UTC, observed by the capture at 2026-10-19 15:29:13 UTC. Its article body explicitly reports Croskey-Merritt out and discusses White and Ekeler as other backfield options. That supports competing recipient paths; it does not supply an exact carry/target split or a calibrated replacement-role forecast.
+
+The same report and current typed canonical resolution give Daniels and McLaurin `NO_GAME_DESIGNATION`. This corrects the prior packet's stale Q/unspecified discussion. It is distinct from final game dressing, unrestricted health, routes, snaps or a guaranteed workload. Their actual canonical UUIDs and native-source lineage remain in the frozen request; no display-name-only join was performed.
+
+The actual request's current native DraftKings facts mark Croskey-Merritt and Deebo Samuel out. Source-native draftable IDs are retained beside canonical UUIDs and game/team scope. Their absence does not establish Watkins' routes or transfer a fixed quantity to a recipient. Watkins remains a sourced expected backup; White and Ekeler also retain backup labels despite the official article identifying them as options. We cannot reconcile this into newly measured starter volume without additional role/usage evidence.
+
+The frozen ESPN/DraftKings market snapshot is 51.5 total with SF -7.5. The quote is already part of prepared model context; treating it as another Analyst boost would duplicate its ancestry. It allows a productive SF attack and a Washington response as a coherent path, while also leaving SF runout and lower Washington efficiency as relevant contrary conditions. These are mechanisms with unknown likelihood, not invented percentages.
+
+## Complete-roster football assessment
+
+Purdy and a receiving scorer such as Kittle can benefit from the same completion or passing touchdown; that is one physical event with two fantasy scorers. McCaffrey can contribute yards/receiving production alongside that path, but his rushing touchdowns compete with SF passing touchdowns. Washington's response can involve Daniels and eligible receiving actors; Daniels rushing production and the available backs share the relevant rushing/scoring budget. No actor is promised a simultaneous marginal P90 outcome.
+
+The backfield absence deserves attention, but White and Ekeler can divide work and Daniels can consume rushing opportunities. A backup label or a historical/proxy average does not prove a recipient expansion. Watkins' cheap salary can enable stronger players elsewhere, but his own routes/targets or a low-volume scoring event still need to occur; price savings do not create his football opportunity. A kicker succeeds when possessions reach range and some drives stall; a roster with kickers and offensive scorers needs compatible possession/finishing paths rather than every selected player receiving independent touchdown credit.
+
+Shared risks include concentrated SF passing failure, ground touchdowns reducing passing scores, Washington failing to sustain drives, uncertain replacement splits and sparse cheap-player participation. Final inactives, practice/game-designation meaning and role assumptions remain separate. User eligibility preferences select among these assessments; they do not change the facts or donate excluded volume.
+
+## Authored disposition
+
+**Sourced no-change for numerical Analyst effects.** Update the expected/counter-path explanation and factual designation discussion; preserve the fresh prepared FP values. No new transfer, fixed recipient share, completion probability, TD probability or numerical opportunity multiplier is supported by this evidence. The prior unused ground-finishing sensitivity remains a separately identified prior design, with original coefficient/source ancestry, not a newly validated forecast or the claimed effect of this refresh.
+
+High football review accepted this disposition. This is actual source investigation and an explicit decision, rather than a neutral packet relabeled as research. The normal publication, exact stable dependency binding, fresh Prepare and saved consumer evidence are still required before claiming the production loop closed. No old lineup comparison or additional optimizer job is required for this investigation.
+
+## Publication checkpoint
+
+At 2026-10-19 19:12:10 UTC, the normal `publish_research` → `import_packet` path published sourced no-change packet `c4e8242fd8ba1863ac0d9746a9d7d1fe071fe04baed4bc5277d6209a1e969f0d`, publication `25fc3e088ebf1936f68a20aec312152b590109b5f755c5c74c07a9c473c7e636`. It binds actual stable request `1ad370d54d4a9b0203e42cc0ce79a33e683b2da89bd78a65efccbc5d105c890f` and dependency `4046bd16ca174325e68a19f4dddca3ee8bc53f2790fb15592a2c10cef75afbee`. All 60 canonical actor identities matched; final-designation/native OUT checks and unchanged 51.5/-7.5 market were checked against the actual request. Current native status and market snapshot bytes and all four cited manifest content hashes verified. No count receipt was supplied. Original source/request/packet bytes remain unchanged. See `publication_receipt.json` and `stable_request_source_comparison.json`. Fresh public Prepare and append-only closure are owned by A; publication alone is not end-to-end closure.
+
+## Current technical revalidation
+
+At 2026-10-19 19:23:19 UTC, publication `1b04233b9c88ea53ecf60a7e99cfaa3b4e7692385c8e25fe0034589a94588b1a` bound actual request `630242f91262c710d805afcf3382a4b516c28115b0e49f509bcb4eac3a2ff247` / dependency `a20800a27d828b8f3084f5545f851f37b5d1fa04b6793e6ad2fe8bb1d4385eca` to packet `993ec342957f6431c00d3dee0b294d175e2804974617b61d9b52e060ae3f16f2`. All 121 canonical source facts remained identical after the reviewed HTTP-capture normalization. The current runtime additionally marked role-evidence verification unavailable for three backup QBs; this derived verification difference is retained and disclosed, and no starter workload is inferred. Original 19:12:10 authorship, first packet/publication and source dates remain explicit. This is technical binding and current-evidence revalidation, not newly discovered source research. A owns the ensuing public Prepare/closure/Optimize/reopen evidence.

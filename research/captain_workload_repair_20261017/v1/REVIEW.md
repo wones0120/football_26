@@ -1,0 +1,67 @@
+# Monday Captain workload repair — current portfolio infeasible
+
+The normal Captain-role regression is repaired and active. **No new recommended portfolio or downloadable CSV exists under the unchanged four-entry /50%Captain /WR–RB /Q-excluded settings.** Only McCaffrey has qualifying workload after those preferences; one Captain cannot fill a50%portfolio. The app now says this explicitly rather than promoting a low-workload receiver or saving two McCaffrey Captains as a purported50%two-entry result.
+
+## Actual UI outcome
+
+Clicked Monday Prepare: operational job `4b318c2a-f46a-4dc6-a376-77ae886efa9d`; projection `1f9af706-3b24-4e83-95d8-f7083cbf0e39`; ownership `44006715-6de6-46fc-9786-6b2b7e2f0a6c`; cutoff17:19:58.282792UTC; prepared17:20:59.242318UTC. The app showed READY. Bound minimum remained1700; no exclusions, locks, Captain exceptions, projections, Analyst numerical assumptions or global preferences were authored.
+
+Clicked Run Optimizer: `94ad1e11-0d35-456e-b9dc-f7ad998247e4` persisted failed0/4 with one supported Captain and no constraint relaxation. After the last tested current-workload override guard was activated on an idle managed worker/API, clicked Run Optimizer again from the same certified build: **`8ae12f6f-57a6-4c95-b323-0c6fcf813c29`**, operational job `e4b3395d-320e-4352-8c4d-88caa3073ed7`, reproduced failed0/4. Clicked Reopen results; the same saved record and reasons were visible. Both download controls were disabled. Public recommended/all CSV requests both returned409, `Export requires a completed optimizer run`. No Check upload readiness control is offered for a failed run. Export acceptance is therefore a verified rejection, not a successful new CSV.
+
+The prior UI-generated Monday run `fca1714e-f4e5-482c-bde0-6391dc41df51` and Sunday `ee5d9a9f-b712-47cb-96c7-b1826843bd16` remain preserved. Earlier successful export acceptance does not certify the older Antonio-Captain recommendation under this new workload policy. No entered Morning/Main/Tiers/Single Stat lineups or contest entries were changed. No browser CSV download or submission occurred.
+
+## Why the earlier recommendation was wrong to treat as normal
+
+Antonio's2.874 `projected_targets` is not an independently calibrated next-game target forecast. The legacy projection pipeline assigns the post-allocation `targets_mean_3` to that misleading field; it combines lagged team volume and redistributed shares. It must not be thresholded as measured expected targets. Original pre-allocation evidence and raw canonically linked weekly rows show targets4/8/3 inWeeks3/4/5:five per observed recent game,16.4%mean target share and13.0%latest target share. Latest snaps68%show participation, not routes, targets or a sourced role expansion. Explicit pregame targets/routes are missing. The [official Antonio game log](https://www.commanders.com/team/players-roster/antonio-williams/) supports the receiving production chronology; the raw source audit preserves exact weekly native IDs, canonical link, row IDs and receipt clocks for target counts.
+
+Broad merged search intentionally removed the old top-four marginal-P90 veto and searched two supporting rosters for every legal Captain. Its gate checked preferences and finiteP90, so cheap receivers could finance both QBs and the required leader. The optional Captain-analysis contract has a stricter sourced-primary-role/story screen, but Monday's reference packet lacks that optional section. Thus the normal broad path bypassed the intended football-role review. Restoring top four alone would not fix the mechanism: Antonio remains high enough in the available WR/RB marginal-P90 ordering to be considered. Salary savings and a possible touchdown were insufficient support for the earlier normal recommendation.
+
+## Active qualification and scope
+
+`showdown_supported_captain_workload_v1` is shared at the existing normal merged Captain boundary, so baseline scenario solves, broader Captain support search, optional Captain conditioning and exact replay inherit it. It changes eligibility, not model points, marginal quantiles or FLEX assessment. The non-merged old top-four strategy remains separately available for explicit comparison, not silently restored as the normal strategy.
+
+The disclosed conservative receiving floors are five original observed targets/game,15%original target share and50%latest snaps. An established20%share can survive one quiet latest game; a secondary15–20%role also needs15%latest share. RBs may qualify through that receiving role or10observed carries,35%carry share and50%latest snaps. Source observation clocks, original feature cutoff and measurement flags are required; unknowns fail rather than becoming healthy/zero evidence. Projected count proxies, salary, P90 and Analyst prose cannot qualify a role. A future or undated source cannot establish it.
+
+A verified ingested explicit workload record can support expansion only with source IDs, source/context linkage and an original observation no later than cutoff, plus the expected count/share criteria. A verified current low workload supersedes a larger old role. No such forecast or expansion was created for Antonio. These are versioned operational football-review floors, **not fitted success thresholds, a probability model or proof of improved tournament performance**. They need chronological predictive evaluation before any performance claim. This change has bounded role sanity checks, not a broad historical sweep or training experiment.
+
+Frozen Sunday sanity examples retain Lamb (11.33observed targets,26.9%share despite11.9%latest), Golden8.67/23.1%, Pickens9/21.8%, Watson7/18.5% with latest25.8%, and Javonte16.67carries/84.9%carryshare. Strong's4carries/18.9% and thin receivers do not qualify; their FLEX assessment remains. This avoids deleting a legitimate established receiver for one quiet game or imposing a same-team quota. Sunday was not regenerated in this task; its prior Flournoy Captain entries are historical results, not re-certified under the new policy.
+
+Frozen Monday workload-qualified players are McCaffrey, Kittle, McLaurin, Diggs and Evans. Kittle remains excluded from Captain by WR/RB-only; the other three receivers remain excluded by the user's Q preference. McCaffrey's original13.67carries/71.7%carryshare and82%latest snaps support his role. Antonio'ssecondary role lacks recent corroboration; Dyami2.33targets/7.8%, Watkins1.67/6.7%, Cowing1.67/6.5% and Cooks3/8.8% lack normal receiving-Captain volume. No QB, TE or Q exception was silently added, and McCaffrey was not locked.
+
+The selector also fixes an independent underfill defect: the requested four-entry50%allowance previously permitted two appearances even when only two entries were achieved. Underfilled sets now additionally bind the cap to achieved size without rounding up; complete portfolios retain established requested-size rounding. A nonempty all-McCaffrey subset would violate the actual cap, so zero is the honest feasible result.
+
+## Before: preserved saved portfolio
+
+|Roster|Captain|FLEX players|Salary|Mean|
+|---|---|---|---:|---:|
+|1|Antonio Williams $6,300|Drew Stevens $5,000; Jayden Daniels $10,000; Brock Purdy $10,800; Chig Okonkwo $4,600; Christian McCaffrey $11,800|$48,500|74.493|
+|2 — old recommendation|Antonio Williams $6,300|Drew Stevens $5,000; Eddy Pineiro $5,200; Jayden Daniels $10,000; Brock Purdy $10,800; Christian McCaffrey $11,800|$49,100|74.513|
+|3|Christian McCaffrey $17,700|Drew Stevens $5,000; Jordan Watkins $2,000; Jayden Daniels $10,000; Brock Purdy $10,800; Antonio Williams $4,200|$49,700|73.247|
+|4|Christian McCaffrey $17,700|Drew Stevens $5,000; Jacob Cowing $2,200; Jayden Daniels $10,000; Brock Purdy $10,800; Antonio Williams $4,200|$49,900|72.772|
+
+## After: supported complete candidates, not a valid portfolio
+
+The final **UI** generation retained the following two complete candidate rosters in its frozen report. Neither was selected or saved as a lineup; together they would be100%McCaffrey Captain. They are readable evidence of the salary/support tradeoff, not a manual replacement or a downloadable recommendation.
+
+|Roster|Captain|FLEX players|Salary|Mean|
+|---|---|---|---:|---:|
+|UI-generated candidate 1; unselected|Christian McCaffrey $17,700|Drew Stevens $5,000; Jordan Watkins $2,000; Jayden Daniels $10,000; Brock Purdy $10,800; Antonio Williams $4,200|$49,700|73.149|
+|UI-generated candidate 2; unselected|Christian McCaffrey $17,700|Drew Stevens $5,000; Jacob Cowing $2,200; Jayden Daniels $10,000; Brock Purdy $10,800; Antonio Williams $4,200|$49,900|72.625|
+
+The stronger supported candidate puts the main rushing/receiving workload at Captain, with Purdy and Daniels both contributing and Antonio still available in FLEX. Watkins'37%latest snaps and limited targets are a weak salary bridge; Cowing's43%snaps do not establish a larger target role. A game with SF passing scores early, McCaffrey production and Washington passing response can support that construction. A purely McCaffrey ground-finish game weakens the Purdy slot; strong SF defense can also suppress Daniels/Antonio. These paths have unknown likelihood.
+
+Two QBs are **allowed, not required**. Their model means make them attractive to the objective; funding McCaffrey at1.5salary alongside both produces thin supports. The non-QB team-leader preference requires McCaffrey here because the other qualifying leader is Q excluded. That is a user-selection consequence, not a model lock or an invented workload transfer. A diagnostic lower-Purdy ground-finish roster from the earlier review—McCaffrey CPT /Stevens /Kittle /Daniels /Okonkwo /Antonio, $49,700, frozen prior mean67.827—was unsaved research. It has a more direct SF ground-finish story and loses material mean versus the old74.513control. It is not an operationally generated replacement, a valid four-entry portfolio, or a free improvement.
+
+## SF-control hypothesis and current news
+
+The fresh prepared market has SF−7.5,total52.5, impliedSF30/WAS22.5. This supports an SF-favored environment; it does not establish a blowout probability. The [official matchup preview](https://www.commanders.com/news/commanders-vs-49ers-preview-a-trip-out-west) reports SF's strong scoring/defensive start and Washington's weaker scoring defense. A comfortable SF win is a sensible diagnostic branch, while Washington response remains possible. No market or player forecast was changed to force either story.
+
+The [official Washington injury report](https://www.commanders.com/news/commanders-vs-49ers-week-6-injury-report-2026) still has blank Saturday/final columns. A separate [official announcement at13:04ET](https://www.commanders.com/news/game-status-commanders-49ers-week-6) rules Croskey-Merritt out and describes a White/Ekeler combination; McNichols activation remains a Monday decision. This new article is evidence for recheck, not a numeric workload forecast or an Antonio target expansion. The frozen prepared native Q preference already excluded Croskey-Merritt; the article has not been relabelled as consumed canonical projection evidence or used to assign unsupported carries. Other Q players' final roles remain unresolved. Refresh the supported evidence workflow when final designations/activation facts arrive; this task does not assert final entry clearance.
+
+## Verification and limits
+
+63focused backend tests passed across workload qualification, existing Captain shortlist, merged scenario construction/selection and workload evidence, plus2targeted canonical-context/missing-opportunity checks. The12workload tests were rerun after strict source-ID validation rejected NaN/string placeholders as missing evidence. That final guard was activated on idle services; no current player has a verified numeric forecast, so it changes no live Captain decision or saved result. UI TypeScript/Vite build and diff check passed (existing large-chunk warning only). Fixtures now supply affirmative measured role facts where normal generation requires them; missing facts are separately tested. Real frozen Sunday/Monday sanity audits, raw canonical weekly evidence, fresh public Prepare receipt, both failed run records and blocked CSV responses are versioned here. No broad tests or independent training/research sweep was launched; normal Prepare ran its established build.
+
+Shared frozen moments are compared in matched_moments.json:12of15shared players are unchanged; the new normal Prepare changed Cowing mean−0.1473, Watkins−0.0982 and Cooks−0.0592 (their marginal P90s moved by the same amounts). No manual score adjustment was made and no claim is made that the eligibility patch caused those refresh differences. All three fail the workload gate under both snapshots, so the one-Captain infeasibility does not depend on those small changes. The role sanity comparison uses the original frozen inputs; the operational before/after is an eligibility/generation experiment with a newly prepared source cutoff, not a frozen-candidate selector experiment.
+
+**Current recommendation:** do not use the old Antonio-Captain recommendation as the normal answer under the repaired role requirement. With present constraints and evidence, the optimizer has no valid nonempty portfolio. No setting was relaxed to manufacture one. A new supported role/availability fact or an explicit user constraint change is needed before a replacement portfolio can be produced.

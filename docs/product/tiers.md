@@ -23,3 +23,5 @@ The initial review and byte-verification evidence is in `research/tiers_2026w6_2
 Official injury refresh is available from a saved Tiers pool. It appends a new pool/status revision and preserves frozen model means, known OUT/Q/unknown gates and original failed readiness history. The NFL source records blank game designations/practice/omission separately; none clears a player. The David Sills/Sills V root cause is fixed through shared suffix normalization with unique team/position matching and native alias conflict guards. Source refresh success is separate from final game-day clearance.
 
 CSV download errors now appear in the workspace instead of saving an API JSON error as a file. Successful responses are checked for CSV content and the correct roster headers before a `.csv` download is started.
+
+Contest standings also load through [Learning folder imports](typed_contest_learning.md), separately from component actuals and financial Entry History. Typed weekly reports preserve observed score/rank and unresolved identity/component/forecast-origin evidence.

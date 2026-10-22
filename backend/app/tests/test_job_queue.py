@@ -283,3 +283,33 @@ def test_projection_dispatch_and_job_status_api_are_idempotent(
     assert [row["job_id"] for row in listed.json()["rows"]] == [
         created_payload["job"]["job_id"]
     ]
+
+
+def test_status_only_job_api_omits_and_does_not_load_saved_results(tmp_path: Path) -> None:
+    from sqlalchemy import inspect
+    from backend.app.services.job_queue import list_jobs
+    factory=_factory(tmp_path)
+    evidence={'immutable_audit':'x'*100_000,'projection_run_id':'preserved'}
+    with factory() as session:
+        job,_=enqueue_job(session,job_type='projection_build',idempotency_key='compact-status',request_payload={'season':2026})
+        job.status='completed';job.result_json=evidence;session.commit();job_id=job.job_id
+    with factory() as session:
+        job=get_job(session,job_id,include_result=False)
+        assert {'result_json','request_json'}<=inspect(job).unloaded
+        session.expunge(job)
+        assert job_response(job,include_result=False).result is None
+    with factory() as session:
+        jobs=list_jobs(session,include_result=False)
+        assert all('result_json' in inspect(job).unloaded for job in jobs)
+    app=FastAPI();app.include_router(job_router)
+    def override_session():
+        with factory() as session:yield session
+    app.dependency_overrides[get_db_session]=override_session
+    client=TestClient(app)
+    compact=client.get(f'/api/jobs/{job_id}?include_result=false').json()
+    full=client.get(f'/api/jobs/{job_id}').json()
+    assert compact['result'] is None and full['result']==evidence
+    assert compact['status']==full['status']=='completed' and compact['run_id']==full['run_id']
+    assert client.get('/api/jobs?include_result=false').json()['rows'][0]['result'] is None
+    assert client.get('/api/jobs').json()['rows'][0]['result']==evidence
+    with factory() as session:assert get_job(session,job_id).result_json==evidence

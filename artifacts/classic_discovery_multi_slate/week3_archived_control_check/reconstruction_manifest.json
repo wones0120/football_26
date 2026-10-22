@@ -1,0 +1,33 @@
+{
+  "actual_score_values_loaded": false,
+  "checkpoint_ref": "refs/codex/turn-diffs/checkpoints/fcb83a93fb52a70ca53557b8cd6a3baf/5d69b4e0be5f5e4e24e8627a5d555774/1790371976411/97fccd69-6eff-40c3-968f-89c2f2370081",
+  "checkpoint_time_from_ref_epoch": "2026-09-25T21:32:56.411+00:00",
+  "code_sha256": {
+    "classic_small_field.py": "31402809c088b3f818b5837b379b8402d20c5dd83e2ee44c01b866014a8d47e8",
+    "gpp_optimizer.py": "883c1ff9b9b59fd1a4f79d3390b5d98321bfc884473e3908937eed3792605f46",
+    "lineup_correlation_scoring.py": "d3f5a835c740575a7250c82a3e69810261f32ed59a5ec1da836dc762ad48e8cd",
+    "optimizer.py": "b600a31aeb6b62d0565a7c6ad49589e966a986564b977823ebee2d7b48edadc5",
+    "player_context_scoring.py": "82ea698aab60ce4c9f0b559863f91c3c6518fdbb2bc77a61bb502c4e43d0fa02",
+    "rule_library.py": "3a9711cd1aa246d6131d59990a6f344b3a4b5bd76ea9bb6be67514d1f4c88b1f"
+  },
+  "contract": "classic_archived_control_reconstruction_check_v1",
+  "eligible_players": 535,
+  "file_sha256": {
+    "candidate_solver_frame.json": "c7d0203a37b13948c7eadec92af11ac32fe0800ead80675c44444acdd623fafe",
+    "check_control.py": "6c175480a5383ad1eac1e71ac2d0cd1aa13ebcbfdcbb77d6ed972b3e4ab9f57b",
+    "inputs.json": "7793d4a452912f43d8ddf5ac74ea289a0ac98346e25fc8872f7bd074cec9ab30",
+    "replay_old.py": "5c0637681928ef56d132d9dd41fa90268247a8aaa233d56358dc4b90f901ad99",
+    "score_check.json": "48313a96710e9e881554702dbc06a4f807cdbc84ac22d6dd64eda3222993511f"
+  },
+  "frozen_at": "2026-10-01T01:53:56.053316+00:00",
+  "generation_check": "running; qualification pending complete original generator replay",
+  "original_control": "a6d7f5e7-db0f-44ae-87c4-60a826973408",
+  "original_control_created_at": "2026-09-25 21:25:39.785833-04:00",
+  "production_written": false,
+  "score_check": {
+    "matching_saved_candidates": 120,
+    "max_absolute_selector_difference": 0
+  },
+  "sha256": "59ce3942449ade826b0d8813ddaec57cc0e9a17364c02bc1baf1bab009947356",
+  "timestamp_limit": "Git tree checkpoint; ref epoch is archive provenance, not a commit timestamp or a saved solver binary"
+}

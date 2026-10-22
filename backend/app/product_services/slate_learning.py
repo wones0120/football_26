@@ -34,7 +34,7 @@ from .entry_submission_evidence import submission_evidence
 
 
 LEARNING_REPORT_CONTRACT = "slate_learning_report_v1"
-LEARNING_REPORT_BUILDER_VERSION = "2026-10-13.1"
+LEARNING_REPORT_BUILDER_VERSION = "2026-10-18.analyst-candidates.1"
 WEEKLY_LEARNING_REPORT_CONTRACT = "weekly_learning_report_v1"
 LEARNING_EFFECT_TOLERANCE = 0.25
 OUTCOME_TAGS = frozenset({
@@ -1202,10 +1202,12 @@ def build_weekly_learning_report(
     weekly_stats: Mapping[str, Any] | None = None,
     generated_at: datetime | None = None,
     correlation_loader: Callable[[Mapping[str, Any], Mapping[str, Any]], Iterable[Mapping[str, Any]]] | None = None,
+    format_results: Iterable[Mapping[str, Any]] = (),
 ) -> dict[str, Any]:
     """Combine exact slate reports without treating repeated entries as new model labels."""
     reports = sorted((dict(report) for report in slate_reports), key=lambda row: row["slate"])
-    if not reports:
+    typed_results = [dict(row) for row in format_results]
+    if not reports and not typed_results:
         raise ValueError("No imported contest results exist for this user and week")
     entries = [
         {"slate": report["slate"], **entry}
@@ -1234,12 +1236,12 @@ def build_weekly_learning_report(
     unique_week_metrics = _projection_metrics(unique_week_players.values())
     weekly_outcome_counts = _outcome_counts(unique_week_players.values())
     slate_financials = [report["summary"] for report in reports]
-    entered_complete = all(row.get("total_amount_entered") is not None for row in slate_financials)
-    returned_complete = all(row.get("total_returned") is not None for row in slate_financials)
+    entered_complete = bool(slate_financials) and all(row.get("total_amount_entered") is not None for row in slate_financials)
+    returned_complete = bool(slate_financials) and all(row.get("total_returned") is not None for row in slate_financials)
     financial_complete = entered_complete and returned_complete
     entered = sum(row["total_amount_entered"] for row in slate_financials) if entered_complete else None
     returned = sum(row["total_returned"] for row in slate_financials) if returned_complete else None
-    source_file_ids = sorted({source_id for report in reports for source_id in report["source_file_ids"]})
+    source_file_ids = sorted({source_id for report in reports for source_id in report["source_file_ids"]} | {row["source_file_id"] for row in typed_results if row.get("source_file_id")})
     run_ids: dict[str, set[str]] = defaultdict(set)
     for report in reports:
         for kind, identifiers in report["run_ids"].items():
@@ -1301,6 +1303,7 @@ def build_weekly_learning_report(
                                                     if selected and (attainment.get("top_1_percent") or {}).get("selected_scored") is not None else None),
                 })
     evidence_hash = _canonical_hash({
+        **({"typed_results": typed_results} if typed_results else {}),
         "contract_id": "weekly_learning_report_v2" if correlation_loader else WEEKLY_LEARNING_REPORT_CONTRACT,
         "scope": [season, week, entry_user.casefold()],
         "slate_report_ids": [report["report_id"] for report in reports],
@@ -1310,6 +1313,7 @@ def build_weekly_learning_report(
         **({"weekly_stats": dict(weekly_stats)} if weekly_stats is not None else {}),
     })
     return {
+        "format_results": typed_results,
         "report_id": "weekly-learning-report-" + str(uuid.uuid5(uuid.NAMESPACE_URL, evidence_hash)),
         "contract_id": "weekly_learning_report_v2" if correlation_loader else WEEKLY_LEARNING_REPORT_CONTRACT,
         "builder_version": LEARNING_REPORT_BUILDER_VERSION,
@@ -1318,8 +1322,11 @@ def build_weekly_learning_report(
         "entry_user": entry_user,
         "generated_at": (generated_at or datetime.now(UTC)).isoformat(),
         "evidence_hash": evidence_hash,
-        "status": "partial" if any(report["status"] == "partial" for report in reports) else "completed",
+        "status": "partial" if typed_results or any(report["status"] == "partial" for report in reports) else "completed",
         "summary": {
+            "typed_contest_entries": sum(len(row['entries']) for row in typed_results),
+            "typed_contest_groups": len(typed_results),
+            "financial_scope": "Classic/Showdown only; typed standings carry no inferred fees/payouts",
             **({"weekly_stats": dict(weekly_stats)} if weekly_stats is not None else {}),
             "slates": len(reports),
             "contests_entered": len(observed_contests),
@@ -1344,14 +1351,14 @@ def build_weekly_learning_report(
             "net_profit": returned - entered if financial_complete else None,
             "roi": (returned - entered) / entered if financial_complete and entered else None,
             "number_cashed": (sum(row["number_cashed"] for row in slate_financials)
-                              if all(row.get("number_cashed") is not None for row in slate_financials) else None),
+                              if slate_financials and all(row.get("number_cashed") is not None for row in slate_financials) else None),
             "net_positive_slates": (
                 sum(row["net_positive"] for row in slate_financials)
-                if all(row["net_positive"] is not None for row in slate_financials) else None
+                if slate_financials and all(row["net_positive"] is not None for row in slate_financials) else None
             ),
             "net_positive_slate_frequency": (
                 sum(row["net_positive"] for row in slate_financials) / len(slate_financials)
-                if all(row["net_positive"] is not None for row in slate_financials) else None
+                if slate_financials and all(row["net_positive"] is not None for row in slate_financials) else None
             ),
         },
         "slate_reports": reports,
@@ -1359,10 +1366,10 @@ def build_weekly_learning_report(
         "optimizer_correlation_aggregate": aggregate_correlations,
         "source_file_ids": source_file_ids,
         "run_ids": {kind: sorted(values) for kind, values in sorted(run_ids.items())},
-        "missing_evidence": sorted(
+        "missing_evidence": sorted([
             f"{report['slate']}:{item}"
             for report in reports for item in report["missing_evidence"]
-        ),
+        ] + [f"{row['contest_format']}:{row['variant']}:{row['contest_id']}:component_reconstruction_and_forecast_origin_unverified" for row in typed_results]),
         "interpretation": (
             "The aggregate projection metrics weight each entered lineup player; repeated "
             "players are not independent model training observations. Import files and resolve "
@@ -1685,6 +1692,14 @@ class SlateLearningService:
                     'correlation_profile', constraint_config_json->'correlation_profile',
                     'strategy_runtime', jsonb_build_object(
                         'candidate_pool_manifest', constraint_config_json#>'{strategy_runtime,candidate_pool_manifest}',
+                        'football_analyst', jsonb_build_object(
+                            'candidates', constraint_config_json#>'{strategy_runtime,football_analyst,candidates}',
+                            'input_snapshot_sha256', constraint_config_json#>'{strategy_runtime,football_analyst,input_snapshot_sha256}',
+                            'input_snapshot', jsonb_build_object('players', (
+                                SELECT coalesce(jsonb_agg(jsonb_build_object('player_id', p->'player_id', 'projection', p->'projection',
+                                    'p90', p->'p90', 'salary', p->'salary', 'game_id', p->'game_id')), '[]'::jsonb)
+                                FROM jsonb_array_elements(coalesce(constraint_config_json#>'{strategy_runtime,football_analyst,input_snapshot,players}', '[]'::jsonb)) p))
+                        ),
                         'classic_run_input_snapshot', jsonb_build_object('payload', jsonb_build_object('metadata', constraint_config_json#>'{strategy_runtime,classic_run_input_snapshot,payload,metadata}')),
                         'single_lineup', jsonb_build_object('all_candidates', constraint_config_json#>'{strategy_runtime,single_lineup,all_candidates}'),
                         'strategy_contract_audit', jsonb_build_object('candidate_rosters', constraint_config_json#>'{strategy_runtime,strategy_contract_audit,candidate_rosters}'),
@@ -1945,9 +1960,11 @@ class SlateLearningService:
                       '\\s+\\([0-9]+/[0-9]+\\)$', ''))=:entry_user
                 ORDER BY slate
             """, {"season": season, "week": week, "entry_user": entry_user.casefold()})
-        if not slates:
+        from .special_contest_results import learning_groups
+        typed_results = learning_groups(season=season,week=week,entry_user=entry_user)
+        if not slates and not typed_results:
             raise ValueError("No imported contest results exist for this user and week")
-        weekly_stats = self._refresh_weekly_stats(season=season, week=week)
+        weekly_stats = self._refresh_weekly_stats(season=season, week=week) if slates else None
         reports = [
             self.generate(season=season, week=week, slate=row["slate"], entry_user=entry_user)
             for row in slates
@@ -1972,6 +1989,7 @@ class SlateLearningService:
             historical_slate_reports=[row["report_json"] for row in history],
             weekly_stats=weekly_stats,
             correlation_loader=self._correlation_samples,
+            format_results=typed_results,
         )
         peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
         report["telemetry"] = {

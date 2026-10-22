@@ -166,7 +166,7 @@ def test_unverifiable_original_salary_lineage_remains_blocking(tmp_path,change):
     assert assess(rows,evidence)['required_sources']['salary_pool']['status'] == 'NOT_READY'
 
 
-def test_valid_legacy_import_does_not_need_a_new_snapshot_but_missing_draft_group_blocks():
+def test_verified_legacy_import_covers_optimization_without_inventing_contest_scope():
     rows,evidence = fixture()
     for s in evidence['source_manifest']['salaries']:
         s.update(snapshot_id=None,source_observed_at=None,captured_at=None)
@@ -174,9 +174,13 @@ def test_valid_legacy_import_does_not_need_a_new_snapshot_but_missing_draft_grou
         imported_at=OBS.isoformat(),completed_at=CUT.isoformat(),reason_codes=[])}
     assert assess(rows,evidence)['status'] == 'READY'
     for s in evidence['source_manifest']['salaries']: s['metadata_json'] = {}
+    # Authenticated original CSV evidence proves the optimization pool;
+    # native contest-entry compatibility remains a separate export check.
+    assert assess(rows,evidence)['status'] == 'READY'
+    evidence['salary_provenance']['salary-ingest']['verified'] = False
     reasons = assess(rows,evidence)['reason_codes']
     assert 'salary_native_draft_group_missing' in reasons
-    assert 'salary_native_source_unverified' not in reasons and 'salary_pool_timestamp_missing' not in reasons
+    assert 'salary_native_source_unverified' in reasons
 
 
 def test_official_roster_parser_requires_explicit_section_and_native_profile():
@@ -284,3 +288,14 @@ def test_club_supplement_does_not_invent_missing_practice_or_accept_future_facts
         'observed_at': (CUT + timedelta(seconds=1)).isoformat()}})
     with pytest.raises(ValueError, match='later than its context observation'):
         risk_evidence_fields(context['evidence_json'], CUT.isoformat())
+
+
+def test_official_depth_multiple_alignment_slots_are_compatible():
+    html='<table><tr><th>Position</th><th>FIRST</th><th>SECOND</th></tr>'
+    html+='<tr><td>WR</td><td><a href="/team/players-roster/other">Other</a></td><td><a href="/team/players-roster/canonical">Receiver</a></td></tr>'
+    html+='<tr><td>WR</td><td><a href="/team/players-roster/canonical">Receiver</a></td><td></td></tr></table>'
+    rows=parse_club_tables(html,team='NE',uri='https://example.test/depth',kind='depth')
+    row=next(r for r in rows if r['source_key'].endswith('/canonical'))
+    assert row['role']=='expected_starter'
+    assert row['depth_assignments']==[dict(rank=2,role='expected_backup'),dict(rank=1,role='expected_starter')]
+    assert sum(r['source_key']==row['source_key'] for r in rows)==1

@@ -1,4 +1,4 @@
-"""Single Stat contracts. No Classic/Showdown projection, salary or eligibility reuse."""
+"""Single Stat contracts. Optional learned yards; no Classic/Showdown salary or eligibility reuse."""
 from __future__ import annotations
 
 import csv
@@ -89,6 +89,7 @@ class PoolImport(Strict):
     columns: dict[Literal['source_player_id', 'name', 'team', 'game_id'], str]
     classification: Literal['native_pool', 'fixture_research'] = 'native_pool'
     evaluation_id: str = Field(default='initial', min_length=1, max_length=128)
+    prepared_input_job_id: str | None = Field(default=None, pattern=r'^[0-9a-fA-F-]{36}$')
 
     @model_validator(mode='after')
     def validate_scope(self):
@@ -110,6 +111,7 @@ class Optimize(Strict):
     pool_sha256: str = Field(pattern=r'^[0-9a-f]{64}$')
     allow_partial_touchdown_research: bool = False
     allow_incomplete_pool_research: bool = False
+    exclude_questionable: bool = False
 
 
 def score(variant, stats, *, disabled=False):
@@ -190,9 +192,17 @@ def import_pool(request, session, *, directory=None, now=None, resolver=None, fo
     now = now or datetime.now(UTC); cutoff = clock(request.source_observed_at)
     if cutoff > now: raise ValueError('Pool source clock is in the future')
     root = Path(directory) if directory is not None else LEDGER
-    request_sha = digest(request.model_dump(mode='json'))
+    payload = request.model_dump(mode='json')
+    # Preserve every legacy request hash, including its existing null fields.
+    if request.prepared_input_job_id is None: payload.pop('prepared_input_job_id')
+    request_sha = digest(payload)
     receipt = root / 'imports' / (request_sha + '.json')
     if receipt.exists(): return load(json.loads(receipt.read_text())['pool_sha256'], directory)
+    binding = None; actors = {}
+    if request.prepared_input_job_id:
+        if forecaster is not None: raise ValueError('Cannot override the bound learned forecaster')
+        from .single_stat_learned_yards import bind_preparation
+        binding, actors = bind_preparation(request, session)
     rows = list(csv.DictReader(io.StringIO(request.native_csv.lstrip('\ufeff'))))
     if not rows or len(rows) > 2000: raise ValueError('Native pool must contain 1–2000 rows')
     if not set(request.columns.values()).issubset(rows[0]): raise ValueError('Declared columns missing from native CSV')
@@ -221,10 +231,14 @@ def import_pool(request, session, *, directory=None, now=None, resolver=None, fo
         if pid in canonical_seen and pid is not None: raise ValueError('Duplicate canonical player in native pool')
         if pid: canonical_seen.add(pid)
         forecast = (forecaster or historical_baseline)(session, pid, cutoff, request.season, request.week, request.variant) if pid else None
-        players.append({**row, 'player_master_id': pid, 'identity_status': 'resolved_native_id' if pid else 'unresolved_native_id', 'identity_reason': identity_reason if resolver is None else 'fixture_resolver', 'forecast': forecast})
-    payload = request.model_dump(mode='json')
+        baseline = forecast
+        if binding and pid:
+            from .single_stat_learned_yards import actor_forecast
+            forecast = actor_forecast(actors.get(str(pid)), row)
+        players.append({**({'baseline_comparison': baseline} if binding else {}), **row, 'player_master_id': pid, 'identity_status': 'resolved_native_id' if pid else 'unresolved_native_id', 'identity_reason': identity_reason if resolver is None else 'fixture_resolver', 'forecast': forecast})
     record = _save(dict(contract_id=CONTRACT, kind='pool', variant=request.variant, game_set_id=request.game_set_id,
         classification=request.classification, created_at=now.isoformat(), source=payload,
+        **({'forecast_binding': binding} if binding else {}),
         native_csv_sha256=hashlib.sha256(request.native_csv.encode()).hexdigest(), players=players,
         rules=dict(version='user_supplied_nfl_single_stat_2026_10_15', official_overview=RULES_URL,
             official_overview_verified='2026-10-15', detailed_rules_status='User supplied; full current sport-specific page not independently retrieved',
@@ -256,7 +270,7 @@ def import_pool(request, session, *, directory=None, now=None, resolver=None, fo
     return record
 
 
-def readiness(pool, *, now=None, partial=False):
+def readiness(pool, *, now=None, partial=False, exclude_questionable=False):
     now = now or datetime.now(UTC); source = pool['source']; reasons = []
     if pool['kind'] != 'pool': raise ValueError('A Single Stat pool record is required')
     if source['contest_status'] != 'active': reasons.append('provider_contest_status_' + source['contest_status'])
@@ -270,9 +284,12 @@ def readiness(pool, *, now=None, partial=False):
         if game['started_at']: lock_at = min(lock_at, clock(game['started_at']))
         if game['disabled']: blocks.append('provider_disabled_game')
         status = player.get('status_evidence') or {}
-        unavailable = {'OUT','IR','O','DOUBTFUL','D','PUP','SUSPENDED','SUSP'}
+        from .player_roles import UNAVAILABLE, PRACTICE
+        unavailable = UNAVAILABLE | PRACTICE | {'DOUBTFUL','D'}
         if str(player.get('native_status','')).upper() in unavailable or str(status.get('status','')).upper() in unavailable: blocks.append('confirmed_or_doubtful_unavailable')
         if status.get('disabled'): blocks.append('provider_disabled_player')
+        if exclude_questionable and any(str(v).upper() in {'Q','QUESTIONABLE'} for v in (player.get('native_status'),status.get('status'))):
+            blocks.append('user_preference_exclude_questionable')
         if lock_at <= now: blocks.append('player_locked')
         if not player['player_master_id']: blocks.append('unresolved_native_id')
         missing = forecast['missing_components'] if forecast else list(COMPONENTS[pool['variant']])
@@ -283,8 +300,11 @@ def readiness(pool, *, now=None, partial=False):
             else: blocks.append('stat_forecast_missing')
         players.append({**player, 'lock_at': lock_at.isoformat(), 'reason_codes': blocks, 'expected_metric': value,
                         'missing_components': missing, 'eligible': not blocks})
-    # Unknown identity/data anywhere prevents claiming a complete pool ranking.
-    if any(p['reason_codes'] and any(r in p['reason_codes'] for r in ('unresolved_native_id', 'stat_forecast_missing')) for p in players):
+    # Identity remains auditable even outside selection. An unavailable actor's
+    # unknown stat is retained, but cannot change the eligible-pool optimum.
+    if any('unresolved_native_id' in p['reason_codes'] or
+           ('stat_forecast_missing' in p['reason_codes'] and not
+            set(p['reason_codes']) - {'stat_forecast_missing','unresolved_native_id'}) for p in players):
         reasons.append('pool_identity_or_stat_coverage_incomplete')
     eligible = [p for p in players if p['eligible']]
     if len(eligible) < 3 or len({p['team'] for p in eligible}) < 2: reasons.append('no_legal_three_player_lineup')
@@ -298,7 +318,7 @@ def legal_lineup(players):
 
 def optimize(request, *, directory=None, now=None):
     now = now or datetime.now(UTC); pool = load(request.pool_sha256, directory)
-    ready = readiness(pool, now=now, partial=request.allow_partial_touchdown_research)
+    ready = readiness(pool, now=now, partial=request.allow_partial_touchdown_research, exclude_questionable=request.exclude_questionable)
     blockers = [r for r in ready['reason_codes'] if not (request.allow_incomplete_pool_research and r == 'pool_identity_or_stat_coverage_incomplete')]
     if blockers: raise ValueError('Single Stat blocked: ' + ', '.join(blockers))
     incomplete_pool = 'pool_identity_or_stat_coverage_incomplete' in ready['reason_codes']
@@ -310,18 +330,25 @@ def optimize(request, *, directory=None, now=None):
     candidates = [p for group in teams.values() for p in group]
     best = max((c for c in combinations(candidates, 3) if legal_lineup(c)), key=lambda c: (sum(p['expected_metric'] for p in c), tuple(p['player_master_id'] for p in c)))
     partial = pool['variant'] == 'touchdowns' and any(p['missing_components'] for p in ready['players'] if p['eligible'])
+    learned = pool.get('forecast_binding')
+    assumptions = ['No salary cap or position constraint.',
+        'Learned counts × role-aware efficiency; rushing and receiving yards each weight 1, passing yards weight 0. No fantasy points or Captain selection gates.' if learned else 'Historical means are baseline forecasts, not trained stat heads or contest-win probabilities.',
+        'Conditional on active participation and supported roles; expected-yard calibration and contest-win probabilities unproven. Research comparison only.' if learned else 'No current injury/workload clearance or calibrated uncertainty. Research report only.',
+        'Questionable preference conservatively uses either captured native or supplemental Q; generic blank/ACT is not a verified Q clearance.']
     return _save(dict(contract_id=CONTRACT, kind='report', variant=pool['variant'], game_set_id=pool['game_set_id'],
-        classification='INCOMPLETE_POOL_RESEARCH' if incomplete_pool else 'PARTIAL_STAT_RESEARCH' if partial else 'BASELINE_RESEARCH', created_at=now.isoformat(),
+        classification='INCOMPLETE_POOL_RESEARCH' if incomplete_pool else 'PARTIAL_STAT_RESEARCH' if partial else 'LEARNED_YARDS_RESEARCH' if learned else 'BASELINE_RESEARCH', created_at=now.isoformat(),
+        **({'forecast_binding': learned} if learned else {}),
         pool_classification=pool['classification'], pool_sha256=pool['sha256'], objective='highest_expected_covered_touchdowns' if partial else 'highest_expected_' + pool['variant'],
         units=UNITS[pool['variant']], expected_metric=sum(p['expected_metric'] for p in best), players=list(best),
         objective_scope='measured_eligible_subset_only' if incomplete_pool else 'complete_imported_pool',
         incomplete_pool_research_explicitly_accepted=request.allow_incomplete_pool_research,
+        user_preferences={'exclude_questionable':request.exclude_questionable},
         excluded_players=[p for p in ready['players'] if not p['eligible']],
         solver_status='OPTIMAL', requested_lineup_size=3, achieved_lineup_size=3,
         distinct_canonical_rosters=1, entry_ready=False, readiness=ready,
-        forecast_coverage='Partial categories explicitly accepted for research' if partial else 'All requested stat categories measured in selected history',
+        forecast_coverage='Partial categories explicitly accepted for research' if partial else 'All selected components covered by learned forecast; missing pool forecasts remain explicit' if learned else 'All requested stat categories measured in selected history',
         source_provenance=dict(pool_sha256=pool['sha256'], native_csv_sha256=pool['native_csv_sha256'], source_reference=pool['source']['source_reference'], source_observed_at=pool['source']['source_observed_at']),
-        rules=pool['rules'], export=pool['export'], assumptions=['No salary cap or position constraint.', 'Historical means are baseline forecasts, not trained stat heads or contest-win probabilities.', 'No current injury/workload clearance or calibrated uncertainty. Research report only.']), directory)
+        rules=pool['rules'], export=pool['export'], assumptions=assumptions), directory)
 
 
 class ActualPlayer(Strict):

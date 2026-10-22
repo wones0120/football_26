@@ -51,7 +51,7 @@ def freeze_model(model, *, variable_players, players, scope, available_at, decis
     return {**payload, 'sha256': digest(payload)}
 
 
-def validate_snapshot(snapshot):
+def validate_snapshot(snapshot, *, mean_only=False):
     if snapshot.get('contract_id') != CONTRACT or digest({k:v for k,v in snapshot.items() if k != 'sha256'}) != snapshot.get('sha256'):
         raise ValueError('snapshot_contract_or_hash_mismatch')
     if snapshot['scope']['format'] not in {'CLASSIC', 'SHOWDOWN'}:
@@ -69,6 +69,10 @@ def validate_snapshot(snapshot):
         if player['game_id'] not in snapshot['scope']['game_ids']:
             raise ValueError('player_outside_snapshot_scope')
         for field in ('salary', 'projection', 'p90'):
+            if (field=='p90' and player.get(field) is None and mean_only
+                and snapshot['policy'].get('mean_only') is True
+                and snapshot['policy'].get('selection_policy')=='expected_anchor_incremental_world_gain_v1'):
+                continue  # Explicit mean-only contract retains an unknown tail.
             if not math.isfinite(float(player[field])) or float(player[field]) < 0:
                 raise ValueError('invalid_numeric_player_input')
     variables, model = pulp.LpProblem.fromDict(deepcopy(snapshot['model']))

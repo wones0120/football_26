@@ -273,3 +273,46 @@ def test_native_new_id_uses_scoped_identity_and_persists_alias(tmp_path):
         imported=stat.import_pool(req,session,directory=tmp_path,now=NOW)
         assert imported['players'][0]['player_master_id']=='canonical'
         assert session.scalar(select(PlayerAlias.player_master_id).where(PlayerAlias.source_key=='new-id'))=='canonical'
+
+
+@pytest.mark.parametrize('status',['DEV','PS','PRACTICE_SQUAD','RES','NFI','EXE'])
+def test_sourced_roster_unavailable_does_not_become_active_from_native_pool(tmp_path,status):
+    request=package().model_copy(update={'player_evidence':{'4':stat.NativePlayerEvidence(
+        status=status,source_reference='fixture scoped roster',observed_at=NOW)}})
+    imported=stat.import_pool(request,None,directory=tmp_path,now=NOW,resolver=lambda source_id:source_id,forecaster=forecast)
+    ready=stat.readiness(imported,now=NOW)
+    actor=next(p for p in ready['players'] if p['source_player_id']=='4')
+    assert not actor['eligible'] and 'confirmed_or_doubtful_unavailable' in actor['reason_codes']
+    assert actor['expected_metric']==8. and actor['native_status']==''
+    result=stat.optimize(stat.Optimize(pool_sha256=imported['sha256']),directory=tmp_path,now=NOW)
+    assert '4' not in {p['source_player_id'] for p in result['players']}
+
+
+def test_explicit_q_preference_preserves_estimates_and_is_saved(tmp_path):
+    request=package().model_copy(update={'player_evidence':{'4':stat.NativePlayerEvidence(
+        status='Q',source_reference='fixture scoped status',observed_at=NOW)}})
+    imported=stat.import_pool(request,None,directory=tmp_path,now=NOW,resolver=lambda source_id:source_id,forecaster=forecast)
+    original=stat.optimize(stat.Optimize(pool_sha256=imported['sha256']),directory=tmp_path,now=NOW)
+    selected=stat.optimize(stat.Optimize(pool_sha256=imported['sha256'],exclude_questionable=True),directory=tmp_path,now=NOW)
+    assert '4' in {p['source_player_id'] for p in original['players']}
+    assert '4' not in {p['source_player_id'] for p in selected['players']}
+    assert selected['user_preferences']=={'exclude_questionable':True}
+    actor=next(p for p in selected['excluded_players'] if p['source_player_id']=='4')
+    assert actor['expected_metric']==8. and actor['status_evidence']['status']=='Q'
+    assert actor['reason_codes']==['user_preference_exclude_questionable']
+    assert stat.load(imported['sha256'],tmp_path)==imported
+
+
+def test_unknown_stats_of_independently_unavailable_actor_do_not_block_eligible_ranking(tmp_path):
+    request=package().model_copy(update={'player_evidence':{'4':stat.NativePlayerEvidence(
+        status='DEV',source_reference='fixture scoped roster',observed_at=NOW)}})
+    def missing(session,pid,cutoff,season,week,variant):
+        return None if pid=='4' else forecast(session,pid,cutoff,season,week,variant)
+    imported=stat.import_pool(request,None,directory=tmp_path,now=NOW,resolver=lambda source_id:source_id,forecaster=missing)
+    ready=stat.readiness(imported,now=NOW)
+    assert 'pool_identity_or_stat_coverage_incomplete' not in ready['reason_codes']
+    actor=next(p for p in ready['players'] if p['source_player_id']=='4')
+    assert actor['expected_metric'] is None and 'stat_forecast_missing' in actor['reason_codes']
+    result=stat.optimize(stat.Optimize(pool_sha256=imported['sha256']),directory=tmp_path,now=NOW)
+    assert not result['incomplete_pool_research_explicitly_accepted']
+    assert {p['source_player_id'] for p in result['players']}=={'1','2','3'}

@@ -29,6 +29,21 @@ for (const contest_format of ["classic", "showdown"] as const) {
   });
 }
 
+test("v2 workload report preserves original observations separately from allocated counts", () => {
+  const packet = {contract_id:"workload_evidence_v2",status:"supported_history",
+    historical:{carries_mean_3:{value:17,status:"observed",source_field:"pregame_base_carries_mean_3"},
+      targets_mean_3:{value:null,status:"original_history_unavailable"}},
+    derived_proxies:{projected_carries:{value:10.76,status:"present"}},explicit_pregame:{}};
+  const optimizer = {job_id:"typed-history",status:"completed",contest_format:"classic",objective:"gpp",results:[],
+    player_pool:{rows:[{player_id:"p",player_name:"Synthetic RB",workload_evidence:packet}]}} as unknown as OptimizerResponse;
+  const before=JSON.stringify(optimizer);
+  const html=buildOptimizerReportHtml(optimizer,{season:2099,week:1,slate:"SYNTHETIC"});
+  assert.match(html,/17 \(observed\)/);
+  assert.match(html,/10\.76 \(present\)/);
+  assert.match(html,/Unavailable \(original_history_unavailable\)/);
+  assert.equal(JSON.stringify(optimizer),before);
+});
+
 test("Showdown exported report uses saved Captain position and effective QB policy", () => {
   const optimizer = {
     job_id: "captain-position", status: "completed", strategy: "showdown_cash_baseline_v1",
@@ -1088,5 +1103,18 @@ test("explicit preliminary reports retain real rosters while preserving blocked 
   assert.match(html,/Preliminary research · not entry cleared/);
   assert.match(html,/Research Roster Player/);
   assert.match(html,/official_player_status_refresh_failed/);
-  assert.match(html,/contest CSV export is blocked/);
+  assert.match(html,/CSV download requires Check upload readiness/);
+});
+
+
+test("primary report separates selection forecast and old optimizer comparison with immutable evidence",()=>{
+ const optimizer={job_id:"primary",status:"completed",contest_format:"showdown",objective:"gpp",enforce_single_te:false,
+ results:[[{player_id:"p",name:"Primary Receiver",roster_position:"CPT",position:"WR",projection:18,scenario_mean:27,salary:12000,showdown_captain_shortlist:{policy_id:"new_model_primary_covered_captains_v1",shortlist:[{player_id:"p",name:"Primary Receiver",team:"NE"}]}}]],
+ scenario_mode:{prepared:{new_model_primary:true,limitations:["Calibration unproven"],sha256:"frozen-source-model-receipt"},conditional_mean:27,scenario_lineup_baseline_mean:18,baseline_mean:22,
+ baseline_lineup:[{player_id:"q",name:"Old Receiver",roster_position:"CPT",position:"WR",salary:9000,projection:22}]}} as unknown as OptimizerResponse;
+ const html=buildOptimizerReportHtml(optimizer,{season:2026,week:7,slate:"THURSDAY_NIGHT"});
+ assert.match(html,/New-model Captain eligibility/);assert.doesNotMatch(html,/Top-four P90 captain shortlist/);
+ assert.match(html,/New models drive selection/);assert.match(html,/Selection forecast: 27.00/);
+ assert.match(html,/Baseline proj/);assert.match(html,/CPT · Old Receiver/);
+ assert.match(html,/frozen-source-model-receipt/);assert.match(html,/not a selector-only experiment/);
 });

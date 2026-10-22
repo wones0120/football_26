@@ -17,14 +17,17 @@ from Database.dst import normalize_team
 from Database.player_identity import normalize_position
 from .player_roles import UNAVAILABLE, PRACTICE
 from .salary_eligibility import normalize_salary_status
+from .factual_designation import resolve_designation, NO_DESIGNATION, explicit_game_dressing
 from .slate_preparation import aware
 
 CONTEXT_CONTRACT = "canonical_showdown_player_context_v1"
-AVAILABLE = {"ACT", "ACTIVE", "AVAILABLE", "HEALTHY", "Q", "QUESTIONABLE", "D", "DOUBTFUL", "P", "PROBABLE"}
+AVAILABLE = {"ACT", "ACTIVE", "AVAILABLE", "HEALTHY", "Q", "QUESTIONABLE", "D", "DOUBTFUL", "P", "PROBABLE", NO_DESIGNATION}
 # Only affirmative source positions supported here can establish a specialist.
 # These are football roles, never aliases for a DraftKings roster position.
 NON_SCORING_SPECIALIST_ROLES = {"LS": "long_snapper"}
 CONTEXT_FIELDS = (
+    "expected_workload_source_ids",
+    "designation_resolution", "binding_roster_unavailability",
     "availability_state", "availability_status", "availability_source", "availability_observed_at",
     "availability_source_ids", "role_source", "role_observed_at", "role_source_ids",
     "canonical_context_reason_codes", "canonical_context_contract", "canonical_role",
@@ -121,8 +124,11 @@ def compose_player_contexts(salaries, facts, *, cutoff, max_age_hours):
         current = [f for f in visible if (cutoff - aware(f["observed_at"])).total_seconds() <= max_age_hours * 3600]
         reasons = []
         roster, roster_conflict = _latest([f for f in current if f["kind"] == "roster_status"], lambda f: _state(f.get("status")))
-        status, status_conflict = _latest([f for f in current if f["kind"] in {"game_status", "injury_status"}
-                                         and _state(f.get("status")) != "UNKNOWN"], lambda f: normalize_salary_status(f.get("status")))
+        designation = resolve_designation(current, cutoff=cutoff, player_id=pid,
+            team=salary.get('team'), position=salary.get('position'), max_age_hours=max_age_hours,
+            season=salary.get('season'),week=salary.get('week'),kickoff_at=salary.get('kickoff_at'))
+        status = designation['chosen_fact']
+        status_conflict = designation['status'] == 'conflict'
         # Generic ACT roster presence cannot clear a current sourced OUT report.
         # Conversely, roster IR/PS is unavailable despite an injury-only ACTIVE.
         if roster and _state(roster.get("status")) == "UNAVAILABLE":
@@ -137,8 +143,11 @@ def compose_player_contexts(salaries, facts, *, cutoff, max_age_hours):
         if state == "AVAILABLE" and status is roster and stale_game_out:
             state = "UNKNOWN"
             reasons.append("player_status_stale")
-        if roster_conflict or status_conflict:
+        binding_roster = bool(status is roster and roster and not roster_conflict and state=="UNAVAILABLE")
+        if roster_conflict or (status_conflict and not binding_roster):
             state = "UNKNOWN"; reasons.append("player_status_conflict")
+        elif status_conflict and binding_roster:
+            reasons.append("game_designation_conflict_retained_under_roster_unavailability")
         if state == "UNKNOWN":
             reasons.append("player_status_stale" if any(f["kind"] in {"roster_status", "game_status", "injury_status"} for f in visible)
                            and not any(f["kind"] in {"roster_status", "game_status", "injury_status"} for f in current)
@@ -158,6 +167,8 @@ def compose_player_contexts(salaries, facts, *, cutoff, max_age_hours):
                 reasons.append("player_role_position_conflict")
             reasons.append("player_role_stale" if any(f["kind"] in {"role", "starting_qb"} for f in visible) else "player_role_missing")
         evidence = {
+            "designation_resolution": designation,
+            "binding_roster_unavailability": deepcopy(roster) if binding_roster else None,
             "canonical_context_contract": CONTEXT_CONTRACT,
             "availability_state": state, "availability_status": (status or {}).get("status"),
             "availability_source": (status or {}).get("source"),
@@ -228,6 +239,25 @@ def _positive_salary(value):
         return False
 
 
+def _binding_roster_unavailability(row, *, cutoff, evaluated_at, max_age_hours):
+    """Independent reserve prohibition, never a healthy-status clearance."""
+    proof=row.get('binding_roster_unavailability')
+    if not isinstance(proof,dict) or proof.get('kind')!='roster_status' or _state(proof.get('status'))!='UNAVAILABLE':return False
+    if row.get('availability_state')!='UNAVAILABLE' or any(row.get(k)!=proof.get(p) for k,p in (
+            ('availability_source','source'),('availability_source_ids','source_ids'),('availability_observed_at','observed_at'),('availability_status','status'))):return False
+    try:
+        decision=aware(cutoff);evaluated=aware(evaluated_at)
+        relevant=[f for f in row.get('source_facts',[proof]) if all(f.get(k)==proof.get(k) for k in ('player_id','team','position'))
+            and _visible(f,decision) and (evaluated-aware(f['observed_at'])).total_seconds()<=max_age_hours*3600]
+        roster,conflict=_latest([f for f in relevant if f.get('kind')=='roster_status'],lambda f:_state(f.get('status')))
+        if conflict or roster!=proof or not proof.get('source_ids') or not proof.get('source'):return False
+        if aware(proof['observed_at'])>evaluated:return False
+        chosen=(row.get('designation_resolution') or {}).get('chosen_fact') or {}
+        if explicit_game_dressing(chosen,'ACTIVE') and chosen.get('game_active') is True and aware(chosen['observed_at'])>aware(proof['observed_at']):return False
+        return True
+    except (KeyError,ValueError,TypeError,AttributeError):return False
+
+
 def assess_availability(row, *, cutoff, evaluated_at, max_age_hours):
     """Only current canonical affirmative evidence permits exclusion/eligibility."""
     if row.get("position") == "DST":
@@ -237,6 +267,8 @@ def assess_availability(row, *, cutoff, evaluated_at, max_age_hours):
         # live collectors always write the canonical contract before scoring.
         return "AVAILABLE", []
     reasons = [r for r in row.get("canonical_context_reason_codes") or [] if r.startswith("player_status")]
+    if (row.get('designation_resolution') or {}).get('status') == 'conflict' and not _binding_roster_unavailability(row,cutoff=cutoff,evaluated_at=evaluated_at,max_age_hours=max_age_hours):
+        reasons.append('player_status_conflict')
     state = row.get("availability_state", "UNKNOWN")
     try:
         observed = aware(row["availability_observed_at"])
@@ -394,8 +426,8 @@ def refresh_canonical_context(engine, *, season, week, slate, cutoff=None):
     params = {"season": season, "week": week, "slate": slate, "cutoff": cutoff}
     with engine.connect() as connection:
         salaries = [dict(r) for r in connection.execute(text("""
-            SELECT DISTINCT ON (s.player_master_id) s.player_master_id AS player_id, s.player_name, s.team, s.position,
-                   s.player_status, s.curated_salary_id AS salary_source_row_id, s.ingest_run_id,
+            SELECT DISTINCT ON (s.player_master_id) s.player_master_id AS player_id, s.player_name, s.team, s.position,s.season,s.week,
+                   s.player_status, s.game_info, s.source_player_key, s.curated_salary_id AS salary_source_row_id, s.ingest_run_id,
                    COALESCE(snapshot.observed_at,s.created_at AT TIME ZONE 'UTC') AS observed_at,
                    s.created_at AT TIME ZONE 'UTC' AS received_at, snapshot.snapshot_id
             FROM public.curated_salary s
@@ -448,6 +480,9 @@ def refresh_canonical_context(engine, *, season, week, slate, cutoff=None):
             SELECT * FROM public.starting_qb_evidence WHERE season=:season AND week=:week AND LOWER(slate)=LOWER(:slate)
               AND created_at AT TIME ZONE 'UTC' <= :cutoff
         """), params).mappings()]
+    from .replay import parse_slate_lock
+    for salary in salaries:
+        salary['kickoff_at'] = parse_slate_lock([salary.get('game_info')]) if salary.get('game_info') else None
     salary_lookup = {r["player_id"]: r for r in salaries}
     source_lookup = {}
     for alias in aliases:
@@ -493,7 +528,8 @@ def refresh_canonical_context(engine, *, season, week, slate, cutoff=None):
             continue
         previous.setdefault(str(r["player_master_id"]), r)
         add(r,pid=r["player_master_id"],kind="game_status",source=r["source"],status=r.get("injury_status") or ("ACTIVE" if e.get("game_active") is True else "INACTIVE" if e.get("game_active") is False or r.get("availability_probability") == 0 else None),
-            observed=r["observed_at"],received=r["received_at"],ids=[r["context_run_id"],r["pregame_player_context_id"]],uri=r.get("source_uri"),game_active=e.get("game_active"))
+            observed=r["observed_at"],received=r["received_at"],ids=[r["context_run_id"],r["pregame_player_context_id"]],uri=r.get("source_uri"),game_active=e.get("game_active"),
+            **{k:e[k] for k in ('report_contract','report_phase','scope_verified','published_at','modified_at','kickoff_at','season','week') if k in e})
         role = e.get("expected_depth_role") or {"STARTER":"expected_starter","LEAD":"expected_starter","PRIMARY":"expected_starter","BACKUP":"expected_backup","SECONDARY":"expected_backup","ROTATION":"rotation","COMMITTEE":"rotation"}.get(r.get("role_label"))
         if role: add(r,pid=r["player_master_id"],kind="role",source=r["source"],role=role,observed=r["observed_at"],received=r["received_at"],ids=[r["context_run_id"],r["pregame_player_context_id"]],uri=r.get("source_uri"))
     depth_error = None
@@ -519,6 +555,18 @@ def refresh_canonical_context(engine, *, season, week, slate, cutoff=None):
                 observed=r["dt"],received=capture.snapshot.captured_at,ids=[capture.snapshot.snapshot_id,r.get("gsis_id")],uri=capture.snapshot.source_uri)
     except (OSError,RuntimeError,ValueError,KeyError) as exc:
         depth_error = f"{type(exc).__name__}: {exc}"
+    native_error = None
+    native_captures, native_discrepancies = [], []
+    try:
+        from .draftkings_player_status import refresh_native_statuses
+        with Session(engine) as session:
+            games = slate_games(session, SlatePreparationRequest(season=season, week=week, slate=slate, action="rebuild"))
+        native_facts, native_captures, native_discrepancies = refresh_native_statuses(
+            engine, salaries=salaries, games=games, season=season, week=week, slate=slate,
+            lock=require_prelock(games), contest_format="showdown")
+        facts.extend(native_facts)
+    except (OSError, RuntimeError, ValueError, KeyError) as exc:
+        native_error = f"{type(exc).__name__}: {exc}"
     # Capture receipt is after our initial read. Set the transform cutoff once
     # all source reads complete; nested facts still retain their original clocks.
     cutoff = datetime.now(UTC)
@@ -556,4 +604,5 @@ def refresh_canonical_context(engine, *, season, week, slate, cutoff=None):
             "source_uri":context["source_uri"],"observed_at":context["observed_at"],"players":[player]})
         run_ids.append(run["context_run_id"])
     return {"context_run_ids":sorted(set(run_ids)),"rows":len(contexts),"availability_counts":{s:sum(c["evidence_json"]["availability_state"]==s for c in contexts) for s in ("AVAILABLE","UNAVAILABLE","UNKNOWN")},
-            "depth_error":depth_error,"source_fact_count":len(facts)}
+            "depth_error":depth_error,"native_status_error":native_error,"native_status_captures":native_captures,
+            "native_status_discrepancies":native_discrepancies,"source_fact_count":len(facts)}

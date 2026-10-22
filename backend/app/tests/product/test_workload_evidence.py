@@ -15,6 +15,7 @@ def source(**extra):
     return {"player_id": "canonical-1", "position": "WR", "salary": 8000,
             "projection": 14.1, "predicted_p10": 2.3, "p90": 23.4,
             "snap_share_mean_3": 0.497, "targets_mean_3": 0,
+            "pregame_base_targets_mean_3": 0,
             "projected_targets": 5.165, "pregame_expected_targets": None,
             "workload_feature_evidence": {"snap_share_mean_3_available": True,
                 "targets_mean_3_available": True, "opportunity_history_window": [{"season": 2026, "week": 4}]},
@@ -25,7 +26,8 @@ def source(**extra):
 
 def test_history_zero_missing_and_unknown_coverage_are_distinct_and_json_safe():
     packet = build_workload_evidence(source())
-    assert packet["historical"]["targets_mean_3"] == {"value": 0, "status": "observed", "available": True, "stored_value": 0}
+    assert packet["historical"]["targets_mean_3"] == {"value": 0, "status": "observed", "available": True, "stored_value": 0,
+        "evidence_kind": "observed_history", "source_field": "pregame_base_targets_mean_3"}
     missing = build_workload_evidence(source(workload_feature_evidence={"targets_mean_3_available": False}))
     assert missing["historical"]["targets_mean_3"]["value"] is None
     assert missing["historical"]["targets_mean_3"]["stored_value"] == 0

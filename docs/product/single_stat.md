@@ -90,3 +90,36 @@ The exact user-provided detailed NFL rules are preserved in the validation resea
 Single Stat and Tiers: **Download lineup CSV** is available as soon as native identity, roster, format and lock checks pass, without a download acknowledgment checkbox. Coverage limitations remain visible; downloads do not submit entries.
 
 CSV download errors now appear in the workspace instead of saving an API JSON error as a file. Successful responses are checked for CSV content and the correct roster headers before a `.csv` download is started.
+
+Contest standings also load through [Learning folder imports](typed_contest_learning.md), separately from component actuals and financial Entry History. Typed weekly reports preserve observed score/rank and unresolved identity/component/forecast-origin evidence.
+
+## Selection preferences and roster evidence
+
+The optional **Exclude questionable players** control is a selection preference, persisted in the report and rechecked at CSV export. It leaves raw status flags and yard/TD baselines unchanged. Legacy reports default to false. This format conservatively retains either native or supplemental Q because its evidence package does not contain the Classic/Showdown typed final-report supersession contract; generic ACT or blank cannot clear native Q. Native and supplemental status are both visible. Sourced practice-squad/developmental/reserve/unavailable statuses use the shared canonical token sets and cannot become an active opportunity simply by appearing in a native pool. Missing current evidence is not proof of health, and the baseline still requires an explicit measured-subset choice where history is incomplete.
+
+Unknown stat history remains visible for every actor. It blocks an eligible-pool ranking when the actor could otherwise be selected; independent sourced unavailability or an explicit user exclusion can remove that actor from selection without inventing a zero history. Unknown identity still blocks and remains in review. Reports preserve both the unavailable reason and missing history.
+
+Monday contest196787359 passed the public import→Generate→reopen→native CSV flow with the explicit Q-exclusion preference and no measured-subset relaxation: [saved evidence and football review](../../research/monday_single_stat_20261019/v2/REVIEW.md). The selected CMC/Kittle/McLaurin yard values remain descriptive observed-game means; no trained yard-head or confirmed dressing claim is added.
+
+
+## Opt-in learned Total Yards (one game)
+
+An evidence package may set `prepared_input_job_id` to a completed public Prepare job. The adapter validates season/week, canonical player identity, native team/position, teams and scheduled kickoff, receipt hash, completion/source clocks and prior-only efficiency training. It binds the frozen `projected_yards` rushing and receiving components, each with weight **1**; passing yards have weight **0**. It never consumes fantasy-point utilities, Captain gates, salary or Showdown eligibility. Native Single Stat status/lock rules still apply. The original historical forecast is preserved as each player's `baseline_comparison`; omitting the field retains the default baseline and legacy import identities.
+
+The UI identifies learned forecasts, cutoff, preparation ID, weights and baseline values. Missing components remain unknown with visible reasons; no historical-mean fallback or zero imputation occurs. Incomplete eligible-pool coverage blocks generation unless **Allow research among measured players only** is explicitly chosen. Such a report is `INCOMPLETE_POOL_RESEARCH`, even with learned yards; a fully supported pool is `LEARNED_YARDS_RESEARCH`. Reopen either through **Saved pools and reports**. Captured questionable status remains visible and eligible unless the separate exclusion preference is selected.
+
+These forecasts use learned opportunities and role efficiency with shared receiving-yard accounting. They remain conditional on active participation and supported roles; mean calibration and joint contest-win probabilities are unproven. This is a comparison path, not a claim that the Captain scenario selector has been calibrated for Single Stat.
+
+
+### Sparse history and sourced nonparticipation
+
+The upstream learned-count consumer preserves a sourced `world_activity=false` condition before its sparse-history abstention gate. A reserve/cut or current non-elevated practice/development condition has zero projected production under that condition, even when active-role history is unsupported. The actor retains its original historical unknowns, hypothetical active-role reference, source conditions and model-component evidence; the learned regressor is marked `not_applied_factual_nonparticipation`. Questionable status, missing history or user exclusion alone never creates this condition. Eligibility and forecast truth remain separate.
+
+The October 22 frozen-input audit reproduced the original consumer and found 19 of tonight’s 22 unknown native actors affected by this ordering bug. The corrected diagnostic preserves all 21 previously supported skill-player yard forecasts and shared passing/receiving accounting. Three remain unsupported: Jahdae Walker (unclosed historical gaps), Tanner Arkin (one observed game) and Kyle Monangai (stale workload window; already OUT in the later native provider evidence). See [coverage audit](../../artifacts/single_stat_coverage_audit_20261022/RESULTS.md). This is a separate reconstructed diagnostic, not a replacement of the saved preparation or `3f6fdde2…` lineup. Existing immutable pools retain their original assessment; a future public Prepare/import uses the fix and current source evidence.
+
+
+### Provider designation versus uploaded CSV flag
+
+The Captured status column labels provider `None` as **No injury designation reported**, shows its observation clock, and lists any separate **Uploaded CSV** flag. This preserves the older file assessment without presenting it as the current provider designation. It is not a confirmed game-dressing claim. Neither label changes forecasts; the separate questionable exclusion preference remains conservative across captured flags.
+
+The corrected October22 public preparation/import/generate/reopen saved `5e3afd7f…`: Swift/Burden/Brown,175.694 projected rushing+receiving yards, unchanged from the earlier roster. Unknown forecasts fell22→3;19 sourced conditional zeros are retained. Q eligibility stays on and measured-subset scope remains explicit. The provider reports no injury designation for Brown; the older CSV's Q is retained as historical source evidence. [Corrected rerun](../../artifacts/single_stat_corrected_rerun_20261022/RESULTS.md).

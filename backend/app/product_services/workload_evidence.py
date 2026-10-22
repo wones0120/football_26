@@ -11,7 +11,10 @@ from collections.abc import Mapping
 
 import pandas as pd
 
-CONTRACT_ID = "workload_evidence_v1"
+CONTRACT_ID = "workload_evidence_v2"
+SUPPORTED_CONTRACT_IDS = frozenset({"workload_evidence_v1", CONTRACT_ID})
+ORIGINAL_HISTORY_FIELDS = {key: "pregame_base_" + key for key in (
+    "targets_mean_3", "carries_mean_3", "target_share_mean_3", "carry_share_mean_3")}
 HISTORICAL_FIELDS = (
     "snap_share_mean_3", "snap_share_last", "snap_share_prior3", "snap_share_trend",
     "targets_mean_3", "carries_mean_3", "target_share_mean_3", "carry_share_mean_3",
@@ -38,6 +41,9 @@ LINEAGE_FIELDS = (
 # Only these small feature values are carried through optimizer SQL. No new
 # sources and no full feature grids duplicated across candidates.
 FEATURE_FIELDS = tuple(dict.fromkeys((
+    'pregame_base_targets_mean_3', 'pregame_base_carries_mean_3',
+    'pregame_base_target_share_mean_3', 'pregame_base_carry_share_mean_3',
+    'expected_workload_source_ids',
     *HISTORICAL_FIELDS, *(f"{key}_available" for key in HISTORICAL_FIELDS if key.endswith("mean_3")),
     *PROXY_FIELDS, *FORECAST_FIELDS, *COVERAGE_FIELDS, *LINEAGE_FIELDS,
     "team_targets_mean_3", "team_targets_mean_3_available",
@@ -96,8 +102,8 @@ def build_workload_evidence(row: Mapping, *, projection_run_id=None, cutoff=None
     forecast_future = any(_after_cutoff(forecast_lineage.get(k) or facts.get(k), cutoff) for k in (
         "pregame_context_observed_at", "expected_workload_observed_at"))
 
-    def metric(key, *, observed=False, future=False):
-        raw = facts.get(key)
+    def metric(key, *, observed=False, future=False, source_key=None, values=None):
+        raw = (facts if values is None else values).get(source_key or key)
         flag_key = key + "_available"
         # Trends inherit their corresponding historical mean's measurement flag.
         if key.startswith("snap_share_"):
@@ -116,13 +122,32 @@ def build_workload_evidence(row: Mapping, *, projection_run_id=None, cutoff=None
                 "status": status, "available": available if observed else None,
                 "stored_value": raw if applicable and not future else None}
 
-    historical = {key: metric(key, observed=True, future=historical_future) for key in HISTORICAL_FIELDS}
-    forecasts = {key: metric(key, future=forecast_future) for key in FORECAST_FIELDS}
-    proxies = {key: metric(key, future=historical_future) for key in PROXY_FIELDS}
+    historical = {}
+    for key in HISTORICAL_FIELDS:
+        source_key = ORIGINAL_HISTORY_FIELDS.get(key, key)
+        item = metric(key, observed=True, future=historical_future, source_key=source_key)
+        if key in ORIGINAL_HISTORY_FIELDS and facts.get(source_key) is None and applicable and not historical_future:
+            item.update(value=None, status="original_history_unavailable")
+        historical[key] = {**item, "evidence_kind": "observed_history", "source_field": source_key}
+    forecasts = {key: {**metric(key, future=forecast_future,
+        values=features if isinstance(features, Mapping) and key in features else None),
+        "evidence_kind": "explicit_pregame_input", "source_field": key,
+        "producer_source": forecast_lineage.get("pregame_context_source"),
+        "producer_observed_at": forecast_lineage.get("expected_workload_observed_at")
+            or forecast_lineage.get("pregame_context_observed_at")}
+        for key in FORECAST_FIELDS}
+    proxies = {key: {**metric(key, future=historical_future),
+        "evidence_kind": "allocated_proxy", "source_field": key} for key in PROXY_FIELDS}
+    for key in ORIGINAL_HISTORY_FIELDS:
+        proxies["allocated_" + key.removesuffix("_mean_3")] = {
+            **metric(key, future=historical_future), "evidence_kind": "allocated_proxy", "source_field": key}
     supported = any(value["status"] == "observed" for value in historical.values())
     present = any(value["value"] is not None for group in (historical, forecasts, proxies) for value in group.values())
     return {
         "contract_id": CONTRACT_ID,
+        "measurement_semantics": {"historical": "original pre-allocation observations; missing original values remain unknown",
+            "derived_proxies": "allocated counts/shares, not independently calibrated workload forecasts",
+            "explicit_pregame": "producer-attributed inputs, never filled from history or allocation"},
         "player_id": str(facts.get("player_id") or facts.get("player_master_id") or ""),
         "applicability": applicability,
         "status": applicability if not applicable else "supported_history" if supported else "partial_evidence" if present else "unavailable",
@@ -153,3 +178,41 @@ def build_workload_evidence(row: Mapping, *, projection_run_id=None, cutoff=None
 def workload_evidence_reference(player_id) -> dict:
     return {"contract_id": CONTRACT_ID, "player_id": str(player_id),
             "source_path": "strategy_runtime.player_pool.rows[player_id].workload_evidence"}
+
+
+def select_measurement(player, channel, *, allow_proxy=True):
+    """Read saved versions as written; v2 includes typed original/proxy provenance."""
+    evidence = player.get("workload_evidence") or {}
+    version = evidence.get("contract_id")
+    if version not in (None, *SUPPORTED_CONTRACT_IDS):
+        return None, "unsupported_workload_contract"
+    choices = [("explicit_pregame", "pregame_expected_" + channel),
+               ("historical", channel + "_mean_3")]
+    if allow_proxy:
+        choices.append(("derived_proxies", "projected_" + channel))
+        if version == CONTRACT_ID:
+            choices.append(("derived_proxies", "allocated_" + channel))
+    for group, key in choices:
+        item = evidence.get(group, {}).get(key) or {}
+        value = item.get("value")
+        valid = item.get("status") not in {"after_cutoff", "unavailable", "coverage_unknown", "original_history_unavailable"}
+        if version == CONTRACT_ID:
+            kind = {"historical": "observed_history", "derived_proxies": "allocated_proxy",
+                    "explicit_pregame": "explicit_pregame_input"}[group]
+            valid = valid and item.get("evidence_kind") == kind
+            if group == "historical":
+                valid = valid and item.get("status") == "observed" and item.get("available") is True
+                valid = valid and item.get("source_field") == ORIGINAL_HISTORY_FIELDS.get(key, key)
+            elif group == "explicit_pregame":
+                valid = valid and bool(item.get("producer_source") and item.get("producer_observed_at"))
+                try:
+                    observed = datetime.fromisoformat(str(item.get("producer_observed_at")).replace("Z", "+00:00"))
+                    valid = valid and observed.tzinfo is not None
+                except (TypeError, ValueError):
+                    valid = False
+        if valid and type(value) in (int, float) and math.isfinite(value) and value >= 0:
+            basis = group + "." + key
+            if version == CONTRACT_ID:
+                basis += " [" + item["evidence_kind"] + ":" + item.get("source_field", key) + "]"
+            return float(value), basis
+    return None, "unavailable"

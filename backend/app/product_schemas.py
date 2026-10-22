@@ -133,6 +133,18 @@ class OptimizerRunRequest(BaseModel):
     @model_validator(mode="after")
     def normalize_showdown_te_control(self):
         import re
+        from .product_services.optimizer_scenario_mode import config as scenario_config
+        if self.params.get('scenario_mode') is not None:
+            self.params['scenario_mode']=scenario_config(self.params['scenario_mode'])
+            supported = ((self.contest_format=='classic' and self.strategy=='classic_large_gpp_v1') or
+                         (self.contest_format=='showdown' and self.strategy=='showdown_gpp_portfolio_v3'))
+            if not supported or self.objective!='gpp':
+                raise ValueError('Scenario mode requires Classic Large GPP or Captain GPP')
+            if (self.contest_format=='classic' and self.params.get('classic_selection_objective')!='baseline_mean') or not self.params.get('prepared_input_job_id'):
+                raise ValueError('Scenario mode requires its prepared one-lineup comparison')
+            self.params['num_lineups']=1
+            if self.params.get('workload_comparison'):
+                raise ValueError('Scenario mode cannot be combined with a different scoring comparison')
         for key in ("analyst_packet_sha256", "analyst_candidates_per_thesis", "analyst_strategy"):
             value = getattr(self, key)
             if value is not None:
@@ -292,6 +304,7 @@ class OptimizerStatusResponse(BaseModel):
     data_readiness: Optional[dict[str, Any]] = None
     football_analyst: Optional[dict[str, Any]] = None
     highest_projection: Optional[dict[str, Any]] = None
+    scenario_mode: Optional[dict[str, Any]] = None
     analyst_handoff_applied: Optional[dict[str, Any]] = None
     showdown_captain_coverage: Optional[dict[str, Any]] = None
     single_lineup_selection: Optional[dict[str, Any]] = None
@@ -972,6 +985,11 @@ class SelectedWeeklyContestFile(BaseModel):
     season: int = Field(..., ge=2000)
     week: int = Field(..., ge=1, le=25)
     slate: str = Field(..., min_length=1)
+    contest_format: Optional[Literal['classic','showdown','tiers','single_stat']] = None
+    scoring_variant: Optional[Literal['tiers','touchdowns','total_yards','passing_yards']] = None
+    pool_sha256: Optional[str] = None
+    source_reference: str = ''
+    correction_of: Optional[str] = None
 
 
 class WeeklyContestFolderImportRequest(BaseModel):
@@ -994,6 +1012,9 @@ class DraftKingsBatchFileResponse(BaseModel):
     contest_id: Optional[str] = None
     template_id: Optional[str] = None
     message: str
+    contest_format: Optional[str] = None
+    scoring_variant: Optional[str] = None
+    result_record_id: Optional[str] = None
 
 
 class DraftKingsBatchImportResponse(BaseModel):
@@ -1156,6 +1177,7 @@ class PlayerOutcomeEventRequest(BaseModel):
 
 
 class WeeklyLearningReportResponse(BaseModel):
+    format_results: List[dict[str, Any]] = Field(default_factory=list)
     telemetry: dict[str, Any] = Field(default_factory=dict)
     report_id: str
     contract_id: Literal["weekly_learning_report_v1", "weekly_learning_report_v2"]

@@ -16,3 +16,4 @@ httpx==0.28.1
 nfl-data-py
 nflreadpy
 pyarrow
+pypdf==6.10.0

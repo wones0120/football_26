@@ -1,0 +1,7 @@
+# Scoped forecast-input clock age (X08-M05)
+
+This diagnostic consumes the exact separately reviewed NWS precipitation forecast input for one native game. At two declared reference instants—the original source receipt cutoff and measured-game kickoff—it reports signed seconds `reference − clock`. Keep generated, updated, observed, captured, snapshot-effective, valid-start and valid-end clocks separate. A distinct provider-issued-at clock is not supplied by this bound input and remains unknown at both references; generated time does not silently become issued time.
+
+Capture-clock manifest `effective_at` is a source receipt convention, not the forecast interval's valid start. Negative ages expose later clocks; they are retained, including the future forecast-valid start at receipt. No clamping, missing-clock substitution or averaging across incomparable clocks. Each age also carries a literal `clock_after_reference` flag, not model eligibility or a stale-input policy.
+
+The NWS original forecast clocks and immutable source receipt are distinct from the later revised native schedule/venue attribution. This diagnostic does not prove all inputs were originally available pregame, assess upstream processing, infer forecast accuracy/calibration or resume model training/serving. One source at two comparison instants is not two independent forecast observations. All original bytes, clock strings, parent hash and publication clocks are retained. Parent source adapters/DB/identity operations are reused, not replayed.

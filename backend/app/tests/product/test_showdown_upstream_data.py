@@ -259,14 +259,38 @@ def test_completed_training_labels_refresh_before_live_cutoff_only():
     from backend.app.product_services.canonical_projection_inputs import StaleTrainingOutcomeError
     engine = MagicMock()
     with patch("backend.app.product_services.canonical_projection_inputs.load_inputs",side_effect=StaleTrainingOutcomeError([(2026,4)])), \
+         patch("backend.app.product_services.showdown_data_readiness.refresh_completed_schedule_scores",return_value={'status':'refreshed'}) as schedules, \
          patch("backend.app.services.lineup_learning.LineupLearningService") as learning:
         learning.return_value.rebuild_player_game_feature_matrix.return_value = dict(slates_total=1,slates_failed=0,rows_written=100)
         result = refresh_training_labels(engine,season=2026,week=5,slate="THURSDAY_NIGHT")
-    assert result == dict(periods=[dict(season=2026,week=4)],rows_written=100)
+    assert result == dict(periods=[dict(season=2026,week=4)],rows_written=100,schedule_receipts=[{'status':'refreshed'}])
+    schedules.assert_called_once_with(engine,season=2026,weeks=[4])
     assert learning.return_value.rebuild_player_game_feature_matrix.call_args.kwargs["weeks"] == [4]
     with patch("backend.app.product_services.canonical_projection_inputs.load_inputs",side_effect=StaleTrainingOutcomeError([(2026,5)])):
         with pytest.raises(ValueError,match="precede the target"):
             refresh_training_labels(engine,season=2026,week=5,slate="THURSDAY_NIGHT")
+
+
+@pytest.mark.parametrize('existing,still_missing',[(False,False),(True,False),(False,True)])
+def test_label_repair_refreshes_missing_schedule_scores_without_imputing(existing,still_missing):
+    from unittest.mock import MagicMock
+    from types import SimpleNamespace
+    from backend.app.product_services.showdown_data_readiness import refresh_completed_schedule_scores
+    from backend.app.product_services.dst_scoring_reconciliation import DstScoringUnresolved
+    def row(score):
+        return SimpleNamespace(game_id='2025_01_BUF_NYJ',raw_row_json=dict(gameday='2025-09-07',gametime='13:00',home_score=score,away_score=10 if score is not None else None))
+    session=MagicMock();session.scalars.return_value.all.side_effect=[[row(20 if existing else None)],[row(None if still_missing else 20)]]
+    with patch('sqlalchemy.orm.Session') as sessions,patch('backend.app.services.source_capture.SourceCaptureService') as capture:
+        sessions.return_value.__enter__.return_value=session
+        capture.return_value.capture_and_ingest_nflreadpy_schedules.return_value.capture.snapshot.snapshot_id='new-source'
+        if still_missing:
+            with pytest.raises(DstScoringUnresolved,match='final score evidence'):
+                refresh_completed_schedule_scores(MagicMock(),season=2025,weeks=[1])
+        else:
+            report=refresh_completed_schedule_scores(MagicMock(),season=2025,weeks=[1])
+            assert report['completed_games']==1
+            assert report['status']==('verified_existing' if existing else 'refreshed')
+        assert capture.return_value.capture_and_ingest_nflreadpy_schedules.call_count==(0 if existing else 1)
 
 
 def test_existing_football_position_aliases_preserve_fullback_role():

@@ -1,0 +1,9 @@
+# X08-M07 source-revision diagnostics: depth-role source slice
+
+For each adjacent same-scope original depth capture pair, report frequency of changed literal provider rank among matched role keys, count of changed ranks, and sum of absolute rank deltas. All literal roles, special-team roles and non-special-team roles are separate views. A larger rank number is not a forecast of reduced work. Original source captures, document times and capture times remain linked and unchanged.
+
+Newly observed/not-observed role counts are separate source-presence units, never mixed numerically with rank magnitudes. Absence is not demotion/inactive. Unkeyed provider rows and unresolved frozen canonical attachments remain in the reviewed parent and durable UI queue. The estimand is matched source roles, not exhaustive football changes or forecast-input revision. Unknown rank deltas mask full revision statistics and keep known-sample values separately. Empty matched populations have undefined frequencies/magnitudes; no change on a known nonempty matched population is a measured zero.
+
+The authenticated parent contains four original SF/WAS depth captures, three comparisons and 458 matched known role deltas. Five ranks changed, all in KR/PR roles; absolute rank-delta sum is six. Source-presence changes remain separate (five new and two no longer observed across pairs). This is a small measured source-domain slice of the revision diagnostic family, not a claim that statuses, projections, statistics or every provider have been compared. Exact catalog classification remains subject to High review.
+
+New postlock descriptive artifact only; no source mutation, role forecast, imputation, model input or optimizer activation. Source captures were available at their original clocks; this newly calculated diagnostic was not a pregame artifact.

@@ -1,0 +1,13 @@
+# Observation contract v1: bounded cached extraction
+
+Frozen before measurement. One <=30-second job, no retry or overwrite, using the same immutable TRAIN2023 projection and frozen SCENARIO-04 cycle library. No new source requests, reconstruction, fit, simulation or live integration. Preserve prior artifacts and deferred source cases by hash.
+
+Produce one separately versioned gzip JSONL ledger retaining every projection row in original order, including controls, overtime, unmatched, missing/ambiguous identity and unresolved source cycles. Bind each record to the projection hash and zero-based row ordinal. The manifest binds full source lineage and revised-historical availability; original pregame availability is not proven. Join only by unique native game/play identity, never names. Retain raw selected fields and unknown/invalid values alongside validated observations.
+
+Validate pre-event regulation clocks by quarter/half/game consistency, timeouts as integer budgets in [0,3], and score differential from possession-side pre-scores only. Map offense/defense timeouts only when native home/away and possession/defense teams agree. Controls have pre-event snapshots, not invented snaps. Retain native action flags and actor IDs as observed policy examples, with no policy probability or generated transition claim.
+
+For uniquely bound compiled cycles, copy the saved wait observation, endpoint, source certification/barriers and joint production/scoring marks as historical followup evidence. The endpoint is a next-action/boundary observation, never a play-end state. The compiled cycle has no general successor native ID: keep that linkage unknown rather than inferring it from neighboring rows, clock equality or a proof applying only to a subset. Expose native source order for later linkage work.
+
+Play-end clock/state, clock running/stopped cause, timeout-use/enforcement, restart/runoff/corrections and untimed-action enforcement remain explicit missing evidence. Never reinterpret drive boundary metadata, end_clock_time, a next snap or a falling timeout count as play-end/timeout-use adjudication. All generated timeout/policy support remains unknown. No continuation model is implemented by this contract.
+
+Validate extraction/schema invariants and frozen hashes in the same capped pass. Save a manifest only after gzip is closed, counts match inputs, IDs are unique by source ordinal, all library cycles are accounted for and prior hashes agree. A failed/capped job leaves its partial file explicit and has no success manifest. Tests cover invalid/missing clocks/timeouts/identity, control/OT retention, immutable inputs, ambiguous joins, score attribution and the separation of source followup from terminal state/policy support.

@@ -1,0 +1,11 @@
+# TRAIN-only stopping diagnosis
+
+Both failures are genuine iteration-limit stops, with finite parameters/objectives and gradients still above the original tolerance. Exact saved TRAIN objectives reproduce: rush 0.5710258103 (initial 4.9612340180), target/pass 0.3492980412 (initial 19.6627829732). Final infinity gradient norms are .0027059170 and .0106914514, versus gtol .00001. No claim is made that the unobserved last-iteration improvement met ftol: that history was not retained.
+
+At each saved point, one fixed symmetric directional derivative check (epsilon .0001) agrees with the analytic derivative within 1.3e−11, and the negative gradient points locally downhill. This is a numerical diagnostic, not an optimizer invocation, model inference, holdout evaluation, or training restart. The script never scores 2024/2025. Those years exist in the shared frozen archives but only 2023 slices are materialized for diagnostics.
+
+TRAIN transformed inputs reach absolute magnitudes 40.05/29.02; 45/46 columns have zero TRAIN variation. About 34.7%/33.5% of hidden tanh activations exceed .999 in magnitude. The cell-Jacobian diagonal curvature proxy varies by factors341/535 with weight regularization included. These facts are consistent with slow nonlinear conditioning, but do not identify the full Hessian condition number or prove a unique cause. Softplus logits remain finite and below absolute20; there is no detected overflow or directional-derivative bug. Neither current optimizer reports convergence.
+
+The smallest proposed experiment changes only the iteration ceiling: a separately versioned fresh seed17 L-BFGS-B run capped at2500 iterations/300seconds per channel. Exact tensors, objective, regularization, scaling, tolerances and initialization rule stay fixed. It is one bounded allowance, not a search or claimed guarantee. Preserve both original failed records. High review and root authorization are required before implementation/fitting; no optimizer or holdout-driven repair selection ran here.
+
+B's separate dated-injury audit found zero qualified pregame replacement cases in the inspected evidence. Replacement status remains unknown, and no injury subgroup performance is fabricated. This evidence gap does not prevent independent TRAIN-only convergence diagnosis. No live model, setting or lineup changes are included.

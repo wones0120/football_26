@@ -1,0 +1,11 @@
+# Joint conditional-mean v2 results — nonconverged
+
+Root explicitly dispatched exactly one fresh rush v2 and one independent target/team-pass v2 fit serially, even if either failed. Both respected the reviewed2500-iteration/300-second limits and original seed17 initialization. Neither used the old failed parameter vector, new data, altered tolerances, modified objectives or a grid. Original500-iteration modules, manifests, models, logs and failure records remain unchanged.
+
+Rush ran22:51:36.608408–22:51:46.167303Z (9.5588seconds); target/pass22:51:55.282272–22:52:00.260461Z (4.9781seconds). Both native optimizer messages state `STOP: TOTAL NO. OF ITERATIONS REACHED LIMIT`; both status values are `fit_failed`. Complete effective options, objective recipe, fresh initialization SHA and finite failed parameters are preserved. Failed status blocks inference. No joint model predictions or held-out evaluation ran.
+
+Requested TRAIN-only final-point diagnostics reproduce objectives .4972830199 and .3004117420, with infinity gradient norms .0023605266/.0036382583 versus the unchanged .00001 tolerance (236/364times higher). These are stopping diagnostics, not holdout performance. The extra iteration allowance reduced TRAIN loss but did not establish convergence. It provides no basis to relax acceptance, activate the model or claim predictive improvement. No further repair or fitting is included.
+
+Consequently no paired week/matchup MAE/RMSE/bias, improved/worsened-week count or actor/rest/budget prediction metrics can be produced for these failed recipes. Saved independent models are not substituted as joint-model results. The requested exact candidate/source labels, prior-only strata and saved-baseline intersections remain frozen for a future independently reviewed experiment;2025 remains repeatedly inspected retrospective evidence and2026 unsupported.
+
+B's dated replacement audit has zero qualified pregame replacement cases in the inspected caches. Replacement status remains UNKNOWN, not false; no increase in realized workload identifies a replacement. The injury-evidence gap remains separate from optimizer nonconvergence. There are no live forecast, settings or lineup changes.

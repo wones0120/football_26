@@ -1,0 +1,11 @@
+# Clock-stop observation amendment v1
+
+Append-only research amendment for exactly the 15 qualified raw-only clock stops in raw_source_feasibility/CONTROL_ASSESSMENT.json. One cached build under a 30-second whole-job cap; exclusive start/output files, no retries, source downloads, RDS decoding, reconstruction, model fit or simulation. Preserve all prior evidence and runtime files by hash. Do not rewrite observation_contract/LEDGER.jsonl.gz or the frozen training cycle library.
+
+Bind each new record to the raw RDS hash, decoded table hash, native game UUID/game ID/play ID and zero-based raw table ordinal. Use a distinct version/source/native-key record identity and explicit APPEND_SOURCE_OBSERVATION operation. Require absence from the base ledger, unique raw and selected native IDs/order, unchanged source fields, undeleted typed TIMEOUT, a valid regulation clock and same-quarter nonincreasing clock bracket. Reconcile both raw anchors with actual base-ledger records and validated clock/order observations; retain exact base record IDs. Never join by names or choose arbitrarily among duplicates.
+
+Select only SOURCE_TYPED_CLOCK_STOP_OBSERVATION cases; retain the four excluded marker records in the prior assessment, without adding them to this amendment. The two exact reported two-minute warning labels remain source-reported causes. Thirteen other causes remain unknown. A native clock-stop observation is an event-time snapshot, not the preceding physical play's end or a restart rule. Quarter clock is observed; any half/game clock is an explicitly labeled arithmetic derivation.
+
+Keep new-record possession/field/down/distance/scores, timeout team/budgets/debit, play-end clock, restart/runoff/corrections, untimed enforcement and generated policy unknown. Do not copy neighboring states or assign opportunity/scoring credits. The amendment has no runtime consumer and creates no new kernel cycles. A composite observation view may append these records later; this task writes only the amendment and manifest.
+
+Test exact source/anchor linkage, immutability, missing/duplicate/foreign identities, contradictory source clocks/order/flags, base collisions, unknown cause/team/debit/state preservation and deterministic output. Validate saved JSONL and prior hashes. Report record and cause counts separately from unchanged simulation/support results.

@@ -1,0 +1,771 @@
+{
+  "actual_started_at": "2026-10-20T15:18:33.088057+00:00",
+  "actual_completed_at": "2026-10-20T15:18:33.102610+00:00",
+  "elapsed_seconds": 0.014553166984114796,
+  "outputs": [
+    {
+      "season": 2023,
+      "source_descriptor": {
+        "path": "research/neural_workload_benchmark_20261013/expanded_v3/sources/pbp_2023.parquet",
+        "manifest": {
+          "url": "https://github.com/nflverse/nflverse-data/releases/download/pbp/play_by_play_2023.parquet",
+          "received_at": "2026-10-13T16:48:59.914331+00:00",
+          "sha256": "bd3484731408def6b0ec93225bba2bd7b2c65769ca707a2b9444d891abdc6776",
+          "bytes": 20534088,
+          "http_last_modified": "Thu, 12 Feb 2026 10:24:52 GMT",
+          "etag": "\"0x8DE6A20F5B300DA\"",
+          "usage": "revised historical data; capture clock not contemporaneous game evidence"
+        }
+      },
+      "source_hash_verification": "Already approved immutable source lineage reused; this footer-only job checks size, does not claim new full-byte hash verification",
+      "source_rows": 49665,
+      "row_groups": 1,
+      "schema_columns": 372,
+      "field_availability": {
+        "game_id": true,
+        "play_id": true,
+        "order_sequence": true,
+        "season": true,
+        "season_type": true,
+        "week": true,
+        "posteam": true,
+        "defteam": true,
+        "drive": true,
+        "fixed_drive": true,
+        "qtr": true,
+        "game_seconds_remaining": true,
+        "quarter_seconds_remaining": true,
+        "time": true,
+        "play_type": true,
+        "no_play": false,
+        "pass_attempt": true,
+        "rush_attempt": true,
+        "sack": true,
+        "qb_dropback": true,
+        "qb_scramble": true,
+        "qb_spike": true,
+        "qb_kneel": true,
+        "two_point_attempt": true,
+        "quarter_end": true
+      },
+      "native_order_candidate_fields": [
+        "order_sequence"
+      ],
+      "row_value_reads": 0,
+      "actual_native_order_proven": false,
+      "missingness_and_conditional_coverage": "Unknown; schema presence does not prove values or native chronology",
+      "footer_field_statistics": {
+        "game_id": {
+          "global_null_count": 0,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 49665,
+              "statistics_present": true,
+              "null_count": 0,
+              "min": "2023_01_ARI_WAS",
+              "max": "2023_22_SF_KC"
+            }
+          ]
+        },
+        "play_id": {
+          "global_null_count": 0,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 49665,
+              "statistics_present": true,
+              "null_count": 0,
+              "min": "1.0",
+              "max": "5340.0"
+            }
+          ]
+        },
+        "order_sequence": {
+          "global_null_count": 0,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 49665,
+              "statistics_present": true,
+              "null_count": 0,
+              "min": "1.0",
+              "max": "5340.0"
+            }
+          ]
+        },
+        "game_seconds_remaining": {
+          "global_null_count": 5,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 49665,
+              "statistics_present": true,
+              "null_count": 5,
+              "min": "-0.0",
+              "max": "3600.0"
+            }
+          ]
+        },
+        "fixed_drive": {
+          "global_null_count": 0,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 49665,
+              "statistics_present": true,
+              "null_count": 0,
+              "min": "1.0",
+              "max": "35.0"
+            }
+          ]
+        },
+        "drive": {
+          "global_null_count": 567,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 49665,
+              "statistics_present": true,
+              "null_count": 567,
+              "min": "1.0",
+              "max": "34.0"
+            }
+          ]
+        },
+        "qtr": {
+          "global_null_count": 0,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 49665,
+              "statistics_present": true,
+              "null_count": 0,
+              "min": "1.0",
+              "max": "5.0"
+            }
+          ]
+        },
+        "posteam": {
+          "global_null_count": 2638,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 49665,
+              "statistics_present": true,
+              "null_count": 2638,
+              "min": "ARI",
+              "max": "WAS"
+            }
+          ]
+        },
+        "pass_attempt": {
+          "global_null_count": 1488,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 49665,
+              "statistics_present": true,
+              "null_count": 1488,
+              "min": "-0.0",
+              "max": "1.0"
+            }
+          ]
+        },
+        "rush_attempt": {
+          "global_null_count": 1488,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 49665,
+              "statistics_present": true,
+              "null_count": 1488,
+              "min": "-0.0",
+              "max": "1.0"
+            }
+          ]
+        },
+        "sack": {
+          "global_null_count": 1488,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 49665,
+              "statistics_present": true,
+              "null_count": 1488,
+              "min": "-0.0",
+              "max": "1.0"
+            }
+          ]
+        },
+        "qb_scramble": {
+          "global_null_count": 0,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 49665,
+              "statistics_present": true,
+              "null_count": 0,
+              "min": "-0.0",
+              "max": "1.0"
+            }
+          ]
+        },
+        "qb_spike": {
+          "global_null_count": 0,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 49665,
+              "statistics_present": true,
+              "null_count": 0,
+              "min": "-0.0",
+              "max": "1.0"
+            }
+          ]
+        },
+        "qb_kneel": {
+          "global_null_count": 0,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 49665,
+              "statistics_present": true,
+              "null_count": 0,
+              "min": "-0.0",
+              "max": "1.0"
+            }
+          ]
+        },
+        "quarter_end": {
+          "global_null_count": 0,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 49665,
+              "statistics_present": true,
+              "null_count": 0,
+              "min": "-0.0",
+              "max": "1.0"
+            }
+          ]
+        }
+      },
+      "scoped_NONNULL_and_eligible_interval_coverage_unknown": true,
+      "global_footer_null_statistics_measured": true
+    },
+    {
+      "season": 2024,
+      "source_descriptor": {
+        "path": "research/neural_workload_benchmark_20261013/expanded_v3/sources/pbp_2024.parquet",
+        "manifest": {
+          "url": "https://github.com/nflverse/nflverse-data/releases/download/pbp/play_by_play_2024.parquet",
+          "received_at": "2026-10-13T16:49:06.998943+00:00",
+          "sha256": "3fd2896bc0b911b615142d2f1fabae54a4bbba5ab7b73b28187b118ef8af6a3b",
+          "bytes": 20597560,
+          "http_last_modified": "Thu, 13 Aug 2026 12:26:27 GMT",
+          "etag": "\"0x8DEF9361906E8D3\"",
+          "usage": "revised historical data; capture clock not contemporaneous game evidence"
+        }
+      },
+      "source_hash_verification": "Already approved immutable source lineage reused; this footer-only job checks size, does not claim new full-byte hash verification",
+      "source_rows": 49492,
+      "row_groups": 1,
+      "schema_columns": 372,
+      "field_availability": {
+        "game_id": true,
+        "play_id": true,
+        "order_sequence": true,
+        "season": true,
+        "season_type": true,
+        "week": true,
+        "posteam": true,
+        "defteam": true,
+        "drive": true,
+        "fixed_drive": true,
+        "qtr": true,
+        "game_seconds_remaining": true,
+        "quarter_seconds_remaining": true,
+        "time": true,
+        "play_type": true,
+        "no_play": false,
+        "pass_attempt": true,
+        "rush_attempt": true,
+        "sack": true,
+        "qb_dropback": true,
+        "qb_scramble": true,
+        "qb_spike": true,
+        "qb_kneel": true,
+        "two_point_attempt": true,
+        "quarter_end": true
+      },
+      "native_order_candidate_fields": [
+        "order_sequence"
+      ],
+      "row_value_reads": 0,
+      "actual_native_order_proven": false,
+      "missingness_and_conditional_coverage": "Unknown; schema presence does not prove values or native chronology",
+      "footer_field_statistics": {
+        "game_id": {
+          "global_null_count": 0,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 49492,
+              "statistics_present": true,
+              "null_count": 0,
+              "min": "2024_01_ARI_BUF",
+              "max": "2024_22_KC_PHI"
+            }
+          ]
+        },
+        "play_id": {
+          "global_null_count": 0,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 49492,
+              "statistics_present": true,
+              "null_count": 0,
+              "min": "1.0",
+              "max": "5246.0"
+            }
+          ]
+        },
+        "order_sequence": {
+          "global_null_count": 0,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 49492,
+              "statistics_present": true,
+              "null_count": 0,
+              "min": "1.0",
+              "max": "5246.0"
+            }
+          ]
+        },
+        "game_seconds_remaining": {
+          "global_null_count": 5,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 49492,
+              "statistics_present": true,
+              "null_count": 5,
+              "min": "-0.0",
+              "max": "3600.0"
+            }
+          ]
+        },
+        "fixed_drive": {
+          "global_null_count": 0,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 49492,
+              "statistics_present": true,
+              "null_count": 0,
+              "min": "1.0",
+              "max": "31.0"
+            }
+          ]
+        },
+        "drive": {
+          "global_null_count": 563,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 49492,
+              "statistics_present": true,
+              "null_count": 563,
+              "min": "1.0",
+              "max": "31.0"
+            }
+          ]
+        },
+        "qtr": {
+          "global_null_count": 0,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 49492,
+              "statistics_present": true,
+              "null_count": 0,
+              "min": "1.0",
+              "max": "5.0"
+            }
+          ]
+        },
+        "posteam": {
+          "global_null_count": 2713,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 49492,
+              "statistics_present": true,
+              "null_count": 2713,
+              "min": "ARI",
+              "max": "WAS"
+            }
+          ]
+        },
+        "pass_attempt": {
+          "global_null_count": 1517,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 49492,
+              "statistics_present": true,
+              "null_count": 1517,
+              "min": "-0.0",
+              "max": "1.0"
+            }
+          ]
+        },
+        "rush_attempt": {
+          "global_null_count": 1517,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 49492,
+              "statistics_present": true,
+              "null_count": 1517,
+              "min": "-0.0",
+              "max": "1.0"
+            }
+          ]
+        },
+        "sack": {
+          "global_null_count": 1517,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 49492,
+              "statistics_present": true,
+              "null_count": 1517,
+              "min": "-0.0",
+              "max": "1.0"
+            }
+          ]
+        },
+        "qb_scramble": {
+          "global_null_count": 0,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 49492,
+              "statistics_present": true,
+              "null_count": 0,
+              "min": "-0.0",
+              "max": "1.0"
+            }
+          ]
+        },
+        "qb_spike": {
+          "global_null_count": 0,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 49492,
+              "statistics_present": true,
+              "null_count": 0,
+              "min": "-0.0",
+              "max": "1.0"
+            }
+          ]
+        },
+        "qb_kneel": {
+          "global_null_count": 0,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 49492,
+              "statistics_present": true,
+              "null_count": 0,
+              "min": "-0.0",
+              "max": "1.0"
+            }
+          ]
+        },
+        "quarter_end": {
+          "global_null_count": 0,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 49492,
+              "statistics_present": true,
+              "null_count": 0,
+              "min": "-0.0",
+              "max": "1.0"
+            }
+          ]
+        }
+      },
+      "scoped_NONNULL_and_eligible_interval_coverage_unknown": true,
+      "global_footer_null_statistics_measured": true
+    },
+    {
+      "season": 2025,
+      "source_descriptor": {
+        "path": "research/neural_workload_benchmark_20261013/expanded_v3/sources/pbp_2025.parquet",
+        "manifest": {
+          "url": "https://github.com/nflverse/nflverse-data/releases/download/pbp/play_by_play_2025.parquet",
+          "received_at": "2026-10-13T16:49:14.267369+00:00",
+          "sha256": "c6ecedd6d678cc37ed316b23ef84ee1ec6abb69c514bb11868a7ebd5a367df29",
+          "bytes": 20337029,
+          "http_last_modified": "Thu, 13 Aug 2026 12:26:09 GMT",
+          "etag": "\"0x8DEF9360E0B88D5\"",
+          "usage": "revised historical data; capture clock not contemporaneous game evidence"
+        }
+      },
+      "source_hash_verification": "Already approved immutable source lineage reused; this footer-only job checks size, does not claim new full-byte hash verification",
+      "source_rows": 48771,
+      "row_groups": 1,
+      "schema_columns": 372,
+      "field_availability": {
+        "game_id": true,
+        "play_id": true,
+        "order_sequence": true,
+        "season": true,
+        "season_type": true,
+        "week": true,
+        "posteam": true,
+        "defteam": true,
+        "drive": true,
+        "fixed_drive": true,
+        "qtr": true,
+        "game_seconds_remaining": true,
+        "quarter_seconds_remaining": true,
+        "time": true,
+        "play_type": true,
+        "no_play": false,
+        "pass_attempt": true,
+        "rush_attempt": true,
+        "sack": true,
+        "qb_dropback": true,
+        "qb_scramble": true,
+        "qb_spike": true,
+        "qb_kneel": true,
+        "two_point_attempt": true,
+        "quarter_end": true
+      },
+      "native_order_candidate_fields": [
+        "order_sequence"
+      ],
+      "row_value_reads": 0,
+      "actual_native_order_proven": false,
+      "missingness_and_conditional_coverage": "Unknown; schema presence does not prove values or native chronology",
+      "footer_field_statistics": {
+        "game_id": {
+          "global_null_count": 0,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 48771,
+              "statistics_present": true,
+              "null_count": 0,
+              "min": "2025_01_ARI_NO",
+              "max": "2025_22_SEA_NE"
+            }
+          ]
+        },
+        "play_id": {
+          "global_null_count": 0,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 48771,
+              "statistics_present": true,
+              "null_count": 0,
+              "min": "1.0",
+              "max": "5519.0"
+            }
+          ]
+        },
+        "order_sequence": {
+          "global_null_count": 0,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 48771,
+              "statistics_present": true,
+              "null_count": 0,
+              "min": "1.0",
+              "max": "5519.0"
+            }
+          ]
+        },
+        "game_seconds_remaining": {
+          "global_null_count": 4,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 48771,
+              "statistics_present": true,
+              "null_count": 4,
+              "min": "-0.0",
+              "max": "3600.0"
+            }
+          ]
+        },
+        "fixed_drive": {
+          "global_null_count": 0,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 48771,
+              "statistics_present": true,
+              "null_count": 0,
+              "min": "1.0",
+              "max": "30.0"
+            }
+          ]
+        },
+        "drive": {
+          "global_null_count": 572,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 48771,
+              "statistics_present": true,
+              "null_count": 572,
+              "min": "1.0",
+              "max": "30.0"
+            }
+          ]
+        },
+        "qtr": {
+          "global_null_count": 0,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 48771,
+              "statistics_present": true,
+              "null_count": 0,
+              "min": "1.0",
+              "max": "5.0"
+            }
+          ]
+        },
+        "posteam": {
+          "global_null_count": 2729,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 48771,
+              "statistics_present": true,
+              "null_count": 2729,
+              "min": "ARI",
+              "max": "WAS"
+            }
+          ]
+        },
+        "pass_attempt": {
+          "global_null_count": 1511,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 48771,
+              "statistics_present": true,
+              "null_count": 1511,
+              "min": "-0.0",
+              "max": "1.0"
+            }
+          ]
+        },
+        "rush_attempt": {
+          "global_null_count": 1511,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 48771,
+              "statistics_present": true,
+              "null_count": 1511,
+              "min": "-0.0",
+              "max": "1.0"
+            }
+          ]
+        },
+        "sack": {
+          "global_null_count": 1511,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 48771,
+              "statistics_present": true,
+              "null_count": 1511,
+              "min": "-0.0",
+              "max": "1.0"
+            }
+          ]
+        },
+        "qb_scramble": {
+          "global_null_count": 0,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 48771,
+              "statistics_present": true,
+              "null_count": 0,
+              "min": "-0.0",
+              "max": "1.0"
+            }
+          ]
+        },
+        "qb_spike": {
+          "global_null_count": 0,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 48771,
+              "statistics_present": true,
+              "null_count": 0,
+              "min": "-0.0",
+              "max": "1.0"
+            }
+          ]
+        },
+        "qb_kneel": {
+          "global_null_count": 0,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 48771,
+              "statistics_present": true,
+              "null_count": 0,
+              "min": "-0.0",
+              "max": "1.0"
+            }
+          ]
+        },
+        "quarter_end": {
+          "global_null_count": 0,
+          "row_group_statistics": [
+            {
+              "row_group": 0,
+              "rows": 48771,
+              "statistics_present": true,
+              "null_count": 0,
+              "min": "-0.0",
+              "max": "1.0"
+            }
+          ]
+        }
+      },
+      "scoped_NONNULL_and_eligible_interval_coverage_unknown": true,
+      "global_footer_null_statistics_measured": true
+    }
+  ],
+  "parquet_value_rows_decoded": 0,
+  "models": 0,
+  "database_queries": 0,
+  "new_sources": 0,
+  "additional_footer_statistics_read": {
+    "actual_started_at": "2026-10-20T15:22:14.128975+00:00",
+    "actual_completed_at": "2026-10-20T15:22:14.150170+00:00",
+    "elapsed_seconds": 0.02119462500559166,
+    "reason": "Unresolved actual missingness risk after header-only inspection; footer statistics answer without decoding any rows",
+    "value_rows_decoded": 0
+  }
+}

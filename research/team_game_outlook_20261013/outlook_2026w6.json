@@ -1,0 +1,3265 @@
+{
+  "contract_id": "team_game_outlook_v1",
+  "run_id": "team_game_outlook_20261013_v1",
+  "generated_at": "2026-10-14T03:24:59.976755+00:00",
+  "source_available_at": "2026-10-13T16:49:52.973124+00:00",
+  "source_hashes": {
+    "games.parquet": "8208fb2529cdea95c3aa15c5f4be205835bb6a379a83873025fd4723a0331f36",
+    "pbp_2023.parquet": "bd3484731408def6b0ec93225bba2bd7b2c65769ca707a2b9444d891abdc6776",
+    "pbp_2024.parquet": "3fd2896bc0b911b615142d2f1fabae54a4bbba5ab7b73b28187b118ef8af6a3b",
+    "pbp_2025.parquet": "c6ecedd6d678cc37ed316b23ef84ee1ec6abb69c514bb11868a7ebd5a367df29",
+    "pbp_2026.parquet": "40c828388fe0f80cc449931287b1f3f6a4cc6caf0388d7e46925824c8406556b"
+  },
+  "model_metadata": {
+    "model_version": "ridge_paired_residual_v1",
+    "alpha": 100,
+    "features": [
+      "home",
+      "rest_days",
+      "history_count",
+      "opponent_history_count",
+      "own_points_mean5",
+      "own_points_against_mean5",
+      "own_plays_mean5",
+      "own_drives_mean5",
+      "own_epa_mean5",
+      "own_success_mean5",
+      "own_target_fraction_mean5",
+      "own_carry_fraction_mean5",
+      "opponent_points_mean5",
+      "opponent_points_against_mean5",
+      "opponent_plays_mean5",
+      "opponent_drives_mean5",
+      "opponent_epa_mean5",
+      "opponent_success_mean5",
+      "opponent_target_fraction_mean5",
+      "opponent_carry_fraction_mean5"
+    ],
+    "feature_sha256": "70c476e22f2c5ef0c3376ec0c4a7e507181f93c810d91d36f750b089a7b9fcc8",
+    "matrix_sha256": "832e80af484362198998ec35e52cacd29277bc8161405b460c1934e5f0e41c18",
+    "training_window": "2023W1-2025W18",
+    "training_rows": 1632,
+    "max_training_completed_at": "2026-01-05T09:20:00+00:00",
+    "max_calibration_completed_at": "2026-09-29T08:15:00+00:00",
+    "calibration_window": "2026W1-W3",
+    "calibration_games": 48,
+    "evaluation": {
+      "retrospective_2025_normal_weeks": {
+        "points": {
+          "mae": 7.648716251425294,
+          "rmse": 9.616557623852046
+        },
+        "plays": {
+          "mae": 6.8842185082497585,
+          "rmse": 8.80107334764114
+        },
+        "drives": {
+          "mae": 1.2758050666296157,
+          "rmse": 1.5688123355880474
+        },
+        "history_points_mae": 7.5375000000000005,
+        "n_team_rows": 448,
+        "n_games": 224,
+        "total_mae": 10.752891147232418,
+        "margin_mae": 10.70997767454622,
+        "win_half_tie_brier": 0.22683578935850943,
+        "score_interval80_coverage": 0.8169642857142857,
+        "reliability_bins": [
+          {
+            "lo": 0,
+            "hi": 0.2,
+            "n": 0,
+            "mean_probability": null,
+            "observed_win_half_tie": null
+          },
+          {
+            "lo": 0.2,
+            "hi": 0.4,
+            "n": 22,
+            "mean_probability": 0.35111860795454547,
+            "observed_win_half_tie": 0.45454545454545453
+          },
+          {
+            "lo": 0.4,
+            "hi": 0.6,
+            "n": 124,
+            "mean_probability": 0.5100609564012096,
+            "observed_win_half_tie": 0.40725806451612906
+          },
+          {
+            "lo": 0.6,
+            "hi": 0.8,
+            "n": 76,
+            "mean_probability": 0.6750905890213815,
+            "observed_win_half_tie": 0.7368421052631579
+          },
+          {
+            "lo": 0.8,
+            "hi": 1,
+            "n": 2,
+            "mean_probability": 0.83428955078125,
+            "observed_win_half_tie": 1.0
+          }
+        ]
+      },
+      "retrospective_2025_sunday_main": {
+        "points": {
+          "mae": 7.700985735774471,
+          "rmse": 9.734491466462808
+        },
+        "plays": {
+          "mae": 6.795378290897002,
+          "rmse": 8.582811804707662
+        },
+        "drives": {
+          "mae": 1.2430300228916238,
+          "rmse": 1.5428691427650394
+        },
+        "history_points_mae": 7.562732919254658,
+        "n_team_rows": 322,
+        "n_games": 161,
+        "total_mae": 10.537395303320677,
+        "margin_mae": 11.213369923798243,
+        "win_half_tie_brier": 0.22158901504478098,
+        "score_interval80_coverage": 0.8136645962732919,
+        "reliability_bins": [
+          {
+            "lo": 0,
+            "hi": 0.2,
+            "n": 0,
+            "mean_probability": null,
+            "observed_win_half_tie": null
+          },
+          {
+            "lo": 0.2,
+            "hi": 0.4,
+            "n": 19,
+            "mean_probability": 0.3472964638157895,
+            "observed_win_half_tie": 0.42105263157894735
+          },
+          {
+            "lo": 0.4,
+            "hi": 0.6,
+            "n": 87,
+            "mean_probability": 0.5132355087104885,
+            "observed_win_half_tie": 0.39080459770114945
+          },
+          {
+            "lo": 0.6,
+            "hi": 0.8,
+            "n": 53,
+            "mean_probability": 0.6770457141804245,
+            "observed_win_half_tie": 0.7735849056603774
+          },
+          {
+            "lo": 0.8,
+            "hi": 1,
+            "n": 2,
+            "mean_probability": 0.83428955078125,
+            "observed_win_half_tie": 1.0
+          }
+        ]
+      },
+      "frozen_choices": [
+        {
+          "alpha": 10,
+          "validation_points_mae": 9.459742916943839
+        },
+        {
+          "alpha": 100,
+          "validation_points_mae": 9.396897228776249
+        }
+      ],
+      "selected_alpha": 100,
+      "train_rows": 544,
+      "validation_rows": 246,
+      "calibration_rows": 298,
+      "label_gaps": [],
+      "already_inspected_2026w4_w5": {
+        "points": {
+          "mae": 6.7637255370632,
+          "rmse": 8.500321809687485
+        },
+        "plays": {
+          "mae": 6.686856692381089,
+          "rmse": 9.13337685362094
+        },
+        "drives": {
+          "mae": 1.3013846319410025,
+          "rmse": 1.5783115027755037
+        },
+        "history_points_mae": 6.724193548387096,
+        "n_team_rows": 62,
+        "n_games": 31,
+        "total_mae": 11.186665826304543,
+        "margin_mae": 8.35823334154997,
+        "win_half_tie_brier": 0.19858194983774616,
+        "score_interval80_coverage": 0.9193548387096774,
+        "reliability_bins": [
+          {
+            "lo": 0,
+            "hi": 0.2,
+            "n": 0,
+            "mean_probability": null,
+            "observed_win_half_tie": null
+          },
+          {
+            "lo": 0.2,
+            "hi": 0.4,
+            "n": 4,
+            "mean_probability": 0.310150146484375,
+            "observed_win_half_tie": 0.25
+          },
+          {
+            "lo": 0.4,
+            "hi": 0.6,
+            "n": 15,
+            "mean_probability": 0.4814208984375,
+            "observed_win_half_tie": 0.23333333333333334
+          },
+          {
+            "lo": 0.6,
+            "hi": 0.8,
+            "n": 12,
+            "mean_probability": 0.6682637532552084,
+            "observed_win_half_tie": 0.75
+          },
+          {
+            "lo": 0.8,
+            "hi": 1,
+            "n": 0,
+            "mean_probability": null,
+            "observed_win_half_tie": null
+          }
+        ]
+      }
+    },
+    "code_sha256": "ba9176938054a8d8f5345f1e2f8ba876c8dc94905bd966afad15cb2b310a13c0",
+    "revised_data_caveat": "Historical source imports later than games; prior outcomes inspected. No contemporaneous backtest or pristine holdout claim.",
+    "injuries": "not modeled; no injury certainty or final-entry readiness",
+    "markets": "excluded from fit/scenario means; existing player market adjustments not added again"
+  },
+  "games": [
+    {
+      "game_id": "2026_06_ARI_LA",
+      "season": 2026,
+      "week": 6,
+      "kickoff_at": "2026-10-18T20:05:00+00:00",
+      "teams": {
+        "LAR": {
+          "opponent": "ARI",
+          "home": true,
+          "central": {
+            "points": 26.29683200333497,
+            "plays": 65.06870096952778,
+            "drives": 10.661770610569597,
+            "targets": 33.89594444125746,
+            "carries": 27.583243548029216
+          },
+          "win_probability": 0.640380859375,
+          "tie_probability": 0.018310546875,
+          "loss_probability": 0.34130859375,
+          "win_half_tie_probability": 0.6495361328125,
+          "score_interval_80": [
+            12.0,
+            38.0
+          ],
+          "script_probabilities": {
+            "leading_by_more_than7": 0.41552734375,
+            "competitive_within7": 0.373779296875,
+            "trailing_by_more_than7": 0.210693359375
+          },
+          "capability_branches": {
+            "competitive_scoring": {
+              "probability": 0.38330078125,
+              "sample_count": 1570,
+              "opponent_budget": {
+                "points": 27.378343949044584,
+                "plays": 65.97513263099282,
+                "drives": 10.983682246846252,
+                "targets": 38.36989631241598,
+                "carries": 22.74278732208389
+              },
+              "budget": {
+                "points": 31.46687898089172,
+                "plays": 66.96078136288004,
+                "drives": 10.944953788169366,
+                "targets": 35.06807016407505,
+                "carries": 28.284577745291674
+              }
+            },
+            "trailing_productive_passing": {
+              "probability": 0.08447265625,
+              "sample_count": 346,
+              "opponent_budget": {
+                "points": 35.471098265895954,
+                "plays": 70.67709449869552,
+                "drives": 11.425861889528917,
+                "targets": 32.7128776531024,
+                "carries": 34.25656116898897
+              },
+              "budget": {
+                "points": 22.387283236994218,
+                "plays": 61.92504673452834,
+                "drives": 10.363507605535856,
+                "targets": 41.90666256727123,
+                "carries": 15.945473449587865
+              }
+            },
+            "drive_stall_runout": {
+              "probability": 0.1435546875,
+              "sample_count": 588,
+              "opponent_budget": {
+                "points": 20.596938775510203,
+                "plays": 62.157951416375546,
+                "drives": 10.595408757565599,
+                "targets": 32.02332940808707,
+                "carries": 27.204070895914533
+              },
+              "budget": {
+                "points": 8.591836734693878,
+                "plays": 63.94621914438271,
+                "drives": 11.03623034980036,
+                "targets": 34.04651812921602,
+                "carries": 24.148421395686817
+              }
+            },
+            "other": {
+              "probability": 0.388671875,
+              "sample_count": 1592,
+              "opponent_budget": {
+                "points": 13.219849246231156,
+                "plays": 59.46306792369496,
+                "drives": 10.637041429220726,
+                "targets": 32.50573785856914,
+                "carries": 22.397862276263513
+              },
+              "budget": {
+                "points": 27.1821608040201,
+                "plays": 64.74221463742099,
+                "drives": 10.713416124808507,
+                "targets": 31.925910086747358,
+                "carries": 29.84664125924147
+              }
+            }
+          },
+          "history_count": 5,
+          "last_history_completed_at": "2026-10-13T08:15:00+00:00"
+        },
+        "ARI": {
+          "opponent": "LAR",
+          "home": false,
+          "central": {
+            "points": 20.339530630640862,
+            "plays": 62.782352297904346,
+            "drives": 10.656508763519675,
+            "targets": 33.15092322673393,
+            "carries": 25.281308111562662
+          },
+          "win_probability": 0.34130859375,
+          "tie_probability": 0.018310546875,
+          "loss_probability": 0.640380859375,
+          "win_half_tie_probability": 0.3504638671875,
+          "score_interval_80": [
+            7.0,
+            34.0
+          ],
+          "script_probabilities": {
+            "leading_by_more_than7": 0.210693359375,
+            "competitive_within7": 0.373779296875,
+            "trailing_by_more_than7": 0.41552734375
+          },
+          "capability_branches": {
+            "competitive_scoring": {
+              "probability": 0.38330078125,
+              "sample_count": 1570,
+              "opponent_budget": {
+                "points": 31.46687898089172,
+                "plays": 66.96078136288004,
+                "drives": 10.944953788169366,
+                "targets": 35.06807016407505,
+                "carries": 28.284577745291674
+              },
+              "budget": {
+                "points": 27.378343949044584,
+                "plays": 65.97513263099282,
+                "drives": 10.983682246846252,
+                "targets": 38.36989631241598,
+                "carries": 22.74278732208389
+              }
+            },
+            "trailing_productive_passing": {
+              "probability": 0.040283203125,
+              "sample_count": 165,
+              "opponent_budget": {
+                "points": 39.47878787878788,
+                "plays": 61.5615283474679,
+                "drives": 11.09412306605468,
+                "targets": 31.793071342196846,
+                "carries": 26.485492915979062
+              },
+              "budget": {
+                "points": 20.64848484848485,
+                "plays": 70.79307025630645,
+                "drives": 11.025588399485025,
+                "targets": 44.38400642220852,
+                "carries": 22.175010985233797
+              }
+            },
+            "drive_stall_runout": {
+              "probability": 0.221435546875,
+              "sample_count": 907,
+              "opponent_budget": {
+                "points": 24.337375964718852,
+                "plays": 64.53265607128372,
+                "drives": 10.74558881054043,
+                "targets": 30.309314533238744,
+                "carries": 31.175409450360423
+              },
+              "budget": {
+                "points": 6.490628445424476,
+                "plays": 57.31498676975204,
+                "drives": 10.332021184157078,
+                "targets": 31.189552410472935,
+                "carries": 21.552472830154045
+              }
+            },
+            "other": {
+              "probability": 0.35498046875,
+              "sample_count": 1454,
+              "opponent_budget": {
+                "points": 18.902338376891333,
+                "plays": 64.24159387608812,
+                "drives": 10.697425165635398,
+                "targets": 36.182050696868004,
+                "carries": 23.786833408748603
+              },
+              "budget": {
+                "points": 24.852819807427785,
+                "plays": 63.27565658283676,
+                "drives": 10.954094373177037,
+                "targets": 31.833028153237493,
+                "carries": 27.716087294062074
+              }
+            }
+          },
+          "history_count": 5,
+          "last_history_completed_at": "2026-10-13T08:15:00+00:00"
+        }
+      },
+      "total_points": 46.636362633975835,
+      "home_margin": 5.957301372694108,
+      "seed": 261013,
+      "draws": 4096,
+      "probability_status": "empirical_paired_residual_estimate; retrospective calibration measured, forward calibration unproven",
+      "tie_convention": "ties separate; win_half_tie=win+0.5*tie",
+      "scenario_definition": "mutually exclusive precedence: competitive_scoring, trailing_productive_passing, drive_stall_runout, other"
+    },
+    {
+      "game_id": "2026_06_BAL_CLE",
+      "season": 2026,
+      "week": 6,
+      "kickoff_at": "2026-10-18T17:00:00+00:00",
+      "teams": {
+        "CLE": {
+          "opponent": "BAL",
+          "home": true,
+          "central": {
+            "points": 20.38316470386532,
+            "plays": 61.93847333089711,
+            "drives": 10.580549822825438,
+            "targets": 32.02109370927371,
+            "carries": 25.739023781285265
+          },
+          "win_probability": 0.26025390625,
+          "tie_probability": 0.03857421875,
+          "loss_probability": 0.701171875,
+          "win_half_tie_probability": 0.279541015625,
+          "score_interval_80": [
+            6.0,
+            32.0
+          ],
+          "script_probabilities": {
+            "leading_by_more_than7": 0.1611328125,
+            "competitive_within7": 0.43359375,
+            "trailing_by_more_than7": 0.4052734375
+          },
+          "capability_branches": {
+            "competitive_scoring": {
+              "probability": 0.361328125,
+              "sample_count": 1480,
+              "opponent_budget": {
+                "points": 29.4222972972973,
+                "plays": 66.43902921035915,
+                "drives": 10.525541608597713,
+                "targets": 34.86710899391425,
+                "carries": 27.71987647451998
+              },
+              "budget": {
+                "points": 28.04527027027027,
+                "plays": 62.504359407918486,
+                "drives": 10.42034624469823,
+                "targets": 31.660168710991634,
+                "carries": 27.110540107602784
+              }
+            },
+            "trailing_productive_passing": {
+              "probability": 0.102783203125,
+              "sample_count": 421,
+              "opponent_budget": {
+                "points": 38.6603325415677,
+                "plays": 63.54695593572466,
+                "drives": 12.732424693928598,
+                "targets": 27.66493375917063,
+                "carries": 31.699883195065976
+              },
+              "budget": {
+                "points": 22.109263657957246,
+                "plays": 62.86735627622484,
+                "drives": 12.41188894906997,
+                "targets": 35.54314801819527,
+                "carries": 21.56949203810112
+              }
+            },
+            "drive_stall_runout": {
+              "probability": 0.294189453125,
+              "sample_count": 1205,
+              "opponent_budget": {
+                "points": 25.556016597510375,
+                "plays": 63.18011394219239,
+                "drives": 10.61854025359516,
+                "targets": 27.735271652441867,
+                "carries": 33.11761988020931
+              },
+              "budget": {
+                "points": 7.020746887966805,
+                "plays": 59.33444348977517,
+                "drives": 10.506787869267107,
+                "targets": 33.06791856878783,
+                "carries": 21.470936568621003
+              }
+            },
+            "other": {
+              "probability": 0.24169921875,
+              "sample_count": 990,
+              "opponent_budget": {
+                "points": 15.184848484848485,
+                "plays": 56.18485190514526,
+                "drives": 10.752240528081149,
+                "targets": 27.285297908296968,
+                "carries": 24.746483069780716
+              },
+              "budget": {
+                "points": 22.46969696969697,
+                "plays": 64.57722196012082,
+                "drives": 10.781349067212105,
+                "targets": 31.34324251972723,
+                "carries": 29.370170836762753
+              }
+            }
+          },
+          "history_count": 5,
+          "last_history_completed_at": "2026-10-12T08:20:00+00:00"
+        },
+        "BAL": {
+          "opponent": "CLE",
+          "home": false,
+          "central": {
+            "points": 24.478319117028587,
+            "plays": 62.193670626065874,
+            "drives": 10.66046673694678,
+            "targets": 28.69319106540898,
+            "carries": 30.00784345775135
+          },
+          "win_probability": 0.701171875,
+          "tie_probability": 0.03857421875,
+          "loss_probability": 0.26025390625,
+          "win_half_tie_probability": 0.720458984375,
+          "score_interval_80": [
+            11.0,
+            39.0
+          ],
+          "script_probabilities": {
+            "leading_by_more_than7": 0.4052734375,
+            "competitive_within7": 0.43359375,
+            "trailing_by_more_than7": 0.1611328125
+          },
+          "capability_branches": {
+            "competitive_scoring": {
+              "probability": 0.361328125,
+              "sample_count": 1480,
+              "opponent_budget": {
+                "points": 28.04527027027027,
+                "plays": 62.504359407918486,
+                "drives": 10.42034624469823,
+                "targets": 31.660168710991634,
+                "carries": 27.110540107602784
+              },
+              "budget": {
+                "points": 29.4222972972973,
+                "plays": 66.43902921035915,
+                "drives": 10.525541608597713,
+                "targets": 34.86710899391425,
+                "carries": 27.71987647451998
+              }
+            },
+            "trailing_productive_passing": {
+              "probability": 0.023681640625,
+              "sample_count": 97,
+              "opponent_budget": {
+                "points": 29.0,
+                "plays": 69.41561919066794,
+                "drives": 11.278054141786365,
+                "targets": 31.3321192340801,
+                "carries": 36.84928879617061
+              },
+              "budget": {
+                "points": 16.0,
+                "plays": 53.89514453025195,
+                "drives": 11.284072620491395,
+                "targets": 30.706245223500407,
+                "carries": 17.46065875543739
+              }
+            },
+            "drive_stall_runout": {
+              "probability": 0.1787109375,
+              "sample_count": 732,
+              "opponent_budget": {
+                "points": 17.378415300546447,
+                "plays": 60.01980272084138,
+                "drives": 10.31799381613814,
+                "targets": 27.274172829903666,
+                "carries": 29.199391155745428
+              },
+              "budget": {
+                "points": 9.180327868852459,
+                "plays": 56.87397529594644,
+                "drives": 9.905731368543941,
+                "targets": 27.57384896892947,
+                "carries": 26.099345197464288
+              }
+            },
+            "other": {
+              "probability": 0.436279296875,
+              "sample_count": 1787,
+              "opponent_budget": {
+                "points": 13.698377168438725,
+                "plays": 62.2433130860877,
+                "drives": 11.143188294011772,
+                "targets": 35.16307062584487,
+                "carries": 21.86982009087278
+              },
+              "budget": {
+                "points": 30.12423055400112,
+                "plays": 62.47830453234951,
+                "drives": 11.446479864893533,
+                "targets": 27.37427036993913,
+                "carries": 31.870731077804308
+              }
+            }
+          },
+          "history_count": 5,
+          "last_history_completed_at": "2026-10-12T08:20:00+00:00"
+        }
+      },
+      "total_points": 44.86148382089391,
+      "home_margin": -4.095154413163268,
+      "seed": 261013,
+      "draws": 4096,
+      "probability_status": "empirical_paired_residual_estimate; retrospective calibration measured, forward calibration unproven",
+      "tie_convention": "ties separate; win_half_tie=win+0.5*tie",
+      "scenario_definition": "mutually exclusive precedence: competitive_scoring, trailing_productive_passing, drive_stall_runout, other"
+    },
+    {
+      "game_id": "2026_06_BUF_LV",
+      "season": 2026,
+      "week": 6,
+      "kickoff_at": "2026-10-18T20:25:00+00:00",
+      "teams": {
+        "LV": {
+          "opponent": "BUF",
+          "home": true,
+          "central": {
+            "points": 23.525241258818607,
+            "plays": 63.1966115686798,
+            "drives": 10.164317289786814,
+            "targets": 32.9564155014478,
+            "carries": 26.602269146016816
+          },
+          "win_probability": 0.369873046875,
+          "tie_probability": 0.085693359375,
+          "loss_probability": 0.54443359375,
+          "win_half_tie_probability": 0.4127197265625,
+          "score_interval_80": [
+            9.0,
+            35.0
+          ],
+          "script_probabilities": {
+            "leading_by_more_than7": 0.203857421875,
+            "competitive_within7": 0.4365234375,
+            "trailing_by_more_than7": 0.359619140625
+          },
+          "capability_branches": {
+            "competitive_scoring": {
+              "probability": 0.427001953125,
+              "sample_count": 1749,
+              "opponent_budget": {
+                "points": 30.133218982275586,
+                "plays": 65.12436641005138,
+                "drives": 10.498364380077707,
+                "targets": 34.33468185113476,
+                "carries": 26.804357708386902
+              },
+              "budget": {
+                "points": 29.136649514008006,
+                "plays": 64.2155134126139,
+                "drives": 10.40416637858385,
+                "targets": 32.80497406643677,
+                "carries": 27.845837684208774
+              }
+            },
+            "trailing_productive_passing": {
+              "probability": 0.10107421875,
+              "sample_count": 414,
+              "opponent_budget": {
+                "points": 39.408212560386474,
+                "plays": 62.57430239526837,
+                "drives": 11.63887762117462,
+                "targets": 26.855439486334745,
+                "carries": 32.18962149104424
+              },
+              "budget": {
+                "points": 22.73913043478261,
+                "plays": 66.34772656284356,
+                "drives": 11.330708268414242,
+                "targets": 42.39841213397042,
+                "carries": 19.109783282412348
+              }
+            },
+            "drive_stall_runout": {
+              "probability": 0.186279296875,
+              "sample_count": 763,
+              "opponent_budget": {
+                "points": 24.698558322411532,
+                "plays": 63.11109374577055,
+                "drives": 10.10625911025641,
+                "targets": 28.84757070391502,
+                "carries": 32.049029865083654
+              },
+              "budget": {
+                "points": 7.290956749672346,
+                "plays": 59.40378161751616,
+                "drives": 10.36206776110847,
+                "targets": 31.804060484644086,
+                "carries": 22.633660718669862
+              }
+            },
+            "other": {
+              "probability": 0.28564453125,
+              "sample_count": 1170,
+              "opponent_budget": {
+                "points": 17.475213675213674,
+                "plays": 55.26971334460541,
+                "drives": 9.990976991952495,
+                "targets": 26.461352714665466,
+                "carries": 25.49990342427195
+              },
+              "budget": {
+                "points": 23.84188034188034,
+                "plays": 63.63283773831074,
+                "drives": 9.814347241367832,
+                "targets": 31.918231601586502,
+                "carries": 28.87097109437378
+              }
+            }
+          },
+          "history_count": 5,
+          "last_history_completed_at": "2026-10-13T08:15:00+00:00"
+        },
+        "BUF": {
+          "opponent": "LV",
+          "home": false,
+          "central": {
+            "points": 25.23658573011219,
+            "plays": 61.165725024826564,
+            "drives": 10.221609781961705,
+            "targets": 28.820790895413815,
+            "carries": 28.948182978351625
+          },
+          "win_probability": 0.54443359375,
+          "tie_probability": 0.085693359375,
+          "loss_probability": 0.369873046875,
+          "win_half_tie_probability": 0.5872802734375,
+          "score_interval_80": [
+            11.0,
+            39.0
+          ],
+          "script_probabilities": {
+            "leading_by_more_than7": 0.359619140625,
+            "competitive_within7": 0.4365234375,
+            "trailing_by_more_than7": 0.203857421875
+          },
+          "capability_branches": {
+            "competitive_scoring": {
+              "probability": 0.427001953125,
+              "sample_count": 1749,
+              "opponent_budget": {
+                "points": 29.136649514008006,
+                "plays": 64.2155134126139,
+                "drives": 10.40416637858385,
+                "targets": 32.80497406643677,
+                "carries": 27.845837684208774
+              },
+              "budget": {
+                "points": 30.133218982275586,
+                "plays": 65.12436641005138,
+                "drives": 10.498364380077707,
+                "targets": 34.33468185113476,
+                "carries": 26.804357708386902
+              }
+            },
+            "trailing_productive_passing": {
+              "probability": 0.04296875,
+              "sample_count": 176,
+              "opponent_budget": {
+                "points": 34.24431818181818,
+                "plays": 63.92199253919899,
+                "drives": 9.617258034707307,
+                "targets": 32.954763129619856,
+                "carries": 29.645713219003373
+              },
+              "budget": {
+                "points": 19.244318181818183,
+                "plays": 59.15011341664924,
+                "drives": 10.044014824649897,
+                "targets": 32.99338045801311,
+                "carries": 22.923550504616557
+              }
+            },
+            "drive_stall_runout": {
+              "probability": 0.156982421875,
+              "sample_count": 643,
+              "opponent_budget": {
+                "points": 21.720062208398133,
+                "plays": 61.66977487409071,
+                "drives": 9.80311551751236,
+                "targets": 28.639962024595683,
+                "carries": 30.127342792125965
+              },
+              "budget": {
+                "points": 9.525660964230172,
+                "plays": 55.47323559243481,
+                "drives": 9.57149561638588,
+                "targets": 26.59364722247437,
+                "carries": 25.35154469125379
+              }
+            },
+            "other": {
+              "probability": 0.373046875,
+              "sample_count": 1528,
+              "opponent_budget": {
+                "points": 14.973167539267015,
+                "plays": 63.049429577268704,
+                "drives": 10.526123367395705,
+                "targets": 35.96088864821675,
+                "carries": 22.493745187041487
+              },
+              "budget": {
+                "points": 30.166230366492147,
+                "plays": 60.63179311883911,
+                "drives": 10.665442294765603,
+                "targets": 26.951623655711323,
+                "carries": 30.941892647552834
+              }
+            }
+          },
+          "history_count": 5,
+          "last_history_completed_at": "2026-10-13T08:15:00+00:00"
+        }
+      },
+      "total_points": 48.76182698893079,
+      "home_margin": -1.7113444712935824,
+      "seed": 261013,
+      "draws": 4096,
+      "probability_status": "empirical_paired_residual_estimate; retrospective calibration measured, forward calibration unproven",
+      "tie_convention": "ties separate; win_half_tie=win+0.5*tie",
+      "scenario_definition": "mutually exclusive precedence: competitive_scoring, trailing_productive_passing, drive_stall_runout, other"
+    },
+    {
+      "game_id": "2026_06_CAR_PHI",
+      "season": 2026,
+      "week": 6,
+      "kickoff_at": "2026-10-18T17:00:00+00:00",
+      "teams": {
+        "PHI": {
+          "opponent": "CAR",
+          "home": true,
+          "central": {
+            "points": 21.871266254976405,
+            "plays": 62.07550256750561,
+            "drives": 10.828504010626299,
+            "targets": 31.323616984225,
+            "carries": 26.22046831688206
+          },
+          "win_probability": 0.436279296875,
+          "tie_probability": 0.05908203125,
+          "loss_probability": 0.504638671875,
+          "win_half_tie_probability": 0.4658203125,
+          "score_interval_80": [
+            7.0,
+            34.0
+          ],
+          "script_probabilities": {
+            "leading_by_more_than7": 0.239990234375,
+            "competitive_within7": 0.418701171875,
+            "trailing_by_more_than7": 0.34130859375
+          },
+          "capability_branches": {
+            "competitive_scoring": {
+              "probability": 0.38525390625,
+              "sample_count": 1578,
+              "opponent_budget": {
+                "points": 29.17743979721166,
+                "plays": 67.13310162431634,
+                "drives": 11.118465761095168,
+                "targets": 38.47475197076055,
+                "carries": 23.901890745904947
+              },
+              "budget": {
+                "points": 28.17743979721166,
+                "plays": 63.9828194546911,
+                "drives": 11.116968555742544,
+                "targets": 31.873507567049728,
+                "carries": 27.783006611600868
+              }
+            },
+            "trailing_productive_passing": {
+              "probability": 0.063720703125,
+              "sample_count": 261,
+              "opponent_budget": {
+                "points": 40.14942528735632,
+                "plays": 65.07447891820695,
+                "drives": 12.498410727388311,
+                "targets": 29.603992435676204,
+                "carries": 32.83771263247633
+              },
+              "budget": {
+                "points": 21.467432950191572,
+                "plays": 63.587404895531805,
+                "drives": 11.527314454474514,
+                "targets": 42.56201288309393,
+                "carries": 15.896721012687573
+              }
+            },
+            "drive_stall_runout": {
+              "probability": 0.25244140625,
+              "sample_count": 1034,
+              "opponent_budget": {
+                "points": 23.59284332688588,
+                "plays": 62.361374571688714,
+                "drives": 10.621199298775847,
+                "targets": 31.007335965665543,
+                "carries": 28.863658995397618
+              },
+              "budget": {
+                "points": 7.295938104448743,
+                "plays": 59.581889482143794,
+                "drives": 10.7909514777211,
+                "targets": 31.140864220470792,
+                "carries": 23.148620019061948
+              }
+            },
+            "other": {
+              "probability": 0.298583984375,
+              "sample_count": 1223,
+              "opponent_budget": {
+                "points": 13.607522485690923,
+                "plays": 56.20932020450395,
+                "drives": 10.746446392718944,
+                "targets": 29.559133327497392,
+                "carries": 22.5955566254347
+              },
+              "budget": {
+                "points": 23.952575633687655,
+                "plays": 61.97502805648719,
+                "drives": 10.865334194937024,
+                "targets": 29.622766869759822,
+                "carries": 27.964928383272305
+              }
+            }
+          },
+          "history_count": 5,
+          "last_history_completed_at": "2026-10-11T21:30:00+00:00"
+        },
+        "CAR": {
+          "opponent": "PHI",
+          "home": false,
+          "central": {
+            "points": 22.555100442491604,
+            "plays": 62.024740184500814,
+            "drives": 10.795729597990508,
+            "targets": 31.834229164415877,
+            "carries": 26.367133296019585
+          },
+          "win_probability": 0.504638671875,
+          "tie_probability": 0.05908203125,
+          "loss_probability": 0.436279296875,
+          "win_half_tie_probability": 0.5341796875,
+          "score_interval_80": [
+            9.0,
+            37.0
+          ],
+          "script_probabilities": {
+            "leading_by_more_than7": 0.34130859375,
+            "competitive_within7": 0.418701171875,
+            "trailing_by_more_than7": 0.239990234375
+          },
+          "capability_branches": {
+            "competitive_scoring": {
+              "probability": 0.38525390625,
+              "sample_count": 1578,
+              "opponent_budget": {
+                "points": 28.17743979721166,
+                "plays": 63.9828194546911,
+                "drives": 11.116968555742544,
+                "targets": 31.873507567049728,
+                "carries": 27.783006611600868
+              },
+              "budget": {
+                "points": 29.17743979721166,
+                "plays": 67.13310162431634,
+                "drives": 11.118465761095168,
+                "targets": 38.47475197076055,
+                "carries": 23.901890745904947
+              }
+            },
+            "trailing_productive_passing": {
+              "probability": 0.04296875,
+              "sample_count": 176,
+              "opponent_budget": {
+                "points": 32.79545454545455,
+                "plays": 62.80088353802477,
+                "drives": 10.281444755546799,
+                "targets": 31.3064114105376,
+                "carries": 29.229047898602644
+              },
+              "budget": {
+                "points": 16.244318181818183,
+                "plays": 60.009128576323455,
+                "drives": 10.618134640678772,
+                "targets": 35.9985940093576,
+                "carries": 20.358734640356463
+              }
+            },
+            "drive_stall_runout": {
+              "probability": 0.1787109375,
+              "sample_count": 732,
+              "opponent_budget": {
+                "points": 18.718579234972676,
+                "plays": 60.1568319574496,
+                "drives": 10.565948003938994,
+                "targets": 26.591959601743813,
+                "carries": 29.67739580538854
+              },
+              "budget": {
+                "points": 7.3183060109289615,
+                "plays": 56.705044854381605,
+                "drives": 10.040994229587625,
+                "targets": 30.43456493810344,
+                "carries": 22.76813180923554
+              }
+            },
+            "other": {
+              "probability": 0.39306640625,
+              "sample_count": 1610,
+              "opponent_budget": {
+                "points": 14.265217391304347,
+                "plays": 61.435831813546244,
+                "drives": 11.12482509635396,
+                "targets": 33.88927951021078,
+                "carries": 21.998545675195874
+              },
+              "budget": {
+                "points": 26.8944099378882,
+                "plays": 60.956769845991566,
+                "drives": 11.284788658546752,
+                "targets": 29.394530058012684,
+                "carries": 28.44759153426135
+              }
+            }
+          },
+          "history_count": 5,
+          "last_history_completed_at": "2026-10-11T21:30:00+00:00"
+        }
+      },
+      "total_points": 44.42636669746801,
+      "home_margin": -0.683834187515199,
+      "seed": 261013,
+      "draws": 4096,
+      "probability_status": "empirical_paired_residual_estimate; retrospective calibration measured, forward calibration unproven",
+      "tie_convention": "ties separate; win_half_tie=win+0.5*tie",
+      "scenario_definition": "mutually exclusive precedence: competitive_scoring, trailing_productive_passing, drive_stall_runout, other"
+    },
+    {
+      "game_id": "2026_06_CHI_ATL",
+      "season": 2026,
+      "week": 6,
+      "kickoff_at": "2026-10-18T17:00:00+00:00",
+      "teams": {
+        "ATL": {
+          "opponent": "CHI",
+          "home": true,
+          "central": {
+            "points": 23.627262236279698,
+            "plays": 62.13749684748837,
+            "drives": 10.740883149592696,
+            "targets": 28.612066012529684,
+            "carries": 29.4912486763797
+          },
+          "win_probability": 0.511962890625,
+          "tie_probability": 0.06103515625,
+          "loss_probability": 0.427001953125,
+          "win_half_tie_probability": 0.54248046875,
+          "score_interval_80": [
+            9.0,
+            35.0
+          ],
+          "script_probabilities": {
+            "leading_by_more_than7": 0.239990234375,
+            "competitive_within7": 0.44189453125,
+            "trailing_by_more_than7": 0.318115234375
+          },
+          "capability_branches": {
+            "competitive_scoring": {
+              "probability": 0.4033203125,
+              "sample_count": 1652,
+              "opponent_budget": {
+                "points": 28.473365617433416,
+                "plays": 67.07686300129255,
+                "drives": 11.008103760309726,
+                "targets": 36.90162894029067,
+                "carries": 25.48623761415635
+              },
+              "budget": {
+                "points": 29.41464891041162,
+                "plays": 64.31476533647509,
+                "drives": 11.04290152476495,
+                "targets": 29.206058231409994,
+                "carries": 30.94547842488504
+              }
+            },
+            "trailing_productive_passing": {
+              "probability": 0.087158203125,
+              "sample_count": 357,
+              "opponent_budget": {
+                "points": 35.80952380952381,
+                "plays": 61.94915901716146,
+                "drives": 11.475522708238888,
+                "targets": 27.364170268009058,
+                "carries": 32.14420396479327
+              },
+              "budget": {
+                "points": 20.92156862745098,
+                "plays": 65.28691492196124,
+                "drives": 10.804976730350472,
+                "targets": 38.95592335589454,
+                "carries": 22.659811219012248
+              }
+            },
+            "drive_stall_runout": {
+              "probability": 0.186279296875,
+              "sample_count": 763,
+              "opponent_budget": {
+                "points": 21.698558322411532,
+                "plays": 65.24963760699042,
+                "drives": 10.558188929143451,
+                "targets": 31.042121465540454,
+                "carries": 31.27991125205585
+              },
+              "budget": {
+                "points": 7.4036697247706424,
+                "plays": 58.34466689632479,
+                "drives": 10.9386336209144,
+                "targets": 27.677350214161816,
+                "carries": 25.357825856523387
+              }
+            },
+            "other": {
+              "probability": 0.3232421875,
+              "sample_count": 1324,
+              "opponent_budget": {
+                "points": 14.66691842900302,
+                "plays": 59.42204070860545,
+                "drives": 10.644796664640591,
+                "targets": 29.353041935579572,
+                "carries": 25.35508234963747
+              },
+              "budget": {
+                "points": 24.645770392749245,
+                "plays": 61.288415091218354,
+                "drives": 10.719056261898038,
+                "targets": 26.754571700530033,
+                "carries": 30.967154437636033
+              }
+            }
+          },
+          "history_count": 5,
+          "last_history_completed_at": "2026-10-12T08:20:00+00:00"
+        },
+        "CHI": {
+          "opponent": "ATL",
+          "home": false,
+          "central": {
+            "points": 22.03448874233641,
+            "plays": 63.30426888604673,
+            "drives": 10.673539600848732,
+            "targets": 30.997228649048996,
+            "carries": 28.151616331680806
+          },
+          "win_probability": 0.427001953125,
+          "tie_probability": 0.06103515625,
+          "loss_probability": 0.511962890625,
+          "win_half_tie_probability": 0.45751953125,
+          "score_interval_80": [
+            8.0,
+            36.0
+          ],
+          "script_probabilities": {
+            "leading_by_more_than7": 0.318115234375,
+            "competitive_within7": 0.44189453125,
+            "trailing_by_more_than7": 0.239990234375
+          },
+          "capability_branches": {
+            "competitive_scoring": {
+              "probability": 0.4033203125,
+              "sample_count": 1652,
+              "opponent_budget": {
+                "points": 29.41464891041162,
+                "plays": 64.31476533647509,
+                "drives": 11.04290152476495,
+                "targets": 29.206058231409994,
+                "carries": 30.94547842488504
+              },
+              "budget": {
+                "points": 28.473365617433416,
+                "plays": 67.07686300129255,
+                "drives": 11.008103760309726,
+                "targets": 36.90162894029067,
+                "carries": 25.48623761415635
+              }
+            },
+            "trailing_productive_passing": {
+              "probability": 0.04296875,
+              "sample_count": 176,
+              "opponent_budget": {
+                "points": 34.24431818181818,
+                "plays": 62.86287781800766,
+                "drives": 10.193823894513189,
+                "targets": 28.563023897893537,
+                "carries": 32.539691162763184
+              },
+              "budget": {
+                "points": 16.244318181818183,
+                "plays": 61.28865727786924,
+                "drives": 10.495944643536932,
+                "targets": 35.32317592119618,
+                "carries": 21.983284293432092
+              }
+            },
+            "drive_stall_runout": {
+              "probability": 0.1787109375,
+              "sample_count": 732,
+              "opponent_budget": {
+                "points": 20.277322404371585,
+                "plays": 60.218826237432275,
+                "drives": 10.478327142905423,
+                "targets": 23.96126297002077,
+                "carries": 32.852369945107924
+              },
+              "budget": {
+                "points": 6.841530054644808,
+                "plays": 57.98457355592737,
+                "drives": 9.918804232445916,
+                "targets": 29.755197199315127,
+                "carries": 24.416301222860294
+              }
+            },
+            "other": {
+              "probability": 0.375,
+              "sample_count": 1536,
+              "opponent_budget": {
+                "points": 16.197265625,
+                "plays": 61.084781085963584,
+                "drives": 11.023005313935327,
+                "targets": 31.1727858612483,
+                "carries": 25.171331878046512
+              },
+              "budget": {
+                "points": 26.622395833333332,
+                "plays": 63.375386482819266,
+                "drives": 11.157890356997974,
+                "targets": 28.854096142294605,
+                "carries": 30.709890365164455
+              }
+            }
+          },
+          "history_count": 5,
+          "last_history_completed_at": "2026-10-12T08:20:00+00:00"
+        }
+      },
+      "total_points": 45.66175097861611,
+      "home_margin": 1.5927734939432874,
+      "seed": 261013,
+      "draws": 4096,
+      "probability_status": "empirical_paired_residual_estimate; retrospective calibration measured, forward calibration unproven",
+      "tie_convention": "ties separate; win_half_tie=win+0.5*tie",
+      "scenario_definition": "mutually exclusive precedence: competitive_scoring, trailing_productive_passing, drive_stall_runout, other"
+    },
+    {
+      "game_id": "2026_06_DAL_GB",
+      "season": 2026,
+      "week": 6,
+      "kickoff_at": "2026-10-19T00:20:00+00:00",
+      "teams": {
+        "GB": {
+          "opponent": "DAL",
+          "home": true,
+          "central": {
+            "points": 23.650355537358855,
+            "plays": 62.913910785641505,
+            "drives": 10.547315832027522,
+            "targets": 34.575902849395526,
+            "carries": 24.479098113228762
+          },
+          "win_probability": 0.436279296875,
+          "tie_probability": 0.0400390625,
+          "loss_probability": 0.523681640625,
+          "win_half_tie_probability": 0.456298828125,
+          "score_interval_80": [
+            9.0,
+            35.0
+          ],
+          "script_probabilities": {
+            "leading_by_more_than7": 0.222412109375,
+            "competitive_within7": 0.436279296875,
+            "trailing_by_more_than7": 0.34130859375
+          },
+          "capability_branches": {
+            "competitive_scoring": {
+              "probability": 0.446044921875,
+              "sample_count": 1827,
+              "opponent_budget": {
+                "points": 29.779967159277504,
+                "plays": 66.58306466155601,
+                "drives": 10.808971986541199,
+                "targets": 39.74141648620688,
+                "carries": 22.61203897447264
+              },
+              "budget": {
+                "points": 29.045429666119322,
+                "plays": 64.26223839008895,
+                "drives": 10.773512159741612,
+                "targets": 34.78661166926346,
+                "carries": 25.666387942089894
+              }
+            },
+            "trailing_productive_passing": {
+              "probability": 0.10986328125,
+              "sample_count": 450,
+              "opponent_budget": {
+                "points": 36.60888888888889,
+                "plays": 61.477851885680806,
+                "drives": 11.593524488352761,
+                "targets": 31.046121524390507,
+                "carries": 28.76180122604972
+              },
+              "budget": {
+                "points": 19.697777777777777,
+                "plays": 65.4237850813952,
+                "drives": 11.003197240241793,
+                "targets": 42.29398351824788,
+                "carries": 19.55610492172166
+              }
+            },
+            "drive_stall_runout": {
+              "probability": 0.186279296875,
+              "sample_count": 763,
+              "opponent_budget": {
+                "points": 24.134993446920053,
+                "plays": 64.58309289039079,
+                "drives": 10.434598115173651,
+                "targets": 34.207991800042436,
+                "carries": 28.03340079561649
+              },
+              "budget": {
+                "points": 7.4036697247706424,
+                "plays": 59.12108083447802,
+                "drives": 10.745066303349153,
+                "targets": 33.313337793603544,
+                "carries": 20.641653668479155
+              }
+            },
+            "other": {
+              "probability": 0.2578125,
+              "sample_count": 1056,
+              "opponent_budget": {
+                "points": 14.839015151515152,
+                "plays": 56.88231374982028,
+                "drives": 10.41558123174835,
+                "targets": 31.425642542119082,
+                "carries": 21.31094741031872
+              },
+              "budget": {
+                "points": 25.34375,
+                "plays": 62.917857362039626,
+                "drives": 10.428480264202973,
+                "targets": 33.32433831925903,
+                "carries": 26.053509902377257
+              }
+            }
+          },
+          "history_count": 5,
+          "last_history_completed_at": "2026-10-12T01:00:00+00:00"
+        },
+        "DAL": {
+          "opponent": "GB",
+          "home": false,
+          "central": {
+            "points": 24.364978747438325,
+            "plays": 62.637724169447004,
+            "drives": 10.549948786878941,
+            "targets": 34.05707121443277,
+            "carries": 25.021715261070472
+          },
+          "win_probability": 0.523681640625,
+          "tie_probability": 0.0400390625,
+          "loss_probability": 0.436279296875,
+          "win_half_tie_probability": 0.543701171875,
+          "score_interval_80": [
+            11.0,
+            39.0
+          ],
+          "script_probabilities": {
+            "leading_by_more_than7": 0.34130859375,
+            "competitive_within7": 0.436279296875,
+            "trailing_by_more_than7": 0.222412109375
+          },
+          "capability_branches": {
+            "competitive_scoring": {
+              "probability": 0.446044921875,
+              "sample_count": 1827,
+              "opponent_budget": {
+                "points": 29.045429666119322,
+                "plays": 64.26223839008895,
+                "drives": 10.773512159741612,
+                "targets": 34.78661166926346,
+                "carries": 25.666387942089894
+              },
+              "budget": {
+                "points": 29.779967159277504,
+                "plays": 66.58306466155601,
+                "drives": 10.808971986541199,
+                "targets": 39.74141648620688,
+                "carries": 22.61203897447264
+              }
+            },
+            "trailing_productive_passing": {
+              "probability": 0.04296875,
+              "sample_count": 176,
+              "opponent_budget": {
+                "points": 34.24431818181818,
+                "plays": 63.639291756160695,
+                "drives": 10.000256576948026,
+                "targets": 34.59378911139191,
+                "carries": 27.490377581097484
+              },
+              "budget": {
+                "points": 18.244318181818183,
+                "plays": 60.62211256126955,
+                "drives": 10.37235382956716,
+                "targets": 38.21465612238368,
+                "carries": 19.00729945808594
+              }
+            },
+            "drive_stall_runout": {
+              "probability": 0.1787109375,
+              "sample_count": 732,
+              "opponent_budget": {
+                "points": 20.277322404371585,
+                "plays": 60.995240175585295,
+                "drives": 10.284759825340187,
+                "targets": 29.706053159919417,
+                "carries": 28.059163933492208
+              },
+              "budget": {
+                "points": 9.180327868852459,
+                "plays": 57.31802883932789,
+                "drives": 9.795213418476152,
+                "targets": 32.510727978112826,
+                "carries": 21.543746472316872
+              }
+            },
+            "other": {
+              "probability": 0.332275390625,
+              "sample_count": 1361,
+              "opponent_budget": {
+                "points": 14.99338721528288,
+                "plays": 62.55864377666051,
+                "drives": 10.928662863240724,
+                "targets": 38.06578456150094,
+                "carries": 19.606701665793672
+              },
+              "budget": {
+                "points": 29.851579720793534,
+                "plays": 62.00100486595353,
+                "drives": 11.154965221185886,
+                "targets": 31.39845598557515,
+                "carries": 27.715906467094264
+              }
+            }
+          },
+          "history_count": 5,
+          "last_history_completed_at": "2026-10-12T01:00:00+00:00"
+        }
+      },
+      "total_points": 48.01533428479718,
+      "home_margin": -0.7146232100794698,
+      "seed": 261013,
+      "draws": 4096,
+      "probability_status": "empirical_paired_residual_estimate; retrospective calibration measured, forward calibration unproven",
+      "tie_convention": "ties separate; win_half_tie=win+0.5*tie",
+      "scenario_definition": "mutually exclusive precedence: competitive_scoring, trailing_productive_passing, drive_stall_runout, other"
+    },
+    {
+      "game_id": "2026_06_HOU_JAX",
+      "season": 2026,
+      "week": 6,
+      "kickoff_at": "2026-10-18T13:30:00+00:00",
+      "teams": {
+        "JAX": {
+          "opponent": "HOU",
+          "home": true,
+          "central": {
+            "points": 27.155969818257958,
+            "plays": 62.86289881766333,
+            "drives": 10.876992243360334,
+            "targets": 30.74290576837757,
+            "carries": 28.387812530333484
+          },
+          "win_probability": 0.681884765625,
+          "tie_probability": 0.0,
+          "loss_probability": 0.318115234375,
+          "win_half_tie_probability": 0.681884765625,
+          "score_interval_80": [
+            13.0,
+            39.0
+          ],
+          "script_probabilities": {
+            "leading_by_more_than7": 0.511962890625,
+            "competitive_within7": 0.319580078125,
+            "trailing_by_more_than7": 0.16845703125
+          },
+          "capability_branches": {
+            "competitive_scoring": {
+              "probability": 0.339111328125,
+              "sample_count": 1389,
+              "opponent_budget": {
+                "points": 29.053275737940965,
+                "plays": 66.3020203464393,
+                "drives": 11.943512644899963,
+                "targets": 37.98837421630249,
+                "carries": 23.011797642432736
+              },
+              "budget": {
+                "points": 33.02951763858891,
+                "plays": 65.42723032942914,
+                "drives": 11.731096952011981,
+                "targets": 33.25437432499831,
+                "carries": 28.25409511094414
+              }
+            },
+            "trailing_productive_passing": {
+              "probability": 0.023193359375,
+              "sample_count": 95,
+              "opponent_budget": {
+                "points": 34.0,
+                "plays": 67.193980029542,
+                "drives": 11.159486723463152,
+                "targets": 29.098290291817946,
+                "carries": 35.5748325694211
+              },
+              "budget": {
+                "points": 19.0,
+                "plays": 65.06990789018703,
+                "drives": 10.21097061271143,
+                "targets": 54.44947846941243,
+                "carries": 7.633301017125624
+              }
+            },
+            "drive_stall_runout": {
+              "probability": 0.12451171875,
+              "sample_count": 510,
+              "opponent_budget": {
+                "points": 18.449019607843137,
+                "plays": 60.44249552437943,
+                "drives": 10.861488289224567,
+                "targets": 32.25685212172107,
+                "carries": 24.757688357870617
+              },
+              "budget": {
+                "points": 8.739215686274509,
+                "plays": 63.716275996451344,
+                "drives": 11.405127584197352,
+                "targets": 31.812761709976165,
+                "carries": 25.76084820368469
+              }
+            },
+            "other": {
+              "probability": 0.51318359375,
+              "sample_count": 2102,
+              "opponent_budget": {
+                "points": 14.623691722169362,
+                "plays": 59.79735160439507,
+                "drives": 10.394814627673506,
+                "targets": 32.95960627448158,
+                "carries": 22.254698682290318
+              },
+              "budget": {
+                "points": 26.836346336822075,
+                "plays": 61.196072749841996,
+                "drives": 10.520841988932789,
+                "targets": 28.479630352891327,
+                "carries": 29.448383762293613
+              }
+            }
+          },
+          "history_count": 5,
+          "last_history_completed_at": "2026-10-12T01:00:00+00:00"
+        },
+        "HOU": {
+          "opponent": "JAX",
+          "home": false,
+          "central": {
+            "points": 19.180274741347326,
+            "plays": 61.74410221473153,
+            "drives": 10.821779767249073,
+            "targets": 32.9548700781683,
+            "carries": 24.17704297785242
+          },
+          "win_probability": 0.318115234375,
+          "tie_probability": 0.0,
+          "loss_probability": 0.681884765625,
+          "win_half_tie_probability": 0.318115234375,
+          "score_interval_80": [
+            5.0,
+            33.0
+          ],
+          "script_probabilities": {
+            "leading_by_more_than7": 0.16845703125,
+            "competitive_within7": 0.319580078125,
+            "trailing_by_more_than7": 0.511962890625
+          },
+          "capability_branches": {
+            "competitive_scoring": {
+              "probability": 0.339111328125,
+              "sample_count": 1389,
+              "opponent_budget": {
+                "points": 33.02951763858891,
+                "plays": 65.42723032942914,
+                "drives": 11.731096952011981,
+                "targets": 33.25437432499831,
+                "carries": 28.25409511094414
+              },
+              "budget": {
+                "points": 29.053275737940965,
+                "plays": 66.3020203464393,
+                "drives": 11.943512644899963,
+                "targets": 37.98837421630249,
+                "carries": 23.011797642432736
+              }
+            },
+            "trailing_productive_passing": {
+              "probability": 0.124267578125,
+              "sample_count": 509,
+              "opponent_budget": {
+                "points": 32.87033398821218,
+                "plays": 61.416600228189786,
+                "drives": 10.203708450980574,
+                "targets": 27.70977429137531,
+                "carries": 30.364171610786457
+              },
+              "budget": {
+                "points": 18.98624754420432,
+                "plays": 65.59713718127861,
+                "drives": 9.69195529975818,
+                "targets": 40.22916316354809,
+                "carries": 19.851010757473478
+              }
+            },
+            "drive_stall_runout": {
+              "probability": 0.221435546875,
+              "sample_count": 907,
+              "opponent_budget": {
+                "points": 25.06284454244763,
+                "plays": 62.326853919419584,
+                "drives": 10.960810443331166,
+                "targets": 27.299550809599054,
+                "carries": 31.84657984292014
+              },
+              "budget": {
+                "points": 5.39470782800441,
+                "plays": 56.27673668657919,
+                "drives": 10.497292187886465,
+                "targets": 30.94314064855878,
+                "carries": 20.538989258937594
+              }
+            },
+            "other": {
+              "probability": 0.315185546875,
+              "sample_count": 1291,
+              "opponent_budget": {
+                "points": 17.977536793183578,
+                "plays": 61.59533765055328,
+                "drives": 10.663303224813719,
+                "targets": 32.83998778454181,
+                "carries": 24.340424152926747
+              },
+              "budget": {
+                "points": 22.324554608830365,
+                "plays": 60.783261729419465,
+                "drives": 10.840558754154417,
+                "targets": 30.9483748491647,
+                "carries": 26.37674597472714
+              }
+            }
+          },
+          "history_count": 5,
+          "last_history_completed_at": "2026-10-12T01:00:00+00:00"
+        }
+      },
+      "total_points": 46.336244559605284,
+      "home_margin": 7.9756950769106325,
+      "seed": 261013,
+      "draws": 4096,
+      "probability_status": "empirical_paired_residual_estimate; retrospective calibration measured, forward calibration unproven",
+      "tie_convention": "ties separate; win_half_tie=win+0.5*tie",
+      "scenario_definition": "mutually exclusive precedence: competitive_scoring, trailing_productive_passing, drive_stall_runout, other"
+    },
+    {
+      "game_id": "2026_06_LAC_KC",
+      "season": 2026,
+      "week": 6,
+      "kickoff_at": "2026-10-18T20:25:00+00:00",
+      "teams": {
+        "KC": {
+          "opponent": "LAC",
+          "home": true,
+          "central": {
+            "points": 25.153414257926055,
+            "plays": 63.29613852467905,
+            "drives": 10.976577316824093,
+            "targets": 30.408849715151096,
+            "carries": 29.27938253571217
+          },
+          "win_probability": 0.681884765625,
+          "tie_probability": 0.018310546875,
+          "loss_probability": 0.2998046875,
+          "win_half_tie_probability": 0.6910400390625,
+          "score_interval_80": [
+            11.0,
+            37.0
+          ],
+          "script_probabilities": {
+            "leading_by_more_than7": 0.511962890625,
+            "competitive_within7": 0.319580078125,
+            "trailing_by_more_than7": 0.16845703125
+          },
+          "capability_branches": {
+            "competitive_scoring": {
+              "probability": 0.299072265625,
+              "sample_count": 1225,
+              "opponent_budget": {
+                "points": 27.772244897959183,
+                "plays": 66.72851918154365,
+                "drives": 12.027336265889057,
+                "targets": 35.286068047415384,
+                "carries": 25.860832184512038
+              },
+              "budget": {
+                "points": 32.64,
+                "plays": 66.031053221527,
+                "drives": 11.670153215990393,
+                "targets": 32.73783137929845,
+                "carries": 29.7717378450268
+              }
+            },
+            "trailing_productive_passing": {
+              "probability": 0.023193359375,
+              "sample_count": 95,
+              "opponent_budget": {
+                "points": 32.0,
+                "plays": 66.21907209235725,
+                "drives": 11.315582534979828,
+                "targets": 25.649656379770928,
+                "carries": 37.88649116493301
+              },
+              "budget": {
+                "points": 17.0,
+                "plays": 65.5031475972027,
+                "drives": 10.31055568617515,
+                "targets": 54.24704057140634,
+                "carries": 8.404315933040003
+              }
+            },
+            "drive_stall_runout": {
+              "probability": 0.1435546875,
+              "sample_count": 588,
+              "opponent_budget": {
+                "points": 17.19047619047619,
+                "plays": 60.144793396018024,
+                "drives": 10.916775572811588,
+                "targets": 28.579802026627274,
+                "carries": 28.226736599983763
+              },
+              "budget": {
+                "points": 7.437074829931973,
+                "plays": 62.17365669953374,
+                "drives": 11.351037056054919,
+                "targets": 30.586796151704895,
+                "carries": 25.878872867592822
+              }
+            },
+            "other": {
+              "probability": 0.5341796875,
+              "sample_count": 2188,
+              "opponent_budget": {
+                "points": 12.673217550274224,
+                "plays": 58.320398025662925,
+                "drives": 10.71790988025185,
+                "targets": 29.75887995667626,
+                "carries": 23.81428746707404
+              },
+              "budget": {
+                "points": 24.856489945155392,
+                "plays": 62.292097960698314,
+                "drives": 10.81079113135382,
+                "targets": 28.71744720108587,
+                "carries": 30.241058867598777
+              }
+            }
+          },
+          "history_count": 5,
+          "last_history_completed_at": "2026-10-12T04:05:00+00:00"
+        },
+        "LAC": {
+          "opponent": "KC",
+          "home": false,
+          "central": {
+            "points": 16.911006771914835,
+            "plays": 60.76919427754686,
+            "drives": 10.97787557876574,
+            "targets": 29.65715763253262,
+            "carries": 26.390377858517454
+          },
+          "win_probability": 0.2998046875,
+          "tie_probability": 0.018310546875,
+          "loss_probability": 0.681884765625,
+          "win_half_tie_probability": 0.3089599609375,
+          "score_interval_80": [
+            3.0,
+            31.0
+          ],
+          "script_probabilities": {
+            "leading_by_more_than7": 0.16845703125,
+            "competitive_within7": 0.319580078125,
+            "trailing_by_more_than7": 0.511962890625
+          },
+          "capability_branches": {
+            "competitive_scoring": {
+              "probability": 0.299072265625,
+              "sample_count": 1225,
+              "opponent_budget": {
+                "points": 32.64,
+                "plays": 66.031053221527,
+                "drives": 11.670153215990393,
+                "targets": 32.73783137929845,
+                "carries": 29.7717378450268
+              },
+              "budget": {
+                "points": 27.772244897959183,
+                "plays": 66.72851918154365,
+                "drives": 12.027336265889057,
+                "targets": 35.286068047415384,
+                "carries": 25.860832184512038
+              }
+            },
+            "trailing_productive_passing": {
+              "probability": 0.124267578125,
+              "sample_count": 509,
+              "opponent_budget": {
+                "points": 30.87033398821218,
+                "plays": 61.849839935205246,
+                "drives": 10.303293524444362,
+                "targets": 27.371234780146096,
+                "carries": 31.25839737501341
+              },
+              "budget": {
+                "points": 16.479371316306484,
+                "plays": 64.62222924409382,
+                "drives": 9.848051111274863,
+                "targets": 36.67438967624024,
+                "carries": 22.316876219157553
+              }
+            },
+            "drive_stall_runout": {
+              "probability": 0.304443359375,
+              "sample_count": 1247,
+              "opponent_budget": {
+                "points": 22.781074578989575,
+                "plays": 63.159836071205234,
+                "drives": 10.935193301689958,
+                "targets": 28.164669265439088,
+                "carries": 31.369165720087405
+              },
+              "budget": {
+                "points": 5.781074578989575,
+                "plays": 54.98166138793006,
+                "drives": 10.646282746438915,
+                "targets": 26.918881294991472,
+                "carries": 23.071617899813692
+              }
+            },
+            "other": {
+              "probability": 0.272216796875,
+              "sample_count": 1115,
+              "opponent_budget": {
+                "points": 14.576681614349775,
+                "plays": 61.73465057511762,
+                "drives": 11.145615357308877,
+                "targets": 33.11119138149329,
+                "carries": 24.354036004716406
+              },
+              "budget": {
+                "points": 22.672645739910315,
+                "plays": 60.81267695945421,
+                "drives": 11.35090456966747,
+                "targets": 28.80624302500555,
+                "carries": 28.85435089040184
+              }
+            }
+          },
+          "history_count": 5,
+          "last_history_completed_at": "2026-10-12T04:05:00+00:00"
+        }
+      },
+      "total_points": 42.06442102984089,
+      "home_margin": 8.24240748601122,
+      "seed": 261013,
+      "draws": 4096,
+      "probability_status": "empirical_paired_residual_estimate; retrospective calibration measured, forward calibration unproven",
+      "tie_convention": "ties separate; win_half_tie=win+0.5*tie",
+      "scenario_definition": "mutually exclusive precedence: competitive_scoring, trailing_productive_passing, drive_stall_runout, other"
+    },
+    {
+      "game_id": "2026_06_NO_NYG",
+      "season": 2026,
+      "week": 6,
+      "kickoff_at": "2026-10-18T17:00:00+00:00",
+      "teams": {
+        "NYG": {
+          "opponent": "NO",
+          "home": true,
+          "central": {
+            "points": 25.41473754470713,
+            "plays": 63.18540202976746,
+            "drives": 10.692374897968701,
+            "targets": 30.67516449547116,
+            "carries": 28.665823805188932
+          },
+          "win_probability": 0.640380859375,
+          "tie_probability": 0.0,
+          "loss_probability": 0.359619140625,
+          "win_half_tie_probability": 0.640380859375,
+          "score_interval_80": [
+            11.0,
+            37.0
+          ],
+          "script_probabilities": {
+            "leading_by_more_than7": 0.3251953125,
+            "competitive_within7": 0.421630859375,
+            "trailing_by_more_than7": 0.253173828125
+          },
+          "capability_branches": {
+            "competitive_scoring": {
+              "probability": 0.361572265625,
+              "sample_count": 1481,
+              "opponent_budget": {
+                "points": 27.75962187711006,
+                "plays": 66.17329457087655,
+                "drives": 10.918930780614666,
+                "targets": 38.341800865803165,
+                "carries": 23.036891627762433
+              },
+              "budget": {
+                "points": 31.299797434166106,
+                "plays": 65.20268774417768,
+                "drives": 10.972326504905052,
+                "targets": 31.65826666690627,
+                "carries": 29.695486638947887
+              }
+            },
+            "trailing_productive_passing": {
+              "probability": 0.08544921875,
+              "sample_count": 350,
+              "opponent_budget": {
+                "points": 34.51714285714286,
+                "plays": 62.9552367012301,
+                "drives": 10.793553302863272,
+                "targets": 28.481762179837517,
+                "carries": 31.145752332776393
+              },
+              "budget": {
+                "points": 21.314285714285713,
+                "plays": 65.24846652995375,
+                "drives": 10.065009506189059,
+                "targets": 41.275827801120855,
+                "carries": 20.302959152103842
+              }
+            },
+            "drive_stall_runout": {
+              "probability": 0.1435546875,
+              "sample_count": 588,
+              "opponent_budget": {
+                "points": 21.049319727891156,
+                "plays": 61.845594721797184,
+                "drives": 10.591576716270882,
+                "targets": 31.738352628747425,
+                "carries": 27.425680877076193
+              },
+              "budget": {
+                "points": 7.591836734693878,
+                "plays": 62.06292020462208,
+                "drives": 11.06683463719945,
+                "targets": 30.84630454078322,
+                "carries": 25.280159114490957
+              }
+            },
+            "other": {
+              "probability": 0.409423828125,
+              "sample_count": 1677,
+              "opponent_budget": {
+                "points": 14.696481812760883,
+                "plays": 60.565120854054136,
+                "drives": 10.834690729690616,
+                "targets": 33.0978506584906,
+                "carries": 23.297127052448598
+              },
+              "budget": {
+                "points": 25.930232558139537,
+                "plays": 61.78613124469341,
+                "drives": 10.828682474002372,
+                "targets": 28.44757730426797,
+                "carries": 29.930789276120535
+              }
+            }
+          },
+          "history_count": 5,
+          "last_history_completed_at": "2026-10-12T01:00:00+00:00"
+        },
+        "NO": {
+          "opponent": "NYG",
+          "home": false,
+          "central": {
+            "points": 20.64132271508444,
+            "plays": 62.46999560332565,
+            "drives": 10.652676722225037,
+            "targets": 32.86077527053327,
+            "carries": 25.516875573558693
+          },
+          "win_probability": 0.359619140625,
+          "tie_probability": 0.0,
+          "loss_probability": 0.640380859375,
+          "win_half_tie_probability": 0.359619140625,
+          "score_interval_80": [
+            7.0,
+            35.0
+          ],
+          "script_probabilities": {
+            "leading_by_more_than7": 0.253173828125,
+            "competitive_within7": 0.421630859375,
+            "trailing_by_more_than7": 0.3251953125
+          },
+          "capability_branches": {
+            "competitive_scoring": {
+              "probability": 0.361572265625,
+              "sample_count": 1481,
+              "opponent_budget": {
+                "points": 31.299797434166106,
+                "plays": 65.20268774417768,
+                "drives": 10.972326504905052,
+                "targets": 31.65826666690627,
+                "carries": 29.695486638947887
+              },
+              "budget": {
+                "points": 27.75962187711006,
+                "plays": 66.17329457087655,
+                "drives": 10.918930780614666,
+                "targets": 38.341800865803165,
+                "carries": 23.036891627762433
+              }
+            },
+            "trailing_productive_passing": {
+              "probability": 0.040283203125,
+              "sample_count": 165,
+              "opponent_budget": {
+                "points": 39.0,
+                "plays": 59.67822940770756,
+                "drives": 11.124727353453835,
+                "targets": 28.69520001779246,
+                "carries": 27.459996276175886
+              },
+              "budget": {
+                "points": 21.12727272727273,
+                "plays": 70.48071356172814,
+                "drives": 11.021756358190432,
+                "targets": 44.04720658875139,
+                "carries": 22.484177141111296
+              }
+            },
+            "drive_stall_runout": {
+              "probability": 0.202392578125,
+              "sample_count": 829,
+              "opponent_budget": {
+                "points": 23.55729794933655,
+                "plays": 62.36612128409432,
+                "drives": 10.542154056043616,
+                "targets": 26.35112463064107,
+                "carries": 33.08466968133875
+              },
+              "budget": {
+                "points": 6.504221954161641,
+                "plays": 56.80175192064631,
+                "drives": 10.059218918887188,
+                "targets": 31.750997037774564,
+                "carries": 21.005925511116207
+              }
+            },
+            "other": {
+              "probability": 0.395751953125,
+              "sample_count": 1621,
+              "opponent_budget": {
+                "points": 18.164713140037016,
+                "plays": 62.552054328419246,
+                "drives": 10.866580429957766,
+                "targets": 33.13446244163666,
+                "carries": 24.803585642944146
+              },
+              "budget": {
+                "points": 24.815545959284393,
+                "plays": 62.460999465882324,
+                "drives": 11.115166462678367,
+                "targets": 31.18229366531582,
+                "carries": 27.743858273997496
+              }
+            }
+          },
+          "history_count": 5,
+          "last_history_completed_at": "2026-10-12T01:00:00+00:00"
+        }
+      },
+      "total_points": 46.056060259791565,
+      "home_margin": 4.773414829622691,
+      "seed": 261013,
+      "draws": 4096,
+      "probability_status": "empirical_paired_residual_estimate; retrospective calibration measured, forward calibration unproven",
+      "tie_convention": "ties separate; win_half_tie=win+0.5*tie",
+      "scenario_definition": "mutually exclusive precedence: competitive_scoring, trailing_productive_passing, drive_stall_runout, other"
+    },
+    {
+      "game_id": "2026_06_NYJ_NE",
+      "season": 2026,
+      "week": 6,
+      "kickoff_at": "2026-10-18T17:00:00+00:00",
+      "teams": {
+        "NE": {
+          "opponent": "NYJ",
+          "home": true,
+          "central": {
+            "points": 24.078609770011166,
+            "plays": 62.76235546755708,
+            "drives": 10.916708809870412,
+            "targets": 30.569347039082476,
+            "carries": 28.221679267250636
+          },
+          "win_probability": 0.5947265625,
+          "tie_probability": 0.02197265625,
+          "loss_probability": 0.38330078125,
+          "win_half_tie_probability": 0.605712890625,
+          "score_interval_80": [
+            9.0,
+            36.0
+          ],
+          "script_probabilities": {
+            "leading_by_more_than7": 0.298828125,
+            "competitive_within7": 0.423095703125,
+            "trailing_by_more_than7": 0.278076171875
+          },
+          "capability_branches": {
+            "competitive_scoring": {
+              "probability": 0.3642578125,
+              "sample_count": 1492,
+              "opponent_budget": {
+                "points": 27.4798927613941,
+                "plays": 65.99249143292236,
+                "drives": 11.174443455893112,
+                "targets": 36.879606030135136,
+                "carries": 23.901430652493385
+              },
+              "budget": {
+                "points": 30.80697050938338,
+                "plays": 64.62422736186336,
+                "drives": 11.146705544442405,
+                "targets": 31.04429171596003,
+                "carries": 29.773376088777685
+              }
+            },
+            "trailing_productive_passing": {
+              "probability": 0.0654296875,
+              "sample_count": 268,
+              "opponent_budget": {
+                "points": 36.735074626865675,
+                "plays": 61.354797250939015,
+                "drives": 11.533510565914195,
+                "targets": 25.64589870295773,
+                "carries": 32.51539018570381
+              },
+              "budget": {
+                "points": 21.89179104477612,
+                "plays": 67.02122180362538,
+                "drives": 10.890186979167565,
+                "targets": 43.54517274565279,
+                "carries": 20.146001944186388
+              }
+            },
+            "drive_stall_runout": {
+              "probability": 0.166015625,
+              "sample_count": 680,
+              "opponent_budget": {
+                "points": 21.49264705882353,
+                "plays": 62.74438387116768,
+                "drives": 10.94412964370409,
+                "targets": 30.550586912500837,
+                "carries": 29.29028711254711
+              },
+              "budget": {
+                "points": 7.076470588235294,
+                "plays": 60.203442954926835,
+                "drives": 11.177081010657208,
+                "targets": 30.414173991505915,
+                "carries": 24.13745258526297
+              }
+            },
+            "other": {
+              "probability": 0.404296875,
+              "sample_count": 1656,
+              "opponent_budget": {
+                "points": 13.507850241545894,
+                "plays": 57.978954225974185,
+                "drives": 10.988570889709923,
+                "targets": 29.44234387810171,
+                "carries": 23.843266505955864
+              },
+              "budget": {
+                "points": 23.660024154589372,
+                "plays": 61.87095918891552,
+                "drives": 10.995634051741154,
+                "targets": 29.027557771967405,
+                "carries": 29.04319797732766
+              }
+            }
+          },
+          "history_count": 5,
+          "last_history_completed_at": "2026-10-12T01:00:00+00:00"
+        },
+        "NYJ": {
+          "opponent": "NE",
+          "home": false,
+          "central": {
+            "points": 20.169207283805644,
+            "plays": 61.39902700913974,
+            "drives": 10.91049615923314,
+            "targets": 30.579143729703222,
+            "carries": 26.355203804586445
+          },
+          "win_probability": 0.38330078125,
+          "tie_probability": 0.02197265625,
+          "loss_probability": 0.5947265625,
+          "win_half_tie_probability": 0.394287109375,
+          "score_interval_80": [
+            6.0,
+            34.0
+          ],
+          "script_probabilities": {
+            "leading_by_more_than7": 0.278076171875,
+            "competitive_within7": 0.423095703125,
+            "trailing_by_more_than7": 0.298828125
+          },
+          "capability_branches": {
+            "competitive_scoring": {
+              "probability": 0.3642578125,
+              "sample_count": 1492,
+              "opponent_budget": {
+                "points": 30.80697050938338,
+                "plays": 64.62422736186336,
+                "drives": 11.146705544442405,
+                "targets": 31.04429171596003,
+                "carries": 29.773376088777685
+              },
+              "budget": {
+                "points": 27.4798927613941,
+                "plays": 65.99249143292236,
+                "drives": 11.174443455893112,
+                "targets": 36.879606030135136,
+                "carries": 23.901430652493385
+              }
+            },
+            "trailing_productive_passing": {
+              "probability": 0.019287109375,
+              "sample_count": 79,
+              "opponent_budget": {
+                "points": 38.0,
+                "plays": 55.197594738615386,
+                "drives": 8.841514533500789,
+                "targets": 31.694175446975045,
+                "carries": 20.945993795083957
+              },
+              "budget": {
+                "points": 17.0,
+                "plays": 67.09788002502236,
+                "drives": 9.74914827074329,
+                "targets": 37.80864646137525,
+                "carries": 27.790866469396914
+              }
+            },
+            "drive_stall_runout": {
+              "probability": 0.221435546875,
+              "sample_count": 907,
+              "opponent_budget": {
+                "points": 22.06284454244763,
+                "plays": 62.22631056931354,
+                "drives": 11.000527009841221,
+                "targets": 27.133498794804417,
+                "carries": 31.676863814046207
+              },
+              "budget": {
+                "points": 6.39470782800441,
+                "plays": 55.931661480987465,
+                "drives": 10.586008579870532,
+                "targets": 28.756191155734676,
+                "carries": 22.521138462369738
+              }
+            },
+            "other": {
+              "probability": 0.39501953125,
+              "sample_count": 1618,
+              "opponent_budget": {
+                "points": 16.592707045735477,
+                "plays": 62.14985376937537,
+                "drives": 11.15685880177664,
+                "targets": 32.946512369121216,
+                "carries": 24.42675101379712
+              },
+              "budget": {
+                "points": 24.527812113720643,
+                "plays": 61.24330371361371,
+                "drives": 11.34633491187402,
+                "targets": 29.25542210527172,
+                "carries": 28.117316504148135
+              }
+            }
+          },
+          "history_count": 5,
+          "last_history_completed_at": "2026-10-12T01:00:00+00:00"
+        }
+      },
+      "total_points": 44.24781705381681,
+      "home_margin": 3.909402486205522,
+      "seed": 261013,
+      "draws": 4096,
+      "probability_status": "empirical_paired_residual_estimate; retrospective calibration measured, forward calibration unproven",
+      "tie_convention": "ties separate; win_half_tie=win+0.5*tie",
+      "scenario_definition": "mutually exclusive precedence: competitive_scoring, trailing_productive_passing, drive_stall_runout, other"
+    },
+    {
+      "game_id": "2026_06_PIT_TB",
+      "season": 2026,
+      "week": 6,
+      "kickoff_at": "2026-10-18T17:00:00+00:00",
+      "teams": {
+        "TB": {
+          "opponent": "PIT",
+          "home": true,
+          "central": {
+            "points": 22.68535400386746,
+            "plays": 62.3683017991082,
+            "drives": 10.994833498238943,
+            "targets": 30.770858012714083,
+            "carries": 27.272858868961908
+          },
+          "win_probability": 0.511962890625,
+          "tie_probability": 0.06103515625,
+          "loss_probability": 0.427001953125,
+          "win_half_tie_probability": 0.54248046875,
+          "score_interval_80": [
+            8.0,
+            34.0
+          ],
+          "script_probabilities": {
+            "leading_by_more_than7": 0.239990234375,
+            "competitive_within7": 0.460205078125,
+            "trailing_by_more_than7": 0.2998046875
+          },
+          "capability_branches": {
+            "competitive_scoring": {
+              "probability": 0.3642578125,
+              "sample_count": 1492,
+              "opponent_budget": {
+                "points": 28.023458445040216,
+                "plays": 66.83946836968238,
+                "drives": 11.206149423671684,
+                "targets": 39.29661937933693,
+                "carries": 22.67997792061686
+              },
+              "budget": {
+                "points": 29.42426273458445,
+                "plays": 64.23017369341424,
+                "drives": 11.224830232810975,
+                "targets": 31.26125844501169,
+                "carries": 28.796717109632983
+              }
+            },
+            "trailing_productive_passing": {
+              "probability": 0.063720703125,
+              "sample_count": 261,
+              "opponent_budget": {
+                "points": 38.44444444444444,
+                "plays": 65.29574267960598,
+                "drives": 12.64488325640952,
+                "targets": 30.612694952217446,
+                "carries": 31.723194247899816
+              },
+              "budget": {
+                "points": 22.467432950191572,
+                "plays": 63.88020412713459,
+                "drives": 11.693643942087158,
+                "targets": 42.04014015004708,
+                "carries": 16.92153213974208
+              }
+            },
+            "drive_stall_runout": {
+              "probability": 0.209716796875,
+              "sample_count": 859,
+              "opponent_budget": {
+                "points": 20.77648428405122,
+                "plays": 62.48414166579591,
+                "drives": 10.655701116597676,
+                "targets": 32.0843379317647,
+                "carries": 27.671593200613238
+              },
+              "budget": {
+                "points": 7.140861466821886,
+                "plays": 59.84886814629616,
+                "drives": 10.984793326067246,
+                "targets": 30.76346246061022,
+                "carries": 23.96437892659852
+              }
+            },
+            "other": {
+              "probability": 0.3623046875,
+              "sample_count": 1484,
+              "opponent_budget": {
+                "points": 14.022237196765499,
+                "plays": 58.36379805046173,
+                "drives": 11.023627313853433,
+                "targets": 31.349666797099815,
+                "carries": 22.523025323726984
+              },
+              "budget": {
+                "points": 23.14487870619946,
+                "plays": 62.16260802026626,
+                "drives": 11.080332439273814,
+                "targets": 29.329287530852895,
+                "carries": 28.6226954665219
+              }
+            }
+          },
+          "history_count": 5,
+          "last_history_completed_at": "2026-10-12T01:00:00+00:00"
+        },
+        "PIT": {
+          "opponent": "TB",
+          "home": false,
+          "central": {
+            "points": 20.77158216192882,
+            "plays": 62.246003945899574,
+            "drives": 10.942202127011724,
+            "targets": 32.81188443733266,
+            "carries": 25.293412122970143
+          },
+          "win_probability": 0.427001953125,
+          "tie_probability": 0.06103515625,
+          "loss_probability": 0.511962890625,
+          "win_half_tie_probability": 0.45751953125,
+          "score_interval_80": [
+            7.0,
+            35.0
+          ],
+          "script_probabilities": {
+            "leading_by_more_than7": 0.2998046875,
+            "competitive_within7": 0.460205078125,
+            "trailing_by_more_than7": 0.239990234375
+          },
+          "capability_branches": {
+            "competitive_scoring": {
+              "probability": 0.3642578125,
+              "sample_count": 1492,
+              "opponent_budget": {
+                "points": 29.42426273458445,
+                "plays": 64.23017369341424,
+                "drives": 11.224830232810975,
+                "targets": 31.26125844501169,
+                "carries": 28.796717109632983
+              },
+              "budget": {
+                "points": 28.023458445040216,
+                "plays": 66.83946836968238,
+                "drives": 11.206149423671684,
+                "targets": 39.29661937933693,
+                "carries": 22.67997792061686
+              }
+            },
+            "trailing_productive_passing": {
+              "probability": 0.019287109375,
+              "sample_count": 79,
+              "opponent_budget": {
+                "points": 36.0,
+                "plays": 54.803541070166425,
+                "drives": 8.9196392218693,
+                "targets": 31.813631464290626,
+                "carries": 20.11842301828908
+              },
+              "budget": {
+                "points": 18.0,
+                "plays": 67.94485696178245,
+                "drives": 9.780854238521888,
+                "targets": 40.262613713455714,
+                "carries": 26.585822468425015
+              }
+            },
+            "drive_stall_runout": {
+              "probability": 0.202392578125,
+              "sample_count": 829,
+              "opponent_budget": {
+                "points": 20.64897466827503,
+                "plays": 61.549021053434416,
+                "drives": 10.844612656313863,
+                "targets": 26.49129460567945,
+                "carries": 31.64313841976185
+              },
+              "budget": {
+                "points": 6.504221954161641,
+                "plays": 56.577760263220355,
+                "drives": 10.348744323673946,
+                "targets": 31.688024784662822,
+                "carries": 20.80359063774708
+              }
+            },
+            "other": {
+              "probability": 0.4140625,
+              "sample_count": 1696,
+              "opponent_budget": {
+                "points": 15.556014150943396,
+                "plays": 61.89776127304496,
+                "drives": 11.342191323848425,
+                "targets": 33.28325083421243,
+                "carries": 23.382361020231002
+              },
+              "budget": {
+                "points": 24.691037735849058,
+                "plays": 61.94418389091429,
+                "drives": 11.474544925512898,
+                "targets": 31.027798445142707,
+                "carries": 27.19773892968277
+              }
+            }
+          },
+          "history_count": 5,
+          "last_history_completed_at": "2026-10-12T01:00:00+00:00"
+        }
+      },
+      "total_points": 43.45693616579628,
+      "home_margin": 1.9137718419386403,
+      "seed": 261013,
+      "draws": 4096,
+      "probability_status": "empirical_paired_residual_estimate; retrospective calibration measured, forward calibration unproven",
+      "tie_convention": "ties separate; win_half_tie=win+0.5*tie",
+      "scenario_definition": "mutually exclusive precedence: competitive_scoring, trailing_productive_passing, drive_stall_runout, other"
+    },
+    {
+      "game_id": "2026_06_SEA_DEN",
+      "season": 2026,
+      "week": 6,
+      "kickoff_at": "2026-10-16T00:15:00+00:00",
+      "teams": {
+        "DEN": {
+          "opponent": "SEA",
+          "home": true,
+          "central": {
+            "points": 21.223532991847073,
+            "plays": 61.23020757649067,
+            "drives": 10.842228145260096,
+            "targets": 31.61138909834834,
+            "carries": 25.54690632985561
+          },
+          "win_probability": 0.4345703125,
+          "tie_probability": 0.041748046875,
+          "loss_probability": 0.523681640625,
+          "win_half_tie_probability": 0.4554443359375,
+          "score_interval_80": [
+            7.0,
+            33.0
+          ],
+          "script_probabilities": {
+            "leading_by_more_than7": 0.222412109375,
+            "competitive_within7": 0.441162109375,
+            "trailing_by_more_than7": 0.33642578125
+          },
+          "capability_branches": {
+            "competitive_scoring": {
+              "probability": 0.3642578125,
+              "sample_count": 1492,
+              "opponent_budget": {
+                "points": 29.427613941018766,
+                "plays": 66.78021683426375,
+                "drives": 11.164586850321612,
+                "targets": 36.69805519861588,
+                "carries": 25.470452740206152
+              },
+              "budget": {
+                "points": 28.06099195710456,
+                "plays": 63.092079470797216,
+                "drives": 11.072224879832085,
+                "targets": 32.15513862685244,
+                "carries": 27.019542920439488
+              }
+            },
+            "trailing_productive_passing": {
+              "probability": 0.058837890625,
+              "sample_count": 241,
+              "opponent_budget": {
+                "points": 35.6597510373444,
+                "plays": 61.27778702720776,
+                "drives": 13.247009391486545,
+                "targets": 28.298728627511757,
+                "carries": 28.73170149642215
+              },
+              "budget": {
+                "points": 21.70954356846473,
+                "plays": 62.946226403909606,
+                "drives": 13.134316467399463,
+                "targets": 35.912143526839074,
+                "carries": 20.76319272843577
+              }
+            },
+            "drive_stall_runout": {
+              "probability": 0.294189453125,
+              "sample_count": 1205,
+              "opponent_budget": {
+                "points": 23.048132780082987,
+                "plays": 63.17319572660786,
+                "drives": 10.858713070310118,
+                "targets": 29.468378649049644,
+                "carries": 30.969146230451305
+              },
+              "budget": {
+                "points": 7.732780082987552,
+                "plays": 58.626177735369005,
+                "drives": 10.768466191701801,
+                "targets": 32.63413777242386,
+                "carries": 21.30963952977983
+              }
+            },
+            "other": {
+              "probability": 0.28271484375,
+              "sample_count": 1158,
+              "opponent_budget": {
+                "points": 13.464594127806564,
+                "plays": 57.23834569501971,
+                "drives": 10.731534774407075,
+                "targets": 29.040468726650417,
+                "carries": 23.992531036517377
+              },
+              "budget": {
+                "points": 24.3860103626943,
+                "plays": 61.79105287285651,
+                "drives": 10.70158506654391,
+                "targets": 30.272999545110785,
+                "carries": 27.967452678229044
+              }
+            }
+          },
+          "history_count": 5,
+          "last_history_completed_at": "2026-10-12T04:25:00+00:00"
+        },
+        "SEA": {
+          "opponent": "DEN",
+          "home": false,
+          "central": {
+            "points": 22.10879010747967,
+            "plays": 62.186752410481226,
+            "drives": 10.900639553661676,
+            "targets": 30.393212254868537,
+            "carries": 27.886739698883545
+          },
+          "win_probability": 0.523681640625,
+          "tie_probability": 0.041748046875,
+          "loss_probability": 0.4345703125,
+          "win_half_tie_probability": 0.5445556640625,
+          "score_interval_80": [
+            8.0,
+            36.0
+          ],
+          "script_probabilities": {
+            "leading_by_more_than7": 0.33642578125,
+            "competitive_within7": 0.441162109375,
+            "trailing_by_more_than7": 0.222412109375
+          },
+          "capability_branches": {
+            "competitive_scoring": {
+              "probability": 0.3642578125,
+              "sample_count": 1492,
+              "opponent_budget": {
+                "points": 28.06099195710456,
+                "plays": 63.092079470797216,
+                "drives": 11.072224879832085,
+                "targets": 32.15513862685244,
+                "carries": 27.019542920439488
+              },
+              "budget": {
+                "points": 29.427613941018766,
+                "plays": 66.78021683426375,
+                "drives": 11.164586850321612,
+                "targets": 36.69805519861588,
+                "carries": 25.470452740206152
+              }
+            },
+            "trailing_productive_passing": {
+              "probability": 0.04296875,
+              "sample_count": 176,
+              "opponent_budget": {
+                "points": 32.24431818181818,
+                "plays": 61.95558854700972,
+                "drives": 10.295168890180607,
+                "targets": 31.600153866347206,
+                "carries": 28.52465504307438
+              },
+              "budget": {
+                "points": 16.244318181818183,
+                "plays": 60.171140802303945,
+                "drives": 10.723044596349865,
+                "targets": 34.62141620251361,
+                "carries": 21.816070283854973
+              }
+            },
+            "drive_stall_runout": {
+              "probability": 0.1787109375,
+              "sample_count": 732,
+              "opponent_budget": {
+                "points": 18.275956284153004,
+                "plays": 59.31153696643443,
+                "drives": 10.579672138572842,
+                "targets": 26.90968511085658,
+                "carries": 28.954033275534492
+              },
+              "budget": {
+                "points": 6.841530054644808,
+                "plays": 56.86705708036201,
+                "drives": 10.1459041852588,
+                "targets": 29.12799712358429,
+                "carries": 24.15957669016752
+              }
+            },
+            "other": {
+              "probability": 0.4140625,
+              "sample_count": 1696,
+              "opponent_budget": {
+                "points": 13.995283018867925,
+                "plays": 60.75966705042866,
+                "drives": 11.189585970869555,
+                "targets": 34.06578979796777,
+                "carries": 21.729754502980356
+              },
+              "budget": {
+                "points": 25.99764150943396,
+                "plays": 61.88493235549619,
+                "drives": 11.432982352163004,
+                "targets": 28.62216362658637,
+                "carries": 29.776576474916055
+              }
+            }
+          },
+          "history_count": 5,
+          "last_history_completed_at": "2026-10-12T04:25:00+00:00"
+        }
+      },
+      "total_points": 43.33232309932674,
+      "home_margin": -0.8852571156325979,
+      "seed": 261013,
+      "draws": 4096,
+      "probability_status": "empirical_paired_residual_estimate; retrospective calibration measured, forward calibration unproven",
+      "tie_convention": "ties separate; win_half_tie=win+0.5*tie",
+      "scenario_definition": "mutually exclusive precedence: competitive_scoring, trailing_productive_passing, drive_stall_runout, other"
+    },
+    {
+      "game_id": "2026_06_TEN_IND",
+      "season": 2026,
+      "week": 6,
+      "kickoff_at": "2026-10-18T17:00:00+00:00",
+      "teams": {
+        "IND": {
+          "opponent": "TEN",
+          "home": true,
+          "central": {
+            "points": 23.9104017195038,
+            "plays": 63.27364226111195,
+            "drives": 10.69792387120176,
+            "targets": 31.163089617904703,
+            "carries": 28.26788881024198
+          },
+          "win_probability": 0.5947265625,
+          "tie_probability": 0.02197265625,
+          "loss_probability": 0.38330078125,
+          "win_half_tie_probability": 0.605712890625,
+          "score_interval_80": [
+            9.0,
+            36.0
+          ],
+          "script_probabilities": {
+            "leading_by_more_than7": 0.298828125,
+            "competitive_within7": 0.423095703125,
+            "trailing_by_more_than7": 0.278076171875
+          },
+          "capability_branches": {
+            "competitive_scoring": {
+              "probability": 0.31884765625,
+              "sample_count": 1306,
+              "opponent_budget": {
+                "points": 28.300153139356816,
+                "plays": 65.68949969641017,
+                "drives": 11.371081119869812,
+                "targets": 37.19951706534953,
+                "carries": 23.50880387693765
+              },
+              "budget": {
+                "points": 31.43032159264931,
+                "plays": 65.48334368306186,
+                "drives": 11.30152448976882,
+                "targets": 32.51662478574534,
+                "carries": 29.280620248815715
+              }
+            },
+            "trailing_productive_passing": {
+              "probability": 0.0654296875,
+              "sample_count": 268,
+              "opponent_budget": {
+                "points": 36.735074626865675,
+                "plays": 60.397287561660065,
+                "drives": 11.293881194542164,
+                "targets": 25.648163420462144,
+                "carries": 31.673227931388297
+              },
+              "budget": {
+                "points": 21.89179104477612,
+                "plays": 67.53250859718041,
+                "drives": 10.67140204049888,
+                "targets": 44.246850664625896,
+                "carries": 20.10156443852315
+              }
+            },
+            "drive_stall_runout": {
+              "probability": 0.166015625,
+              "sample_count": 680,
+              "opponent_budget": {
+                "points": 21.38235294117647,
+                "plays": 61.786874181888926,
+                "drives": 10.704500272332153,
+                "targets": 30.503590355344198,
+                "carries": 28.498469411769342
+              },
+              "budget": {
+                "points": 6.720588235294118,
+                "plays": 60.7147297484817,
+                "drives": 10.958296071988487,
+                "targets": 31.003255215421767,
+                "carries": 24.16707371170053
+              }
+            },
+            "other": {
+              "probability": 0.44970703125,
+              "sample_count": 1842,
+              "opponent_budget": {
+                "points": 13.925624321389794,
+                "plays": 57.36656802973519,
+                "drives": 10.458391870750818,
+                "targets": 29.80017855475247,
+                "carries": 22.90907637389728
+              },
+              "budget": {
+                "points": 23.635722041259502,
+                "plays": 62.41364800042227,
+                "drives": 10.52721427330316,
+                "targets": 29.193305218158418,
+                "carries": 29.5580091905961
+              }
+            }
+          },
+          "history_count": 5,
+          "last_history_completed_at": "2026-10-12T01:00:00+00:00"
+        },
+        "TEN": {
+          "opponent": "IND",
+          "home": false,
+          "central": {
+            "points": 19.929784485577983,
+            "plays": 60.44151731986087,
+            "drives": 10.67086678786113,
+            "targets": 30.512329077510625,
+            "carries": 25.60493455309027
+          },
+          "win_probability": 0.38330078125,
+          "tie_probability": 0.02197265625,
+          "loss_probability": 0.5947265625,
+          "win_half_tie_probability": 0.394287109375,
+          "score_interval_80": [
+            6.0,
+            34.0
+          ],
+          "script_probabilities": {
+            "leading_by_more_than7": 0.278076171875,
+            "competitive_within7": 0.423095703125,
+            "trailing_by_more_than7": 0.298828125
+          },
+          "capability_branches": {
+            "competitive_scoring": {
+              "probability": 0.31884765625,
+              "sample_count": 1306,
+              "opponent_budget": {
+                "points": 31.43032159264931,
+                "plays": 65.48334368306186,
+                "drives": 11.30152448976882,
+                "targets": 32.51662478574534,
+                "carries": 29.280620248815715
+              },
+              "budget": {
+                "points": 28.300153139356816,
+                "plays": 65.68949969641017,
+                "drives": 11.371081119869812,
+                "targets": 37.19951706534953,
+                "carries": 23.50880387693765
+              }
+            },
+            "trailing_productive_passing": {
+              "probability": 0.019287109375,
+              "sample_count": 79,
+              "opponent_budget": {
+                "points": 37.0,
+                "plays": 55.70888153217029,
+                "drives": 8.622729594832128,
+                "targets": 32.29125381006833,
+                "carries": 20.97827989114586
+              },
+              "budget": {
+                "points": 17.0,
+                "plays": 66.14037033574365,
+                "drives": 9.509518899371294,
+                "targets": 37.71783082997461,
+                "carries": 27.023029818817818
+              }
+            },
+            "drive_stall_runout": {
+              "probability": 0.221435546875,
+              "sample_count": 907,
+              "opponent_budget": {
+                "points": 21.80154355016538,
+                "plays": 62.73759736286793,
+                "drives": 10.781742071172578,
+                "targets": 27.698239646414557,
+                "carries": 31.754968014076272
+              },
+              "budget": {
+                "points": 6.226019845644983,
+                "plays": 54.97415179170898,
+                "drives": 10.34637920849846,
+                "targets": 28.634600381501986,
+                "carries": 21.82924446652313
+              }
+            },
+            "other": {
+              "probability": 0.4404296875,
+              "sample_count": 1804,
+              "opponent_budget": {
+                "points": 17.337583148558757,
+                "plays": 62.66444883626743,
+                "drives": 10.666557688849851,
+                "targets": 32.727896522262014,
+                "carries": 25.392262872721826
+              },
+              "budget": {
+                "points": 23.861419068736144,
+                "plays": 60.30161911828029,
+                "drives": 10.773148689627392,
+                "targets": 29.687797646663718,
+                "carries": 26.680686740305365
+              }
+            }
+          },
+          "history_count": 5,
+          "last_history_completed_at": "2026-10-12T01:00:00+00:00"
+        }
+      },
+      "total_points": 43.84018620508178,
+      "home_margin": 3.980617233925816,
+      "seed": 261013,
+      "draws": 4096,
+      "probability_status": "empirical_paired_residual_estimate; retrospective calibration measured, forward calibration unproven",
+      "tie_convention": "ties separate; win_half_tie=win+0.5*tie",
+      "scenario_definition": "mutually exclusive precedence: competitive_scoring, trailing_productive_passing, drive_stall_runout, other"
+    },
+    {
+      "game_id": "2026_06_WAS_SF",
+      "season": 2026,
+      "week": 6,
+      "kickoff_at": "2026-10-20T00:15:00+00:00",
+      "teams": {
+        "SF": {
+          "opponent": "WAS",
+          "home": true,
+          "central": {
+            "points": 29.792087517305177,
+            "plays": 63.48922497675786,
+            "drives": 10.39589402201485,
+            "targets": 30.405954771111738,
+            "carries": 30.4400345297182
+          },
+          "win_probability": 0.721923828125,
+          "tie_probability": 0.0439453125,
+          "loss_probability": 0.234130859375,
+          "win_half_tie_probability": 0.743896484375,
+          "score_interval_80": [
+            15.0,
+            41.0
+          ],
+          "script_probabilities": {
+            "leading_by_more_than7": 0.640380859375,
+            "competitive_within7": 0.236328125,
+            "trailing_by_more_than7": 0.123291015625
+          },
+          "capability_branches": {
+            "competitive_scoring": {
+              "probability": 0.3515625,
+              "sample_count": 1440,
+              "opponent_budget": {
+                "points": 28.297916666666666,
+                "plays": 63.791478365476216,
+                "drives": 11.130687929781773,
+                "targets": 33.50564411311562,
+                "carries": 26.04645256947697
+              },
+              "budget": {
+                "points": 32.990972222222226,
+                "plays": 66.24056180915392,
+                "drives": 10.88472772310892,
+                "targets": 34.37238712162442,
+                "carries": 29.43780779942668
+              }
+            },
+            "trailing_productive_passing": {
+              "probability": 0.020263671875,
+              "sample_count": 83,
+              "opponent_budget": {
+                "points": 25.0,
+                "plays": 65.36552623358776,
+                "drives": 11.225923221160178,
+                "targets": 26.517535882986767,
+                "carries": 37.28297842958906
+              },
+              "budget": {
+                "points": 15.0,
+                "plays": 51.17201306347489,
+                "drives": 9.268919736622932,
+                "targets": 31.22548333490299,
+                "carries": 12.690273512450862
+              }
+            },
+            "drive_stall_runout": {
+              "probability": 0.08251953125,
+              "sample_count": 338,
+              "opponent_budget": {
+                "points": 18.142011834319526,
+                "plays": 58.22945551136148,
+                "drives": 10.545977627155885,
+                "targets": 29.558498128738822,
+                "carries": 24.463021232304214
+              },
+              "budget": {
+                "points": 9.094674556213018,
+                "plays": 69.05212983452269,
+                "drives": 11.351000965319807,
+                "targets": 34.043953544926595,
+                "carries": 29.95349774108947
+              }
+            },
+            "other": {
+              "probability": 0.545654296875,
+              "sample_count": 2235,
+              "opponent_budget": {
+                "points": 13.002237136465324,
+                "plays": 59.76771962086915,
+                "drives": 10.03525766298722,
+                "targets": 32.61536451979526,
+                "carries": 22.49113398553643
+              },
+              "budget": {
+                "points": 30.173154362416106,
+                "plays": 61.64726435330413,
+                "drives": 10.266405325684016,
+                "targets": 27.907109190782144,
+                "carries": 31.202723246387922
+              }
+            }
+          },
+          "history_count": 5,
+          "last_history_completed_at": "2026-10-12T04:25:00+00:00"
+        },
+        "WAS": {
+          "opponent": "SF",
+          "home": false,
+          "central": {
+            "points": 17.637189983347444,
+            "plays": 60.657880702346944,
+            "drives": 10.312583938056662,
+            "targets": 31.052367457844834,
+            "carries": 25.215049179885902
+          },
+          "win_probability": 0.234130859375,
+          "tie_probability": 0.0439453125,
+          "loss_probability": 0.721923828125,
+          "win_half_tie_probability": 0.256103515625,
+          "score_interval_80": [
+            4.0,
+            32.0
+          ],
+          "script_probabilities": {
+            "leading_by_more_than7": 0.123291015625,
+            "competitive_within7": 0.236328125,
+            "trailing_by_more_than7": 0.640380859375
+          },
+          "capability_branches": {
+            "competitive_scoring": {
+              "probability": 0.3515625,
+              "sample_count": 1440,
+              "opponent_budget": {
+                "points": 32.990972222222226,
+                "plays": 66.24056180915392,
+                "drives": 10.88472772310892,
+                "targets": 34.37238712162442,
+                "carries": 29.43780779942668
+              },
+              "budget": {
+                "points": 28.297916666666666,
+                "plays": 63.791478365476216,
+                "drives": 11.130687929781773,
+                "targets": 33.50564411311562,
+                "carries": 26.04645256947697
+              }
+            },
+            "trailing_productive_passing": {
+              "probability": 0.201904296875,
+              "sample_count": 827,
+              "opponent_budget": {
+                "points": 34.30108827085852,
+                "plays": 63.97118751887533,
+                "drives": 10.333333001802616,
+                "targets": 29.0649555601524,
+                "carries": 32.098317786468655
+              },
+              "budget": {
+                "points": 18.062877871825876,
+                "plays": 64.11103322445759,
+                "drives": 10.152923871043775,
+                "targets": 38.636576282937625,
+                "carries": 20.47416748195274
+              }
+            },
+            "drive_stall_runout": {
+              "probability": 0.260498046875,
+              "sample_count": 1067,
+              "opponent_budget": {
+                "points": 28.234301780693535,
+                "plays": 63.33591019287526,
+                "drives": 10.320825517939674,
+                "targets": 27.03055253822963,
+                "carries": 33.84804769474335
+              },
+              "budget": {
+                "points": 5.486410496719775,
+                "plays": 54.41419609902972,
+                "drives": 9.893454690949342,
+                "targets": 28.34567705774041,
+                "carries": 21.396662898626165
+              }
+            },
+            "other": {
+              "probability": 0.18603515625,
+              "sample_count": 762,
+              "opponent_budget": {
+                "points": 17.405511811023622,
+                "plays": 58.90412669824727,
+                "drives": 10.490009641980787,
+                "targets": 30.96147329375755,
+                "carries": 23.956017971126393
+              },
+              "budget": {
+                "points": 21.620734908136484,
+                "plays": 62.47765915824036,
+                "drives": 10.462347435059321,
+                "targets": 30.03908338706802,
+                "carries": 28.698552524198053
+              }
+            }
+          },
+          "history_count": 5,
+          "last_history_completed_at": "2026-10-12T04:25:00+00:00"
+        }
+      },
+      "total_points": 47.42927750065262,
+      "home_margin": 12.154897533957733,
+      "seed": 261013,
+      "draws": 4096,
+      "probability_status": "empirical_paired_residual_estimate; retrospective calibration measured, forward calibration unproven",
+      "tie_convention": "ties separate; win_half_tie=win+0.5*tie",
+      "scenario_definition": "mutually exclusive precedence: competitive_scoring, trailing_productive_passing, drive_stall_runout, other"
+    }
+  ],
+  "seed": 261013,
+  "draws": 4096,
+  "baseline_mutation": false,
+  "event_definitions": {
+    "competitive_scoring": "both scores>=20 and abs margin<=14",
+    "trailing_productive_passing": "else trailing>7, points>=14 and identified targets>=30",
+    "drive_stall_runout": "else points<14 and points/drive<1.4",
+    "other": "remaining outcomes",
+    "note": "descriptive mutually exclusive proxy events; no injury or QB availability conditioning"
+  },
+  "sha256": "748c7f51e28ef0849022041558e1a8418a9b5cd6a584cd2a8dc4edb11d185d79"
+}

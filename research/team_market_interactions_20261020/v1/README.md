@@ -1,0 +1,15 @@
+# Lagged team/market descriptive interactions
+
+Candidate IDs X01-M01–M03 are centered continuous input products, not fitted response curves. Feature-only exact classification requires High review against the extension catalog. Predictive response, calibration, model, scenario, optimizer and current serving remain pending.
+
+- X01-M01: centered mean prior physical offensive snaps × centered target intended total. Units: physical snaps × market points.
+- X01-M02: centered pooled prior called-pass fraction × centered target signed team spread. Units: called-pass fraction × signed market points. Nonspike dropbacks include sacks/scrambles once; denominator adds designed nonkneel rushes.
+- X01-M03: centered mean prior full-team official carries × centered target implied points. Units: official carries × market points. Carries include kneels and unmapped native actors.
+
+The actual composition targets 2026 weeks 4–6. Every workload parent uses strictly earlier same-season native games, up to eight prior scheduled game slots; missing parent logs remain unknown instead of being skipped. Original measured context ends before 202606. Target workload is never used in its own feature. Reference means freeze on target examples strictly before 202604, whose own workload parents also precede their target games. Known reference sample counts, keys, periods and SHA are preserved; no reference observation means null. Products can be negative and never represent additional physical opportunities.
+
+The environment/official parents share the authenticated native PBP snapshot, event receipt and original boundary. Only commutative workload/call counts are read from the environment block; its superseded play-ID pace fields are unused. Intake verifies original indexed raw bytes, managed context and compressed parent without inflating the parent. Official full-team budgets retain native identity residuals. The schedule loader verifies the indexed original native schedule CSV and intended pregame line fields. Source home expected margin is positive for a home favorite; canonical wager spread reverses that sign, and team implied points equal (total − team spread)/2. The nflreadr primary schedule dictionary documents these fields: https://raw.githubusercontent.com/nflverse/nflreadr/main/data-raw/dictionary_schedules.csv.
+
+Original archived quote publication and historical decision availability are unknown. Revised source availability, original evidence boundary, and actual postlock read/publication clocks are preserved separately. All artifacts explicitly prohibit pregame/current serving. No future outcome/result, name join, regression, causal claim, fit, source fetch or source mutation is involved.
+
+Targeted tests cover reference freezing, exact arithmetic, pooled call denominators, target-workload exclusion, market numerical consumption, unknown parents/reference, known zero carries, missing native game slots, row/provenance invariance and source/scope contract rejection. Managed full and SF/WAS selected artifact refs and actual known/unknown coverage are in `actual_receipt.json`; original inputs remain immutable.

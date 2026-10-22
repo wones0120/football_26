@@ -126,7 +126,8 @@ def native_matchup(rows, teams):
 
 def evaluate_readiness(rows, *, season, week, slate, projection_run_id,
                        evidence_cutoff, evaluated_at, rules, ownership_required=False,
-                       ownership_attempted=False, refresh=None, require_canonical_context=False):
+                       ownership_attempted=False, refresh=None, require_canonical_context=False,
+                       minimum_player_salary=None):
     """Deterministic, side-effect-free assessment of the exact consumed rows."""
     now, cutoff = aware(evaluated_at), aware(evidence_cutoff)
     teams = sorted({str(r.get("player_team") or r.get("team") or "") for r in rows} - {""})
@@ -201,14 +202,16 @@ def evaluate_readiness(rows, *, season, week, slate, projection_run_id,
 
     # Availability and role have independent original observation clocks.
     individuals = [r for r in native_rows if r.get("position") != "DST"]
-    bad_status, status_invalid, status_dates = [], [], []
+    bad_status, status_invalid, status_dates, excluded_status = [], [], [], []
     for r in individuals:
         pid = str(r.get("player_id"))
         state, reasons = dispositions[pid]
+        reasons = list(reasons)
+        row_dates = []
         if r.get("canonical_context_contract") == CONTEXT_CONTRACT:
-            status_dates.append(r.get("availability_observed_at"))
+            row_dates.append(r.get("availability_observed_at"))
             if state != "UNAVAILABLE":
-                status_dates.append(r.get("role_observed_at"))
+                row_dates.append(r.get("role_observed_at"))
                 if not r.get("canonical_role") or not r.get("role_source") or not r.get("role_source_ids"):
                     reasons.append("player_role_missing")
                 reasons.extend(code for code in r.get("canonical_context_reason_codes") or [] if code.startswith("player_role"))
@@ -222,7 +225,7 @@ def evaluate_readiness(rows, *, season, week, slate, projection_run_id,
         else:
             if require_canonical_context:
                 reasons.append("canonical_player_context_missing")
-            status_dates.append(r.get("pregame_context_observed_at"))
+            row_dates.append(r.get("pregame_context_observed_at"))
             if not (r.get("pregame_context_source") and r.get("pregame_context_run_id")
                     and r.get("player_status_evidence_present") is True
                     and (r.get("official_availability_status") or r.get("pregame_injury_status")
@@ -230,19 +233,40 @@ def evaluate_readiness(rows, *, season, week, slate, projection_run_id,
                     and (r.get("role_optimizer_eligible") is False or
                          (r.get("expected_depth_role") not in {None, "uncertain"} and not r.get("pregame_role_uncertain")))):
                 reasons.append("player_status_missing")
-        if reasons:
-            bad_status.append(pid); status_invalid.extend(reasons)
         # Include clock-only violations in the per-player audit as well.
+        clock_reasons = []
         for clock in ([r.get("availability_observed_at"), r.get("role_observed_at")] if
                       r.get("canonical_context_contract") == CONTEXT_CONTRACT and state != "UNAVAILABLE" else
                       [r.get("availability_observed_at")] if r.get("canonical_context_contract") == CONTEXT_CONTRACT else
                       [r.get("pregame_context_observed_at")]):
             try:
                 date = aware(clock)
-                if date > cutoff or date > now or (now-date).total_seconds() > rules["player_status"]*3600:
-                    bad_status.append(pid)
+                if date > cutoff or date > now:
+                    clock_reasons.append("player_status_after_cutoff")
+                if (now-date).total_seconds() > rules["player_status"]*3600:
+                    clock_reasons.append("player_status_stale")
             except (ValueError, TypeError, AttributeError):
+                clock_reasons.append("player_status_missing")
+        # A selection preference cannot establish a football fact. Retain the
+        # unknown role/status and projection, but it need not block a player
+        # pool whose bound salary floor makes this identity unselectable.
+        salary = number(r.get("base_salary"))
+        if salary is None:
+            salary = number(r.get("salary"))
+        if minimum_player_salary and salary is not None and 0 < salary < minimum_player_salary:
+            excluded_status.append({"player_id": pid, "player": r.get("player_name") or r.get("name"),
+                "salary": salary, "reason": "user_minimum_player_salary", "category": "user_preference",
+                "availability_state": state, "player_status": r.get("player_status"),
+                "canonical_role": r.get("canonical_role"), "role_source": r.get("role_source"),
+                "availability_observed_at": r.get("availability_observed_at"),
+                "role_observed_at": r.get("role_observed_at"),
+                "reason_codes": sorted(set(reasons + clock_reasons)),
+                "model_assessment": {"projection": r.get("projection"), "p90": r.get("p90")}})
+        else:
+            status_dates.extend(row_dates)
+            if reasons or clock_reasons:
                 bad_status.append(pid)
+            status_invalid.extend(reasons)
     check("player_status", status_dates, "player_status_missing", "player_status_stale", invalid=status_invalid,
           players=bad_status, ids=[r.get("pregame_context_run_id") for r in individuals],
           sources=[r.get("availability_source") or r.get("pregame_context_source") for r in individuals] +
@@ -312,7 +336,9 @@ def evaluate_readiness(rows, *, season, week, slate, projection_run_id,
                 "favorite": next((t for t, q in markets.items() if q["spread"] < 0), None),
                 "underdog": next((t for t, q in markets.items() if q["spread"] > 0), None),
                 "pickem": len(markets) == 2 and all(q["spread"] == 0 for q in markets.values())},
-            "refresh": deepcopy(refresh or {})}
+            "refresh": deepcopy(refresh or {}),
+            "selection_scope": {"minimum_player_salary": minimum_player_salary,
+                "nonblocking_player_status_exclusions": excluded_status}}
     result["player_pool_readiness"] = player_pool_diagnostic(native_rows, readiness=result)
     result["generation_eligible_player_ids"] = [p["canonical_id"] for p in result["player_pool_readiness"]["players"] if p["generation_eligible"]]
     return result
@@ -338,6 +364,37 @@ def validate_frozen_evidence(value):
     return value["data_readiness"]
 
 
+def refresh_completed_schedule_scores(engine, *, season, weeks):
+    """Acquire missing final scores before rebuilding completed DST labels.
+
+    Captures append source versions; missing or conflicting finals still block.
+    """
+    from sqlalchemy import select
+    from sqlalchemy.orm import Session
+    from ..models import RawNflSchedule
+    from ..schemas import NflReadPySeasonRequest
+    from ..services.source_capture import SourceCaptureService
+    from .dst_scoring_reconciliation import require_completed_schedule_scores, DstScoringUnresolved
+
+    def check():
+        with Session(engine) as session:
+            rows = session.scalars(select(RawNflSchedule).where(
+                RawNflSchedule.source_system == 'nflreadpy', RawNflSchedule.season == season,
+                RawNflSchedule.week.in_(weeks))).all()
+            if not rows:
+                raise DstScoringUnresolved('Missing completed-period schedule evidence')
+            return require_completed_schedule_scores(
+                [dict(game_id=r.game_id, raw_row_json=r.raw_row_json) for r in rows], now=datetime.now(UTC))
+    try:
+        return dict(status='verified_existing', **check())
+    except DstScoringUnresolved:
+        with Session(engine) as session:
+            captured = SourceCaptureService(session).capture_and_ingest_nflreadpy_schedules(
+                NflReadPySeasonRequest(season=season, weeks=sorted(set(weeks))))
+            snapshot_id = captured.capture.snapshot.snapshot_id
+        return dict(status='refreshed', snapshot_id=snapshot_id, **check())
+
+
 def refresh_training_labels(engine, *, season, week, slate, preliminary_exclude_unknown=False):
     """Repair stale completed labels before taking the live projection cutoff."""
     from sqlalchemy.orm import Session
@@ -355,14 +412,20 @@ def refresh_training_labels(engine, *, season, week, slate, preliminary_exclude_
             raise ValueError("Training label repair must precede the target period")
         grouped.setdefault(prior_season,[]).append(prior_week)
     rows = 0
+    schedule_receipts = []
     for prior_season,weeks in sorted(grouped.items()):
+        schedule_receipts.append(refresh_completed_schedule_scores(engine, season=prior_season, weeks=weeks))
         with Session(engine) as session:
             result = LineupLearningService(session).rebuild_player_game_feature_matrix(
                 source_system="draftkings",season_start=prior_season,season_end=prior_season,weeks=sorted(set(weeks)))
         if not result["slates_total"] or result["slates_failed"]:
-            raise ValueError("Completed training-label refresh did not rebuild every affected slice")
+            failures = [f"{r.get('season')}-W{r.get('week')} {r.get('slate')}: {r.get('error_message')}"
+                        for r in result.get('rows', []) if r.get('status') == 'failed']
+            raise ValueError("Completed training-label refresh did not rebuild every affected slice" +
+                             (": " + "; ".join(failures) if failures else ""))
         rows += result["rows_written"]
-    return {"periods": [{"season":s,"week":w} for s,w in periods], "rows_written":rows}
+    return {"periods": [{"season":s,"week":w} for s,w in periods], "rows_written":rows,
+            "schedule_receipts": schedule_receipts}
 
 
 def _refresh_player_sources(service, *, season, week, slate, games, lock, attempt,
@@ -521,6 +584,10 @@ def refresh_live_sources(service, *, season, week, slate, params, progress=None,
             "Prior-week stats/snaps could not be completed: " + report["historical_participation"]["reason"]}
         return {"projection_run_id": None, "data_cutoff_at": datetime.now(UTC),
                 "ownership_run_id": None, "report": report}
+    if params.get("include_workload_forecast"):
+        from .workload_gamebook_participation import refresh_slate_gaps
+        attempt("workload_participation", lambda: refresh_slate_gaps(service.engine,
+            season=season,week=week,slate=slate,target_lock_at=lock,progress=progress))
     # Refresh roster identities first; new provider IDs must be available to the
     # same resolver used by import before status joins or dependent builds run.
     resolved = _refresh_player_sources(service, season=season, week=week, slate=slate, games=games, lock=lock, attempt=attempt,
@@ -530,6 +597,10 @@ def refresh_live_sources(service, *, season, week, slate, params, progress=None,
             "Salary identity resolution must complete before building projections. Review the unresolved identity queue."}
         return {"projection_run_id": None, "data_cutoff_at": datetime.now(UTC),
                 "ownership_run_id": None, "report": report}
+    if player_context_supplement is None and label == 'Showdown':
+        from .classic_official_context import supplement_unresolved_context
+        player_context_supplement = lambda: supplement_unresolved_context(service.engine,
+            season=season, week=week, slate=slate, contest_format='showdown')
     if player_context_supplement:
         attempt('official_context_supplement', player_context_supplement)
     checkpoint = {}

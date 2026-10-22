@@ -10,3 +10,8 @@ export function sameOptimizerRunScope(run: RunScope, scope: RunScope): boolean {
 export function canOpenSavedOptimizerReport(run: Pick<OptimizerRunSummary, "status" | "saved_report_available">): boolean {
   return run.status === "completed" || (run.status === "failed" && run.saved_report_available === true);
 }
+
+// Finished history is stable. Poll only while a solve can change its status.
+export function optimizerHistoryPollDelay(runs: Pick<OptimizerRunSummary, "status">[]): number | null {
+  return runs.some(run => ["queued", "running"].includes(run.status)) ? 5000 : null;
+}

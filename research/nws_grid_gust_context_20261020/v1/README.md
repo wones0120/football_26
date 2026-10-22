@@ -1,0 +1,5 @@
+# NWS grid maximum-gust context
+
+`capture_sources.py` makes at most2 original officialNWS requests (point then returned raw-grid link),1MiB cap each,5s connect/15s read, no alternate location/fallback. Both original entities are immutable indexed SourceSnapshots; reruns reuse exact indexed URI/scope rather than recapture. `derive_actual.py` authenticates bytes/manifests and reviewed schedule/registry refs, independently verifies the exact native schedule row/venue mapping, then publishes an immutable new gust transform. No raw adapter replay, identity joins, fits or lineup changes.
+
+27 targeted tests cover units, original clocks, overlapping/malformed/empty intervals, geometry, native point/grid links, invalid/missing/null/boolean values, unknown venue and source/game scope. Initial26test revision is preserved; actual source revealed canonical km_h-1 unit and native aggregateP7DT17H, now explicitly supported without inferring hourly means. Initial actual receipt before strengthening independent native-row binding is preserved; both feature semantic digests match. No repeat HTTP/DB/source intake.

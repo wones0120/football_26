@@ -1,0 +1,26 @@
+# Shared-world policy: public app acceptance
+
+The named opt-in feature is implemented and passed actual Prepare → Optimize → Recent Runs reopen → saved upload check → native CSV response validation. This is correctness/workflow acceptance, not better lineup performance or forecast calibration. The standard default and all original runs remain available.
+
+**No incremental scenario coverage achieved.** All four selected marginal gains were zero. Entries differ under hard controls, not demonstrated scenario diversification. The authored Expected world is numerically neutral; the prior passing-sensitivity world did not produce an incremental point improvement over the anchor on this bounded candidate pool. Conditional likelihoods remain unknown.
+
+Saved run `bae9dcc3-b34f-4c61-a1d9-5360a33cf9df`; job `b2f851c2-bb60-4529-bb66-c34604f67d9d`. Prepare `47a9690f-1456-43a2-889f-4f6846eace39`, projection `0580f701-cd13-4e87-b79e-a1688eb9c9ca`, cutoff `2026-10-19T16:09:16.910433-04:00`. The same current authored dependency/closed producer was reused, preserving original19:12:10Z source assessment and19:23:19Z technical revalidation. No new numerical research adjustment was invented.
+
+| Saved | Captain | FLEX | Salary | Original mean, CPT weighted once |
+|---|---|---|---:|---:|
+| 1 recommended | Jayden Daniels | Drew Stevens / Brock Purdy / Christian McCaffrey / Treylon Burks / Antonio Williams | $50,000 | 77.004294 |
+| 2 | Brock Purdy | Drew Stevens / Jayden Daniels / Austin Ekeler / Christian McCaffrey / Treylon Burks | $49,800 | 76.649506 |
+| 3 | Jayden Daniels | Drew Stevens / Brock Purdy / Austin Ekeler / Christian McCaffrey / Treylon Burks | $49,400 | 76.116063 |
+| 4 | Brock Purdy | Jayden Daniels / Chig Okonkwo / Christian McCaffrey / Treylon Burks / Antonio Williams | $50,000 | 75.764692 |
+
+The shared core is Jayden Daniels, Brock Purdy, Christian McCaffrey and Treylon Burks across all four. Daniels and Purdy each captain2/4 (50%). All four currently avoid Jordan Watkins as an outcome of this solve; no blanket player exclusion was added. The source roles still identify Burks and Antonio Williams as backups, and Ekeler as a backfield option, so cheap salary does not establish expanded routes, targets or scoring. These uncertainties are shown in the actual saved UI with the source tier/clocks.
+
+Lineup1 spends the cap on both starting quarterbacks and McCaffrey with a Washington kicker and cheap receivers. It needs adequate production from both offenses, Daniels scoring credited at Captain, and actual participation for the inexpensive pass catchers. Stevens needs kicking opportunities, including some drives reaching range and stalling. A Washington drive failure or thin backup participation damages several slots. Lineup2 trades Antonio for Ekeler and captains Purdy; lineup3 has that same six-player membership with Daniels at Captain. That is role/salary/exposure variation, not a separate demonstrated game path. Lineup4 removes Stevens/Ekeler for Okonkwo/Antonio, emphasizing Washington receiving participation while keeping Purdy Captain. Passing and receiving scoring can credit the same event; McCaffrey ground touchdowns compete with SF passing touchdowns. No independent-opportunity or probability claim is made.
+
+Generation searched all3 original worlds (2 distinct score columns),54 optimal bounded searches and17 distinct canonical rosters; 2.083s generation and0.184s selection. Unique authored anchor `monday_reference` has proven optimal mean in the captured legal model. Every selected prefix has an exact requested-size completion proof. Both generation and replay omit strategy-owned mandatory stacks/starting-QB predicates while preserving actual user settings; saved settings differ in zero hard-preference fields. No P90, ownership, workload bonus, source-story quota or teammate penalty enters the new objective.
+
+Recommended/all CSV responses are HTTP200 text/csv, with exact CPT+5FLEX native IDs and1/4 rows; no browser download or submission. Saved upload record `evaluation-2708486afb5e8c5714660c1d5d0b4b6a195358114a789f54354c2c7be63db98b` is provisional pending final official inactives, valid until `2026-10-19T20:51:22.352534+00:00`. This does not confirm game dressing or contest entry.
+
+The first public attempt17d67750 failed before solving because internal preparation revalidation omitted objective/strategy. Its original request/evidence remains immutable. The narrow correction passes22 focused regressions, and the actual successful retry also passes final post-solve revalidation. Main integration gates:94 backend tests,2 UI tests,TypeScript/Vite build. An expanded slate-preparation test run had3 dependency failures from sandbox-blocked local PostgreSQL reads (37pass); those unrelated fixture paths were not changed. One existing report-copy assertion still expects obsolete CSV-blocked wording; it is not a new selector failure.
+
+The next delivery is the reviewed fast verified PBP/source plus measured defense/environment publication into real Prepare/count/Analyst consumers. Those19:36:57Z captures were not consumed by this run, and none are advertised as new forward forecasts here. No old head-to-head or model training sweep is required or started.

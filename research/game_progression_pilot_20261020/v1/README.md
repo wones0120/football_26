@@ -1,0 +1,15 @@
+# Game progression pilot — frozen first slice
+
+This first research slice models regulation game progression through complete observed drive trajectories, conditioned on generated score/time/field state and strictly prior team context. Future target paths and hindsight game-script labels are never predictors. It is a nonparametric empirical model, not another player-mean fit.
+
+A owns the new isolated runtime; B owns native state reconstruction. Source/implementation gates precede one root-dispatched contextual-versus-control pilot with32 paths per arm/game, seed17 and120second cap. No tree/NN grid, retry or live activation.
+
+The first forecast scope is team/event opportunities, yards and points. Source-bound DK replay and unassigned generated fantasy components are distinct from future canonical player fantasy forecasts. Actor assignments, individual bonuses and injury-replacement gains remain unknown until supported. Within-drive paths are sampled jointly, so the pilot responds at drive boundaries; it is not yet a full snap-by-snap playcalling policy.
+
+All2026 schedule rows and early-week cold starts remain in coverage. New team coldstart strata use frozen TRAIN pooled source context; this does not admit the unsupported v4 player early weeks. Only independently finalized, source-certified regulation truth enters metrics. Reconstructed source/vintage/rule transport limits and previously inspected outcomes stay explicit. Full details and acceptance gates are in CONTRACT.json.
+
+The binding MC_PRECISION_AND_SOURCE_POLICY_AMENDMENT.json limits32paths/120seconds to a mechanics smoke test. Separate root-dispatched Monte Carlo mean-precision stages use fixed seeds17/731 and cumulative256/1024/4096paths with predeclared unit tolerances and300second bounds. They are designonly; no larger pilot is authorized. Stable simulation means are not forecast or tail calibration, and cap hits remain incomplete. The amendment also fixes source unknown-mass, score/phase and context-bin semantics.
+
+The integrated manifest binds the SHA-verified TRAIN-only trajectory kernel, paired empirical openings, explicit deterministic-marker exclusion ledger, prior-only target contexts, and all214 scheduled-side coverage. Its preparation made zero simulator calls. Unknown opening/action support stays in the law; target opening evidence is status-only and target regulation truth remains unknown.
+
+The gated mechanics command is `PYTHONPATH=. .venv/bin/python research/game_progression_pilot_20261020/v1/run_smoke.py --output research/game_progression_pilot_20261020/v1/smoke_attempt_1`. It requires root dispatch after the integrated gate, refuses an existing output directory, and applies one120second whole-job alarm including managed input reads. Every finished path is durably appended before proceeding; unfinished planned paths remain unknown on a cap. It does not calculate accuracy or authorize a larger run. Zero complete full-law trajectories blocks enlarging the known-unknown sample.

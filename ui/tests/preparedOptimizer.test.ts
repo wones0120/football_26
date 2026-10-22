@@ -53,3 +53,11 @@ test("ready and other pending operations stay distinct", () => {
   assert.deepEqual(optimizerWaitingStatus(status, scope, true, "Refreshing readiness and optimizer status...", null, null), {
     busy: true, message: "Refreshing readiness and optimizer status..." });
 });
+
+test("lowering a bound Showdown salary floor requires preparation for newly eligible identities", () => {
+  const prepared = { ...status, latest_build: { ...status.latest_build, contest_format: "showdown", minimum_player_salary: 1700 } };
+  assert.equal(optimizerHasPreparedInputs(prepared, scope, "showdown", overrides, 1700), true);
+  assert.equal(optimizerHasPreparedInputs(prepared, scope, "showdown", overrides, 2000), true);
+  assert.equal(optimizerHasPreparedInputs(prepared, scope, "showdown", overrides, 200), false);
+  assert.equal(optimizerHasPreparedInputs(prepared, scope, "showdown", overrides, null), false);
+});

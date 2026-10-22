@@ -1,0 +1,9 @@
+# Declared called-pass decision features
+
+G02-M01/M02/M04–M10 use a declared called-pass definition: nonspike reported dropback divided by nonspike dropbacks plus designed nonkneel rushes. A scramble belongs to the dropback call once, never both denominator channels. These are decisions, not official pass-attempt fractions; High must adjudicate catalog equivalence explicitly. Native QB spikes/kneels are excluded from decision exposure. The existing reviewed event/environment builder supplies the physical classifications and tri-state eligibility, including preplay score/down/yardline evidence.
+
+Subsets: neutral means first three quarters with absolute preplay score differential at most7; early down is1–2; first down1; third down3; red zone yardline_100 at most20; goal line at most5; trailing/leading uses strict preplay differential sign. Unknown subset/call exposure and unknown outcomes mask exact all-eligible rates. Known-attributed sample fractions remain separately named, zero denominator is undefined. Windows pool counts over last up to8 observed same-season team logs, never unweighted averages or missing-game zeros. Full-game/drive completion is not independently established.
+
+G02-M03 remains a separate partial vendor-xpass residual; no expected-pass model or missing source value is invented here. No pace/possession proxy is promoted by this package.
+
+The read path verifies the indexed original raw PBP, server-managed immutable reviewed context, producer/helper SHA, scope/clocks, and parent compressed byte hash without inflating147MB. Actual read/publication timestamps remain postlock; current/pregame serving is ineligible. No new source fetch, model fit, optimizer or app consumer is claimed. Actual full/selected refs and per-definition exact/unknown coverage are in actual_receipt.json.
