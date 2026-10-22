@@ -491,8 +491,12 @@ imports/captures are awaited. Before taking the prepared source snapshot, the ex
 salary identity reconciler resolves supported matches or records unmatched salaries
 for exclusion and review. Preflight names unresolved players; remaining identity,
 source-consumption and lock failures still block.
-Classic preparation does not fetch source evidence. Live Showdown uses the
-server refresh/readiness gate above. Final entry clearance remains a separate check.
+Live Classic and Showdown preparation refresh source evidence before their readiness gates.
+The official weekly injury parser retains valid game tables when a future matchup has explicit
+“No Injuries Reported” placeholders; those missing teams remain disclosed, without clearing player statuses.
+Historical nonparticipation intake attempts at most eight gamebooks per preparation and lists remaining
+games as unverified. Pending or failed capture never supplies zero workload or closes a missing-history gap.
+Final entry clearance remains a separate check.
 If the worker cannot read a saved source artifact, preparation can use an
 already provisioned local copy in `data/source_snapshot_replicas`. It verifies the
 copy's bytes, full snapshot manifest and original storage lineage; original source

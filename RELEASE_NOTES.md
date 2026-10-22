@@ -1,3 +1,7 @@
+## Bounded multi-game source preparation
+
+Official injury intake now keeps valid matchup tables when future games have explicit unpublished placeholders, while retaining missing-team coverage. Large-slate historical participation intake makes at most eight gamebook attempts and reports the unverified remainder instead of rejecting the entire intake before any capture. Unsupported participation remains unknown. Week7 ALL Sills vendor identity was corrected through a separately audited current-source amendment; historical identities and saved Thursday comparisons remain preserved.
+
 ## Single Stat status-source clarity
 
 Saved Single Stat views now show timestamped provider no-injury-designation observations separately from older uploaded CSV flags. Original source data, eligibility preferences and forecasts are preserved. The corrected Thursday rerun saves Swift/Burden/Brown at175.694 yards with three remaining forecast gaps explicitly labeled; prior results/settings are retained.

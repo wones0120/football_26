@@ -185,14 +185,23 @@ def refresh_slate_gaps(engine, *, season, week, slate, target_lock_at, progress=
         game['home_team']=canonical_team(game['home_team']);game['away_team']=canonical_team(game['away_team'])
         if not any((team,game['week']) in needed for team in (game['home_team'],game['away_team'])):continue
         game['gameday']=game['raw_row_json'].get('gameday');selected.append(game)
-    if len(selected)>8:
-        raise ValueError('More than8 historical gamebooks need verification; source coverage requires review')
+    return _capture_bounded_games(engine, selected, target_lock_at=target_lock_at, progress=progress)
+
+
+def _capture_bounded_games(engine, selected, *, target_lock_at, progress=None):
+    """Make bounded progress on large slates; pending games remain unverified."""
+    ordered=sorted(selected,key=lambda g:g['game_id'])
+    batch=ordered[:8]
     receipts=[]
-    for index,game in enumerate(sorted(selected,key=lambda g:g['game_id'])):
-        if progress:progress('workload_participation',index,len(selected),f"Verifying official inactive evidence: {game['game_id']}")
+    for index,game in enumerate(batch):
+        if progress:progress('workload_participation',index,len(batch),f"Verifying official inactive evidence: {game['game_id']}")
         try:receipts.append(capture_game(engine,game,target_lock_at=target_lock_at))
         except (ValueError,httpx.HTTPError) as exc:
             receipts.append(dict(game_id=game['game_id'],status='unavailable',reason=str(exc)))
+    if len(ordered)>len(batch):
+        receipts.append(dict(status='partial',reason='Bounded eight-game intake; pending games have no new participation proof',
+            pending_game_ids=[g['game_id'] for g in ordered[len(batch):]],
+            requested_games=len(ordered),attempted_games=len(batch)))
     return receipts
 
 

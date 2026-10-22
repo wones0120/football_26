@@ -75,6 +75,12 @@ def parse_official_report(html, *, season, week, slate_teams=None):
         if slate_teams is not None and not set(teams).intersection(slate_teams):
             continue
         tables = list(unit.find("table"))
+        if len(teams) == 2 and len(set(teams)) == 2 and not tables:
+            placeholders = list(unit.find("section", "nfl-o-no-results"))
+            if len(placeholders) == 2 and all(n.content() == "No Injuries Reported" for n in placeholders):
+                # A future matchup may have no published tables yet. Retain
+                # the missing-team coverage; this never clears any player.
+                continue
         if len(teams) != 2 or len(set(teams)) != 2 or len(tables) != 2:
             raise ValueError("Official injury report matchup/table structure changed")
         for team, table in zip(teams, tables):

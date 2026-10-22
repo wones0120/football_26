@@ -18,6 +18,24 @@ def page():
 GAME=dict(game_id="2026_04_IND_WAS",season=2026,week=4,gameday="2026-10-04",away_team="IND",home_team="WAS")
 
 
+def test_large_slate_captures_at_most_eight_and_keeps_pending_and_failed_proofs_explicit(monkeypatch):
+    from backend.app.product_services import workload_gamebook_participation as source
+    attempts=[]
+    def capture(engine, game, **kwargs):
+        attempts.append(game['game_id'])
+        if game['game_id']=='game-02':raise ValueError('No verified inactive list')
+        return dict(game_id=game['game_id'],rows=[dict(kind=source.CONTRACT)])
+    monkeypatch.setattr(source,'capture_game',capture)
+    games=[dict(game_id=f'game-{i:02}') for i in reversed(range(10))]
+    result=source._capture_bounded_games(None,games,target_lock_at=datetime(2026,10,22,tzinfo=UTC))
+    assert attempts==[f'game-{i:02}' for i in range(8)]
+    assert result[2]['status']=='unavailable' and 'rows' not in result[2]
+    pending=result[-1]
+    assert pending['status']=='partial' and pending['pending_game_ids']==['game-08','game-09']
+    assert 'rows' not in pending and pending['requested_games']==10 and pending['attempted_games']==8
+    assert source._capture_bounded_games(None,[],target_lock_at=datetime(2026,10,22,tzinfo=UTC))==[]
+
+
 def test_parser_only_explicit_inactive_exact_scope_and_no_fg_pollution():
     rows=parse_not_active(page(),GAME)
     assert [(r["team"],r["jersey"],r["player_name"]) for r in rows if r["team"]=="WAS"] == [

@@ -42,6 +42,20 @@ def test_wrong_scope_changed_columns_and_missing_native_keys_fail_closed(html):
     with pytest.raises(ValueError):parse_official_report(html,season=2026,week=5)
 
 
+def test_explicit_unpublished_matchup_keeps_other_reports_and_missing_team_coverage():
+    placeholder = ('<section class="nfl-o-injury-report__unit">'
+        '<span class="nfl-c-matchup-strip__team-abbreviation">NYG</span>'
+        '<span class="nfl-c-matchup-strip__team-abbreviation">WAS</span>'
+        '<section class="nfl-o-no-results">No Injuries Reported</section>'
+        '<section class="nfl-o-no-results">No Injuries Reported</section></section>')
+    rows = parse_official_report(report()+placeholder,season=2026,week=5,slate_teams={'TB','DAL','NYG','WAS'})
+    assert {r['team'] for r in rows} == {'TB','DAL'}
+    with pytest.raises(ValueError,match='no player rows'):
+        parse_official_report(report()+placeholder,season=2026,week=5,slate_teams={'NYG','WAS'})
+    with pytest.raises(ValueError,match='structure changed'):
+        parse_official_report(report()+placeholder.replace('No Injuries Reported','Unknown',1),season=2026,week=5)
+
+
 def test_identity_requires_team_position_and_normalized_name_then_retains_native_key():
     row = parse_official_report(report(),season=2026,week=5)[0]
     salary = dict(player_id="canonical",player_name=row["player_name"],full_name=row["player_name"],team="TB",position="QB")
