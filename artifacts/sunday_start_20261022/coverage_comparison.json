@@ -1,0 +1,59 @@
+{
+  "previous_unknown": 152,
+  "current_unknown": 144,
+  "resolved": [
+    {
+      "player_id": "2fa43876-8b80-4de0-a467-82bfa150f042",
+      "name": "Jalen Coker",
+      "score": 12.477183121709874
+    },
+    {
+      "player_id": "df4f0270-1ff0-4d87-bb04-b71badb3e44c",
+      "name": "Shawn Bowman",
+      "score": 0.0
+    },
+    {
+      "player_id": "59c2bf4a-5219-4ad2-b095-1b3cd9e8f04e",
+      "name": "Devin Singletary",
+      "score": 5.2936921360439575
+    },
+    {
+      "player_id": "0ac05959-df96-48fc-b793-81fd6930a0a9",
+      "name": "Jaylen Wright",
+      "score": 3.7851715003761015
+    },
+    {
+      "player_id": "96283cef-93ab-42c2-b43f-98f64f408bd1",
+      "name": "Tylan Wallace",
+      "score": 2.413122338440198
+    },
+    {
+      "player_id": "75ce51c3-50e5-41b2-b91f-25f0e54deefe",
+      "name": "Colby Parkinson",
+      "score": 5.6842427768917485
+    },
+    {
+      "player_id": "37b2e76d-353b-4b03-8a4a-652774647103",
+      "name": "Justin Jefferson",
+      "score": 10.973882440835467
+    },
+    {
+      "player_id": "c9dac826-73b9-4974-881c-6dccd0d452f0",
+      "name": "Kyle Juszczyk",
+      "score": 3.109316697816821
+    }
+  ],
+  "newly_unknown": [
+    {
+      "player_id": "15a4be7d-5bd1-4fdf-8c9d-e10d9eb0bff4",
+      "name": "Anthony Tyus III"
+    }
+  ],
+  "removed_ids": [
+    "6bd6e435-af33-4d13-b8da-fc4296bfc7d4"
+  ],
+  "added_ids": [
+    "19c52f9c-8e42-4843-9f3f-2b934683a33d"
+  ],
+  "comparison": "Changed fresh sources and identity correction, not controlled model experiment"
+}

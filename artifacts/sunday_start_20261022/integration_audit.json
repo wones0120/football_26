@@ -1,0 +1,32 @@
+{
+  "status": "confirmed_integration_gap",
+  "code_hashes": {
+    "ui/src/scenarioMode.ts": "d098c585832f34ea739968c9ffa4608ba7277d4499849f9fd0b84e6835871ee1",
+    "backend/app/product_services/optimizer.py": "78f27af90a4167cd9018beeb63c20e367740c7d749f0368c879833a862d14779",
+    "backend/app/product_services/optimizer_scenario_mode.py": "4397a91fcba6367cd42a9a78c3b755abcc94ad73acfb417f13a779f183a7e35c",
+    "backend/app/product_services/primary_model_forecast.py": "851679dd16754f379d7a7a52aeb1b07859a62c35a9ac0882871942b01165cd45"
+  },
+  "findings": [
+    {
+      "source": "ui/src/scenarioMode.ts",
+      "function": "scenarioParams",
+      "behavior": "Deletes analyst_* settings, forces Classic baseline_mean, one lineup, BASELINE handoff and MIXED intent"
+    },
+    {
+      "source": "backend/app/product_services/optimizer.py",
+      "behavior": "Scenario mode requires prepared highest-projection Classic comparison or Showdown comparison"
+    },
+    {
+      "source": "backend/app/product_services/optimizer_scenario_mode.py",
+      "function": "solve",
+      "behavior": "Classic uses exact conditional-mean objective and incumbent comparison, not Analyst world selection"
+    },
+    {
+      "source": "backend/app/product_services/primary_model_forecast.py",
+      "function": "prepare",
+      "behavior": "Published team/player models consume market/source evidence and reconcile budgets; not a joint multi-game world selector"
+    }
+  ],
+  "decision": "No Classic lineup promoted as new-model scenario-first until the paths are integrated and tested",
+  "scope": "Sunday Main source preparation only; DET is required UI config anchor with both factors 1, not a game preference"
+}

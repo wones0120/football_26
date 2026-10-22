@@ -1,0 +1,138 @@
+{
+  "record_id": "evaluation-ea31406ed2effe4f5ccaaaad57580549e7c6d45f728a5752aec7d0fed65557d8",
+  "scope": {
+    "season": 2026,
+    "week": 7,
+    "slate": "SUNDAY_MAIN"
+  },
+  "operation": "extend_retained_source_identity_correction",
+  "parent_record_id": "evaluation-53a0371066952a2eb489f6bfd7768976374d4e19656b3b1c51878612a5ffcd70",
+  "canonical_id": "19c52f9c-8e42-4843-9f3f-2b934683a33d",
+  "old_vendor_id": "6bd6e435-af33-4d13-b8da-fc4296bfc7d4",
+  "salary_before": [
+    {
+      "curated_salary_id": 34553,
+      "ingest_run_id": "f774f80b-d6c9-4511-98fd-fd5aead1e9b5",
+      "source_system": "draftkings",
+      "season": 2026,
+      "week": 7,
+      "slate": "SUNDAY_MAIN",
+      "source_player_key": "44557506",
+      "player_master_id": "6bd6e435-af33-4d13-b8da-fc4296bfc7d4",
+      "player_name": "David Sills V",
+      "normalized_name": "david sills v",
+      "team": "TB",
+      "opponent": "CAR",
+      "position": "WR",
+      "roster_position": "WR",
+      "salary": 3000,
+      "game_info": "TB@CAR 10/25/2026 01:00PM ET",
+      "created_at": "2026-10-20 23:41:11.197743",
+      "player_status": "IR"
+    }
+  ],
+  "aliases_before": [
+    {
+      "alias_id": 88398,
+      "player_master_id": "6bd6e435-af33-4d13-b8da-fc4296bfc7d4",
+      "source_system": "draftkings",
+      "source_key": "44557506",
+      "alias_name": "David Sills V",
+      "normalized_alias": "david sills v",
+      "team": "TB",
+      "position": "WR",
+      "first_seen_season": 2026,
+      "first_seen_week": 7,
+      "last_seen_at": "2026-10-20 23:41:11.148325",
+      "created_at": "2026-10-20 23:41:11.148325"
+    }
+  ],
+  "stable_native_evidence": [
+    {
+      "alias_id": 3648,
+      "player_master_id": "19c52f9c-8e42-4843-9f3f-2b934683a33d",
+      "source_system": "nflreadpy",
+      "source_key": "00-0035359",
+      "alias_name": "David Sills",
+      "normalized_alias": "david sills",
+      "team": "TB",
+      "position": "WR",
+      "first_seen_season": 2025,
+      "first_seen_week": null,
+      "last_seen_at": "2026-10-22 23:35:22.978039",
+      "created_at": "2026-02-21 20:22:46.763084"
+    },
+    {
+      "alias_id": 88398,
+      "player_master_id": "6bd6e435-af33-4d13-b8da-fc4296bfc7d4",
+      "source_system": "draftkings",
+      "source_key": "44557506",
+      "alias_name": "David Sills V",
+      "normalized_alias": "david sills v",
+      "team": "TB",
+      "position": "WR",
+      "first_seen_season": 2026,
+      "first_seen_week": 7,
+      "last_seen_at": "2026-10-20 23:41:11.148325",
+      "created_at": "2026-10-20 23:41:11.148325"
+    },
+    {
+      "alias_id": 85186,
+      "player_master_id": "19c52f9c-8e42-4843-9f3f-2b934683a33d",
+      "source_system": "nfl_official",
+      "source_key": "/players/david-sills",
+      "alias_name": "David Sills",
+      "normalized_alias": "david sills",
+      "team": "TB",
+      "position": "WR",
+      "first_seen_season": 2026,
+      "first_seen_week": 6,
+      "last_seen_at": "2026-10-22 18:16:13.830144",
+      "created_at": "2026-10-16 09:57:22.912949"
+    }
+  ],
+  "roster_evidence": [
+    {
+      "raw_nfl_weekly_roster_id": 1002768,
+      "gsis_id": "00-0035359",
+      "team": "TB",
+      "position": "WR"
+    },
+    {
+      "raw_nfl_weekly_roster_id": 1005037,
+      "gsis_id": "00-0035359",
+      "team": "TB",
+      "position": "WR"
+    },
+    {
+      "raw_nfl_weekly_roster_id": 1007307,
+      "gsis_id": "00-0035359",
+      "team": "TB",
+      "position": "WR"
+    },
+    {
+      "raw_nfl_weekly_roster_id": 1012018,
+      "gsis_id": "00-0035359",
+      "team": "TB",
+      "position": "WR"
+    },
+    {
+      "raw_nfl_weekly_roster_id": 1014293,
+      "gsis_id": "00-0035359",
+      "team": "TB",
+      "position": "WR"
+    },
+    {
+      "raw_nfl_weekly_roster_id": 1021689,
+      "gsis_id": "00-0035359",
+      "team": "TB",
+      "position": "WR"
+    }
+  ],
+  "official_activation_snapshot_id": "44c872d9-ec02-5613-8af6-3f9596e122f8",
+  "raw_rows_changed": 0,
+  "historical_aliases_changed": 0,
+  "masters_merged": 0,
+  "status_changed": false,
+  "reason": "Official native profile and stable NFL GSIS bind TB WR canonical actor; Sunday vendor salary retained the duplicate corrected separately in ALL. Original salary IR flag preserved; activation is not game-day clearance."
+}
